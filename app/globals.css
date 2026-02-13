@@ -1,0 +1,69 @@
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&display=swap");
+@import "tailwindcss";
+
+:root {
+  --navy: #0F2A3D;
+  --navy-light: #1A3F54;
+  --teal: #18B3A6;
+  --orange: #F36F21;
+  --bg: #F0F4F8;
+  --card-bg: #FFFFFF;
+  --border: #E2EAF3;
+  --text: #2D3748;
+  --text-muted: #607080;
+  --text-body: #3D4F5F;
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-navy-light: var(--navy-light);
+  --color-teal: var(--teal);
+  --color-orange: var(--orange);
+  --color-bg: var(--bg);
+  --color-card: var(--card-bg);
+  --color-border: var(--border);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --font-oswald: "Oswald", sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Source Serif 4", Georgia, serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Oswald", sans-serif;
+}
+
+.ice-stripe {
+  height: 3px;
+  background: linear-gradient(90deg, var(--teal), #29B6F6, #0288D1, #29B6F6, var(--teal));
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(24, 179, 166, 0.15);
+}
+
+/* ── Print / PDF Download Styles ──────────────────────────── */
+@media print {
+  nav {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
