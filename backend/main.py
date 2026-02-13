@@ -1188,11 +1188,61 @@ async def ingest_stats(
                 errors.append(f"Row {i+1}: {str(e)}")
 
         conn.commit()
+
+        # ── Auto-aggregate game logs into a season summary row ──────
+        # Delete any existing auto-generated season summary for this player/season
+        # (so re-importing doesn't create duplicates)
+        if default_season and inserted > 0:
+            conn.execute("""
+                DELETE FROM player_stats
+                WHERE player_id = ? AND season = ? AND stat_type = 'season'
+                AND id IN (
+                    SELECT id FROM player_stats
+                    WHERE player_id = ? AND season = ? AND stat_type = 'season'
+                )
+            """, (player_id, default_season, player_id, default_season))
+
+            # Aggregate all game rows for this player/season
+            agg = conn.execute("""
+                SELECT
+                    COUNT(*) as gp,
+                    SUM(g) as g, SUM(a) as a, SUM(p) as p,
+                    SUM(plus_minus) as plus_minus, SUM(pim) as pim,
+                    SUM(toi_seconds) as toi_seconds,
+                    SUM(pp_toi_seconds) as pp_toi_seconds,
+                    SUM(pk_toi_seconds) as pk_toi_seconds,
+                    SUM(shots) as shots, SUM(sog) as sog
+                FROM player_stats
+                WHERE player_id = ? AND season = ? AND stat_type = 'game'
+            """, (player_id, default_season)).fetchone()
+
+            if agg and agg["gp"] > 0:
+                total_g = agg["g"] or 0
+                total_sog = agg["sog"] or 0
+                season_shooting_pct = round((total_g / total_sog * 100), 1) if total_sog > 0 else None
+
+                conn.execute("""
+                    INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
+                                              toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct, created_at)
+                    VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    gen_id(), player_id, default_season,
+                    agg["gp"], total_g, agg["a"] or 0, agg["p"] or 0,
+                    agg["plus_minus"] or 0, agg["pim"] or 0,
+                    agg["toi_seconds"] or 0, agg["pp_toi_seconds"] or 0, agg["pk_toi_seconds"] or 0,
+                    agg["shots"] or 0, total_sog, season_shooting_pct,
+                    now_iso(),
+                ))
+                conn.commit()
+                logger.info("Auto-generated season summary for %s %s (%s): %dGP %dG %dA %dP",
+                            player["first_name"], player["last_name"], default_season,
+                            agg["gp"], total_g, agg["a"] or 0, agg["p"] or 0)
+
         conn.close()
         logger.info("InStat game log ingested: %d games for %s %s", inserted, player["first_name"], player["last_name"])
         return {
-            "detail": f"Imported {inserted} game stats from InStat game log",
-            "inserted": inserted,
+            "detail": f"Imported {inserted} game logs + season summary from InStat",
+            "inserted": inserted + (1 if default_season and inserted > 0 else 0),
             "format": "instat_game_log",
             "errors": errors[:10],
         }
