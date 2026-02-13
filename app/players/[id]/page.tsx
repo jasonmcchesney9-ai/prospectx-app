@@ -480,7 +480,7 @@ export default function PlayerDetailPage() {
                     {teamSystem.season && <span className="text-xs font-normal text-muted/60 ml-1">{teamSystem.season}</span>}
                   </h3>
                   <Link
-                    href="/systems"
+                    href="/team-systems"
                     className="text-xs text-teal hover:underline"
                   >
                     Edit Systems →
@@ -544,7 +544,7 @@ export default function PlayerDetailPage() {
                 <Shield size={24} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted mb-1">No system profile for <strong>{player.current_team}</strong></p>
                 <Link
-                  href="/systems"
+                  href="/team-systems"
                   className="text-xs text-teal hover:underline"
                 >
                   Create team system profile →
