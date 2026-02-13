@@ -36,8 +36,8 @@ export default function NavBar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <span className="font-oswald text-lg font-bold tracking-widest uppercase text-teal">
-              ProspectX
+            <span className="font-oswald text-lg font-bold tracking-widest uppercase">
+              <span className="text-teal">Prospect</span><span className="text-orange">X</span>
             </span>
             <span className="hidden sm:inline font-oswald text-xs tracking-wider text-white/60 uppercase">
               Intelligence

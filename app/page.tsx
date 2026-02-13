@@ -5,12 +5,43 @@ import Link from "next/link";
 import { Users, FileText, PlusCircle, Zap } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import LandingPage from "@/components/LandingPage";
 import ReportCard from "@/components/ReportCard";
 import api from "@/lib/api";
-import { getUser } from "@/lib/auth";
+import { getUser, isAuthenticated } from "@/lib/auth";
 import type { Player, Report } from "@/types/api";
 
-export default function DashboardPage() {
+export default function HomePage() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setAuthed(isAuthenticated());
+  }, []);
+
+  // Still checking auth
+  if (authed === null) {
+    return (
+      <div className="min-h-screen bg-navy flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
+      </div>
+    );
+  }
+
+  // Not logged in — show public landing page
+  if (!authed) {
+    return <LandingPage />;
+  }
+
+  // Logged in — show dashboard
+  return (
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
+  );
+}
+
+// ── Dashboard (authenticated users) ──────────────
+function Dashboard() {
   const [playerCount, setPlayerCount] = useState(0);
   const [reportCount, setReportCount] = useState(0);
   const [recentReports, setRecentReports] = useState<Report[]>([]);
@@ -41,7 +72,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <ProtectedRoute>
+    <>
       <NavBar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
@@ -55,7 +86,7 @@ export default function DashboardPage() {
 
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
-            <span className="text-red-500 mt-0.5">⚠</span>
+            <span className="text-red-500 mt-0.5">!</span>
             <div>
               <p className="text-red-700 font-medium text-sm">Backend Connection Error</p>
               <p className="text-red-600 text-xs mt-0.5">{error}</p>
@@ -72,7 +103,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-2xl font-oswald font-bold text-navy">
-                  {loading ? "—" : playerCount}
+                  {loading ? "\u2014" : playerCount}
                 </p>
                 <p className="text-xs text-muted font-oswald uppercase tracking-wider">Players</p>
               </div>
@@ -86,7 +117,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-2xl font-oswald font-bold text-navy">
-                  {loading ? "—" : reportCount}
+                  {loading ? "\u2014" : reportCount}
                 </p>
                 <p className="text-xs text-muted font-oswald uppercase tracking-wider">Reports</p>
               </div>
@@ -143,6 +174,6 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
-    </ProtectedRoute>
+    </>
   );
 }
