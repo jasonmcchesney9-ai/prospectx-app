@@ -96,7 +96,7 @@ function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl border border-border p-5">
+          <Link href="/players" className="bg-white rounded-xl border border-border p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center">
                 <Users size={20} className="text-teal" />
@@ -108,9 +108,9 @@ function Dashboard() {
                 <p className="text-xs text-muted font-oswald uppercase tracking-wider">Players</p>
               </div>
             </div>
-          </div>
+          </Link>
 
-          <div className="bg-white rounded-xl border border-border p-5">
+          <Link href="/reports" className="bg-white rounded-xl border border-border p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-orange/10 flex items-center justify-center">
                 <FileText size={20} className="text-orange" />
@@ -122,7 +122,7 @@ function Dashboard() {
                 <p className="text-xs text-muted font-oswald uppercase tracking-wider">Reports</p>
               </div>
             </div>
-          </div>
+          </Link>
 
           <Link href="/players/new" className="bg-white rounded-xl border border-border p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3">

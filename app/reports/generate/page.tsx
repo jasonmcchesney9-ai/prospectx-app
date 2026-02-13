@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Zap, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, CheckCircle2, AlertCircle, Users, Building2 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -13,6 +13,7 @@ import type {
   ReportGenerateRequest,
   ReportGenerateResponse,
   ReportStatusResponse,
+  TeamReference,
 } from "@/types/api";
 import { REPORT_TYPE_LABELS, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES } from "@/types/api";
 
@@ -39,14 +40,18 @@ function GenerateReportContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedPlayer = searchParams.get("player") || "";
+  const preselectedTeam = searchParams.get("team") || "";
 
   const [players, setPlayers] = useState<Player[]>([]);
+  const [teams, setTeams] = useState<TeamReference[]>([]);
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedPlayer, setSelectedPlayer] = useState(preselectedPlayer);
+  const [selectedTeam, setSelectedTeam] = useState(preselectedTeam);
   const [selectedType, setSelectedType] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
 
   const [genState, setGenState] = useState<GenerationState>("idle");
   const [reportId, setReportId] = useState<string | null>(null);
@@ -54,20 +59,30 @@ function GenerateReportContent() {
   const [statusMessage, setStatusMessage] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load players and templates
+  // Determine if current selection is a team report type
+  const isTeamReportType = (TEAM_REPORT_TYPES as readonly string[]).includes(selectedType);
+
+  // Load players, teams, and templates
   useEffect(() => {
     async function load() {
       try {
-        const [playersRes, templatesRes] = await Promise.all([
+        const [playersRes, templatesRes, teamsRes] = await Promise.all([
           api.get<Player[]>("/players?limit=500"),
           api.get<ReportTemplate[]>("/templates"),
+          api.get<TeamReference[]>("/teams/reference"),
         ]);
         setPlayers(playersRes.data);
         setTemplates(templatesRes.data);
+        setTeams(teamsRes.data);
 
         // Default to first template type if available
         if (templatesRes.data.length > 0 && !selectedType) {
-          setSelectedType(templatesRes.data[0].report_type);
+          // If team preselected, default to team_identity
+          if (preselectedTeam) {
+            setSelectedType("team_identity");
+          } else {
+            setSelectedType(templatesRes.data[0].report_type);
+          }
         }
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load data. Is the backend running?";
@@ -98,6 +113,17 @@ function GenerateReportContent() {
     );
   });
 
+  // Filter teams by search
+  const filteredTeams = teams.filter((t) => {
+    if (!teamSearch) return true;
+    const q = teamSearch.toLowerCase();
+    return (
+      t.name.toLowerCase().includes(q) ||
+      (t.league || "").toLowerCase().includes(q) ||
+      (t.city || "").toLowerCase().includes(q)
+    );
+  });
+
   // Get unique report types from templates
   const reportTypes = Array.from(new Set(templates.map((t) => t.report_type)));
 
@@ -119,7 +145,6 @@ function GenerateReportContent() {
             setGenState("failed");
             setError(data.error_message || "Report generation failed.");
           }
-          // else still processing — keep polling
         } catch {
           // Polling error — keep trying
         }
@@ -129,7 +154,10 @@ function GenerateReportContent() {
   );
 
   const handleGenerate = async () => {
-    if (!selectedPlayer || !selectedType) return;
+    // Validate based on report type
+    if (isTeamReportType && !selectedTeam) return;
+    if (!isTeamReportType && !selectedPlayer) return;
+    if (!selectedType) return;
 
     setError("");
     setGenState("submitting");
@@ -137,22 +165,25 @@ function GenerateReportContent() {
 
     try {
       const payload: ReportGenerateRequest = {
-        player_id: selectedPlayer,
         report_type: selectedType,
       };
+      if (isTeamReportType) {
+        payload.team_name = selectedTeam;
+      } else {
+        payload.player_id = selectedPlayer;
+      }
+
       const { data } = await api.post<ReportGenerateResponse>(
         "/reports/generate",
         payload
       );
       setReportId(data.report_id);
 
-      // If already complete (synchronous generation), redirect immediately
       if (data.status === "complete") {
         setGenState("complete");
         setStatusMessage("Report complete! Redirecting...");
         setTimeout(() => router.push(`/reports/${data.report_id}`), 500);
       } else {
-        // Start polling
         pollStatus(data.report_id);
       }
     } catch (err: unknown) {
@@ -166,6 +197,11 @@ function GenerateReportContent() {
 
   const selectedPlayerObj = players.find((p) => p.id === selectedPlayer);
   const isGenerating = genState === "submitting" || genState === "polling";
+
+  // Determine if generate button should be enabled
+  const canGenerate = isTeamReportType
+    ? !!selectedTeam && !!selectedType
+    : !!selectedPlayer && !!selectedType;
 
   return (
     <ProtectedRoute>
@@ -186,96 +222,147 @@ function GenerateReportContent() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-border p-6 space-y-6">
-            {/* Player Selection */}
-            <div>
-              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
-                Select Player *
-              </label>
-              {!selectedPlayer ? (
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Search players..."
-                    value={playerSearch}
-                    onChange={(e) => setPlayerSearch(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
-                  />
-                  <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
-                    {filteredPlayers.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-muted text-sm">
-                        {players.length === 0 ? (
-                          <>
-                            No players yet.{" "}
-                            <Link
-                              href="/players/new"
-                              className="text-teal hover:underline"
-                            >
-                              Add a player first
-                            </Link>
-                          </>
-                        ) : (
-                          "No matching players."
-                        )}
-                      </div>
-                    ) : (
-                      filteredPlayers.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => setSelectedPlayer(p.id)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-navy/[0.03] transition-colors flex items-center gap-3"
-                        >
-                          <span className="font-semibold text-navy text-sm">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
-                            {p.position}
-                          </span>
-                          {p.current_team && (
-                            <span className="text-xs text-muted ml-auto">
-                              {p.current_team}
-                            </span>
+            {/* Subject Selection — Player OR Team based on report type */}
+            {isTeamReportType ? (
+              /* ── TEAM PICKER ── */
+              <div>
+                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
+                  <Building2 size={12} className="inline mr-1" />
+                  Select Team *
+                </label>
+                <p className="text-[11px] text-muted/60 mb-2">Team reports analyze the entire roster, systems, and strategy.</p>
+                {!selectedTeam ? (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Search teams..."
+                      value={teamSearch}
+                      onChange={(e) => setTeamSearch(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                    />
+                    <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                      {filteredTeams.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-muted text-sm">No teams found.</div>
+                      ) : (
+                        filteredTeams.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setSelectedTeam(t.name)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-navy/[0.03] transition-colors flex items-center gap-3"
+                          >
+                            <span className="font-semibold text-navy text-sm">{t.name}</span>
+                            {t.league && (
+                              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
+                                {t.league}
+                              </span>
+                            )}
+                            {t.city && <span className="text-xs text-muted ml-auto">{t.city}</span>}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-orange/5 rounded-lg px-4 py-3 border border-orange/20">
+                    <div className="flex items-center gap-3">
+                      <Building2 size={16} className="text-orange" />
+                      <span className="font-semibold text-navy text-sm">{selectedTeam}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedTeam(""); setTeamSearch(""); }}
+                      className="text-xs text-muted hover:text-red-600 transition-colors"
+                      disabled={isGenerating}
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* ── PLAYER PICKER ── */
+              <div>
+                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
+                  <Users size={12} className="inline mr-1" />
+                  Select Player *
+                </label>
+                {!selectedPlayer ? (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Search players..."
+                      value={playerSearch}
+                      onChange={(e) => setPlayerSearch(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                    />
+                    <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                      {filteredPlayers.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-muted text-sm">
+                          {players.length === 0 ? (
+                            <>
+                              No players yet.{" "}
+                              <Link href="/players/new" className="text-teal hover:underline">
+                                Add a player first
+                              </Link>
+                            </>
+                          ) : (
+                            "No matching players."
                           )}
-                        </button>
-                      ))
-                    )}
+                        </div>
+                      ) : (
+                        filteredPlayers.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedPlayer(p.id)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-navy/[0.03] transition-colors flex items-center gap-3"
+                          >
+                            <span className="font-semibold text-navy text-sm">
+                              {p.first_name} {p.last_name}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
+                              {p.position}
+                            </span>
+                            {p.current_team && (
+                              <span className="text-xs text-muted ml-auto">{p.current_team}</span>
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between bg-navy/[0.03] rounded-lg px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-navy text-sm">
-                      {selectedPlayerObj
-                        ? `${selectedPlayerObj.first_name} ${selectedPlayerObj.last_name}`
-                        : "Selected Player"}
-                    </span>
-                    {selectedPlayerObj && (
-                      <>
-                        <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
-                          {selectedPlayerObj.position}
-                        </span>
-                        {selectedPlayerObj.current_team && (
-                          <span className="text-xs text-muted">
-                            {selectedPlayerObj.current_team}
+                ) : (
+                  <div className="flex items-center justify-between bg-navy/[0.03] rounded-lg px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-navy text-sm">
+                        {selectedPlayerObj
+                          ? `${selectedPlayerObj.first_name} ${selectedPlayerObj.last_name}`
+                          : "Selected Player"}
+                      </span>
+                      {selectedPlayerObj && (
+                        <>
+                          <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
+                            {selectedPlayerObj.position}
                           </span>
-                        )}
-                      </>
-                    )}
+                          {selectedPlayerObj.current_team && (
+                            <span className="text-xs text-muted">{selectedPlayerObj.current_team}</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedPlayer(""); setPlayerSearch(""); }}
+                      className="text-xs text-muted hover:text-red-600 transition-colors"
+                      disabled={isGenerating}
+                    >
+                      Change
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedPlayer("");
-                      setPlayerSearch("");
-                    }}
-                    className="text-xs text-muted hover:text-red-600 transition-colors"
-                    disabled={isGenerating}
-                  >
-                    Change
-                  </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Report Type Selection — Player Reports */}
             <div>
@@ -325,7 +412,7 @@ function GenerateReportContent() {
                 <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
                   Team Reports
                 </label>
-                <p className="text-[11px] text-muted/60 mb-3">Team strategy, lineup, and game-planning reports. Select a player as the primary focus or reference.</p>
+                <p className="text-[11px] text-muted/60 mb-3">Team strategy, identity, game-planning, and lineup optimization reports. Select a team below.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {reportTypes
                     .filter((type) => (TEAM_REPORT_TYPES as readonly string[]).includes(type))
@@ -400,18 +487,14 @@ function GenerateReportContent() {
 
             {/* Error */}
             {error && genState !== "failed" && (
-              <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">
-                {error}
-              </p>
+              <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>
             )}
 
             {/* Generate Button */}
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={
-                !selectedPlayer || !selectedType || isGenerating || genState === "complete"
-              }
+              disabled={!canGenerate || isGenerating || genState === "complete"}
               className="w-full flex items-center justify-center gap-2 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
             >
               {isGenerating ? (
@@ -427,7 +510,7 @@ function GenerateReportContent() {
               ) : (
                 <>
                   <Zap size={16} />
-                  Generate Report
+                  Generate {isTeamReportType ? "Team" : ""} Report
                 </>
               )}
             </button>

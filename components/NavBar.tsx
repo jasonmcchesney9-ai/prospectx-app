@@ -9,7 +9,6 @@ import {
   Building2,
   FileText,
   Upload,
-  Shield,
   Menu,
   X,
   LogOut,
@@ -21,7 +20,6 @@ const NAV_ITEMS = [
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/team-systems", label: "Systems", icon: Shield },
   { href: "/players/import", label: "Import", icon: Upload },
 ];
 

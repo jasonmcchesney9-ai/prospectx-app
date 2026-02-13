@@ -362,6 +362,39 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    # ── Reports table migration: make player_id nullable, add team_name column ──
+    # SQLite doesn't support ALTER COLUMN, so we check and recreate if needed
+    cursor_info = c.execute("PRAGMA table_info(reports)").fetchall()
+    report_cols = {col[1] for col in cursor_info}
+    if "team_name" not in report_cols:
+        logger.info("Migrating reports table: adding team_name column, making player_id nullable...")
+        c.execute("""CREATE TABLE IF NOT EXISTS reports_new (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_id TEXT,
+            team_name TEXT,
+            template_id TEXT,
+            report_type TEXT NOT NULL,
+            title TEXT,
+            status TEXT DEFAULT 'pending',
+            output_json TEXT,
+            output_text TEXT,
+            input_data TEXT,
+            error_message TEXT,
+            generated_at TEXT,
+            llm_model TEXT,
+            llm_tokens INTEGER DEFAULT 0,
+            generation_time_ms INTEGER,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )""")
+        c.execute("""INSERT INTO reports_new (id, org_id, player_id, template_id, report_type, title, status, output_json, output_text, input_data, error_message, generated_at, llm_model, llm_tokens, generation_time_ms, created_by, created_at)
+            SELECT id, org_id, player_id, template_id, report_type, title, status, output_json, output_text, input_data, error_message, generated_at, llm_model, llm_tokens, generation_time_ms, created_by, created_at FROM reports""")
+        c.execute("DROP TABLE reports")
+        c.execute("ALTER TABLE reports_new RENAME TO reports")
+        logger.info("Reports table migration complete.")
+
     # Player archetypes — computed or manually assigned role classifications
     c.execute("""
         CREATE TABLE IF NOT EXISTS player_archetypes (
@@ -731,7 +764,8 @@ class PlayerResponse(BaseModel):
 
 # --- Reports ---
 class ReportGenerateRequest(BaseModel):
-    player_id: str
+    player_id: Optional[str] = None
+    team_name: Optional[str] = None
     report_type: str
     template_id: Optional[str] = None
     data_scope: Optional[Dict[str, Any]] = None
@@ -739,7 +773,8 @@ class ReportGenerateRequest(BaseModel):
 class ReportResponse(BaseModel):
     id: str
     org_id: str
-    player_id: str
+    player_id: Optional[str] = None
+    team_name: Optional[str] = None
     report_type: str
     title: Optional[str] = None
     status: str
@@ -1630,20 +1665,26 @@ async def get_team_roster(team_name: str, token_data: dict = Depends(verify_toke
 
 @app.get("/teams/{team_name}/reports")
 async def get_team_reports(team_name: str, token_data: dict = Depends(verify_token)):
-    """Get all reports for players on a specific team."""
+    """Get all reports for players on a specific team, plus team-level reports."""
     org_id = token_data["org_id"]
     decoded_name = team_name.replace("%20", " ")
     conn = get_db()
+    # Player-linked reports (via player's current_team) + team-level reports (via r.team_name)
     rows = conn.execute("""
         SELECT r.* FROM reports r
-        JOIN players p ON r.player_id = p.id
-        WHERE r.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+        LEFT JOIN players p ON r.player_id = p.id
+        WHERE r.org_id = ?
+          AND (LOWER(p.current_team) = LOWER(?) OR LOWER(r.team_name) = LOWER(?))
         ORDER BY r.created_at DESC
-    """, (org_id, decoded_name)).fetchall()
+    """, (org_id, decoded_name, decoded_name)).fetchall()
     conn.close()
     results = []
+    seen_ids = set()
     for r in rows:
         d = dict(r)
+        if d["id"] in seen_ids:
+            continue
+        seen_ids.add(d["id"])
         for json_field in ("output_json", "input_data"):
             if d.get(json_field) and isinstance(d[json_field], str):
                 try:
@@ -1654,14 +1695,21 @@ async def get_team_reports(team_name: str, token_data: dict = Depends(verify_tok
     return results
 
 
+class TeamCreateRequest(BaseModel):
+    name: str
+    league: Optional[str] = None
+    city: Optional[str] = None
+    abbreviation: Optional[str] = None
+
+
 @app.post("/teams")
-async def create_team(name: str, league: str = None, city: str = None, token_data: dict = Depends(verify_token)):
+async def create_team(body: TeamCreateRequest, token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
     team_id = gen_id()
     conn = get_db()
     conn.execute(
-        "INSERT INTO teams (id, org_id, name, league, city) VALUES (?, ?, ?, ?, ?)",
-        (team_id, org_id, name, league, city),
+        "INSERT INTO teams (id, org_id, name, league, city, abbreviation) VALUES (?, ?, ?, ?, ?, ?)",
+        (team_id, org_id, body.name, body.league, body.city, body.abbreviation),
     )
     conn.commit()
     row = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
@@ -1727,12 +1775,231 @@ BOTTOM_LINE
 """
 
 
+TEAM_REPORT_TYPES = [
+    "team_identity", "opponent_gameplan", "line_chemistry", "st_optimization",
+    "practice_plan", "playoff_series", "goalie_tandem",
+]
+
+
+def _get_team_system(conn, org_id: str, team_name: str) -> Optional[dict]:
+    """Fetch and parse a team's system profile."""
+    ts_row = conn.execute(
+        "SELECT * FROM team_systems WHERE org_id = ? AND LOWER(team_name) = LOWER(?) LIMIT 1",
+        (org_id, team_name)
+    ).fetchone()
+    if not ts_row:
+        return None
+    return {
+        "team_name": ts_row["team_name"],
+        "season": ts_row["season"],
+        "forecheck": ts_row["forecheck"],
+        "dz_structure": ts_row["dz_structure"],
+        "oz_setup": ts_row["oz_setup"],
+        "pp_formation": ts_row["pp_formation"],
+        "pk_formation": ts_row["pk_formation"],
+        "breakout": ts_row["breakout"],
+        "pace": ts_row["pace"] or "",
+        "physicality": ts_row["physicality"] or "",
+        "offensive_style": ts_row["offensive_style"] or "",
+        "identity_tags": json.loads(ts_row["identity_tags"]) if ts_row["identity_tags"] else [],
+        "notes": ts_row["notes"] or "",
+    }
+
+
+def _resolve_system_code(conn, code: str) -> str:
+    """Look up a system code in the library and return description."""
+    if not code:
+        return "Not specified"
+    lib_row = conn.execute(
+        "SELECT name, description FROM systems_library WHERE code = ? LIMIT 1", (code,)
+    ).fetchone()
+    if lib_row:
+        return f"{lib_row['name']} — {lib_row['description']}"
+    return code
+
+
+def _build_system_context_block(conn, team_system: dict) -> str:
+    """Build the TEAM SYSTEM CONTEXT prompt block from a team system dict."""
+    fc_desc = _resolve_system_code(conn, team_system.get('forecheck', ''))
+    dz_desc = _resolve_system_code(conn, team_system.get('dz_structure', ''))
+    oz_desc = _resolve_system_code(conn, team_system.get('oz_setup', ''))
+    pp_desc = _resolve_system_code(conn, team_system.get('pp_formation', ''))
+    pk_desc = _resolve_system_code(conn, team_system.get('pk_formation', ''))
+    bo_desc = _resolve_system_code(conn, team_system.get('breakout', ''))
+
+    return f"""
+TEAM SYSTEM CONTEXT — HOCKEY OPERATING SYSTEM:
+Team: {team_system['team_name']} ({team_system.get('season', 'Current')})
+Team Identity: {', '.join(team_system.get('identity_tags', [])) or 'Not specified'}
+Team Notes: {team_system.get('notes', 'None')}
+
+TACTICAL SYSTEMS:
+- Forecheck: {fc_desc}
+- Defensive Zone Coverage: {dz_desc}
+- Offensive Zone Setup: {oz_desc}
+- Power Play Formation: {pp_desc}
+- Penalty Kill Formation: {pk_desc}
+- Breakout Pattern: {bo_desc}
+
+TEAM STYLE:
+- Pace: {team_system.get('pace', 'Not specified')}
+- Physicality: {team_system.get('physicality', 'Not specified')}
+- Offensive Style: {team_system.get('offensive_style', 'Not specified')}
+"""
+
+
+async def _generate_team_report(request, org_id: str, user_id: str, conn):
+    """Generate a team-level report (team_identity, opponent_gameplan, etc.)."""
+    team_name = request.team_name
+
+    # Get template
+    template = conn.execute(
+        "SELECT * FROM report_templates WHERE report_type = ? AND (org_id = ? OR is_global = 1) LIMIT 1",
+        (request.report_type, org_id),
+    ).fetchone()
+    if not template:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Report template not found")
+
+    # Create report record — player_id is NULL for team reports
+    report_id = gen_id()
+    conn.execute("""
+        INSERT INTO reports (id, org_id, player_id, team_name, template_id, report_type, status, input_data, created_by, created_at)
+        VALUES (?, ?, NULL, ?, ?, ?, 'processing', ?, ?, ?)
+    """, (report_id, org_id, team_name, template["id"], request.report_type, json.dumps(request.data_scope or {}), user_id, now_iso()))
+    conn.commit()
+
+    start_time = time.perf_counter()
+    title = f"{template['template_name']} — {team_name}"
+
+    try:
+        client = get_anthropic_client()
+
+        # Gather roster data
+        roster_rows = conn.execute(
+            "SELECT * FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) ORDER BY position, last_name",
+            (org_id, team_name),
+        ).fetchall()
+        roster = [_player_from_row(r) for r in roster_rows]
+
+        # Gather stats for each rostered player
+        roster_with_stats = []
+        for p in roster:
+            stats_rows = conn.execute(
+                "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 5",
+                (p["id"],)
+            ).fetchall()
+            p_stats = []
+            for sr in stats_rows:
+                p_stats.append({
+                    "season": sr["season"], "stat_type": sr["stat_type"],
+                    "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
+                    "plus_minus": sr["plus_minus"], "pim": sr["pim"],
+                })
+            roster_with_stats.append({
+                "name": f"{p['first_name']} {p['last_name']}",
+                "position": p["position"],
+                "archetype": p.get("archetype", ""),
+                "shoots": p.get("shoots", ""),
+                "stats": p_stats,
+            })
+
+        # Gather team system
+        team_system = _get_team_system(conn, org_id, team_name)
+        system_context = _build_system_context_block(conn, team_system) if team_system else "\nNo team system profile configured. The report should note this limitation.\n"
+
+        report_type_name = template["template_name"]
+        input_data = {
+            "team_name": team_name,
+            "roster": roster_with_stats,
+            "team_system": team_system,
+            "report_type": request.report_type,
+        }
+
+        if client:
+            llm_model = "claude-sonnet-4-20250514"
+
+            system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine powered by the Hockey Operating System. You produce professional-grade team strategy and scouting reports using tactical hockey terminology that NHL coaches, junior hockey GMs, and hockey operations staff expect.
+
+Generate a **{report_type_name}** for the team below. Your report must be:
+- Data-driven: Reference roster composition, player stats, and team system when available
+- Tactically literate: Use real hockey language — forecheck structures, defensive zone coverage, breakout patterns, special teams formations, line matching
+- Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, TEAM_IDENTITY, ROSTER_ANALYSIS, TACTICAL_SYSTEMS, SPECIAL_TEAMS, STRENGTHS, WEAKNESSES, GAME_PLAN, PRACTICE_PRIORITIES, BOTTOM_LINE)
+- System-aware: Reference the team's configured Hockey Operating System — their forecheck, DZ, OZ, PP, PK structures
+- Coaching-grade: Write like you're briefing a coaching staff before a game or planning session
+
+{system_context}
+
+Include actionable coaching recommendations. Reference specific players by name when discussing line combinations, deployment, or matchup strategies."""
+
+            user_prompt = f"Generate a {report_type_name} for {team_name}. Here is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+
+            message = client.messages.create(
+                model=llm_model,
+                max_tokens=8000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            output_text = message.content[0].text
+            total_tokens = message.usage.input_tokens + message.usage.output_tokens
+        else:
+            llm_model = "mock-demo"
+            total_tokens = 0
+            roster_summary = ", ".join([f"{p['name']} ({p['position']})" for p in roster_with_stats[:10]])
+            output_text = f"""EXECUTIVE_SUMMARY
+{team_name} — {report_type_name}. This is a demo-mode team report. Roster: {len(roster_with_stats)} players. Connect your Anthropic API key in backend/.env to generate full AI-powered team intelligence.
+
+ROSTER_ANALYSIS
+Players on file: {roster_summary or 'No players found for this team.'}
+Total roster size: {len(roster_with_stats)} players.
+
+TACTICAL_SYSTEMS
+{'Team system profile is configured.' if team_system else 'No team system profile found. Configure one in the Systems tab to unlock full tactical analysis.'}
+
+BOTTOM_LINE
+This report was generated in demo mode. Add your Anthropic API key to backend/.env and re-generate for full team intelligence.
+
+**To unlock full report intelligence:** Add your Anthropic API key to backend/.env and re-generate this report.
+"""
+            logger.info("No Anthropic API key — generated mock team report for %s", team_name)
+
+        generation_ms = int((time.perf_counter() - start_time) * 1000)
+
+        conn.execute("""
+            UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
+                              llm_model=?, llm_tokens=?, generation_time_ms=?
+            WHERE id = ?
+        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+        conn.commit()
+
+        logger.info("Team report generated: %s (%s) in %d ms", title, request.report_type, generation_ms)
+        conn.close()
+        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+
+    except Exception as e:
+        conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+        conn.commit()
+        conn.close()
+        logger.error("Team report generation failed: %s — %s", report_id, str(e))
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+
+
 @app.post("/reports/generate", response_model=ReportGenerateResponse)
 async def generate_report(request: ReportGenerateRequest, token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
+
+    if not request.player_id and not request.team_name:
+        raise HTTPException(status_code=400, detail="Either player_id or team_name is required")
+
+    is_team_report = request.report_type in TEAM_REPORT_TYPES and request.team_name and not request.player_id
     conn = get_db()
 
+    # ── TEAM REPORT FLOW ──────────────────────────────────
+    if is_team_report:
+        return await _generate_team_report(request, org_id, user_id, conn)
+
+    # ── PLAYER REPORT FLOW (existing) ─────────────────────
     # Verify player
     player_row = conn.execute("SELECT * FROM players WHERE id = ? AND org_id = ?", (request.player_id, org_id)).fetchone()
     if not player_row:
@@ -2007,7 +2274,8 @@ async def regenerate_report(report_id: str, token_data: dict = Depends(verify_to
     conn.close()
 
     regen_req = ReportGenerateRequest(
-        player_id=report["player_id"],
+        player_id=report.get("player_id"),
+        team_name=report.get("team_name"),
         report_type=report["report_type"],
         template_id=report.get("template_id"),
     )
@@ -2427,9 +2695,13 @@ def _fuzzy_name_match(name1: str, name2: str) -> float:
 @app.post("/import/preview")
 async def preview_import(
     file: UploadFile = File(...),
+    team_override: Optional[str] = None,
+    league_override: Optional[str] = None,
     token_data: dict = Depends(verify_token),
 ):
-    """Upload a CSV or Excel file, parse it, detect duplicates, return preview for admin review."""
+    """Upload a CSV or Excel file, parse it, detect duplicates, return preview for admin review.
+    Optional team_override/league_override to auto-inject team/league for all rows (used by team roster import).
+    """
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
 
@@ -2516,6 +2788,16 @@ async def preview_import(
             "pim": row.get("pim") or row.get("penalty_minutes") or row.get("pen") or None,
             "season": row.get("season") or row.get("year") or None,
         })
+
+    # Apply team/league override for team roster imports
+    if team_override:
+        for rd in rows_data:
+            if not rd.get("current_team"):
+                rd["current_team"] = team_override
+    if league_override:
+        for rd in rows_data:
+            if not rd.get("current_league"):
+                rd["current_league"] = league_override
 
     # Fetch existing players for duplicate detection
     conn = get_db()

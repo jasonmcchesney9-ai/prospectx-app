@@ -107,7 +107,8 @@ export interface PlayerStats {
 export interface Report {
   id: string;
   org_id: string;
-  player_id: string;
+  player_id: string | null;
+  team_name: string | null;
   report_type: string;
   title: string | null;
   status: "pending" | "processing" | "complete" | "failed";
@@ -131,10 +132,18 @@ export interface ReportTemplate {
 }
 
 export interface ReportGenerateRequest {
-  player_id: string;
+  player_id?: string;
+  team_name?: string;
   report_type: string;
   template_id?: string;
   data_scope?: Record<string, unknown>;
+}
+
+export interface TeamCreateRequest {
+  name: string;
+  league?: string;
+  city?: string;
+  abbreviation?: string;
 }
 
 export interface ReportGenerateResponse {
@@ -386,6 +395,18 @@ export const SECTION_LABELS: Record<string, string> = {
   DEVELOPMENT_PROJECTION: "Development Projection",
   DRAFT_ELIGIBILITY: "Draft Eligibility",
   DATA_LIMITATIONS: "Data Limitations",
+  // Team report sections
+  TEAM_IDENTITY: "Team Identity",
+  ROSTER_ANALYSIS: "Roster Analysis",
+  TACTICAL_SYSTEMS: "Tactical Systems",
+  SPECIAL_TEAMS: "Special Teams",
+  GAME_PLAN: "Game Plan",
+  PRACTICE_PRIORITIES: "Practice Priorities",
+  WEAKNESSES: "Weaknesses",
+  LINE_COMBINATIONS: "Line Combinations",
+  MATCHUP_STRATEGY: "Matchup Strategy",
+  SERIES_STRATEGY: "Series Strategy",
+  GOALTENDING: "Goaltending",
 };
 
 export const REPORT_TYPE_LABELS: Record<string, string> = {

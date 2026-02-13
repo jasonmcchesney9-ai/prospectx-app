@@ -199,20 +199,27 @@ export default function ReportViewerPage() {
     return extractGrade(report.output_text);
   }, [report?.output_text]);
 
-  // Build the player-friendly filename for download/print
-  const playerName = player ? `${player.first_name}_${player.last_name}` : "Report";
+  // Build the filename for download/print — works for player or team reports
+  const subjectName = player
+    ? `${player.first_name}_${player.last_name}`
+    : report?.team_name?.replace(/\s+/g, "_") || "Report";
   const reportFileName = useMemo(() => {
     const type = report?.report_type || "report";
     const date = report?.generated_at
       ? new Date(report.generated_at).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0];
-    return `${playerName}_${type}_${date}`;
-  }, [playerName, report?.report_type, report?.generated_at]);
+    return `${subjectName}_${type}_${date}`;
+  }, [subjectName, report?.report_type, report?.generated_at]);
 
   // Set document title for print/save PDF (so the browser suggests a good filename)
   useEffect(() => {
-    if (report && player) {
-      document.title = `${player.first_name} ${player.last_name} — ${REPORT_TYPE_LABELS[report.report_type] || report.report_type} | ProspectX`;
+    if (report) {
+      const label = REPORT_TYPE_LABELS[report.report_type] || report.report_type;
+      if (player) {
+        document.title = `${player.first_name} ${player.last_name} — ${label} | ProspectX`;
+      } else if (report.team_name) {
+        document.title = `${report.team_name} — ${label} | ProspectX`;
+      }
     }
     return () => {
       document.title = "ProspectX Intelligence";
@@ -290,7 +297,7 @@ export default function ReportViewerPage() {
               <h1 className="text-2xl font-bold">
                 {report.title || "Report"}
               </h1>
-              {player && (
+              {player ? (
                 <Link
                   href={`/players/${player.id}`}
                   className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-teal mt-1 transition-colors"
@@ -303,7 +310,14 @@ export default function ReportViewerPage() {
                     </span>
                   )}
                 </Link>
-              )}
+              ) : report.team_name ? (
+                <Link
+                  href={`/teams/${encodeURIComponent(report.team_name)}`}
+                  className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-teal mt-1 transition-colors"
+                >
+                  {report.team_name}
+                </Link>
+              ) : null}
               <div className="flex items-center gap-4 mt-3 text-xs text-white/50">
                 {report.generated_at && (
                   <span>
