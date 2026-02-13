@@ -283,9 +283,179 @@ def init_db():
         )
     """)
 
+    # ── Hockey Operating System Tables ──────────────────────────
+
+    # Hockey terminology glossary — the language ProspectX speaks
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS hockey_terms (
+            id TEXT PRIMARY KEY,
+            term TEXT NOT NULL UNIQUE,
+            category TEXT NOT NULL,
+            definition TEXT NOT NULL,
+            aliases TEXT DEFAULT '[]',
+            usage_context TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Systems library — tactical structures teams can run
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS systems_library (
+            id TEXT PRIMARY KEY,
+            system_type TEXT NOT NULL,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            description TEXT,
+            strengths TEXT,
+            weaknesses TEXT,
+            ideal_personnel TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Team systems — which systems a team actually runs
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS team_systems (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            team_id TEXT,
+            team_name TEXT,
+            season TEXT,
+            forecheck TEXT,
+            dz_structure TEXT,
+            oz_setup TEXT,
+            pp_formation TEXT,
+            pk_formation TEXT,
+            neutral_zone TEXT,
+            breakout TEXT,
+            identity_tags TEXT DEFAULT '[]',
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    # Player archetypes — computed or manually assigned role classifications
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS player_archetypes (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            archetype TEXT NOT NULL,
+            confidence REAL DEFAULT 0.0,
+            indices TEXT DEFAULT '{}',
+            assigned_by TEXT DEFAULT 'manual',
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+
+    # System adherence — how well a player fits or performs in a system
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS system_adherence (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            system_code TEXT NOT NULL,
+            adherence_score REAL,
+            fit_rating TEXT,
+            notes TEXT,
+            evaluated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+
+    # Team evaluation criteria — what a team values for each position
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS team_eval_criteria (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            position TEXT NOT NULL,
+            criteria_name TEXT NOT NULL,
+            weight REAL DEFAULT 1.0,
+            description TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
     conn.commit()
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
+
+
+def seed_hockey_os():
+    """Seed the Hockey OS reference data (systems library + glossary)."""
+    conn = get_db()
+
+    # Check if already seeded
+    count = conn.execute("SELECT COUNT(*) FROM systems_library").fetchone()[0]
+    if count > 0:
+        conn.close()
+        return
+
+    # ── Systems Library ───────────────────────────────────────
+    systems = [
+        # Forecheck systems
+        ("forecheck", "F_AGGRESSIVE_1_2_2", "Aggressive 1-2-2", "First forward pressures hard, two wingers contain middle ice, two D stay high. Forces turnovers but vulnerable to speed through the middle.", "High pressure, turnovers forced, good for teams with fast F1", "Can be beaten with quick east-west passes, requires disciplined F1", "Fast F1 with good closing speed, physical wingers"),
+        ("forecheck", "F_1_2_2_TRAP", "1-2-2 Neutral Zone Trap", "Passive forecheck clogging the neutral zone. F1 angles, two forwards sit in a wall across the red line, D stay deep. Limits opponent transition.", "Limits odd-man rushes, controls pace, low risk", "Can be frustrating for own forwards, low event hockey", "Disciplined forwards willing to backcheck, patient defensemen"),
+        ("forecheck", "F_2_1_2", "2-1-2 Forecheck", "Two forwards go deep on the forecheck, one center supports high, two D pinch. Very aggressive, forces turnovers but leaves the NZ open.", "Maximum OZ pressure, turnovers deep, dominant possession", "Vulnerable to stretch passes, breakaways if pinch fails", "Two physical forecheckers, mobile D who can pinch and recover"),
+        ("forecheck", "F_1_3_1", "1-3-1 Forecheck", "One forward pressures, three across the neutral zone in a line, one D cheats up. Great for trapping teams and counter-attacking.", "Controls NZ, generates turnovers in transition, counter-attack", "Weak if opponent gets behind the 3-man wall", "Smart F1 who angles well, fast counter-attack wingers"),
+        ("forecheck", "F_1_1_3", "1-1-3 Passive Trap", "Deep trap with only one forechecker, one mid-zone forward, and three players sitting back. Ultra-defensive shell.", "Almost impossible to get clean entries against, low goals against", "Very few offensive chances, boring hockey, hard to score", "Disciplined team willing to play low-event hockey"),
+        # DZ structures
+        ("dz_coverage", "DZ_MAN_TO_MAN", "Man-to-Man DZ", "Each player picks up a man in the defensive zone. Tight coverage, eliminates passing lanes, but can be exposed by picks and screens.", "Tight coverage, eliminates freelancers, good vs cycle teams", "Vulnerable to screens, picks, and mismatch situations", "Players with good feet, communication, and physicality"),
+        ("dz_coverage", "DZ_ZONE", "Zone Defense DZ", "Players cover areas rather than men. Strong side overload, weak side rotates. Standard NHL-style coverage.", "Good against cycle, covers shooting lanes, less skating", "Can leave men open in soft areas, requires communication", "Smart players who read plays, good stick positioning"),
+        ("dz_coverage", "DZ_COLLAPSING_BOX", "Collapsing Box DZ", "Four players form a box in front of the net, one player pressures the puck. Collapses inward on shots. Very protective of the slot.", "Protects the slot and net-front, limits high-danger chances", "Gives up perimeter shots, weak vs point shots with traffic", "Shot-blocking willingness, goalie who handles perimeter shots"),
+        ("dz_coverage", "DZ_SWARM", "Swarm Coverage DZ", "Aggressive puck pursuit in the DZ. All five players pressure the puck carrier. High risk, high reward — forces turnovers or gets burned.", "Forces turnovers, creates transition chances from DZ", "Extremely vulnerable if beaten, requires elite conditioning", "High-compete players, great conditioning, smart gambles"),
+        # OZ setups
+        ("oz_setup", "OZ_UMBRELLA", "Umbrella OZ / PP", "One player at the top with two half-wall options and two net-front/bumper players. Classic power play look. Creates triangles for one-timers.", "One-timer options, triangle passing, multiple shooting lanes", "Predictable if scouted, requires a strong bumper player", "Shooter at the top, playmaker on the half-wall, big net-front"),
+        ("oz_setup", "OZ_OVERLOAD", "Overload OZ", "Shifts 4 players to one side of the ice, creating numerical advantage. Quick passes in tight space, back-door options.", "Creates confusion, numerical advantage, back-door plays", "Weak side is empty — one pass beats it entirely", "Quick decision-makers, players comfortable in tight spaces"),
+        ("oz_setup", "OZ_CYCLE", "Heavy Cycle OZ", "Grind the puck down low, use the half-wall, and work it to the net-front or point. Physical, possession-based.", "Controls the puck, wears down opponents, creates net-front chaos", "Slow to generate shots, can be broken by aggressive DZ pressure", "Big, strong forwards who protect the puck, net-front presence"),
+        ("oz_setup", "OZ_1_3_1_PP", "1-3-1 Power Play", "One player at the top, three across the middle (two half-walls + bumper), one net-front. Creates passing lanes and mid-range shots.", "Multiple shooting options, hard to defend bumper, cross-ice plays", "Requires elite passer at the top, vulnerable to aggressive PK", "High-IQ playmaker at the top, finisher in the bumper"),
+        # Breakout systems
+        ("breakout", "BO_STANDARD", "Standard Breakout", "D-to-D behind the net, up to the winger on the wall, center supports through the middle. Basic but reliable.", "Simple, reliable, low turnover risk", "Predictable, easy for aggressive forechecks to read", "Good first-pass D, wingers who get open on the wall"),
+        ("breakout", "BO_REVERSE", "Reverse Breakout", "D starts one direction then reverses behind the net to the weak-side D or winger. Changes the point of attack.", "Changes angles, beats overcommitted forecheckers", "Risky if weak-side support is late, requires good skating D", "Mobile defensemen, quick-thinking forwards"),
+        ("breakout", "BO_WHEEL", "Wheel Breakout", "D skates behind the net and carries the puck up-ice themselves. Aggressive, creates odd-man opportunities.", "Creates speed through NZ, D joins the rush as an extra attacker", "Very risky if D gets caught, requires elite skating ability", "Mobile, puck-carrying defensemen with good vision"),
+        # PK formations
+        ("pk_formation", "PK_BOX", "Box PK", "Four players form a box (diamond). Protects the slot, takes away one-timer lanes. Standard PK look.", "Protects the slot, eliminates one-timers, simple reads", "Gives up perimeter shots, can be stretched by movement", "Shot blockers, strong sticks in passing lanes"),
+        ("pk_formation", "PK_DIAMOND", "Diamond PK", "One forward pressures high, two forwards/D at the dots, one D in front of the net. More aggressive than a box.", "Pressures the puck, disrupts PP entries, forces turnovers", "Vulnerable if high man is beaten, leaves backdoor open", "Fast penalty-killing forwards, aggressive D"),
+        ("pk_formation", "PK_AGGRESSIVE", "Aggressive PK", "Two forwards pressure the puck aggressively on the PK, trying to force turnovers and create shorthanded chances.", "Shorthanded goals, disrupts PP flow, momentum swings", "Extremely risky — one pass can expose the entire PK", "Elite PKers with speed, high hockey IQ, calculated aggression"),
+    ]
+
+    for sys_type, code, name, desc, strengths, weaknesses, personnel in systems:
+        conn.execute(
+            "INSERT INTO systems_library (id, system_type, code, name, description, strengths, weaknesses, ideal_personnel) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), sys_type, code, name, desc, strengths, weaknesses, personnel),
+        )
+
+    # ── Hockey Glossary Terms ─────────────────────────────────
+    terms = [
+        ("Controlled Entry", "transition", "Entering the offensive zone with possession of the puck (carry-in or pass). Opposite of a dump-in.", '["carry-in", "clean entry"]', "Microstat tracking, transition analysis"),
+        ("Controlled Exit", "transition", "Exiting the defensive zone with possession — either carrying or passing the puck out cleanly.", '["clean exit", "breakout with possession"]', "Microstat tracking, transition analysis"),
+        ("Battle Win Rate", "compete", "Percentage of loose puck battles won. Measured in board play, net-front, and forecheck scenarios.", '["puck battle %", "compete rate"]', "Physical evaluation, compete level assessment"),
+        ("Forecheck Pressure", "forecheck", "An aggressive action on the puck carrier in the offensive zone to force a turnover or rushed play.", '["F1 pressure", "forechecking"]', "System adherence, forecheck evaluation"),
+        ("Slot Pass", "offense", "A pass completed into the scoring slot area (between the faceoff dots and below the top of the circles).", '["pass to slot", "dangerous pass"]', "Offensive creation, playmaking evaluation"),
+        ("xG (Expected Goals)", "analytics", "A model-based metric estimating the probability a shot becomes a goal based on location, type, and context.", '["expected goals"]', "Advanced analytics, shot quality measurement"),
+        ("Cycle Play", "systems", "Possession-based offensive strategy working the puck along the boards and behind the net to create scoring chances.", '["grinding", "below the goal line"]', "System description, offensive evaluation"),
+        ("Gap Control", "defense", "The distance a defender maintains between themselves and the attacking player. Tight gap = aggressive, loose gap = conservative.", '["closing speed", "gap management"]', "Defensive evaluation, skating assessment"),
+        ("Net-Front Presence", "offense", "A player's ability to establish and maintain position in front of the opposing net to screen, tip, and create chaos.", '["net-front", "crease work", "dirty area goals"]', "Role fit, archetype classification"),
+        ("Transition Game", "transition", "The ability to move the puck effectively from defense to offense through the neutral zone. Measured by controlled entries/exits.", '["transition", "NZ play"]', "Overall game assessment, speed of play"),
+        ("Two-Way Forward", "archetypes", "A forward who contributes offensively while also being responsible defensively. Trusted in all three zones and situations.", '["200-foot player", "complete forward"]', "Archetype classification, role fit"),
+        ("Puck-Moving Defenseman", "archetypes", "A defenseman whose primary value is moving the puck out of the DZ and through the NZ. Good first pass, skating, and vision.", '["mobile D", "skating defenseman"]', "Archetype classification, D evaluation"),
+        ("F1/F2/F3", "systems", "The three forward roles in a forecheck. F1 = first forechecker (pressure), F2 = second (support/contain), F3 = third (high/safety).", '["forecheck roles"]', "System description, forecheck evaluation"),
+        ("Retrieve and Regroup", "breakout", "A breakout strategy where the D retrieves the puck behind the net and looks to regroup rather than make a quick breakout pass.", '["regroup"]', "Breakout evaluation, patience assessment"),
+        ("Shooting Percentage", "analytics", "Goals divided by shots on goal. Context matters — league average varies by level. Sustainability is key.", '["S%", "sh%", "shooting efficiency"]', "Offensive evaluation, shot selection"),
+    ]
+
+    for term, cat, defn, aliases, context in terms:
+        conn.execute(
+            "INSERT INTO hockey_terms (id, term, category, definition, aliases, usage_context) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), term, cat, defn, aliases, context),
+        )
+
+    conn.commit()
+    conn.close()
+    logger.info("Seeded Hockey OS: %d systems, %d glossary terms", len(systems), len(terms))
 
 
 def seed_templates():
@@ -332,6 +502,7 @@ def seed_templates():
 # Run on import
 init_db()
 seed_templates()
+seed_hockey_os()
 
 
 # ============================================================
@@ -1290,7 +1461,27 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     "tags": nr["tags"],
                 })
 
-            logger.info("Report input — stats: %d rows, notes: %d rows", len(stats_list), len(notes_list))
+            # Gather team system data (if the player's team has a system profile)
+            team_system = None
+            if player.get("current_team"):
+                ts_row = conn.execute(
+                    "SELECT * FROM team_systems WHERE org_id = ? AND LOWER(team_name) = LOWER(?) LIMIT 1",
+                    (org_id, player["current_team"])
+                ).fetchone()
+                if ts_row:
+                    team_system = {
+                        "team_name": ts_row["team_name"],
+                        "forecheck": ts_row["forecheck"],
+                        "dz_structure": ts_row["dz_structure"],
+                        "oz_setup": ts_row["oz_setup"],
+                        "pp_formation": ts_row["pp_formation"],
+                        "pk_formation": ts_row["pk_formation"],
+                        "breakout": ts_row["breakout"],
+                        "identity_tags": json.loads(ts_row["identity_tags"]) if ts_row["identity_tags"] else [],
+                    }
+
+            logger.info("Report input — stats: %d rows, notes: %d rows, team_system: %s",
+                        len(stats_list), len(notes_list), "yes" if team_system else "no")
 
             input_data = {
                 "player": player,
@@ -1298,17 +1489,39 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                 "scout_notes": notes_list,
                 "request_scope": request.data_scope,
             }
+            if team_system:
+                input_data["team_system"] = team_system
 
             report_type_name = template["template_name"]
-            system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine. You produce professional-grade scouting reports used by NHL scouts, junior hockey GMs, agents, and player development staff.
+
+            # Build the system context block for the prompt
+            system_context_block = ""
+            if team_system:
+                system_context_block = f"""
+
+TEAM SYSTEM CONTEXT (use this to evaluate system fit):
+Team: {team_system['team_name']}
+Forecheck: {team_system.get('forecheck', 'Not specified')}
+DZ Coverage: {team_system.get('dz_structure', 'Not specified')}
+OZ Setup: {team_system.get('oz_setup', 'Not specified')}
+PP Formation: {team_system.get('pp_formation', 'Not specified')}
+PK Formation: {team_system.get('pk_formation', 'Not specified')}
+Breakout: {team_system.get('breakout', 'Not specified')}
+Identity: {', '.join(team_system.get('identity_tags', [])) or 'Not specified'}
+
+When generating the report, include a SYSTEM_FIT section that evaluates how well this player fits the team's tactical system. Reference forecheck role (F1/F2/F3), defensive zone responsibilities, offensive zone contributions, and special teams fit. Use real hockey language — "drives play as an aggressive F1 on the 2-1-2 forecheck" not "performs well in the system."
+"""
+
+            system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine powered by the Hockey Operating System. You produce professional-grade scouting reports using tactical hockey terminology that NHL scouts, junior hockey GMs, agents, and player development staff expect.
 
 Generate a **{report_type_name}** for the player below. Your report must be:
 - Data-driven: Reference specific stats (GP, G, A, P, +/-, PIM, S%, etc.) when available
-- Analytically rigorous: Project trends, identify strengths/weaknesses, compare to level benchmarks
-- Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, PROJECTION, BOTTOM_LINE)
+- Tactically literate: Use real hockey language — forecheck roles (F1/F2/F3), transition play, gap control, cycle game, net-front presence, breakout patterns, DZ coverage
+- Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, SYSTEM_FIT, PROJECTION, BOTTOM_LINE)
 - Specific to position: Tailor analysis to the player's position (center, wing, defense, goalie)
 - Honest and balanced: Don't inflate or deflate — give an accurate, scout-grade assessment
-
+- Archetype-aware: Identify the player's archetype (sniper, playmaker, two-way forward, transition driver, power forward, puck-moving D, shutdown D, etc.)
+{system_context_block}
 PROSPECT GRADING SCALE (include an overall grade in EXECUTIVE_SUMMARY or BOTTOM_LINE):
   A   = Top-Line / #1 D / Franchise — Elite NHL talent, first-round caliber
   A-  = Top-6 F / Top-4 D / Starting G — High-end NHL player, early-round pick
@@ -1647,6 +1860,162 @@ async def delete_note(note_id: str, token_data: dict = Depends(verify_token)):
     conn.commit()
     conn.close()
     return {"detail": "Note deleted"}
+
+
+# ============================================================
+# HOCKEY OPERATING SYSTEM ENDPOINTS
+# ============================================================
+
+
+class TeamSystemCreate(BaseModel):
+    team_name: str
+    season: str = ""
+    forecheck: str = ""
+    dz_structure: str = ""
+    oz_setup: str = ""
+    pp_formation: str = ""
+    pk_formation: str = ""
+    neutral_zone: str = ""
+    breakout: str = ""
+    identity_tags: list = []
+    notes: str = ""
+
+
+class TeamSystemResponse(BaseModel):
+    id: str
+    org_id: str
+    team_id: Optional[str] = None
+    team_name: str
+    season: str = ""
+    forecheck: str = ""
+    dz_structure: str = ""
+    oz_setup: str = ""
+    pp_formation: str = ""
+    pk_formation: str = ""
+    neutral_zone: str = ""
+    breakout: str = ""
+    identity_tags: list = []
+    notes: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@app.get("/hockey-os/systems-library")
+async def list_systems_library(system_type: Optional[str] = None):
+    """Get all available tactical systems from the library (no auth needed — reference data)."""
+    conn = get_db()
+    if system_type:
+        rows = conn.execute("SELECT * FROM systems_library WHERE system_type = ? ORDER BY code", (system_type,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM systems_library ORDER BY system_type, code").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/hockey-os/glossary")
+async def list_glossary(category: Optional[str] = None):
+    """Get hockey terminology glossary (no auth needed — reference data)."""
+    conn = get_db()
+    if category:
+        rows = conn.execute("SELECT * FROM hockey_terms WHERE category = ? ORDER BY term", (category,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM hockey_terms ORDER BY category, term").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/hockey-os/team-systems")
+async def list_team_systems(token_data: dict = Depends(verify_token)):
+    """Get all team system profiles for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM team_systems WHERE org_id = ? ORDER BY team_name", (org_id,)).fetchall()
+    conn.close()
+    results = []
+    for r in rows:
+        d = dict(r)
+        if d.get("identity_tags"):
+            try:
+                d["identity_tags"] = json.loads(d["identity_tags"])
+            except (json.JSONDecodeError, TypeError):
+                d["identity_tags"] = []
+        else:
+            d["identity_tags"] = []
+        results.append(d)
+    return results
+
+
+@app.get("/hockey-os/team-systems/{system_id}")
+async def get_team_system(system_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single team system profile."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    row = conn.execute("SELECT * FROM team_systems WHERE id = ? AND org_id = ?", (system_id, org_id)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Team system not found")
+    result = dict(row)
+    # Parse JSON fields
+    if result.get("identity_tags"):
+        try:
+            result["identity_tags"] = json.loads(result["identity_tags"])
+        except (json.JSONDecodeError, TypeError):
+            result["identity_tags"] = []
+    return result
+
+
+@app.post("/hockey-os/team-systems", status_code=201)
+async def create_team_system(body: TeamSystemCreate, token_data: dict = Depends(verify_token)):
+    """Create a team system profile."""
+    org_id = token_data["org_id"]
+    system_id = gen_id()
+    now = now_iso()
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO team_systems (id, org_id, team_name, season, forecheck, dz_structure, oz_setup,
+                                   pp_formation, pk_formation, neutral_zone, breakout, identity_tags, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (system_id, org_id, body.team_name, body.season, body.forecheck, body.dz_structure, body.oz_setup,
+          body.pp_formation, body.pk_formation, body.neutral_zone, body.breakout,
+          json.dumps(body.identity_tags), body.notes, now, now))
+    conn.commit()
+    row = conn.execute("SELECT * FROM team_systems WHERE id = ?", (system_id,)).fetchone()
+    conn.close()
+    logger.info("Team system created: %s (org %s)", body.team_name, org_id)
+    return dict(row)
+
+
+@app.put("/hockey-os/team-systems/{system_id}")
+async def update_team_system(system_id: str, body: TeamSystemCreate, token_data: dict = Depends(verify_token)):
+    """Update a team system profile."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM team_systems WHERE id = ? AND org_id = ?", (system_id, org_id)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Team system not found")
+    conn.execute("""
+        UPDATE team_systems SET team_name=?, season=?, forecheck=?, dz_structure=?, oz_setup=?,
+               pp_formation=?, pk_formation=?, neutral_zone=?, breakout=?, identity_tags=?, notes=?, updated_at=?
+        WHERE id = ? AND org_id = ?
+    """, (body.team_name, body.season, body.forecheck, body.dz_structure, body.oz_setup,
+          body.pp_formation, body.pk_formation, body.neutral_zone, body.breakout,
+          json.dumps(body.identity_tags), body.notes, now_iso(), system_id, org_id))
+    conn.commit()
+    row = conn.execute("SELECT * FROM team_systems WHERE id = ?", (system_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.delete("/hockey-os/team-systems/{system_id}")
+async def delete_team_system(system_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a team system profile."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    conn.execute("DELETE FROM team_systems WHERE id = ? AND org_id = ?", (system_id, org_id))
+    conn.commit()
+    conn.close()
+    return {"detail": "Team system deleted"}
 
 
 # ============================================================

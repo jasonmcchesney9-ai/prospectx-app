@@ -8,6 +8,7 @@ import {
   Users,
   FileText,
   Upload,
+  Shield,
   Menu,
   X,
   LogOut,
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/players", label: "Players", icon: Users },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/systems", label: "Systems", icon: Shield },
   { href: "/players/import", label: "Import", icon: Upload },
 ];
 

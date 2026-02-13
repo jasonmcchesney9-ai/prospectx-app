@@ -138,6 +138,46 @@ export interface StatsIngestResponse {
   errors: Array<{ row: number; error: string }>;
 }
 
+// --- Hockey Operating System ---
+export interface SystemLibraryEntry {
+  id: string;
+  system_type: string;
+  code: string;
+  name: string;
+  description: string;
+  strengths: string;
+  weaknesses: string;
+  ideal_personnel: string;
+}
+
+export interface TeamSystem {
+  id: string;
+  org_id: string;
+  team_id: string | null;
+  team_name: string;
+  season: string;
+  forecheck: string;
+  dz_structure: string;
+  oz_setup: string;
+  pp_formation: string;
+  pk_formation: string;
+  neutral_zone: string;
+  breakout: string;
+  identity_tags: string[];
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlossaryTerm {
+  id: string;
+  term: string;
+  category: string;
+  definition: string;
+  aliases: string[];
+  usage_context: string;
+}
+
 // --- Scout Notes ---
 export interface ScoutNote {
   id: string;
@@ -251,6 +291,16 @@ export const REPORT_SECTIONS = [
   "CONCERNS_IDENTIFIED",
   "OFFSEASON_PRIORITIES",
   "CONTRACT_CONTEXT",
+  // Hockey OS sections
+  "SYSTEM_FIT",
+  "SKATING_ASSESSMENT",
+  "OFFENSIVE_GAME",
+  "DEFENSIVE_GAME",
+  "HOCKEY_SENSE",
+  "PHYSICAL_PROFILE",
+  "DEVELOPMENT_PROJECTION",
+  "DRAFT_ELIGIBILITY",
+  "DATA_LIMITATIONS",
 ] as const;
 
 export const SECTION_LABELS: Record<string, string> = {
@@ -304,6 +354,16 @@ export const SECTION_LABELS: Record<string, string> = {
   DEVELOPMENT_TRAJECTORY: "Development Trajectory",
   RISK_MITIGATION: "Risk Mitigation",
   RECOMMENDATION: "Recommendation",
+  // Hockey OS sections
+  SYSTEM_FIT: "System Fit",
+  SKATING_ASSESSMENT: "Skating Assessment",
+  OFFENSIVE_GAME: "Offensive Game",
+  DEFENSIVE_GAME: "Defensive Game",
+  HOCKEY_SENSE: "Hockey Sense",
+  PHYSICAL_PROFILE: "Physical Profile",
+  DEVELOPMENT_PROJECTION: "Development Projection",
+  DRAFT_ELIGIBILITY: "Draft Eligibility",
+  DATA_LIMITATIONS: "Data Limitations",
 };
 
 export const REPORT_TYPE_LABELS: Record<string, string> = {
