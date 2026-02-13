@@ -624,6 +624,14 @@ def seed_teams():
         conn.close()
         return
 
+    # Ensure __global__ org exists for reference data (FK constraint)
+    existing = conn.execute("SELECT id FROM organizations WHERE id = '__global__'").fetchone()
+    if not existing:
+        conn.execute(
+            "INSERT INTO organizations (id, name) VALUES ('__global__', 'Global Reference Data')"
+        )
+        conn.commit()
+
     gojhl_teams = [
         # Western Conference
         ("Chatham Maroons", "GOJHL", "Chatham", "CM"),
