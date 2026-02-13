@@ -19,8 +19,9 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
 
@@ -62,6 +63,13 @@ app = FastAPI(
     description="Decision-Grade Hockey Intelligence Platform",
     version="1.0.0",
 )
+
+# ── Images directory ──────────────────────────────
+_IMAGES_DIR = os.path.join(_DATA_DIR, "images")
+os.makedirs(_IMAGES_DIR, exist_ok=True)
+
+# Serve uploaded player images as static files
+app.mount("/uploads", StaticFiles(directory=_IMAGES_DIR), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -163,6 +171,7 @@ def init_db():
             notes TEXT,
             tags TEXT DEFAULT '[]',
             archetype TEXT,
+            image_url TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (org_id) REFERENCES organizations(id)
@@ -397,6 +406,15 @@ def init_db():
     """)
 
     conn.commit()
+
+    # ── Migrations for existing databases ───────────────────
+    # Add image_url column if it doesn't exist
+    cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    if "image_url" not in cols:
+        conn.execute("ALTER TABLE players ADD COLUMN image_url TEXT")
+        conn.commit()
+        logger.info("Migration: added image_url column to players table")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -592,6 +610,7 @@ class PlayerCreate(BaseModel):
     notes: Optional[str] = None
     tags: Optional[List[str]] = []
     archetype: Optional[str] = None
+    image_url: Optional[str] = None
 
 class PlayerResponse(BaseModel):
     id: str
@@ -609,6 +628,7 @@ class PlayerResponse(BaseModel):
     notes: Optional[str] = None
     tags: Optional[List[str]] = []
     archetype: Optional[str] = None
+    image_url: Optional[str] = None
     created_at: str
 
 # --- Reports ---
@@ -883,14 +903,14 @@ async def create_player(player: PlayerCreate, token_data: dict = Depends(verify_
 
     conn.execute("""
         INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots, height_cm, weight_kg,
-                             current_team, current_league, passports, notes, tags, archetype, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             current_team, current_league, passports, notes, tags, archetype, image_url, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         player_id, org_id, player.first_name, player.last_name, player.dob,
         player.position.upper(), player.shoots, player.height_cm, player.weight_kg,
         player.current_team, player.current_league,
         json.dumps(player.passports or []), player.notes, json.dumps(player.tags or []),
-        player.archetype, now, now,
+        player.archetype, player.image_url, now, now,
     ))
     conn.commit()
 
@@ -922,13 +942,13 @@ async def update_player(player_id: str, player: PlayerCreate, token_data: dict =
 
     conn.execute("""
         UPDATE players SET first_name=?, last_name=?, dob=?, position=?, shoots=?, height_cm=?, weight_kg=?,
-                          current_team=?, current_league=?, passports=?, notes=?, tags=?, archetype=?, updated_at=?
+                          current_team=?, current_league=?, passports=?, notes=?, tags=?, archetype=?, image_url=?, updated_at=?
         WHERE id = ? AND org_id = ?
     """, (
         player.first_name, player.last_name, player.dob, player.position.upper(), player.shoots,
         player.height_cm, player.weight_kg, player.current_team, player.current_league,
         json.dumps(player.passports or []), player.notes, json.dumps(player.tags or []),
-        player.archetype, now_iso(), player_id, org_id,
+        player.archetype, player.image_url, now_iso(), player_id, org_id,
     ))
     conn.commit()
     row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
@@ -946,6 +966,84 @@ async def delete_player(player_id: str, token_data: dict = Depends(verify_token)
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     return {"detail": "Player deleted"}
+
+
+# ── Player Image Upload ────────────────────────────────────
+@app.post("/players/{player_id}/image")
+async def upload_player_image(
+    player_id: str,
+    file: UploadFile = File(...),
+    token_data: dict = Depends(verify_token),
+):
+    org_id = token_data["org_id"]
+    conn = get_db()
+    row = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if file.content_type not in allowed_types:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid image type. Allowed: JPEG, PNG, WebP, GIF")
+
+    # Generate a unique filename
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "jpg"
+    if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
+        ext = "jpg"
+    filename = f"{player_id}.{ext}"
+    filepath = os.path.join(_IMAGES_DIR, filename)
+
+    # Remove any existing image for this player (different extension)
+    for old_ext in ("jpg", "jpeg", "png", "webp", "gif"):
+        old_path = os.path.join(_IMAGES_DIR, f"{player_id}.{old_ext}")
+        if os.path.exists(old_path) and old_path != filepath:
+            os.remove(old_path)
+
+    # Save the file
+    contents = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    # Update the player record with the image URL
+    image_url = f"/uploads/{filename}"
+    conn.execute(
+        "UPDATE players SET image_url = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+        (image_url, now_iso(), player_id, org_id),
+    )
+    conn.commit()
+    conn.close()
+
+    logger.info("Player image uploaded: %s → %s", player_id, filename)
+    return {"image_url": image_url}
+
+
+@app.delete("/players/{player_id}/image")
+async def delete_player_image(
+    player_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    org_id = token_data["org_id"]
+    conn = get_db()
+    row = conn.execute("SELECT id, image_url FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # Delete the file from disk
+    for ext in ("jpg", "jpeg", "png", "webp", "gif"):
+        fpath = os.path.join(_IMAGES_DIR, f"{player_id}.{ext}")
+        if os.path.exists(fpath):
+            os.remove(fpath)
+
+    conn.execute(
+        "UPDATE players SET image_url = NULL, updated_at = ? WHERE id = ? AND org_id = ?",
+        (now_iso(), player_id, org_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"detail": "Image deleted"}
 
 
 # ============================================================
@@ -1628,7 +1726,7 @@ Generate a **{report_type_name}** for the player below. Your report must be:
 - Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, SYSTEM_FIT, PROJECTION, BOTTOM_LINE)
 - Specific to position: Tailor analysis to the player's position (center, wing, defense, goalie)
 - Honest and balanced: Don't inflate or deflate — give an accurate, scout-grade assessment
-- Archetype-aware: Identify the player's archetype (sniper, playmaker, two-way forward, transition driver, power forward, puck-moving D, shutdown D, etc.)
+- Archetype-aware: The player's archetype may be compound (e.g., "Two-Way Playmaking Forward") indicating multiple dimensions. Analyze ALL archetype traits — if the archetype says "Two-Way Playmaking Forward" you must evaluate both the 200-foot game AND the playmaking IQ separately, then synthesize how these traits combine
 {system_context_block}
 PROSPECT GRADING SCALE (include an overall grade in EXECUTIVE_SUMMARY or BOTTOM_LINE):
   A   = Top-Line / #1 D / Franchise — Elite NHL talent, first-round caliber

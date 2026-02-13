@@ -33,6 +33,7 @@ export interface Player {
   notes: string | null;
   tags: string[];
   archetype: string | null;
+  image_url: string | null;
   created_at: string;
 }
 

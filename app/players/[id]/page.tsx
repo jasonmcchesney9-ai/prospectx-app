@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Activity,
   User,
+  Camera,
   Save,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
@@ -55,6 +56,9 @@ export default function PlayerDetailPage() {
   // CSV upload
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
+
+  // Image upload
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Note form
   const [showNoteForm, setShowNoteForm] = useState(false);
@@ -93,6 +97,34 @@ export default function PlayerDetailPage() {
     } finally {
       setUploading(false);
       e.target.value = "";
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post<{ image_url: string }>(`/players/${playerId}/image`, formData);
+      setPlayer((prev) => prev ? { ...prev, image_url: data.image_url } : prev);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to upload image";
+      alert(msg);
+    } finally {
+      setUploadingImage(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleImageDelete = async () => {
+    if (!confirm("Remove player photo?")) return;
+    try {
+      await api.delete(`/players/${playerId}/image`);
+      setPlayer((prev) => prev ? { ...prev, image_url: null } : prev);
+    } catch {
+      alert("Failed to delete image");
     }
   };
 
@@ -232,7 +264,24 @@ export default function PlayerDetailPage() {
         {/* Player Header */}
         <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-6 text-white mb-1">
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex items-start gap-4">
+              {/* Player Photo */}
+              <div className="shrink-0">
+                {player.image_url ? (
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-white/20 bg-white/10">
+                    <img
+                      src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${player.image_url}`}
+                      alt={`${player.first_name} ${player.last_name}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-white/10 bg-white/5 flex items-center justify-center">
+                    <User size={28} className="text-white/30" />
+                  </div>
+                )}
+              </div>
+              <div>
               <h1 className="text-2xl font-bold">
                 {player.first_name} {player.last_name}
               </h1>
@@ -249,11 +298,23 @@ export default function PlayerDetailPage() {
                 {player.current_team && <span>{player.current_team}</span>}
                 {player.current_league && <span className="text-white/50">({player.current_league})</span>}
               </div>
-              {player.height_cm && player.weight_kg && (
+              {(player.height_cm || player.weight_kg || player.dob) && (
                 <p className="text-xs text-white/50 mt-1">
-                  {player.height_cm}cm / {player.weight_kg}kg
+                  {player.dob && (() => {
+                    const birth = new Date(player.dob);
+                    const today = new Date();
+                    let age = today.getFullYear() - birth.getFullYear();
+                    const m = today.getMonth() - birth.getMonth();
+                    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+                    return `Age ${age}`;
+                  })()}
+                  {player.dob && (player.height_cm || player.weight_kg) && " · "}
+                  {player.height_cm && `${player.height_cm}cm`}
+                  {player.height_cm && player.weight_kg && " / "}
+                  {player.weight_kg && `${player.weight_kg}kg`}
                 </p>
               )}
+              </div>
             </div>
             <Link
               href={`/reports/generate?player=${playerId}`}
@@ -300,6 +361,52 @@ export default function PlayerDetailPage() {
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
                   <User size={14} className="text-teal" /> Player Info
                 </h3>
+
+                {/* Player Photo Upload */}
+                <div className="flex items-center gap-4 mb-4 pb-4 border-b border-border/50">
+                  <div className="relative group">
+                    {player.image_url ? (
+                      <div className="w-20 h-20 rounded-lg overflow-hidden border border-border bg-navy/5">
+                        <img
+                          src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${player.image_url}`}
+                          alt={`${player.first_name} ${player.last_name}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 rounded-lg border-2 border-dashed border-border bg-navy/[0.02] flex items-center justify-center">
+                        <Camera size={24} className="text-muted/30" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-muted mb-1.5">Player Photo</p>
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal border border-teal/20 hover:bg-teal/20 transition-colors">
+                        <Camera size={12} />
+                        {uploadingImage ? "Uploading..." : player.image_url ? "Change" : "Upload"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleImageUpload}
+                          disabled={uploadingImage}
+                          className="hidden"
+                        />
+                      </label>
+                      {player.image_url && (
+                        <button
+                          onClick={handleImageDelete}
+                          className="text-xs text-muted hover:text-red-600 transition-colors"
+                          title="Remove photo"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted/50 mt-1">JPG, PNG, or WebP. Max 5 MB.</p>
+                  </div>
+                </div>
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted">Position</span>
@@ -314,7 +421,19 @@ export default function PlayerDetailPage() {
                   {player.dob && (
                     <div className="flex justify-between">
                       <span className="text-muted">Date of Birth</span>
-                      <span className="font-semibold text-navy">{player.dob}</span>
+                      <span className="font-semibold text-navy">
+                        {player.dob}
+                        <span className="text-xs text-muted ml-1.5">
+                          (Age {(() => {
+                            const birth = new Date(player.dob!);
+                            const today = new Date();
+                            let age = today.getFullYear() - birth.getFullYear();
+                            const m = today.getMonth() - birth.getMonth();
+                            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+                            return age;
+                          })()})
+                        </span>
+                      </span>
                     </div>
                   )}
                   {player.height_cm && (
@@ -393,50 +512,58 @@ export default function PlayerDetailPage() {
                     )}
                     {player.archetype && (
                       <p className="text-xs text-muted/70 mt-2 leading-relaxed">
-                        Archetypes help the AI understand player role and system fit when generating reports.
+                        Compound archetypes help the AI understand the full player profile for system fit analysis.
                       </p>
                     )}
                   </div>
                 ) : (
                   <div>
-                    <select
+                    <input
+                      type="text"
                       value={archetypeValue}
                       onChange={(e) => setArchetypeValue(e.target.value)}
+                      placeholder="e.g., Two-Way Playmaking Forward"
                       className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
-                    >
-                      <option value="">Select archetype...</option>
-                      <optgroup label="Forwards">
-                        <option value="Sniper">Sniper</option>
-                        <option value="Playmaker">Playmaker</option>
-                        <option value="Power Forward">Power Forward</option>
-                        <option value="Two-Way Forward">Two-Way Forward</option>
-                        <option value="Grinder / Energy">Grinder / Energy</option>
-                        <option value="Net-Front Presence">Net-Front Presence</option>
-                        <option value="Speed / Transition">Speed / Transition</option>
-                        <option value="Checking Line Center">Checking Line Center</option>
-                      </optgroup>
-                      <optgroup label="Defensemen">
-                        <option value="Puck-Moving D">Puck-Moving D</option>
-                        <option value="Shutdown D">Shutdown D</option>
-                        <option value="Two-Way D">Two-Way D</option>
-                        <option value="Offensive D">Offensive D</option>
-                        <option value="Physical / Stay-at-Home D">Physical / Stay-at-Home D</option>
-                      </optgroup>
-                      <optgroup label="Goalies">
-                        <option value="Butterfly Goalie">Butterfly Goalie</option>
-                        <option value="Hybrid Goalie">Hybrid Goalie</option>
-                        <option value="Athletic / Reactive Goalie">Athletic / Reactive Goalie</option>
-                      </optgroup>
-                    </select>
+                      autoFocus
+                    />
+                    <p className="text-[10px] text-muted/60 mb-2">Click traits below to build a compound archetype, or type your own:</p>
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {([
+                        { group: "Style", chips: ["Two-Way", "Offensive", "Defensive", "Physical", "Speed", "Playmaking", "Sniper", "Power", "Shutdown"] },
+                        { group: "Role", chips: ["Forward", "Center", "Winger", "Defenseman", "Goalie"] },
+                        { group: "Traits", chips: ["Elite IQ", "Net-Front", "Transition", "Puck-Moving", "Grinder", "Energy", "Checking", "Hybrid"] },
+                      ] as const).map(({ group, chips }) => (
+                        <div key={group} className="flex flex-wrap items-center gap-1">
+                          <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/50 mr-0.5">{group}:</span>
+                          {chips.map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => {
+                                const current = archetypeValue.trim();
+                                if (current && !current.endsWith(" ")) {
+                                  setArchetypeValue(current + " " + chip);
+                                } else {
+                                  setArchetypeValue((current + " " + chip).trim());
+                                }
+                              }}
+                              className="px-2 py-0.5 text-[10px] rounded-full border border-border hover:border-teal/50 hover:bg-teal/5 text-navy/70 transition-colors"
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={async () => {
                           try {
                             await api.put(`/players/${playerId}`, {
                               ...player,
-                              archetype: archetypeValue || null,
+                              archetype: archetypeValue.trim() || null,
                             });
-                            setPlayer({ ...player, archetype: archetypeValue || null });
+                            setPlayer({ ...player, archetype: archetypeValue.trim() || null });
                             setEditingArchetype(false);
                           } catch {
                             alert("Failed to save archetype");
@@ -455,6 +582,14 @@ export default function PlayerDetailPage() {
                       >
                         Cancel
                       </button>
+                      {archetypeValue && (
+                        <button
+                          onClick={() => setArchetypeValue("")}
+                          className="px-2 py-1 text-xs text-muted/60 hover:text-red-500 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

@@ -10,9 +10,19 @@ export default function PlayerCard({ player }: { player: Player }) {
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-navy/10 flex items-center justify-center">
-            <User size={18} className="text-navy" />
-          </div>
+          {player.image_url ? (
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-navy/10 shrink-0">
+              <img
+                src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${player.image_url}`}
+                alt={`${player.first_name} ${player.last_name}`}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-navy/10 flex items-center justify-center shrink-0">
+              <User size={18} className="text-navy" />
+            </div>
+          )}
           <div>
             <h3 className="font-semibold text-navy text-sm">
               {player.first_name} {player.last_name}
