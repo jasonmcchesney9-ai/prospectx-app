@@ -64,6 +64,24 @@ export interface Team {
   created_at: string;
 }
 
+export interface League {
+  id: string;
+  name: string;
+  abbreviation: string;
+  country: string;
+  level: string;
+  sort_order: number;
+}
+
+export interface TeamReference {
+  id: string;
+  org_id: string;
+  name: string;
+  league: string | null;
+  city: string | null;
+  abbreviation: string | null;
+}
+
 export interface PlayerStats {
   id: string;
   player_id: string;

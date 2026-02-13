@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
-import type { PlayerCreate, Player } from "@/types/api";
+import type { PlayerCreate, Player, League, TeamReference } from "@/types/api";
 
 export default function NewPlayerPage() {
   const router = useRouter();
@@ -26,8 +26,61 @@ export default function NewPlayerPage() {
     notes: "",
   });
 
+  // Reference data for dropdowns
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [refTeams, setRefTeams] = useState<TeamReference[]>([]);
+  const [customLeague, setCustomLeague] = useState(false);
+  const [customTeam, setCustomTeam] = useState(false);
+
+  useEffect(() => {
+    async function loadRef() {
+      try {
+        const [leaguesRes, teamsRes] = await Promise.all([
+          api.get<League[]>("/leagues"),
+          api.get<TeamReference[]>("/teams/reference"),
+        ]);
+        setLeagues(leaguesRes.data);
+        setRefTeams(teamsRes.data);
+      } catch {
+        // Non-critical — fallback to text inputs
+      }
+    }
+    loadRef();
+  }, []);
+
   const update = (field: keyof PlayerCreate, value: string | number | undefined) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Filter teams by selected league
+  const filteredTeams = form.current_league
+    ? refTeams.filter((t) => t.league === form.current_league)
+    : refTeams;
+
+  const handleLeagueChange = (value: string) => {
+    if (value === "__custom__") {
+      setCustomLeague(true);
+      update("current_league", "");
+      // Also reset team since league changed
+      update("current_team", "");
+      setCustomTeam(true);
+    } else {
+      setCustomLeague(false);
+      update("current_league", value);
+      // Reset team when league changes
+      update("current_team", "");
+      setCustomTeam(false);
+    }
+  };
+
+  const handleTeamChange = (value: string) => {
+    if (value === "__custom__") {
+      setCustomTeam(true);
+      update("current_team", "");
+    } else {
+      setCustomTeam(false);
+      update("current_team", value);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,17 +145,81 @@ export default function NewPlayerPage() {
             </div>
           </div>
 
-          {/* Team + League */}
+          {/* League + Team (Cascading Dropdowns) */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Team</label>
-              <input type="text" value={form.current_team || ""} onChange={(e) => update("current_team", e.target.value)}
-                placeholder="e.g., Chatham Maroons" className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">League</label>
+              {!customLeague && leagues.length > 0 ? (
+                <select
+                  value={form.current_league || ""}
+                  onChange={(e) => handleLeagueChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                >
+                  <option value="">Select league...</option>
+                  {leagues.map((l) => (
+                    <option key={l.id} value={l.abbreviation}>
+                      {l.abbreviation} — {l.name}
+                    </option>
+                  ))}
+                  <option value="__custom__">Other...</option>
+                </select>
+              ) : (
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={form.current_league || ""}
+                    onChange={(e) => update("current_league", e.target.value)}
+                    placeholder="e.g., GOJHL"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  />
+                  {leagues.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setCustomLeague(false); update("current_league", ""); }}
+                      className="px-2 text-xs text-teal hover:underline shrink-0"
+                    >
+                      List
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div>
-              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">League</label>
-              <input type="text" value={form.current_league || ""} onChange={(e) => update("current_league", e.target.value)}
-                placeholder="e.g., GOJHL" className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Team</label>
+              {!customTeam && filteredTeams.length > 0 ? (
+                <select
+                  value={form.current_team || ""}
+                  onChange={(e) => handleTeamChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                >
+                  <option value="">Select team...</option>
+                  {filteredTeams.map((t) => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}
+                    </option>
+                  ))}
+                  <option value="__custom__">Other...</option>
+                </select>
+              ) : (
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={form.current_team || ""}
+                    onChange={(e) => update("current_team", e.target.value)}
+                    placeholder="e.g., Chatham Maroons"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  />
+                  {refTeams.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setCustomTeam(false); update("current_team", ""); }}
+                      className="px-2 text-xs text-teal hover:underline shrink-0"
+                    >
+                      List
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

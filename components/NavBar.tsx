@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Users,
+  Building2,
   FileText,
   Upload,
   Shield,
@@ -18,8 +19,9 @@ import { getUser, logout } from "@/lib/auth";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/players", label: "Players", icon: Users },
+  { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/team-systems", label: "Team Systems", icon: Shield },
+  { href: "/team-systems", label: "Systems", icon: Shield },
   { href: "/players/import", label: "Import", icon: Upload },
 ];
 

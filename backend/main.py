@@ -405,6 +405,18 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS leagues (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            abbreviation TEXT NOT NULL UNIQUE,
+            country TEXT DEFAULT 'Canada',
+            level TEXT DEFAULT 'junior',
+            sort_order INTEGER DEFAULT 100,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
 
     # ── Migrations for existing databases ───────────────────
@@ -534,10 +546,96 @@ def seed_templates():
     logger.info("Seeded %d report templates", len(templates))
 
 
+def seed_leagues():
+    """Seed the leagues reference table with Canadian/US junior and college leagues."""
+    conn = get_db()
+    count = conn.execute("SELECT COUNT(*) FROM leagues").fetchone()[0]
+    if count > 0:
+        conn.close()
+        return
+
+    leagues = [
+        ("GOJHL", "Greater Ontario Junior Hockey League", "Canada", "junior_b", 10),
+        ("OJHL", "Ontario Junior Hockey League", "Canada", "junior_a", 20),
+        ("OHL", "Ontario Hockey League", "Canada", "major_junior", 30),
+        ("QMJHL", "Quebec Major Junior Hockey League", "Canada", "major_junior", 31),
+        ("WHL", "Western Hockey League", "Canada", "major_junior", 32),
+        ("BCHL", "British Columbia Hockey League", "Canada", "junior_a", 40),
+        ("AJHL", "Alberta Junior Hockey League", "Canada", "junior_a", 41),
+        ("SJHL", "Saskatchewan Junior Hockey League", "Canada", "junior_a", 42),
+        ("MJHL", "Manitoba Junior Hockey League", "Canada", "junior_a", 43),
+        ("MHL", "Maritime Hockey League", "Canada", "junior_a", 44),
+        ("CCHL", "Central Canada Hockey League", "Canada", "junior_a", 45),
+        ("NOJHL", "Northern Ontario Junior Hockey League", "Canada", "junior_a", 46),
+        ("USHL", "United States Hockey League", "USA", "junior_a", 50),
+        ("NAHL", "North American Hockey League", "USA", "junior_a", 51),
+        ("NCAA", "National Collegiate Athletic Association", "USA", "college", 60),
+        ("USHS", "US High School", "USA", "high_school", 70),
+        ("AAA", "AAA Minor Hockey", "Canada", "minor", 80),
+    ]
+    for abbr, name, country, level, sort in leagues:
+        conn.execute(
+            "INSERT INTO leagues (id, abbreviation, name, country, level, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), abbr, name, country, level, sort),
+        )
+    conn.commit()
+    conn.close()
+    logger.info("Seeded %d leagues", len(leagues))
+
+
+def seed_teams():
+    """Seed reference teams for GOJHL (all conferences)."""
+    conn = get_db()
+    count = conn.execute("SELECT COUNT(*) FROM teams WHERE org_id = '__global__'").fetchone()[0]
+    if count > 0:
+        conn.close()
+        return
+
+    gojhl_teams = [
+        # Western Conference
+        ("Chatham Maroons", "GOJHL", "Chatham", "CM"),
+        ("Leamington Flyers", "GOJHL", "Leamington", "LF"),
+        ("LaSalle Vipers", "GOJHL", "LaSalle", "LV"),
+        ("London Nationals", "GOJHL", "London", "LN"),
+        ("Komoka Kings", "GOJHL", "Komoka", "KK"),
+        ("Strathroy Rockets", "GOJHL", "Strathroy", "SR"),
+        ("St. Thomas Stars", "GOJHL", "St. Thomas", "STS"),
+        ("St. Marys Lincolns", "GOJHL", "St. Marys", "STM"),
+        ("Sarnia Legionnaires", "GOJHL", "Sarnia", "SAR"),
+        # Midwestern Conference
+        ("Brantford Bandits", "GOJHL", "Brantford", "BB"),
+        ("Cambridge Redhawks", "GOJHL", "Cambridge", "CAM"),
+        ("Elmira Sugar Kings", "GOJHL", "Elmira", "ESK"),
+        ("KW Siskins", "GOJHL", "Kitchener", "KWS"),
+        ("Listowel Cyclones", "GOJHL", "Listowel", "LC"),
+        ("Stratford Warriors", "GOJHL", "Stratford", "SW"),
+        ("Ayr Centennials", "GOJHL", "Ayr", "AC"),
+        # Golden Horseshoe Conference
+        ("Caledonia Corvairs", "GOJHL", "Caledonia", "CC"),
+        ("Hamilton Kilty B's", "GOJHL", "Hamilton", "HKB"),
+        ("Pelham Panthers", "GOJHL", "Pelham", "PP"),
+        ("St. Catharines Falcons", "GOJHL", "St. Catharines", "SCF"),
+        ("Thorold Blackhawks", "GOJHL", "Thorold", "TB"),
+        ("Niagara Falls Canucks", "GOJHL", "Niagara Falls", "NFC"),
+        # Northern Conference
+        ("Caledon Bombers", "GOJHL", "Caledon", "CB"),
+    ]
+    for name, league, city, abbr in gojhl_teams:
+        conn.execute(
+            "INSERT INTO teams (id, org_id, name, league, city, abbreviation) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), "__global__", name, league, city, abbr),
+        )
+    conn.commit()
+    conn.close()
+    logger.info("Seeded %d reference teams", len(gojhl_teams))
+
+
 # Run on import
 init_db()
 seed_templates()
 seed_hockey_os()
+seed_leagues()
+seed_teams()
 
 
 # ============================================================
@@ -867,6 +965,7 @@ def _player_from_row(row: sqlite3.Row) -> dict:
 async def list_players(
     search: Optional[str] = None,
     position: Optional[str] = None,
+    team: Optional[str] = None,
     limit: int = Query(default=200, ge=1, le=500),
     skip: int = Query(default=0, ge=0),
     token_data: dict = Depends(verify_token),
@@ -885,6 +984,10 @@ async def list_players(
     if position:
         query += " AND position = ?"
         params.append(position.upper())
+
+    if team:
+        query += " AND LOWER(current_team) = LOWER(?)"
+        params.append(team)
 
     query += " ORDER BY last_name, first_name LIMIT ? OFFSET ?"
     params.extend([limit, skip])
@@ -1474,6 +1577,15 @@ async def ingest_stats(
 # TEAM ENDPOINTS
 # ============================================================
 
+@app.get("/leagues")
+async def list_leagues():
+    """List all leagues (reference data — no auth required)."""
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM leagues ORDER BY sort_order, name").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 @app.get("/teams")
 async def list_teams(token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
@@ -1481,6 +1593,65 @@ async def list_teams(token_data: dict = Depends(verify_token)):
     rows = conn.execute("SELECT * FROM teams WHERE org_id = ? ORDER BY name", (org_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+@app.get("/teams/reference")
+async def list_reference_teams(
+    league: Optional[str] = None,
+    token_data: dict = Depends(verify_token),
+):
+    """List global reference teams + org-specific teams, optionally filtered by league."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    query = "SELECT * FROM teams WHERE (org_id = '__global__' OR org_id = ?)"
+    params: list = [org_id]
+    if league:
+        query += " AND league = ?"
+        params.append(league)
+    query += " ORDER BY league, name"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/teams/{team_name}/roster")
+async def get_team_roster(team_name: str, token_data: dict = Depends(verify_token)):
+    """Get all players on a team (matched by current_team, case-insensitive)."""
+    org_id = token_data["org_id"]
+    decoded_name = team_name.replace("%20", " ")
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) ORDER BY position, last_name",
+        (org_id, decoded_name),
+    ).fetchall()
+    conn.close()
+    return [_player_from_row(r) for r in rows]
+
+
+@app.get("/teams/{team_name}/reports")
+async def get_team_reports(team_name: str, token_data: dict = Depends(verify_token)):
+    """Get all reports for players on a specific team."""
+    org_id = token_data["org_id"]
+    decoded_name = team_name.replace("%20", " ")
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT r.* FROM reports r
+        JOIN players p ON r.player_id = p.id
+        WHERE r.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+        ORDER BY r.created_at DESC
+    """, (org_id, decoded_name)).fetchall()
+    conn.close()
+    results = []
+    for r in rows:
+        d = dict(r)
+        for json_field in ("output_json", "input_data"):
+            if d.get(json_field) and isinstance(d[json_field], str):
+                try:
+                    d[json_field] = json.loads(d[json_field])
+                except Exception:
+                    pass
+        results.append(d)
+    return results
 
 
 @app.post("/teams")

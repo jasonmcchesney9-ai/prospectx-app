@@ -63,6 +63,14 @@ const FAQ_SECTIONS = [
         q: "Can I add scout notes?",
         a: "Yes! Add notes to any player, tag observations (Compete, Skating, Skill, Hockey IQ), link to specific games, and set notes as private or shared with your team. Scout notes automatically feed into AI report generation for richer, more contextual evaluations.",
       },
+      {
+        q: "How do Team Folders work?",
+        a: "Every team gets its own folder page with four tabs: Roster (players grouped by Forwards, Defense, Goalies), Systems (your tactical profile for that team), Reports (all reports for team players in one view), and Stats. Coaches organize by team, not individual players \u2014 so ProspectX does too.",
+      },
+      {
+        q: "Can I batch import players?",
+        a: "Yes! Upload a CSV or Excel file with your full roster. ProspectX detects duplicates using fuzzy name matching, lets you review conflicts (skip, merge, or create new), and imports all players with stats in one step. Most teams are fully loaded in under 5 minutes.",
+      },
     ],
   },
   {

@@ -16,6 +16,12 @@ export default function PlayersPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("");
+  const [teamFilter, setTeamFilter] = useState("");
+
+  // Extract unique teams from loaded players for the filter dropdown
+  const uniqueTeams = Array.from(
+    new Set(players.map((p) => p.current_team).filter(Boolean) as string[])
+  ).sort();
 
   useEffect(() => {
     async function load() {
@@ -25,6 +31,7 @@ export default function PlayersPage() {
         params.set("limit", "200");
         if (search) params.set("search", search);
         if (posFilter) params.set("position", posFilter);
+        if (teamFilter) params.set("team", teamFilter);
         const { data } = await api.get<Player[]>(`/players?${params}`);
         setPlayers(data);
       } catch (err: unknown) {
@@ -36,7 +43,7 @@ export default function PlayersPage() {
     }
     const timer = setTimeout(load, 300);
     return () => clearTimeout(timer);
-  }, [search, posFilter]);
+  }, [search, posFilter, teamFilter]);
 
   return (
     <ProtectedRoute>
@@ -75,6 +82,16 @@ export default function PlayersPage() {
               <option value="">All Positions</option>
               {POSITIONS.filter(Boolean).map((p) => (
                 <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            <select
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-white max-w-[200px]"
+            >
+              <option value="">All Teams</option>
+              {uniqueTeams.map((t) => (
+                <option key={t} value={t}>{t}</option>
               ))}
             </select>
           </div>
