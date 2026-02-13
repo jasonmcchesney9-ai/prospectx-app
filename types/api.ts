@@ -61,6 +61,7 @@ export interface Team {
   city: string | null;
   abbreviation: string | null;
   identity: Record<string, unknown>;
+  logo_url: string | null;
   created_at: string;
 }
 
@@ -80,6 +81,7 @@ export interface TeamReference {
   league: string | null;
   city: string | null;
   abbreviation: string | null;
+  logo_url: string | null;
 }
 
 export interface PlayerStats {
@@ -101,7 +103,90 @@ export interface PlayerStats {
   sog: number;
   shooting_pct: number | null;
   microstats: Record<string, unknown> | null;
+  extended_stats: ExtendedStats | null;
+  data_source: string | null;
   created_at: string;
+}
+
+// ── InStat Extended Stats (organized by category) ────────────
+export interface ExtendedStats {
+  main?: Record<string, number | string>;
+  shots?: Record<string, number>;
+  puck_battles?: Record<string, number>;
+  recoveries?: Record<string, number>;
+  special_teams?: Record<string, number>;
+  xg?: Record<string, number>;
+  passes?: Record<string, number>;
+  entries?: Record<string, number>;
+  advanced?: Record<string, number>;
+  faceoffs_zone?: Record<string, number>;
+  playtime?: Record<string, number>;
+  scoring_chances?: Record<string, number>;
+  team_extras?: Record<string, number>;
+  // Team stats categories
+  offense?: Record<string, number>;
+  discipline?: Record<string, number>;
+  faceoffs?: Record<string, number>;
+  physical?: Record<string, number>;
+  defense?: Record<string, number>;
+  transition?: Record<string, number>;
+  [key: string]: Record<string, number | string> | undefined;
+}
+
+export interface GoalieStats {
+  id: string;
+  player_id: string;
+  org_id: string;
+  season: string | null;
+  stat_type: string;
+  gp: number;
+  toi_seconds: number;
+  ga: number;
+  sa: number;
+  sv: number;
+  sv_pct: string | null;
+  gaa: number | null;
+  extended_stats: ExtendedStats | null;
+  data_source: string | null;
+  created_at: string;
+}
+
+export interface TeamStats {
+  id: string;
+  org_id: string;
+  team_name: string;
+  league: string | null;
+  season: string | null;
+  stat_type: string;
+  extended_stats: ExtendedStats | null;
+  data_source: string | null;
+  created_at: string;
+}
+
+export interface LineCombination {
+  id: string;
+  org_id: string;
+  team_name: string;
+  season: string | null;
+  line_type: string;
+  player_names: string;
+  player_refs: Array<{ jersey: string; name: string }> | null;
+  plus_minus: string | null;
+  shifts: number;
+  toi_seconds: number;
+  goals_for: number;
+  goals_against: number;
+  extended_stats: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface InStatImportResponse {
+  file_type: string;
+  total_rows: number;
+  players_created: number;
+  players_updated: number;
+  stats_imported: number;
+  errors: string[];
 }
 
 export interface Report {
@@ -460,6 +545,100 @@ export const TEAM_REPORT_TYPES = [
 // ── Prospect Grading Scale ─────────────────────────────────────
 // Used in Pro/Amateur Skater, Unified Prospect, and other scouting reports.
 // Grades reflect NHL trajectory projection based on current tools & development curve.
+// ── InStat Stat Category Labels ──────────────────────────────
+export const STAT_CATEGORIES: Record<string, string> = {
+  main: "Main Statistics",
+  shots: "Shots",
+  puck_battles: "Puck Battles",
+  recoveries: "Recoveries & Losses",
+  special_teams: "Special Teams",
+  xg: "Expected Goals (xG)",
+  passes: "Passes",
+  entries: "Entries & Breakouts",
+  advanced: "Advanced (Corsi / Fenwick)",
+  faceoffs_zone: "Faceoffs by Zone",
+  playtime: "Playtime Phases",
+  scoring_chances: "Scoring Chances",
+  team_extras: "Team-Specific",
+  // Team stat categories
+  offense: "Offense",
+  discipline: "Discipline",
+  faceoffs: "Faceoffs",
+  physical: "Physical Play",
+  defense: "Defense",
+  transition: "Transition",
+};
+
+export const STAT_FIELD_LABELS: Record<string, string> = {
+  // Main
+  shifts: "Shifts", puck_touches: "Puck Touches", puck_control_time: "Puck Control Time",
+  scoring_chances: "Scoring Chances", penalties: "Penalties", penalties_drawn: "Penalties Drawn",
+  hits: "Hits", hits_against: "Hits Against", error_leading_to_goal: "Errors → Goal",
+  dump_ins: "Dump Ins", dump_outs: "Dump Outs", first_assist: "1st Assists", second_assist: "2nd Assists",
+  plus: "Plus", minus: "Minus", faceoffs: "Faceoffs", faceoffs_won: "FO Won",
+  faceoffs_lost: "FO Lost", faceoffs_won_pct: "FO Win %",
+  // Shots
+  blocked_shots: "Blocked Shots", missed_shots: "Missed Shots",
+  slapshot: "Slapshots", wrist_shot: "Wrist Shots",
+  shootouts: "Shootouts", shootouts_scored: "SO Goals", shootouts_missed: "SO Missed",
+  pp_shots: "PP Shots", sh_shots: "SH Shots",
+  positional_attack_shots: "Positional Attack Shots", counter_attack_shots: "Counter-Attack Shots",
+  five_v_five_shots: "5v5 Shots",
+  // Puck battles
+  total: "Total", won: "Won", won_pct: "Win %",
+  dz: "In DZ", nz: "In NZ", oz: "In OZ",
+  shots_blocking: "Shots Blocked", dekes: "Dekes",
+  dekes_successful: "Dekes Successful", dekes_unsuccessful: "Dekes Failed",
+  dekes_successful_pct: "Deke Success %",
+  // Recoveries
+  takeaways: "Takeaways", takeaways_dz: "Takeaways DZ", takeaways_nz: "Takeaways NZ",
+  takeaways_oz: "Takeaways OZ", loose_puck_recovery: "Loose Puck Recovery",
+  dump_in_retrievals: "Dump-In Retrievals", puck_retrievals_after_shots: "Post-Shot Retrievals",
+  puck_losses: "Puck Losses", puck_losses_dz: "Puck Losses DZ",
+  puck_losses_nz: "Puck Losses NZ", puck_losses_oz: "Puck Losses OZ",
+  // Special teams
+  pp_count: "PP Opportunities", pp_successful: "PP Goals", pp_time: "PP Time",
+  sh_count: "SH Situations", pk_count: "PK Count", sh_time: "SH Time",
+  // xG
+  xg_per_shot: "xG/Shot", xg: "xG", xg_per_goal: "xG/Goal",
+  net_xg: "Net xG", team_xg_on_ice: "Team xG On Ice",
+  opponent_xg_on_ice: "Opponent xG On Ice", xg_conversion: "xG Conversion",
+  // Passes
+  accurate: "Accurate", accurate_pct: "Accuracy %",
+  to_slot: "Passes to Slot", pre_shot: "Pre-Shot Passes", receptions: "Receptions",
+  // Entries
+  via_pass: "Via Pass", via_dump: "Via Dump", via_stickhandling: "Via Stickhandling",
+  breakouts_total: "Breakouts", breakouts_via_pass: "Breakouts via Pass",
+  breakouts_via_dump: "Breakouts via Dump", breakouts_via_stickhandling: "Breakouts via Stickhandling",
+  // Advanced
+  corsi: "CORSI", corsi_for: "CORSI+", corsi_against: "CORSI-", corsi_pct: "CORSI %",
+  fenwick_for: "Fenwick For", fenwick_against: "Fenwick Against", fenwick_pct: "Fenwick %",
+  // Faceoffs by zone
+  dz_total: "DZ Total", dz_won: "DZ Won", dz_pct: "DZ Win %",
+  nz_total: "NZ Total", nz_won: "NZ Won", nz_pct: "NZ Win %",
+  oz_total: "OZ Total", oz_won: "OZ Won", oz_pct: "OZ Win %",
+  // Playtime
+  offensive: "Offensive Play", defensive: "Defensive Play",
+  oz_possession: "OZ Possession", nz_possession: "NZ Possession", dz_possession: "DZ Possession",
+  // Scoring chances
+  scored: "Scored", missed: "Missed", saved: "Saved", pct: "%",
+  inner_slot_total: "Inner Slot Total", inner_slot_scored: "Inner Slot Goals",
+  inner_slot_missed: "Inner Slot Missed", inner_slot_saved: "Inner Slot Saved",
+  inner_slot_pct: "Inner Slot %",
+  outer_slot_total: "Outer Slot Total", outer_slot_scored: "Outer Slot Goals",
+  outer_slot_missed: "Outer Slot Missed", outer_slot_saved: "Outer Slot Saved",
+  outer_slot_pct: "Outer Slot %",
+  blocked_from_slot: "Blocked from Slot", blocked_outside_slot: "Blocked Outside Slot",
+};
+
+export const LINE_TYPE_LABELS: Record<string, string> = {
+  full: "Full Units (5v5)",
+  forwards: "Forward Lines",
+  defense: "Defence Pairs",
+  pp: "Power Play",
+  pk: "Penalty Kill",
+};
+
 export const PROSPECT_GRADES: Record<string, { label: string; nhl: string; description: string }> = {
   "A":   { label: "A",   nhl: "Top-Line / #1 Defenseman / Franchise",   description: "Elite NHL talent. Projects as a top-line forward, #1 defenseman, or franchise goalie. First-round caliber." },
   "A-":  { label: "A-",  nhl: "Top-6 Forward / Top-4 D / Starting G",  description: "High-end NHL player. Projects as a top-6 forward, top-4 defenseman, or NHL starting goalie. Early-round pick." },

@@ -19,12 +19,16 @@ import {
   Save,
   X,
   Upload,
+  Camera,
+  Layers,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportCard from "@/components/ReportCard";
+import ExtendedStatTable from "@/components/ExtendedStatTable";
+import LineCombinations from "@/components/LineCombinations";
 import api from "@/lib/api";
-import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry } from "@/types/api";
+import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination } from "@/types/api";
 
 type Tab = "roster" | "systems" | "reports" | "stats";
 
@@ -102,9 +106,12 @@ export default function TeamDetailPage() {
   const [teamSystem, setTeamSystem] = useState<TeamSystem | null>(null);
   const [systemsLibrary, setSystemsLibrary] = useState<SystemLibraryEntry[]>([]);
   const [teamRef, setTeamRef] = useState<TeamReference | null>(null);
+  const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
+  const [lineCombinations, setLineCombinations] = useState<LineCombination[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("roster");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // ── Systems inline CRUD state ───────────────────────────
   const [sysEditing, setSysEditing] = useState(false);
@@ -116,17 +123,21 @@ export default function TeamDetailPage() {
   const loadData = useCallback(async () => {
     try {
       setError("");
-      const [rosterRes, reportsRes, sysRes, libRes, refRes] = await Promise.allSettled([
+      const [rosterRes, reportsRes, sysRes, libRes, refRes, teamStatsRes, linesRes] = await Promise.allSettled([
         api.get<Player[]>(`/teams/${encodeURIComponent(teamName)}/roster`),
         api.get<Report[]>(`/teams/${encodeURIComponent(teamName)}/reports`),
         api.get<TeamSystem[]>("/hockey-os/team-systems"),
         api.get<SystemLibraryEntry[]>("/hockey-os/systems-library"),
         api.get<TeamReference[]>("/teams/reference"),
+        api.get<TeamStats>(`/stats/team/${encodeURIComponent(teamName)}`),
+        api.get<LineCombination[]>(`/stats/team/${encodeURIComponent(teamName)}/lines`),
       ]);
 
       if (rosterRes.status === "fulfilled") setRoster(rosterRes.value.data);
       if (reportsRes.status === "fulfilled") setReports(reportsRes.value.data);
       if (libRes.status === "fulfilled") setSystemsLibrary(libRes.value.data);
+      if (teamStatsRes.status === "fulfilled" && teamStatsRes.value.data) setTeamStats(teamStatsRes.value.data);
+      if (linesRes.status === "fulfilled") setLineCombinations(linesRes.value.data || []);
 
       // Match team system by name
       if (sysRes.status === "fulfilled") {
@@ -243,6 +254,25 @@ export default function TeamDetailPage() {
     setSysForm({ ...sysForm, identity_tags: sysForm.identity_tags.filter((t) => t !== tag) });
   };
 
+  // ── Logo upload ───────────────────────────────────────
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !teamRef) return;
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post<{ logo_url: string }>(`/teams/${teamRef.id}/logo`, formData);
+      setTeamRef((prev) => prev ? { ...prev, logo_url: data.logo_url } : prev);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to upload logo";
+      alert(msg);
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = "";
+    }
+  };
+
   // ── Roster grouping ─────────────────────────────────────
   const forwards = roster.filter((p) => posGroup(p.position) === "forwards");
   const defense = roster.filter((p) => posGroup(p.position) === "defense");
@@ -273,11 +303,36 @@ export default function TeamDetailPage() {
         <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-6 text-white mb-1">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-white/10 flex items-center justify-center shrink-0 border border-white/10">
-                {teamRef?.abbreviation ? (
-                  <span className="font-oswald font-bold text-lg text-white">{teamRef.abbreviation}</span>
+              {/* Team Logo */}
+              <div className="relative group shrink-0">
+                {teamRef?.logo_url ? (
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border-2 border-white/20 bg-white/10">
+                    <img
+                      src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${teamRef.logo_url}`}
+                      alt={teamName}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
                 ) : (
-                  <Building2 size={28} className="text-white/50" />
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-white/10 flex items-center justify-center border border-white/10">
+                    {teamRef?.abbreviation ? (
+                      <span className="font-oswald font-bold text-lg text-white">{teamRef.abbreviation}</span>
+                    ) : (
+                      <Building2 size={28} className="text-white/50" />
+                    )}
+                  </div>
+                )}
+                {teamRef && (
+                  <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                    <Camera size={16} className="text-white" />
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      className="hidden"
+                    />
+                  </label>
                 )}
               </div>
               <div>
@@ -295,6 +350,7 @@ export default function TeamDetailPage() {
                 </div>
                 <p className="text-xs text-white/50 mt-1">
                   {roster.length} players &middot; {reports.length} reports
+                  {lineCombinations.length > 0 && <> &middot; {lineCombinations.length} line combos</>}
                 </p>
               </div>
             </div>
@@ -791,14 +847,54 @@ export default function TeamDetailPage() {
 
         {/* ── Stats Tab ──────────────────────────────────── */}
         {activeTab === "stats" && (
-          <section>
-            <div className="text-center py-12 bg-white rounded-xl border border-border">
-              <BarChart3 size={32} className="mx-auto text-muted/40 mb-3" />
-              <p className="text-muted text-sm font-semibold">Team Stats</p>
-              <p className="text-xs text-muted/60 mt-1">
-                Aggregate team statistics coming soon.
-              </p>
-            </div>
+          <section className="space-y-6">
+            {/* Team Stats */}
+            {teamStats && teamStats.extended_stats && Object.keys(teamStats.extended_stats).length > 0 ? (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-navy">Team Statistics</h2>
+                  {teamStats.season && (
+                    <span className="text-xs text-muted">{teamStats.season}</span>
+                  )}
+                </div>
+                <ExtendedStatTable
+                  stats={teamStats.extended_stats}
+                  season={teamStats.season}
+                  source={teamStats.data_source || undefined}
+                />
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-border p-6 text-center">
+                <BarChart3 size={28} className="mx-auto text-muted/30 mb-2" />
+                <p className="text-sm text-muted">No team statistics imported yet.</p>
+                <p className="text-xs text-muted/60 mt-1">
+                  Upload an InStat Teams XLSX export from the{" "}
+                  <Link href="/instat" className="text-teal hover:underline">InStat Import</Link> page.
+                </p>
+              </div>
+            )}
+
+            {/* Line Combinations */}
+            {lineCombinations.length > 0 ? (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Layers size={16} className="text-orange" />
+                  <h2 className="text-lg font-semibold text-navy">Line Combinations</h2>
+                </div>
+                <div className="bg-white rounded-xl border border-border p-4">
+                  <LineCombinations lines={lineCombinations} />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-border p-6 text-center">
+                <Layers size={28} className="mx-auto text-muted/30 mb-2" />
+                <p className="text-sm text-muted">No line combinations imported yet.</p>
+                <p className="text-xs text-muted/60 mt-1">
+                  Upload InStat Lines XLSX files from the{" "}
+                  <Link href="/instat" className="text-teal hover:underline">InStat Import</Link> page.
+                </p>
+              </div>
+            )}
           </section>
         )}
       </main>

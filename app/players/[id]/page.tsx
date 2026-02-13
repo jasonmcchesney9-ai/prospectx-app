@@ -28,9 +28,11 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import StatTable from "@/components/StatTable";
+import ExtendedStatTable from "@/components/ExtendedStatTable";
+import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
 import api from "@/lib/api";
-import type { Player, PlayerStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports";
@@ -41,6 +43,7 @@ export default function PlayerDetailPage() {
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [stats, setStats] = useState<PlayerStats[]>([]);
+  const [goalieStats, setGoalieStats] = useState<GoalieStats[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [notes, setNotes] = useState<ScoutNote[]>([]);
   const [teamSystem, setTeamSystem] = useState<TeamSystem | null>(null);
@@ -192,14 +195,16 @@ export default function PlayerDetailPage() {
         setPlayer(playerRes.data);
         setArchetypeValue(playerRes.data.archetype || "");
 
-        const [statsRes, reportsRes, notesRes, libRes, sysRes] = await Promise.allSettled([
+        const [statsRes, reportsRes, notesRes, libRes, sysRes, goalieRes] = await Promise.allSettled([
           api.get<PlayerStats[]>(`/stats/player/${playerId}`),
           api.get<Report[]>(`/reports?player_id=${playerId}`),
           api.get<ScoutNote[]>(`/players/${playerId}/notes`),
           api.get<SystemLibraryEntry[]>("/hockey-os/systems-library"),
           api.get<TeamSystem[]>("/hockey-os/team-systems"),
+          api.get<GoalieStats[]>(`/stats/goalie/${playerId}`),
         ]);
         if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
+        if (goalieRes.status === "fulfilled") setGoalieStats(goalieRes.value.data);
         if (reportsRes.status === "fulfilled") setReports(reportsRes.value.data);
         if (notesRes.status === "fulfilled") setNotes(notesRes.value.data);
         if (libRes.status === "fulfilled") setSystemsLibrary(libRes.value.data);
@@ -723,14 +728,65 @@ export default function PlayerDetailPage() {
               </div>
             )}
 
+            {/* Goalie Stats (if goalie position) */}
+            {goalieStats.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Goaltending</h3>
+                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                  <GoalieStatTable stats={goalieStats} />
+                </div>
+              </div>
+            )}
+
+            {/* Skater Stats */}
             <div className="bg-white rounded-xl border border-border overflow-hidden">
               <StatTable stats={stats} />
             </div>
 
-            {stats.length === 0 && (
+            {stats.length === 0 && goalieStats.length === 0 && (
               <p className="text-xs text-muted mt-2">
                 No stats yet. Upload a CSV or Excel file with columns: season, gp, g, a, p, plus_minus, pim, shots, sog, shooting_pct
               </p>
+            )}
+
+            {/* Extended Stats (InStat Analytics) */}
+            {stats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
+              <div className="mt-6">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
+                  InStat Advanced Analytics
+                </h3>
+                {stats
+                  .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
+                  .slice(0, 1)
+                  .map((s) => (
+                    <ExtendedStatTable
+                      key={s.id}
+                      stats={s.extended_stats!}
+                      season={s.season}
+                      source={s.data_source || undefined}
+                    />
+                  ))}
+              </div>
+            )}
+
+            {/* Goalie Extended Stats */}
+            {goalieStats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
+              <div className="mt-6">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
+                  Goaltending Advanced Analytics
+                </h3>
+                {goalieStats
+                  .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
+                  .slice(0, 1)
+                  .map((s) => (
+                    <ExtendedStatTable
+                      key={s.id}
+                      stats={s.extended_stats!}
+                      season={s.season}
+                      source={s.data_source || undefined}
+                    />
+                  ))}
+              </div>
             )}
           </section>
         )}

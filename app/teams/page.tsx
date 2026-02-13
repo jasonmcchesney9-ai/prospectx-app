@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, Building2, Users, MapPin, PlusCircle, X, Save, Filter } from "lucide-react";
+import { Search, Building2, Users, MapPin, PlusCircle, X, Save, Filter, ChevronDown, ChevronRight } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -13,7 +13,27 @@ interface TeamSummary {
   league: string | null;
   city: string | null;
   abbreviation: string | null;
+  logo_url: string | null;
   playerCount: number;
+}
+
+// ── Tier hierarchy definitions ────────────────────────────
+const TIER_ORDER: { key: string; label: string; levels: string[]; color: string }[] = [
+  { key: "major_junior", label: "Major Junior (CHL)", levels: ["major_junior"], color: "bg-orange/10 text-orange border-orange/20" },
+  { key: "junior_a", label: "Junior A", levels: ["junior_a"], color: "bg-teal/10 text-teal border-teal/20" },
+  { key: "junior_b", label: "Junior B", levels: ["junior_b"], color: "bg-navy/10 text-navy border-navy/20" },
+  { key: "college", label: "College / University", levels: ["college"], color: "bg-purple-100 text-purple-700 border-purple-200" },
+  { key: "high_school", label: "High School", levels: ["high_school"], color: "bg-blue-100 text-blue-700 border-blue-200" },
+  { key: "minor", label: "Minor Hockey", levels: ["minor"], color: "bg-green-100 text-green-700 border-green-200" },
+  { key: "other", label: "Other", levels: [], color: "bg-gray-100 text-gray-600 border-gray-200" },
+];
+
+function getTierForLevel(level: string | undefined): string {
+  if (!level) return "other";
+  for (const tier of TIER_ORDER) {
+    if (tier.levels.includes(level)) return tier.key;
+  }
+  return "other";
 }
 
 export default function TeamsPage() {
@@ -23,6 +43,8 @@ export default function TeamsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [leagueFilter, setLeagueFilter] = useState("");
+  const [viewMode, setViewMode] = useState<"hierarchy" | "flat">("hierarchy");
+  const [collapsedTiers, setCollapsedTiers] = useState<Set<string>>(new Set());
 
   // Add Team form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -70,6 +92,7 @@ export default function TeamsPage() {
           league: ref.league,
           city: ref.city,
           abbreviation: ref.abbreviation,
+          logo_url: ref.logo_url || null,
           playerCount: countData?.count || 0,
         });
       }
@@ -82,6 +105,7 @@ export default function TeamsPage() {
             league: data.league,
             city: null,
             abbreviation: null,
+            logo_url: null,
             playerCount: data.count,
           });
         }
@@ -131,6 +155,43 @@ export default function TeamsPage() {
 
   // Get unique leagues from teams data for filter
   const uniqueLeagues = Array.from(new Set(teams.map((t) => t.league).filter(Boolean) as string[])).sort();
+
+  // Build league-level map from DB leagues
+  const leagueLevelMap = new Map<string, string>();
+  for (const l of leagues) {
+    leagueLevelMap.set(l.abbreviation, l.level);
+  }
+
+  // Group teams by tier → league
+  const tierGroups = TIER_ORDER.map((tier) => {
+    const tierTeams = filtered.filter((t) => {
+      const level = t.league ? leagueLevelMap.get(t.league) : undefined;
+      return getTierForLevel(level) === tier.key;
+    });
+
+    // Sub-group by league within this tier
+    const leagueMap = new Map<string, TeamSummary[]>();
+    for (const team of tierTeams) {
+      const lg = team.league || "Unassigned";
+      if (!leagueMap.has(lg)) leagueMap.set(lg, []);
+      leagueMap.get(lg)!.push(team);
+    }
+
+    return {
+      ...tier,
+      teams: tierTeams,
+      byLeague: Array.from(leagueMap.entries()).sort(([a], [b]) => a.localeCompare(b)),
+    };
+  }).filter((tier) => tier.teams.length > 0);
+
+  const toggleTier = (key: string) => {
+    setCollapsedTiers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   return (
     <ProtectedRoute>
@@ -217,9 +278,9 @@ export default function TeamsPage() {
           </div>
         )}
 
-        {/* Search + League Filter */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative flex-1 max-w-md">
+        {/* Search + League Filter + View Toggle */}
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               type="text"
@@ -242,6 +303,24 @@ export default function TeamsPage() {
               ))}
             </select>
           </div>
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button
+              onClick={() => setViewMode("hierarchy")}
+              className={`px-3 py-1.5 text-xs font-oswald uppercase tracking-wider ${
+                viewMode === "hierarchy" ? "bg-navy text-white" : "bg-white text-muted hover:bg-navy/5"
+              }`}
+            >
+              Tiers
+            </button>
+            <button
+              onClick={() => setViewMode("flat")}
+              className={`px-3 py-1.5 text-xs font-oswald uppercase tracking-wider ${
+                viewMode === "flat" ? "bg-navy text-white" : "bg-white text-muted hover:bg-navy/5"
+              }`}
+            >
+              All
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -262,52 +341,122 @@ export default function TeamsPage() {
               {search || leagueFilter ? "No teams match your filters." : "No teams found."}
             </p>
           </div>
+        ) : viewMode === "hierarchy" ? (
+          /* ── Hierarchy View (Tiers → Leagues → Teams) ──── */
+          <div className="space-y-4">
+            {tierGroups.map((tier) => (
+              <div key={tier.key} className="bg-white rounded-xl border border-border overflow-hidden">
+                {/* Tier Header */}
+                <button
+                  onClick={() => toggleTier(tier.key)}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-navy/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    {collapsedTiers.has(tier.key) ? (
+                      <ChevronRight size={18} className="text-muted" />
+                    ) : (
+                      <ChevronDown size={18} className="text-muted" />
+                    )}
+                    <h2 className="text-sm font-oswald font-semibold uppercase tracking-wider text-navy">
+                      {tier.label}
+                    </h2>
+                    <span className={`px-2 py-0.5 text-[10px] font-oswald font-bold rounded-full border ${tier.color}`}>
+                      {tier.teams.length} {tier.teams.length === 1 ? "team" : "teams"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    {tier.byLeague.map(([lg]) => (
+                      <span key={lg} className="px-1.5 py-0.5 rounded bg-navy/5 text-navy/70 text-[10px] font-oswald font-bold">
+                        {lg}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+
+                {/* Tier Body */}
+                {!collapsedTiers.has(tier.key) && (
+                  <div className="border-t border-border/50">
+                    {tier.byLeague.map(([leagueName, leagueTeams]) => (
+                      <div key={leagueName} className="px-5 py-3">
+                        {tier.byLeague.length > 1 && (
+                          <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+                            <span className="px-1.5 py-0.5 rounded bg-teal/10 text-teal font-bold text-[10px]">{leagueName}</span>
+                            <span className="text-muted/50">{leagueTeams.length} teams</span>
+                          </h3>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                          {leagueTeams.map((team) => (
+                            <TeamCard key={team.name} team={team} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         ) : (
+          /* ── Flat View (Original Grid) ──── */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((team) => (
-              <Link
-                key={team.name}
-                href={`/teams/${encodeURIComponent(team.name)}`}
-                className="bg-white rounded-xl border border-border p-5 hover:shadow-md transition-shadow group"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-navy/[0.06] flex items-center justify-center shrink-0">
-                      {team.abbreviation ? (
-                        <span className="font-oswald font-bold text-sm text-navy">{team.abbreviation}</span>
-                      ) : (
-                        <Building2 size={20} className="text-navy/50" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-navy group-hover:text-teal transition-colors">
-                        {team.name}
-                      </h3>
-                      <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
-                        {team.league && (
-                          <span className="px-1.5 py-0.5 rounded bg-teal/10 text-teal font-oswald font-bold text-[10px]">
-                            {team.league}
-                          </span>
-                        )}
-                        {team.city && (
-                          <span className="flex items-center gap-0.5">
-                            <MapPin size={10} />
-                            {team.city}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-1.5 text-xs text-muted">
-                  <Users size={12} />
-                  <span className="font-medium text-navy">{team.playerCount}</span> players
-                </div>
-              </Link>
+              <TeamCard key={team.name} team={team} />
             ))}
           </div>
         )}
       </main>
     </ProtectedRoute>
+  );
+}
+
+// ── Team Card Component ───────────────────────────────────
+function TeamCard({ team }: { team: TeamSummary }) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  return (
+    <Link
+      href={`/teams/${encodeURIComponent(team.name)}`}
+      className="bg-white rounded-xl border border-border p-4 hover:shadow-md transition-shadow group"
+    >
+      <div className="flex items-center gap-3">
+        {/* Team Logo / Abbreviation */}
+        <div className="w-11 h-11 rounded-lg bg-navy/[0.06] flex items-center justify-center shrink-0 overflow-hidden">
+          {team.logo_url ? (
+            <img
+              src={`${apiUrl}${team.logo_url}`}
+              alt={team.name}
+              className="w-full h-full object-contain"
+            />
+          ) : team.abbreviation ? (
+            <span className="font-oswald font-bold text-sm text-navy">{team.abbreviation}</span>
+          ) : (
+            <Building2 size={18} className="text-navy/50" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-navy group-hover:text-teal transition-colors text-sm truncate">
+            {team.name}
+          </h3>
+          <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
+            {team.league && (
+              <span className="px-1.5 py-0.5 rounded bg-teal/10 text-teal font-oswald font-bold text-[10px]">
+                {team.league}
+              </span>
+            )}
+            {team.city && (
+              <span className="flex items-center gap-0.5 truncate">
+                <MapPin size={10} />
+                {team.city}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {team.playerCount > 0 && (
+        <div className="mt-2.5 pt-2.5 border-t border-border/50 flex items-center gap-1.5 text-xs text-muted">
+          <Users size={11} />
+          <span className="font-medium text-navy">{team.playerCount}</span> players
+        </div>
+      )}
+    </Link>
   );
 }
