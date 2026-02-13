@@ -329,12 +329,29 @@ def init_db():
             neutral_zone TEXT,
             breakout TEXT,
             identity_tags TEXT DEFAULT '[]',
+            pace TEXT DEFAULT '',
+            physicality TEXT DEFAULT '',
+            offensive_style TEXT DEFAULT '',
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (org_id) REFERENCES organizations(id)
         )
     """)
+
+    # Migrate existing team_systems table — add Team Style columns if missing
+    try:
+        c.execute("ALTER TABLE team_systems ADD COLUMN pace TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        c.execute("ALTER TABLE team_systems ADD COLUMN physicality TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE team_systems ADD COLUMN offensive_style TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
 
     # Player archetypes — computed or manually assigned role classifications
     c.execute("""
@@ -1507,9 +1524,12 @@ OZ Setup: {team_system.get('oz_setup', 'Not specified')}
 PP Formation: {team_system.get('pp_formation', 'Not specified')}
 PK Formation: {team_system.get('pk_formation', 'Not specified')}
 Breakout: {team_system.get('breakout', 'Not specified')}
+Pace: {team_system.get('pace', 'Not specified')}
+Physicality: {team_system.get('physicality', 'Not specified')}
+Offensive Style: {team_system.get('offensive_style', 'Not specified')}
 Identity: {', '.join(team_system.get('identity_tags', [])) or 'Not specified'}
 
-When generating the report, include a SYSTEM_FIT section that evaluates how well this player fits the team's tactical system. Reference forecheck role (F1/F2/F3), defensive zone responsibilities, offensive zone contributions, and special teams fit. Use real hockey language — "drives play as an aggressive F1 on the 2-1-2 forecheck" not "performs well in the system."
+When generating the report, include a SYSTEM_FIT section that evaluates how well this player fits the team's tactical system. Reference forecheck role (F1/F2/F3), defensive zone responsibilities, offensive zone contributions, and special teams fit. Consider the team's pace, physicality level, and offensive style when evaluating fit. Use real hockey language — "drives play as an aggressive F1 on the 2-1-2 forecheck" not "performs well in the system."
 """
 
             system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine powered by the Hockey Operating System. You produce professional-grade scouting reports using tactical hockey terminology that NHL scouts, junior hockey GMs, agents, and player development staff expect.
@@ -1878,6 +1898,9 @@ class TeamSystemCreate(BaseModel):
     neutral_zone: str = ""
     breakout: str = ""
     identity_tags: list = []
+    pace: str = ""
+    physicality: str = ""
+    offensive_style: str = ""
     notes: str = ""
 
 
@@ -1973,11 +1996,13 @@ async def create_team_system(body: TeamSystemCreate, token_data: dict = Depends(
     conn = get_db()
     conn.execute("""
         INSERT INTO team_systems (id, org_id, team_name, season, forecheck, dz_structure, oz_setup,
-                                   pp_formation, pk_formation, neutral_zone, breakout, identity_tags, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   pp_formation, pk_formation, neutral_zone, breakout, identity_tags,
+                                   pace, physicality, offensive_style, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (system_id, org_id, body.team_name, body.season, body.forecheck, body.dz_structure, body.oz_setup,
           body.pp_formation, body.pk_formation, body.neutral_zone, body.breakout,
-          json.dumps(body.identity_tags), body.notes, now, now))
+          json.dumps(body.identity_tags), body.pace, body.physicality, body.offensive_style,
+          body.notes, now, now))
     conn.commit()
     row = conn.execute("SELECT * FROM team_systems WHERE id = ?", (system_id,)).fetchone()
     conn.close()
@@ -1996,11 +2021,13 @@ async def update_team_system(system_id: str, body: TeamSystemCreate, token_data:
         raise HTTPException(status_code=404, detail="Team system not found")
     conn.execute("""
         UPDATE team_systems SET team_name=?, season=?, forecheck=?, dz_structure=?, oz_setup=?,
-               pp_formation=?, pk_formation=?, neutral_zone=?, breakout=?, identity_tags=?, notes=?, updated_at=?
+               pp_formation=?, pk_formation=?, neutral_zone=?, breakout=?, identity_tags=?,
+               pace=?, physicality=?, offensive_style=?, notes=?, updated_at=?
         WHERE id = ? AND org_id = ?
     """, (body.team_name, body.season, body.forecheck, body.dz_structure, body.oz_setup,
           body.pp_formation, body.pk_formation, body.neutral_zone, body.breakout,
-          json.dumps(body.identity_tags), body.notes, now_iso(), system_id, org_id))
+          json.dumps(body.identity_tags), body.pace, body.physicality, body.offensive_style,
+          body.notes, now_iso(), system_id, org_id))
     conn.commit()
     row = conn.execute("SELECT * FROM team_systems WHERE id = ?", (system_id,)).fetchone()
     conn.close()

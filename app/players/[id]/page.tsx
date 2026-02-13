@@ -506,8 +506,28 @@ export default function PlayerDetailPage() {
                     );
                   })}
                 </div>
+                {/* Team Style */}
+                {(teamSystem.pace || teamSystem.physicality || teamSystem.offensive_style) && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {teamSystem.pace && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-orange/[0.06] text-navy/70">
+                        <strong>Pace:</strong> {teamSystem.pace}
+                      </span>
+                    )}
+                    {teamSystem.physicality && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-orange/[0.06] text-navy/70">
+                        <strong>Physical:</strong> {teamSystem.physicality}
+                      </span>
+                    )}
+                    {teamSystem.offensive_style && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-orange/[0.06] text-navy/70">
+                        <strong>Offense:</strong> {teamSystem.offensive_style}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {teamSystem.identity_tags && teamSystem.identity_tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
+                  <div className="flex flex-wrap gap-1.5 mt-2">
                     {teamSystem.identity_tags.map((tag) => (
                       <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-teal/10 text-teal font-medium">
                         {tag}

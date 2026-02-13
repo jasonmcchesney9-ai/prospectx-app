@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   PlusCircle,
   Shield,
   Swords,
@@ -16,28 +14,22 @@ import {
   ChevronDown,
   ChevronUp,
   BookOpen,
+  Gauge,
+  Flame,
+  Crosshair,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import type { SystemLibraryEntry, TeamSystem } from "@/types/api";
 
-type SystemType = "forecheck" | "dz_coverage" | "oz_setup" | "breakout" | "pk_formation";
-
+// ── Constants ──────────────────────────────────────────────
 const SYSTEM_TYPE_LABELS: Record<string, string> = {
   forecheck: "Forecheck",
   dz_coverage: "Defensive Zone",
-  oz_setup: "Offensive Zone / PP",
+  oz_setup: "Offensive Zone",
   breakout: "Breakout",
   pk_formation: "Penalty Kill",
-};
-
-const SYSTEM_TYPE_ICONS: Record<string, typeof Swords> = {
-  forecheck: Swords,
-  dz_coverage: Shield,
-  oz_setup: Target,
-  breakout: Zap,
-  pk_formation: Shield,
 };
 
 function SystemTypeColor(type: string): string {
@@ -51,7 +43,16 @@ function SystemTypeColor(type: string): string {
   }
 }
 
-// Empty form for new team system
+const PACE_OPTIONS = ["Slow / Controlled", "Moderate", "Fast", "Up-Tempo / Push Pace"];
+const PHYSICALITY_OPTIONS = ["Low", "Moderate", "High", "Very High / Intimidation"];
+const OFFENSIVE_STYLE_OPTIONS = ["Cycle / Grind", "Rush / Transition", "Balanced", "Perimeter / Shot Volume", "Net-Front / Dirty Areas"];
+
+const IDENTITY_TAG_OPTIONS = [
+  "aggressive", "structured", "physical", "speed", "skill", "defensive",
+  "high-event", "low-event", "puck-possession", "transition", "grind",
+  "counter-attack", "cycle-heavy", "shooting-team",
+];
+
 const EMPTY_FORM = {
   team_name: "",
   season: "2025-26",
@@ -63,15 +64,13 @@ const EMPTY_FORM = {
   neutral_zone: "",
   breakout: "",
   identity_tags: [] as string[],
+  pace: "",
+  physicality: "",
+  offensive_style: "",
   notes: "",
 };
 
-const IDENTITY_TAG_OPTIONS = [
-  "aggressive", "structured", "physical", "speed", "skill", "defensive",
-  "high-event", "low-event", "puck-possession", "transition", "grind",
-  "counter-attack", "cycle-heavy", "shooting-team",
-];
-
+// ── Page Component ─────────────────────────────────────────
 export default function SystemsPage() {
   const [library, setLibrary] = useState<SystemLibraryEntry[]>([]);
   const [teamSystems, setTeamSystems] = useState<TeamSystem[]>([]);
@@ -140,6 +139,9 @@ export default function SystemsPage() {
       neutral_zone: sys.neutral_zone || "",
       breakout: sys.breakout || "",
       identity_tags: sys.identity_tags || [],
+      pace: sys.pace || "",
+      physicality: sys.physicality || "",
+      offensive_style: sys.offensive_style || "",
       notes: sys.notes || "",
     });
     setEditingId(sys.id);
@@ -159,17 +161,27 @@ export default function SystemsPage() {
     return acc;
   }, {} as Record<string, SystemLibraryEntry[]>);
 
-  // Get options for a dropdown from library
+  // Get dropdown options from library
   const getOptions = (type: string) => library.filter((e) => e.system_type === type);
+
+  // Selected system description helper
+  const getSelectedDescription = (field: string) => {
+    const code = (form as Record<string, unknown>)[field] as string;
+    if (!code) return null;
+    return library.find((e) => e.code === code);
+  };
 
   return (
     <ProtectedRoute>
       <NavBar />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-navy">Team Systems</h1>
-            <p className="text-sm text-muted mt-1">Define how your teams play — forecheck, DZ coverage, breakouts, and more.</p>
+            <h1 className="text-2xl font-bold text-navy">Team Systems Configuration</h1>
+            <p className="text-sm text-muted mt-1">
+              Define how your teams play — these profiles feed directly into AI report generation.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -177,14 +189,14 @@ export default function SystemsPage() {
               className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg text-sm text-muted hover:text-navy hover:border-navy/30 transition-colors"
             >
               <BookOpen size={16} />
-              Systems Library
+              <span className="hidden sm:inline">Systems Library</span>
             </button>
             <button
               onClick={() => { setShowForm(true); setEditingId(null); setForm({ ...EMPTY_FORM }); }}
               className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
             >
               <PlusCircle size={16} />
-              New Team System
+              New Team
             </button>
           </div>
         </div>
@@ -196,7 +208,7 @@ export default function SystemsPage() {
           </div>
         )}
 
-        {/* Systems Library Browser */}
+        {/* Systems Library Browser (collapsible reference) */}
         {showLibrary && (
           <div className="mb-6 bg-white rounded-xl border border-border p-6">
             <div className="flex items-center justify-between mb-4">
@@ -246,139 +258,215 @@ export default function SystemsPage() {
           </div>
         )}
 
-        {/* Create/Edit Form */}
+        {/* ── Create / Edit Form ───────────────────────────── */}
         {showForm && (
-          <div className="mb-6 bg-white rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-navy">
+          <div className="mb-6 bg-white rounded-xl border border-border overflow-hidden">
+            {/* Form Header */}
+            <div className="bg-gradient-to-r from-navy to-navy-light px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-oswald font-semibold text-white uppercase tracking-wider">
                 {editingId ? "Edit Team System" : "New Team System"}
               </h2>
-              <button onClick={() => { setShowForm(false); setEditingId(null); }} className="text-muted hover:text-navy"><X size={18} /></button>
+              <button onClick={() => { setShowForm(false); setEditingId(null); }} className="text-white/60 hover:text-white"><X size={18} /></button>
             </div>
+            <div className="ice-stripe" />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Team Name */}
-              <div>
-                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Team Name *</label>
-                <input
-                  type="text"
-                  value={form.team_name}
-                  onChange={(e) => setForm({ ...form, team_name: e.target.value })}
-                  placeholder="e.g., Chatham Maroons"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Season</label>
-                <input
-                  type="text"
-                  value={form.season}
-                  onChange={(e) => setForm({ ...form, season: e.target.value })}
-                  placeholder="2025-26"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
-                />
-              </div>
-
-              {/* System dropdowns */}
-              {([
-                ["forecheck", "Forecheck System", "forecheck"],
-                ["dz_structure", "DZ Coverage", "dz_coverage"],
-                ["oz_setup", "OZ Setup / PP", "oz_setup"],
-                ["breakout", "Breakout System", "breakout"],
-                ["pk_formation", "PK Formation", "pk_formation"],
-              ] as [string, string, string][]).map(([field, label, libType]) => (
-                <div key={field}>
-                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">{label}</label>
-                  <select
-                    value={(form as Record<string, unknown>)[field] as string}
-                    onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
-                  >
-                    <option value="">Select...</option>
-                    {getOptions(libType).map((opt) => (
-                      <option key={opt.code} value={opt.code}>{opt.name}</option>
-                    ))}
-                  </select>
+            <div className="p-6 space-y-6">
+              {/* Team + Season */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">Team *</label>
+                  <input
+                    type="text"
+                    value={form.team_name}
+                    onChange={(e) => setForm({ ...form, team_name: e.target.value })}
+                    placeholder="e.g., Chatham Maroons"
+                    className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
+                  />
                 </div>
-              ))}
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">Season</label>
+                  <input
+                    type="text"
+                    value={form.season}
+                    onChange={(e) => setForm({ ...form, season: e.target.value })}
+                    placeholder="2025-26"
+                    className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
+                  />
+                </div>
+              </div>
 
-              {/* Neutral Zone — freetext since not in library yet */}
+              {/* ── System Selections ─────────────────────── */}
               <div>
-                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Neutral Zone</label>
-                <input
-                  type="text"
-                  value={form.neutral_zone}
-                  onChange={(e) => setForm({ ...form, neutral_zone: e.target.value })}
-                  placeholder="e.g., 1-2-2 trap, aggressive NZ"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                  <Shield size={14} className="text-teal" /> System Assignments
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    { field: "forecheck", label: "Primary Forecheck", libType: "forecheck", icon: Swords },
+                    { field: "dz_structure", label: "Defensive Zone", libType: "dz_coverage", icon: Shield },
+                    { field: "oz_setup", label: "Offensive Zone", libType: "oz_setup", icon: Target },
+                    { field: "pp_formation", label: "Power Play", libType: "oz_setup", icon: Target },
+                    { field: "pk_formation", label: "Penalty Kill", libType: "pk_formation", icon: Shield },
+                    { field: "breakout", label: "Breakout", libType: "breakout", icon: Zap },
+                  ] as const).map(({ field, label, libType, icon: Icon }) => {
+                    const selected = getSelectedDescription(field);
+                    return (
+                      <div key={field}>
+                        <label className="flex items-center gap-1.5 text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">
+                          <Icon size={12} /> {label}
+                        </label>
+                        <select
+                          value={(form as Record<string, unknown>)[field] as string}
+                          onChange={(e) => setForm({ ...form, [field]: e.target.value })}
+                          className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                        >
+                          <option value="">Select...</option>
+                          {getOptions(libType).map((opt) => (
+                            <option key={opt.code} value={opt.code}>{opt.name}</option>
+                          ))}
+                        </select>
+                        {selected?.description && (
+                          <p className="text-[11px] text-muted/60 mt-1 leading-snug line-clamp-2">{selected.description}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Neutral Zone — freetext */}
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">
+                      <Crosshair size={12} /> Neutral Zone
+                    </label>
+                    <input
+                      type="text"
+                      value={form.neutral_zone}
+                      onChange={(e) => setForm({ ...form, neutral_zone: e.target.value })}
+                      placeholder="e.g., 1-2-2 trap, aggressive NZ"
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Team Style ────────────────────────────── */}
+              <div>
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                  <Flame size={14} className="text-orange" /> Team Style
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">
+                      <Gauge size={12} /> Pace
+                    </label>
+                    <select
+                      value={form.pace}
+                      onChange={(e) => setForm({ ...form, pace: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                    >
+                      <option value="">Select...</option>
+                      {PACE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">
+                      <Flame size={12} /> Physicality
+                    </label>
+                    <select
+                      value={form.physicality}
+                      onChange={(e) => setForm({ ...form, physicality: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                    >
+                      <option value="">Select...</option>
+                      {PHYSICALITY_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">
+                      <Target size={12} /> Offensive Style
+                    </label>
+                    <select
+                      value={form.offensive_style}
+                      onChange={(e) => setForm({ ...form, offensive_style: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                    >
+                      <option value="">Select...</option>
+                      {OFFENSIVE_STYLE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Identity Tags ─────────────────────────── */}
+              <div>
+                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">Team Identity Tags</label>
+                <div className="flex flex-wrap gap-2">
+                  {IDENTITY_TAG_OPTIONS.map((tag) => {
+                    const active = form.identity_tags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          setForm({
+                            ...form,
+                            identity_tags: active
+                              ? form.identity_tags.filter((t) => t !== tag)
+                              : [...form.identity_tags, tag],
+                          });
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                          active
+                            ? "bg-teal/10 border-teal/30 text-teal font-semibold"
+                            : "bg-white border-border text-muted hover:border-navy/30"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Notes ─────────────────────────────────── */}
+              <div>
+                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="System tendencies, coaching philosophy, special situations..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
                 />
               </div>
-            </div>
 
-            {/* Identity Tags */}
-            <div className="mt-4">
-              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">Team Identity Tags</label>
-              <div className="flex flex-wrap gap-2">
-                {IDENTITY_TAG_OPTIONS.map((tag) => {
-                  const active = form.identity_tags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => {
-                        setForm({
-                          ...form,
-                          identity_tags: active
-                            ? form.identity_tags.filter((t) => t !== tag)
-                            : [...form.identity_tags, tag],
-                        });
-                      }}
-                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                        active
-                          ? "bg-teal/10 border-teal/30 text-teal font-semibold"
-                          : "bg-white border-border text-muted hover:border-navy/30"
-                      }`}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
+              {/* ── Save / Cancel ─────────────────────────── */}
+              <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !form.team_name.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 disabled:opacity-50 transition-colors"
+                >
+                  <Save size={14} />
+                  {saving ? "Saving..." : "Save Systems"}
+                </button>
+                <button
+                  onClick={() => { setShowForm(false); setEditingId(null); }}
+                  className="px-4 py-2.5 text-sm text-muted hover:text-navy transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
-            </div>
-
-            {/* Notes */}
-            <div className="mt-4">
-              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="System tendencies, special situations, coaching philosophy..."
-                rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm"
-              />
-            </div>
-
-            {/* Save/Cancel */}
-            <div className="flex items-center gap-3 mt-4">
-              <button
-                onClick={handleSave}
-                disabled={saving || !form.team_name.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 disabled:opacity-50 transition-colors"
-              >
-                <Save size={14} />
-                {saving ? "Saving..." : editingId ? "Update" : "Create"}
-              </button>
-              <button
-                onClick={() => { setShowForm(false); setEditingId(null); }}
-                className="px-4 py-2 text-sm text-muted hover:text-navy transition-colors"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         )}
 
-        {/* Team Systems List */}
+        {/* ── Team Systems List ─────────────────────────────── */}
         {loading ? (
           <div className="flex items-center justify-center min-h-[30vh]">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
@@ -414,6 +502,7 @@ export default function SystemsPage() {
   );
 }
 
+// ── Team System Card Component ─────────────────────────────
 function TeamSystemCard({
   system,
   library,
@@ -433,11 +522,18 @@ function TeamSystemCard({
   };
 
   const systemFields = [
-    { label: "Forecheck", value: system.forecheck, icon: Swords },
-    { label: "DZ Coverage", value: system.dz_structure, icon: Shield },
-    { label: "OZ Setup", value: system.oz_setup, icon: Target },
-    { label: "Breakout", value: system.breakout, icon: Zap },
-    { label: "PK", value: system.pk_formation, icon: Shield },
+    { label: "Forecheck", value: system.forecheck, icon: Swords, color: "text-orange" },
+    { label: "DZ", value: system.dz_structure, icon: Shield, color: "text-navy" },
+    { label: "OZ", value: system.oz_setup, icon: Target, color: "text-teal" },
+    { label: "PP", value: system.pp_formation, icon: Target, color: "text-teal" },
+    { label: "PK", value: system.pk_formation, icon: Shield, color: "text-navy" },
+    { label: "Breakout", value: system.breakout, icon: Zap, color: "text-orange" },
+  ].filter((f) => f.value);
+
+  const styleFields = [
+    { label: "Pace", value: system.pace, icon: Gauge },
+    { label: "Physicality", value: system.physicality, icon: Flame },
+    { label: "Offense", value: system.offensive_style, icon: Target },
   ].filter((f) => f.value);
 
   const tags = Array.isArray(system.identity_tags) ? system.identity_tags : [];
@@ -448,65 +544,107 @@ function TeamSystemCard({
         className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-navy/[0.02] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <div>
-          <h3 className="text-lg font-semibold text-navy">{system.team_name}</h3>
-          <div className="flex items-center gap-3 mt-1">
-            {system.season && <span className="text-xs text-muted">{system.season}</span>}
-            {tags.map((tag) => (
-              <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-teal/10 text-teal font-medium">
-                {tag}
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold text-navy">{system.team_name}</h3>
+            {system.season && (
+              <span className="text-xs text-muted bg-navy/[0.04] px-2 py-0.5 rounded">{system.season}</span>
+            )}
+          </div>
+          {/* Quick summary chips */}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            {systemFields.slice(0, 4).map(({ label, value, icon: Icon, color }) => (
+              <span key={label} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-navy/[0.04] text-navy/80">
+                <Icon size={10} className={color} />
+                <strong className="font-medium">{label}:</strong> {getSystemName(value)}
               </span>
             ))}
+            {systemFields.length > 4 && (
+              <span className="text-[10px] text-muted">+{systemFields.length - 4} more</span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 rounded hover:bg-navy/5 text-muted hover:text-navy transition-colors">
+        <div className="flex items-center gap-2 shrink-0 ml-3">
+          <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 rounded hover:bg-navy/5 text-muted hover:text-navy transition-colors" title="Edit">
             <Edit3 size={14} />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded hover:bg-red-50 text-muted hover:text-red-600 transition-colors">
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1.5 rounded hover:bg-red-50 text-muted hover:text-red-600 transition-colors" title="Delete">
             <Trash2 size={14} />
           </button>
           {expanded ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
         </div>
       </div>
 
-      {/* Quick summary row */}
-      {!expanded && systemFields.length > 0 && (
-        <div className="px-5 pb-3 flex flex-wrap gap-2">
-          {systemFields.map(({ label, value }) => (
-            <span key={label} className="text-xs px-2 py-1 rounded bg-navy/[0.04] text-navy/80">
-              <strong>{label}:</strong> {getSystemName(value)}
-            </span>
-          ))}
-        </div>
-      )}
-
       {/* Expanded details */}
       {expanded && (
-        <div className="px-5 pb-5 border-t border-border/50 pt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {systemFields.map(({ label, value, icon: Icon }) => {
-              const entry = library.find((e) => e.code === value);
-              return (
-                <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Icon size={14} className="text-teal" />
-                    <span className="text-xs font-oswald uppercase tracking-wider text-muted">{label}</span>
+        <div className="border-t border-border/50">
+          {/* Systems grid */}
+          <div className="px-5 pt-4 pb-2">
+            <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Systems</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {systemFields.map(({ label, value, icon: Icon, color }) => {
+                const entry = library.find((e) => e.code === value);
+                return (
+                  <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon size={12} className={color} />
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-navy">{entry?.name || value}</p>
+                    {entry?.description && (
+                      <p className="text-[11px] text-muted/60 mt-1 leading-snug line-clamp-2">{entry.description}</p>
+                    )}
                   </div>
-                  <p className="text-sm font-semibold text-navy">{entry?.name || value}</p>
-                  {entry?.description && (
-                    <p className="text-xs text-muted/70 mt-1 leading-relaxed">{entry.description}</p>
-                  )}
+                );
+              })}
+              {system.neutral_zone && (
+                <div className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Crosshair size={12} className="text-muted" />
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">NZ</span>
+                  </div>
+                  <p className="text-sm font-semibold text-navy">{system.neutral_zone}</p>
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
-          {system.notes && (
-            <div className="mt-3 p-3 rounded-lg bg-orange/5 border border-orange/20">
-              <span className="text-xs font-oswald uppercase tracking-wider text-orange/60">Notes</span>
-              <p className="text-sm text-navy/80 mt-1">{system.notes}</p>
+
+          {/* Team Style */}
+          {styleFields.length > 0 && (
+            <div className="px-5 pt-3 pb-2">
+              <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Team Style</h4>
+              <div className="grid grid-cols-3 gap-3">
+                {styleFields.map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="p-3 rounded-lg bg-orange/[0.04] border border-orange/10">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon size={12} className="text-orange" />
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-navy">{value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Tags + Notes */}
+          <div className="px-5 pb-5 pt-2">
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {tags.map((tag) => (
+                  <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-teal/10 text-teal font-medium">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+            {system.notes && (
+              <div className="p-3 rounded-lg bg-orange/5 border border-orange/20">
+                <span className="text-[10px] font-oswald uppercase tracking-wider text-orange/60">Notes</span>
+                <p className="text-sm text-navy/80 mt-1">{system.notes}</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

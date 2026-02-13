@@ -164,6 +164,9 @@ export interface TeamSystem {
   neutral_zone: string;
   breakout: string;
   identity_tags: string[];
+  pace: string;
+  physicality: string;
+  offensive_style: string;
   notes: string;
   created_at: string;
   updated_at: string;
