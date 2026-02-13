@@ -33,9 +33,9 @@ function parseReportSections(
 
   for (const line of lines) {
     const trimmed = line.trim();
-    // Check if this line is a section header: ALL_CAPS with underscores, possibly with colons or dashes
+    // Check if this line is a section header: ALL_CAPS with underscores, possibly with ## markdown prefix, colons or dashes
     const headerMatch = trimmed.match(
-      /^([A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*)[\s:—\-]*$/
+      /^(?:#{1,3}\s+)?([A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*)[\s:—\-]*$/
     );
     if (headerMatch && headerMatch[1] in SECTION_LABELS) {
       // Save previous section

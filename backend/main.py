@@ -1488,14 +1488,31 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                 if ts_row:
                     team_system = {
                         "team_name": ts_row["team_name"],
+                        "season": ts_row["season"],
                         "forecheck": ts_row["forecheck"],
                         "dz_structure": ts_row["dz_structure"],
                         "oz_setup": ts_row["oz_setup"],
                         "pp_formation": ts_row["pp_formation"],
                         "pk_formation": ts_row["pk_formation"],
                         "breakout": ts_row["breakout"],
+                        "pace": ts_row["pace"] or "",
+                        "physicality": ts_row["physicality"] or "",
+                        "offensive_style": ts_row["offensive_style"] or "",
                         "identity_tags": json.loads(ts_row["identity_tags"]) if ts_row["identity_tags"] else [],
+                        "notes": ts_row["notes"] or "",
                     }
+
+            # Resolve system codes to human-readable names from the systems library
+            def resolve_system_code(code: str) -> str:
+                """Look up a system code in the library and return 'Name (code)' or just the code."""
+                if not code:
+                    return "Not specified"
+                lib_row = conn.execute(
+                    "SELECT name, description, ideal_personnel FROM systems_library WHERE code = ? LIMIT 1", (code,)
+                ).fetchone()
+                if lib_row:
+                    return f"{lib_row['name']} — {lib_row['description']}"
+                return code
 
             logger.info("Report input — stats: %d rows, notes: %d rows, team_system: %s",
                         len(stats_list), len(notes_list), "yes" if team_system else "no")
@@ -1511,25 +1528,46 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
 
             report_type_name = template["template_name"]
 
-            # Build the system context block for the prompt
+            # Build the system context block for the prompt — resolve codes to full tactical descriptions
             system_context_block = ""
             if team_system:
+                fc_desc = resolve_system_code(team_system.get('forecheck', ''))
+                dz_desc = resolve_system_code(team_system.get('dz_structure', ''))
+                oz_desc = resolve_system_code(team_system.get('oz_setup', ''))
+                pp_desc = resolve_system_code(team_system.get('pp_formation', ''))
+                pk_desc = resolve_system_code(team_system.get('pk_formation', ''))
+                bo_desc = resolve_system_code(team_system.get('breakout', ''))
+
                 system_context_block = f"""
 
-TEAM SYSTEM CONTEXT (use this to evaluate system fit):
-Team: {team_system['team_name']}
-Forecheck: {team_system.get('forecheck', 'Not specified')}
-DZ Coverage: {team_system.get('dz_structure', 'Not specified')}
-OZ Setup: {team_system.get('oz_setup', 'Not specified')}
-PP Formation: {team_system.get('pp_formation', 'Not specified')}
-PK Formation: {team_system.get('pk_formation', 'Not specified')}
-Breakout: {team_system.get('breakout', 'Not specified')}
-Pace: {team_system.get('pace', 'Not specified')}
-Physicality: {team_system.get('physicality', 'Not specified')}
-Offensive Style: {team_system.get('offensive_style', 'Not specified')}
-Identity: {', '.join(team_system.get('identity_tags', [])) or 'Not specified'}
+TEAM SYSTEM CONTEXT — HOCKEY OPERATING SYSTEM (use this to evaluate system fit):
+Team: {team_system['team_name']} ({team_system.get('season', 'Current')})
+Team Identity: {', '.join(team_system.get('identity_tags', [])) or 'Not specified'}
+Team Notes: {team_system.get('notes', 'None')}
 
-When generating the report, include a SYSTEM_FIT section that evaluates how well this player fits the team's tactical system. Reference forecheck role (F1/F2/F3), defensive zone responsibilities, offensive zone contributions, and special teams fit. Consider the team's pace, physicality level, and offensive style when evaluating fit. Use real hockey language — "drives play as an aggressive F1 on the 2-1-2 forecheck" not "performs well in the system."
+TACTICAL SYSTEMS:
+- Forecheck: {fc_desc}
+- Defensive Zone Coverage: {dz_desc}
+- Offensive Zone Setup: {oz_desc}
+- Power Play Formation: {pp_desc}
+- Penalty Kill Formation: {pk_desc}
+- Breakout Pattern: {bo_desc}
+
+TEAM STYLE:
+- Pace: {team_system.get('pace', 'Not specified')}
+- Physicality: {team_system.get('physicality', 'Not specified')}
+- Offensive Style: {team_system.get('offensive_style', 'Not specified')}
+
+SYSTEM_FIT SECTION REQUIREMENTS:
+You MUST include a dedicated SYSTEM_FIT section in the report. This is a signature ProspectX feature. The SYSTEM_FIT section must:
+1. Explicitly name the team's forecheck system and describe the player's role within it (F1/F2/F3 for forwards, pinch/support for D)
+2. Evaluate DZ responsibilities — how this player functions in the team's defensive zone structure
+3. Evaluate OZ contributions — how this player drives the team's offensive zone attack
+4. Assess special teams fit — power play role and penalty kill capability
+5. Rate overall system compatibility (Elite Fit / Strong Fit / Developing Fit / Adjustment Needed)
+6. Provide specific tactical recommendations for coaching staff
+
+Use elite hockey language. Write like you're briefing an NHL coaching staff. Reference specific systems by name — "As F1 on the 2-1-2 aggressive forecheck, McChesney's 18.4% shooting and +12 rating suggest..." not generic statements. This section should make a GM say "this tool UNDERSTANDS my team."
 """
 
             system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine powered by the Hockey Operating System. You produce professional-grade scouting reports using tactical hockey terminology that NHL scouts, junior hockey GMs, agents, and player development staff expect.
