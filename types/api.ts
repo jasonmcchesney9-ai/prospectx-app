@@ -651,3 +651,59 @@ export const PROSPECT_GRADES: Record<string, { label: string; nhl: string; descr
   "D":   { label: "D",   nhl: "Junior / College / Non-Pro",            description: "Developing player. Appropriate level is junior (OHL/WHL/QMJHL/USHL), college (NCAA), or top midget/U18." },
   "NR":  { label: "NR",  nhl: "Not Rated / Insufficient Data",         description: "Insufficient data to assign a grade. More viewings or stats needed before projecting a trajectory." },
 };
+
+// --- Player Intelligence ---
+export interface PlayerIntelligence {
+  id: string | null;
+  player_id: string;
+  archetype: string | null;
+  archetype_confidence: number | null;
+  overall_grade: string | null;
+  offensive_grade: string | null;
+  defensive_grade: string | null;
+  skating_grade: string | null;
+  hockey_iq_grade: string | null;
+  compete_grade: string | null;
+  summary: string | null;
+  strengths: string[];
+  development_areas: string[];
+  comparable_players: string[];
+  stat_signature: Record<string, string> | null;
+  tags: string[];
+  projection: string | null;
+  trigger: string | null;
+  version: number;
+  created_at: string | null;
+}
+
+// Stat signature display labels for UI chips
+export const STAT_SIGNATURE_LABELS: Record<string, { emoji: string; label: string }> = {
+  production_tier: { emoji: "\u{1F4CA}", label: "Production" },
+  scoring_profile: { emoji: "\u{1F3AF}", label: "Scoring" },
+  defensive_reliability: { emoji: "\u{1F6E1}", label: "Defense" },
+  discipline: { emoji: "\u{2696}", label: "Discipline" },
+  shooting_efficiency: { emoji: "\u{1F525}", label: "Shooting" },
+  finishing: { emoji: "\u{1F945}", label: "Finishing" },
+  possession_impact: { emoji: "\u{1F4CA}", label: "Possession" },
+  physical_engagement: { emoji: "\u{1F4AA}", label: "Physical" },
+  faceoff_ability: { emoji: "\u{1F3D2}", label: "Faceoffs" },
+  save_pct_tier: { emoji: "\u{1F94A}", label: "Save %" },
+  goals_against_tier: { emoji: "\u{1F6E1}", label: "GAA" },
+};
+
+// Grade color mapping for UI
+export const GRADE_COLORS: Record<string, string> = {
+  "A+": "#16a34a",  // green-600
+  "A":  "#16a34a",
+  "A-": "#22c55e",  // green-500
+  "B+": "#3b82f6",  // blue-500
+  "B":  "#3b82f6",
+  "B-": "#60a5fa",  // blue-400
+  "C+": "#f59e0b",  // amber-500
+  "C":  "#f59e0b",
+  "C-": "#fbbf24",  // amber-400
+  "D+": "#ef4444",  // red-500
+  "D":  "#ef4444",
+  "D-": "#f87171",  // red-400
+  "NR": "#9ca3af",  // gray-400
+};

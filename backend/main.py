@@ -3,9 +3,11 @@ ProspectX API Server — SQLite Version
 Zero external DB dependencies. Just SQLite + FastAPI.
 """
 
+import asyncio
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -25,7 +27,9 @@ from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
 
-load_dotenv(override=True)
+# Load .env from the backend directory (works regardless of CWD)
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_backend_dir, ".env"), override=True)
 
 # ============================================================
 # LOGGING
@@ -507,6 +511,35 @@ def init_db():
         )
     """)
 
+    # ── Player Intelligence table ─────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS player_intelligence (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            archetype TEXT,
+            archetype_confidence REAL,
+            overall_grade TEXT,
+            offensive_grade TEXT,
+            defensive_grade TEXT,
+            skating_grade TEXT,
+            hockey_iq_grade TEXT,
+            compete_grade TEXT,
+            summary TEXT,
+            strengths TEXT,
+            development_areas TEXT,
+            comparable_players TEXT,
+            stat_signature TEXT,
+            tags TEXT DEFAULT '[]',
+            projection TEXT,
+            data_sources_used TEXT,
+            trigger TEXT,
+            version INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+
     conn.commit()
 
     # ── Migrations for existing databases ───────────────────
@@ -534,6 +567,13 @@ def init_db():
         conn.execute("ALTER TABLE teams ADD COLUMN logo_url TEXT")
         conn.commit()
         logger.info("Migration: added logo_url column to teams")
+
+    # Add intelligence_version column to players
+    player_cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    if "intelligence_version" not in player_cols:
+        conn.execute("ALTER TABLE players ADD COLUMN intelligence_version INTEGER DEFAULT 0")
+        conn.commit()
+        logger.info("Migration: added intelligence_version column to players")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -1410,6 +1450,574 @@ def _player_from_row(row: sqlite3.Row) -> dict:
     return d
 
 
+# ── Player Intelligence Engine ─────────────────────────────────────────────
+
+
+def _compute_stat_signature(player: dict, stats: list, goalie_stats: list, extended_stats_list: list) -> tuple:
+    """Rule-based stat classifier. Fast, deterministic, no LLM needed.
+    Returns (stat_signature dict, auto_tags list)."""
+    sig = {}
+    tags = set()
+
+    position = (player.get("position") or "").upper()
+    is_goalie = position in ("G", "GK", "GOALIE")
+
+    if is_goalie and goalie_stats:
+        # Goalie classification
+        latest = goalie_stats[0]  # most recent
+        gp = latest.get("gp") or 0
+        sv_pct_str = latest.get("sv_pct") or ""
+        gaa = latest.get("gaa") or 0
+
+        # Parse sv_pct (might be string like ".920" or "0.920" or "92.0")
+        try:
+            sv_pct = float(sv_pct_str) if sv_pct_str else 0
+            if sv_pct > 1:
+                sv_pct = sv_pct / 100.0
+        except (ValueError, TypeError):
+            sv_pct = 0
+
+        if gp >= 5:
+            if sv_pct >= 0.930:
+                sig["save_pct_tier"] = "Elite"
+                tags.add("positioning")
+            elif sv_pct >= 0.910:
+                sig["save_pct_tier"] = "Strong"
+            elif sv_pct >= 0.890:
+                sig["save_pct_tier"] = "Average"
+            else:
+                sig["save_pct_tier"] = "Developing"
+
+            if gaa <= 2.0:
+                sig["goals_against_tier"] = "Elite"
+            elif gaa <= 2.75:
+                sig["goals_against_tier"] = "Strong"
+            elif gaa <= 3.5:
+                sig["goals_against_tier"] = "Average"
+            else:
+                sig["goals_against_tier"] = "Developing"
+
+        # Check extended goalie stats
+        if latest.get("extended_stats"):
+            try:
+                ext = json.loads(latest["extended_stats"]) if isinstance(latest["extended_stats"], str) else latest["extended_stats"]
+                if ext:
+                    tags.add("compete")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return sig, list(tags)
+
+    # Skater classification
+    if not stats:
+        return sig, list(tags)
+
+    # Aggregate across all stat rows (use latest season or total)
+    total_gp = 0
+    total_g = 0
+    total_a = 0
+    total_p = 0
+    total_pim = 0
+    total_plus_minus = 0
+    total_shots = 0
+
+    for s in stats:
+        gp = s.get("gp") or 0
+        total_gp += gp
+        total_g += s.get("g") or 0
+        total_a += s.get("a") or 0
+        total_p += s.get("p") or 0
+        total_pim += s.get("pim") or 0
+        total_plus_minus += s.get("plus_minus") or 0
+        total_shots += s.get("shots") or s.get("sog") or 0
+
+    if total_gp == 0:
+        return sig, list(tags)
+
+    ppg = total_p / total_gp
+    gpg = total_g / total_gp
+    apg = total_a / total_gp
+    pim_pg = total_pim / total_gp
+
+    # Production tier
+    if ppg > 1.0:
+        sig["production_tier"] = "Elite"
+        tags.update(["shooting", "vision"])
+    elif ppg > 0.7:
+        sig["production_tier"] = "High"
+        tags.add("puck_skills")
+    elif ppg > 0.4:
+        sig["production_tier"] = "Moderate"
+    else:
+        sig["production_tier"] = "Developing"
+
+    # Goal-scoring profile
+    if gpg > 0.4:
+        sig["scoring_profile"] = "Sniper"
+        tags.add("shooting")
+    elif gpg > 0.25:
+        sig["scoring_profile"] = "Scorer"
+        tags.add("shooting")
+    elif total_g > 0 and total_a > 1.5 * total_g:
+        sig["scoring_profile"] = "Playmaker"
+        tags.update(["vision", "puck_skills"])
+    else:
+        sig["scoring_profile"] = "Balanced"
+
+    # Defensive reliability
+    pm_per_game = total_plus_minus / total_gp
+    if pm_per_game > 0.5:
+        sig["defensive_reliability"] = "Elite"
+        tags.add("positioning")
+    elif total_plus_minus > 0:
+        sig["defensive_reliability"] = "Reliable"
+    elif total_plus_minus == 0:
+        sig["defensive_reliability"] = "Neutral"
+    else:
+        sig["defensive_reliability"] = "Developing"
+
+    # Discipline
+    if pim_pg < 0.5:
+        sig["discipline"] = "Clean"
+    elif pim_pg < 1.5:
+        sig["discipline"] = "Moderate"
+    else:
+        sig["discipline"] = "Physical"
+        tags.add("physicality")
+
+    # Shooting efficiency
+    if total_shots > 0:
+        sh_pct = total_g / total_shots * 100
+        if sh_pct > 15:
+            sig["shooting_efficiency"] = "Elite"
+            tags.add("shooting")
+        elif sh_pct > 10:
+            sig["shooting_efficiency"] = "Above Average"
+        elif sh_pct > 5:
+            sig["shooting_efficiency"] = "Average"
+        else:
+            sig["shooting_efficiency"] = "Below Average"
+
+    # ── Extended stats analysis (InStat analytics) ──
+    for ext_row in extended_stats_list:
+        try:
+            ext = json.loads(ext_row) if isinstance(ext_row, str) else ext_row
+            if not ext or not isinstance(ext, dict):
+                continue
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        # xG finishing (check multiple possible locations)
+        xg_data = ext.get("xg") or ext.get("advanced") or {}
+        xg_val = xg_data.get("xG") or xg_data.get("xg") or 0
+        if xg_val and total_g > 0:
+            try:
+                xg_float = float(xg_val)
+                if xg_float > 0:
+                    ratio = total_g / xg_float
+                    if ratio > 1.15:
+                        sig["finishing"] = "Over-performer"
+                        tags.add("shooting")
+                    elif ratio > 0.85:
+                        sig["finishing"] = "Expected"
+                    else:
+                        sig["finishing"] = "Under-performer"
+            except (ValueError, TypeError):
+                pass
+
+        # Possession (CORSI / possession %)
+        poss_data = ext.get("main") or ext.get("advanced") or {}
+        cf_pct = poss_data.get("CF%") or poss_data.get("cf_pct") or poss_data.get("Possession, %") or 0
+        try:
+            cf_float = float(cf_pct)
+            if cf_float > 0:
+                if cf_float > 55:
+                    sig["possession_impact"] = "Driver"
+                    tags.update(["hockey_iq", "puck_skills"])
+                elif cf_float > 50:
+                    sig["possession_impact"] = "Positive"
+                elif cf_float > 45:
+                    sig["possession_impact"] = "Neutral"
+                else:
+                    sig["possession_impact"] = "Passenger"
+        except (ValueError, TypeError):
+            pass
+
+        # Puck battles
+        battles_data = ext.get("puck_battles") or ext.get("duels") or {}
+        battle_won = battles_data.get("Won") or battles_data.get("won") or 0
+        battle_total = battles_data.get("Total") or battles_data.get("total") or 0
+        try:
+            b_won = float(battle_won)
+            b_total = float(battle_total)
+            if b_total > 0:
+                win_pct = (b_won / b_total) * 100
+                if win_pct > 55:
+                    sig["physical_engagement"] = "Battle Winner"
+                    tags.update(["physicality", "compete"])
+                elif win_pct > 45:
+                    sig["physical_engagement"] = "Competitive"
+                    tags.add("compete")
+                else:
+                    sig["physical_engagement"] = "Avoid Contact"
+        except (ValueError, TypeError):
+            pass
+
+        # Faceoffs
+        fo_data = ext.get("faceoffs") or ext.get("main") or {}
+        fo_won = fo_data.get("FO Won") or fo_data.get("fo_won") or 0
+        fo_total = fo_data.get("FO Total") or fo_data.get("fo_total") or fo_data.get("Faceoffs") or 0
+        try:
+            fw = float(fo_won)
+            ft = float(fo_total)
+            if ft > 0:
+                fo_pct = (fw / ft) * 100
+                if fo_pct > 55:
+                    sig["faceoff_ability"] = "Elite"
+                    tags.add("hockey_iq")
+                elif fo_pct > 50:
+                    sig["faceoff_ability"] = "Strong"
+                else:
+                    sig["faceoff_ability"] = "Developing"
+        except (ValueError, TypeError):
+            pass
+
+        break  # Use first valid extended stats row
+
+    # Position-based tag hints
+    if position in ("D", "LD", "RD"):
+        if sig.get("defensive_reliability") in ("Elite", "Reliable"):
+            tags.add("positioning")
+        if ppg > 0.5:
+            tags.add("puck_skills")  # offensive D
+    elif position in ("C",):
+        if sig.get("faceoff_ability") in ("Elite", "Strong"):
+            tags.add("hockey_iq")
+
+    return sig, list(tags)
+
+
+async def _generate_player_intelligence(player_id: str, org_id: str, trigger: str = "manual") -> Optional[dict]:
+    """Generate or refresh a player's AI intelligence profile.
+    Uses Claude Haiku for fast, cheap structured JSON output."""
+    conn = get_db()
+    try:
+        # 1. Get player
+        player_row = conn.execute("SELECT * FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+        if not player_row:
+            return None
+        player = _player_from_row(player_row)
+
+        # 2. Get stats
+        stats_rows = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC", (player_id,)
+        ).fetchall()
+        stats = [dict(r) for r in stats_rows]
+
+        # 3. Get goalie stats
+        goalie_rows = conn.execute(
+            "SELECT * FROM goalie_stats WHERE player_id = ? ORDER BY season DESC", (player_id,)
+        ).fetchall()
+        goalie_stats = [dict(r) for r in goalie_rows]
+
+        # 4. Get extended stats
+        extended_stats_list = []
+        for s in stats:
+            if s.get("extended_stats"):
+                extended_stats_list.append(s["extended_stats"])
+        for g in goalie_stats:
+            if g.get("extended_stats"):
+                extended_stats_list.append(g["extended_stats"])
+
+        # 5. Compute stat signature (rule-based, instant)
+        stat_sig, auto_tags = _compute_stat_signature(player, stats, goalie_stats, extended_stats_list)
+
+        # 6. Get scout notes (last 10)
+        notes_rows = conn.execute(
+            "SELECT note_text, note_type, tags, created_at FROM scout_notes WHERE player_id = ? ORDER BY created_at DESC LIMIT 10",
+            (player_id,)
+        ).fetchall()
+        notes = [dict(n) for n in notes_rows]
+
+        # 7. Get previous intelligence snapshot (for continuity)
+        prev_intel = conn.execute(
+            "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
+            (player_id, org_id)
+        ).fetchone()
+        prev_version = dict(prev_intel)["version"] if prev_intel else 0
+
+        # 8. Get latest report summary
+        latest_report = conn.execute(
+            "SELECT output_text, report_type, generated_at FROM reports WHERE player_id = ? AND status = 'complete' ORDER BY generated_at DESC LIMIT 1",
+            (player_id,)
+        ).fetchone()
+
+        # 9. Build context for LLM
+        # Pre-compute age
+        age_str = "Unknown"
+        if player.get("dob"):
+            try:
+                dob_str = player["dob"][:10]
+                birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
+                today = datetime.now().date()
+                age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+                age_str = str(age)
+            except Exception:
+                pass
+
+        bio_section = f"""PLAYER BIO:
+Name: {player.get('first_name', '')} {player.get('last_name', '')}
+Position: {player.get('position', 'Unknown')}
+Age: {age_str}
+DOB: {player.get('dob', 'Unknown')}
+Height: {player.get('height_cm', 'N/A')} cm
+Weight: {player.get('weight_kg', 'N/A')} kg
+Shoots: {player.get('shoots', 'Unknown')}
+Team: {player.get('current_team', 'Unknown')}
+League: {player.get('current_league', 'Unknown')}"""
+
+        stats_section = ""
+        if stats:
+            stats_section = "\n\nSTATISTICS:\n"
+            for s in stats[:3]:  # Last 3 seasons max
+                season = s.get("season", "Unknown")
+                stats_section += f"Season {season}: {s.get('gp',0)} GP, {s.get('g',0)}G-{s.get('a',0)}A—{s.get('p',0)}P, +/- {s.get('plus_minus',0)}, {s.get('pim',0)} PIM"
+                if s.get("shots"):
+                    stats_section += f", {s.get('shots',0)} SOG"
+                if s.get("shooting_pct"):
+                    stats_section += f", {s.get('shooting_pct',0)}% SH%"
+                stats_section += "\n"
+
+        if goalie_stats:
+            stats_section += "\nGOALIE STATISTICS:\n"
+            for g in goalie_stats[:3]:
+                season = g.get("season", "Unknown")
+                stats_section += f"Season {season}: {g.get('gp',0)} GP, {g.get('gaa','N/A')} GAA, {g.get('sv_pct','N/A')} SV%, {g.get('ga',0)} GA, {g.get('sa',0)} SA\n"
+
+        sig_section = ""
+        if stat_sig:
+            sig_section = "\n\nSTAT SIGNATURE (rule-based analysis):\n"
+            for k, v in stat_sig.items():
+                sig_section += f"- {k.replace('_', ' ').title()}: {v}\n"
+
+        notes_section = ""
+        if notes:
+            notes_section = "\n\nSCOUT NOTES (most recent first):\n"
+            for n in notes[:5]:  # Cap at 5 for prompt size
+                notes_section += f"- [{n.get('note_type','general')}] {n.get('note_text','')[:300]}\n"
+
+        report_section = ""
+        if latest_report:
+            report_text = dict(latest_report).get("output_text", "")
+            if report_text:
+                # Extract key sections (first 800 chars)
+                report_section = f"\n\nLATEST REPORT EXCERPT:\n{report_text[:800]}..."
+
+        prev_section = ""
+        if prev_intel:
+            pi = dict(prev_intel)
+            prev_section = f"\n\nPREVIOUS INTELLIGENCE (v{pi.get('version',0)}):\nArchetype: {pi.get('archetype','N/A')}\nOverall Grade: {pi.get('overall_grade','N/A')}\nSummary: {(pi.get('summary','N/A') or 'N/A')[:300]}"
+
+        full_context = bio_section + stats_section + sig_section + notes_section + report_section + prev_section
+
+        # 10. Call Claude Haiku for intelligence
+        client = get_anthropic_client()
+        if not client:
+            # No API key — store stat signature only
+            intel_id = str(uuid.uuid4())
+            now = datetime.now().isoformat()
+            conn.execute("""
+                INSERT INTO player_intelligence (id, player_id, org_id, stat_signature, tags, trigger, version, data_sources_used, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (intel_id, player_id, org_id, json.dumps(stat_sig), json.dumps(auto_tags), trigger, prev_version + 1,
+                  json.dumps({"stats": len(stats), "goalie_stats": len(goalie_stats), "notes": len(notes), "reports": 1 if latest_report else 0}), now))
+            conn.execute("UPDATE players SET tags = ?, intelligence_version = ? WHERE id = ?",
+                         (json.dumps(auto_tags), prev_version + 1, player_id))
+            conn.commit()
+            return {"id": intel_id, "stat_signature": stat_sig, "tags": auto_tags, "version": prev_version + 1}
+
+        system_prompt = """You are ProspectX Intelligence — an elite hockey scouting AI that produces structured player intelligence profiles.
+
+Given a player's bio, statistics, stat signature, scout notes, and any previous intelligence, produce a JSON object with your assessment.
+
+RULES:
+- Return ONLY valid JSON — no markdown, no explanation, no code fences
+- Grade scale: A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, NR (Not Rated — use when insufficient data)
+- Archetype should be a compound descriptor like "Two-Way Playmaking Center" or "Power Forward" or "Offensive Defenseman"
+- archetype_confidence is 0.0 to 1.0 (higher = more data available)
+- strengths and development_areas: 3-5 items each, specific to hockey skills
+- comparable_players: 1-2 NHL/pro comparisons that match the player's style (be realistic, these are junior players)
+- projection: 1-2 sentences about ceiling/floor at next level
+- tags must be from: skating, shooting, compete, hockey_iq, puck_skills, positioning, physicality, speed, vision, leadership, coachability, work_ethic
+- summary: 2-3 sentence scouting summary, professional tone
+- If data is very limited, be conservative with grades (use NR liberally) but still provide archetype/summary based on what's available
+
+JSON SCHEMA:
+{
+  "archetype": string,
+  "archetype_confidence": number,
+  "overall_grade": string,
+  "offensive_grade": string,
+  "defensive_grade": string,
+  "skating_grade": string,
+  "hockey_iq_grade": string,
+  "compete_grade": string,
+  "summary": string,
+  "strengths": [string],
+  "development_areas": [string],
+  "comparable_players": [string],
+  "projection": string,
+  "tags": [string]
+}"""
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": f"Generate an intelligence profile for this player:\n\n{full_context}"}]
+            )
+
+            raw_text = response.content[0].text.strip()
+            # Strip code fences if present
+            if raw_text.startswith("```"):
+                raw_text = re.sub(r"^```(?:json)?\s*\n?", "", raw_text)
+                raw_text = re.sub(r"\n?```\s*$", "", raw_text)
+
+            intel_data = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            logger.error("Intelligence JSON parse error for player %s: %s", player_id, str(e))
+            # Fall back to stat signature only
+            intel_data = {}
+        except Exception as e:
+            logger.error("Intelligence LLM call failed for player %s: %s", player_id, str(e))
+            intel_data = {}
+
+        # 11. Merge LLM results with stat signature
+        archetype = intel_data.get("archetype") or player.get("archetype")
+        archetype_confidence = intel_data.get("archetype_confidence", 0.5)
+        overall_grade = intel_data.get("overall_grade", "NR")
+        offensive_grade = intel_data.get("offensive_grade", "NR")
+        defensive_grade = intel_data.get("defensive_grade", "NR")
+        skating_grade = intel_data.get("skating_grade", "NR")
+        hockey_iq_grade = intel_data.get("hockey_iq_grade", "NR")
+        compete_grade = intel_data.get("compete_grade", "NR")
+        summary = intel_data.get("summary", "")
+        strengths = intel_data.get("strengths", [])
+        dev_areas = intel_data.get("development_areas", [])
+        comparables = intel_data.get("comparable_players", [])
+        projection = intel_data.get("projection", "")
+        llm_tags = intel_data.get("tags", [])
+
+        # Merge LLM tags with rule-based auto_tags
+        all_tags = list(set(auto_tags + llm_tags))
+        # Filter to valid tags only
+        valid_tags = {"skating", "shooting", "compete", "hockey_iq", "puck_skills", "positioning",
+                      "physicality", "speed", "vision", "leadership", "coachability", "work_ethic"}
+        all_tags = [t for t in all_tags if t in valid_tags]
+
+        # 12. Store intelligence
+        intel_id = str(uuid.uuid4())
+        new_version = prev_version + 1
+        now = datetime.now().isoformat()
+        data_sources = {
+            "stats": len(stats),
+            "goalie_stats": len(goalie_stats),
+            "notes": len(notes),
+            "reports": 1 if latest_report else 0,
+            "extended_stats": len(extended_stats_list)
+        }
+
+        conn.execute("""
+            INSERT INTO player_intelligence
+            (id, player_id, org_id, archetype, archetype_confidence, overall_grade, offensive_grade, defensive_grade,
+             skating_grade, hockey_iq_grade, compete_grade, summary, strengths, development_areas, comparable_players,
+             stat_signature, tags, projection, data_sources_used, trigger, version, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (intel_id, player_id, org_id, archetype, archetype_confidence, overall_grade, offensive_grade,
+              defensive_grade, skating_grade, hockey_iq_grade, compete_grade, summary,
+              json.dumps(strengths), json.dumps(dev_areas), json.dumps(comparables),
+              json.dumps(stat_sig), json.dumps(all_tags), projection, json.dumps(data_sources),
+              trigger, new_version, now))
+
+        # 13. Write back to players table
+        conn.execute("UPDATE players SET archetype = ?, tags = ?, intelligence_version = ? WHERE id = ?",
+                     (archetype, json.dumps(all_tags), new_version, player_id))
+        conn.commit()
+
+        logger.info("Intelligence v%d generated for player %s (trigger=%s)", new_version, player_id, trigger)
+
+        return {
+            "id": intel_id,
+            "player_id": player_id,
+            "archetype": archetype,
+            "archetype_confidence": archetype_confidence,
+            "overall_grade": overall_grade,
+            "offensive_grade": offensive_grade,
+            "defensive_grade": defensive_grade,
+            "skating_grade": skating_grade,
+            "hockey_iq_grade": hockey_iq_grade,
+            "compete_grade": compete_grade,
+            "summary": summary,
+            "strengths": strengths,
+            "development_areas": dev_areas,
+            "comparable_players": comparables,
+            "stat_signature": stat_sig,
+            "tags": all_tags,
+            "projection": projection,
+            "trigger": trigger,
+            "version": new_version,
+            "created_at": now,
+        }
+    except Exception as e:
+        logger.error("Intelligence generation failed for player %s: %s", player_id, str(e))
+        return None
+    finally:
+        conn.close()
+
+
+async def _extract_report_intelligence(report_id: str, player_id: str, org_id: str):
+    """Parse a completed report to extract insights, then refresh player intelligence."""
+    conn = get_db()
+    try:
+        report = conn.execute("SELECT output_text FROM reports WHERE id = ?", (report_id,)).fetchone()
+        if not report:
+            return
+        text = dict(report).get("output_text", "") or ""
+        if not text:
+            return
+
+        # Extract key data from report text using regex
+        extracted = {}
+
+        # Overall Grade
+        grade_match = re.search(r"Overall\s*Grade[:\s]*([A-D][+-]?)", text, re.IGNORECASE)
+        if grade_match:
+            extracted["overall_grade"] = grade_match.group(1)
+
+        # System Fit
+        fit_match = re.search(r"(Elite Fit|Strong Fit|Developing Fit|Adjustment Needed)", text, re.IGNORECASE)
+        if fit_match:
+            extracted["system_fit"] = fit_match.group(1)
+
+        # Archetype mentions
+        arch_match = re.search(r"(?:profiles?|projects?|presents?|plays?)\s+as\s+(?:a|an)\s+(.+?)(?:\.|,|\n)", text, re.IGNORECASE)
+        if arch_match:
+            extracted["archetype_hint"] = arch_match.group(1).strip()[:80]
+
+        logger.info("Report %s intelligence extracted: %s", report_id, list(extracted.keys()))
+    except Exception as e:
+        logger.error("Report intelligence extraction failed for %s: %s", report_id, str(e))
+    finally:
+        conn.close()
+
+    # Now refresh player intelligence with the new report context
+    try:
+        await _generate_player_intelligence(player_id, org_id, trigger="report")
+    except Exception as e:
+        logger.error("Post-report intelligence refresh failed for %s: %s", player_id, str(e))
+
+
 @app.get("/players", response_model=List[PlayerResponse])
 async def list_players(
     search: Optional[str] = None,
@@ -2135,6 +2743,11 @@ async def ingest_stats(
 
         conn.close()
         logger.info("InStat game log ingested: %d games for %s %s", inserted, player["first_name"], player["last_name"])
+
+        # Trigger intelligence generation in background
+        if inserted > 0:
+            asyncio.create_task(_generate_player_intelligence(player_id, org_id, trigger="import"))
+
         return {
             "detail": f"Imported {inserted} game logs + season summary from InStat",
             "inserted": inserted + (1 if default_season and inserted > 0 else 0),
@@ -2147,6 +2760,7 @@ async def ingest_stats(
     # Has player names + stats for the whole team
     if _detect_instat_team_stats(headers):
         logger.info("InStat team stats detected — %d rows", len(all_rows))
+        _imported_player_ids = set()
 
         for i, row in enumerate(all_rows):
             # Get player name
@@ -2204,12 +2818,18 @@ async def ingest_stats(
                     now_iso(),
                 ))
                 inserted += 1
+                _imported_player_ids.add(pid)
             except Exception as e:
                 errors.append(f"Row {i+1} ({player_name}): {str(e)}")
 
         conn.commit()
         conn.close()
         logger.info("InStat team stats ingested: %d rows", inserted)
+
+        # Trigger intelligence generation for each imported player in background
+        for _pid in _imported_player_ids:
+            asyncio.create_task(_generate_player_intelligence(_pid, org_id, trigger="import"))
+
         return {
             "detail": f"Imported {inserted} stat rows from InStat team stats",
             "inserted": inserted,
@@ -2218,6 +2838,7 @@ async def ingest_stats(
         }
 
     # ── Standard Format ───────────────────────────────────────────
+    _std_player_ids = set()
     for i, row in enumerate(all_rows):
         pid = row.get("player_id") or player_id
         if not pid:
@@ -2255,11 +2876,17 @@ async def ingest_stats(
             now_iso(),
         ))
         inserted += 1
+        _std_player_ids.add(pid)
 
     conn.commit()
     conn.close()
 
     logger.info("Stats ingested: %d rows for org %s (%d errors)", inserted, org_id, len(errors))
+
+    # Trigger intelligence generation for each imported player in background
+    for _pid in _std_player_ids:
+        asyncio.create_task(_generate_player_intelligence(_pid, org_id, trigger="import"))
+
     return {
         "detail": f"Imported {inserted} stat rows",
         "inserted": inserted,
@@ -2975,6 +3602,11 @@ Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, 
 
         logger.info("Report generated: %s (%s) in %d ms", title, request.report_type, generation_ms)
         conn.close()
+
+        # Trigger intelligence refresh from report insights (background)
+        if request.player_id:
+            asyncio.create_task(_extract_report_intelligence(report_id, request.player_id, org_id))
+
         return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
 
     except Exception as e:
@@ -3087,6 +3719,156 @@ async def delete_report(report_id: str, token_data: dict = Depends(verify_token)
 
 
 # ============================================================
+# PLAYER INTELLIGENCE ENDPOINTS
+# ============================================================
+
+
+@app.get("/players/{player_id}/intelligence")
+async def get_player_intelligence(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get the latest intelligence snapshot for a player. Auto-generates if none exists."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # Verify player belongs to org
+    player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # Get latest intelligence
+    row = conn.execute(
+        "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
+        (player_id, org_id)
+    ).fetchone()
+    conn.close()
+
+    if row:
+        d = dict(row)
+        # Parse JSON fields
+        for field in ("strengths", "development_areas", "comparable_players", "tags"):
+            val = d.get(field)
+            if isinstance(val, str):
+                try:
+                    d[field] = json.loads(val)
+                except Exception:
+                    d[field] = []
+            elif val is None:
+                d[field] = []
+        if isinstance(d.get("stat_signature"), str):
+            try:
+                d["stat_signature"] = json.loads(d["stat_signature"])
+            except Exception:
+                d["stat_signature"] = {}
+        if isinstance(d.get("data_sources_used"), str):
+            try:
+                d["data_sources_used"] = json.loads(d["data_sources_used"])
+            except Exception:
+                d["data_sources_used"] = {}
+        return d
+
+    # No intelligence exists — check if player has any data to generate from
+    conn2 = get_db()
+    has_stats = conn2.execute("SELECT COUNT(*) FROM player_stats WHERE player_id = ?", (player_id,)).fetchone()[0] > 0
+    has_goalie_stats = conn2.execute("SELECT COUNT(*) FROM goalie_stats WHERE player_id = ?", (player_id,)).fetchone()[0] > 0
+    has_notes = conn2.execute("SELECT COUNT(*) FROM scout_notes WHERE player_id = ?", (player_id,)).fetchone()[0] > 0
+    conn2.close()
+
+    if has_stats or has_goalie_stats or has_notes:
+        # Auto-generate intelligence
+        result = await _generate_player_intelligence(player_id, org_id, trigger="auto")
+        if result:
+            return result
+
+    # No data at all — return empty intelligence
+    return {
+        "id": None,
+        "player_id": player_id,
+        "archetype": None,
+        "archetype_confidence": None,
+        "overall_grade": None,
+        "offensive_grade": None,
+        "defensive_grade": None,
+        "skating_grade": None,
+        "hockey_iq_grade": None,
+        "compete_grade": None,
+        "summary": None,
+        "strengths": [],
+        "development_areas": [],
+        "comparable_players": [],
+        "stat_signature": None,
+        "tags": [],
+        "projection": None,
+        "trigger": None,
+        "version": 0,
+        "created_at": None,
+    }
+
+
+@app.get("/players/{player_id}/intelligence/history")
+async def get_intelligence_history(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get all historical intelligence snapshots for a player (shows evolution)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # Verify player
+    player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    rows = conn.execute(
+        "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC",
+        (player_id, org_id)
+    ).fetchall()
+    conn.close()
+
+    results = []
+    for row in rows:
+        d = dict(row)
+        for field in ("strengths", "development_areas", "comparable_players", "tags"):
+            val = d.get(field)
+            if isinstance(val, str):
+                try:
+                    d[field] = json.loads(val)
+                except Exception:
+                    d[field] = []
+            elif val is None:
+                d[field] = []
+        if isinstance(d.get("stat_signature"), str):
+            try:
+                d["stat_signature"] = json.loads(d["stat_signature"])
+            except Exception:
+                d["stat_signature"] = {}
+        if isinstance(d.get("data_sources_used"), str):
+            try:
+                d["data_sources_used"] = json.loads(d["data_sources_used"])
+            except Exception:
+                d["data_sources_used"] = {}
+        results.append(d)
+
+    return results
+
+
+@app.post("/players/{player_id}/intelligence")
+async def refresh_player_intelligence(player_id: str, token_data: dict = Depends(verify_token)):
+    """Manually trigger a full intelligence refresh for a player."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # Verify player
+    player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+    conn.close()
+
+    result = await _generate_player_intelligence(player_id, org_id, trigger="manual")
+    if result:
+        return result
+    raise HTTPException(status_code=500, detail="Intelligence generation failed — check server logs")
+
+
+# ============================================================
 # SCOUT NOTES ENDPOINTS
 # ============================================================
 
@@ -3127,6 +3909,9 @@ async def create_note(player_id: str, note: NoteCreate, token_data: dict = Depen
 
     conn.close()
     logger.info("Note created for player %s by %s", player_id, user_id)
+
+    # Trigger intelligence refresh in background (notes change context)
+    asyncio.create_task(_generate_player_intelligence(player_id, org_id, trigger="note"))
 
     return NoteResponse(
         id=note_id, org_id=org_id, player_id=player_id, scout_id=user_id,
@@ -3822,25 +4607,30 @@ async def instat_import(
         "errors": [],
     }
 
+    _instat_player_ids = []
     try:
         if file_type == "league_teams":
             r = _import_league_teams(rows, season, org_id)
             result.update(r)
         elif file_type == "league_skaters":
             r = _import_league_skaters(rows, season, org_id)
+            _instat_player_ids = r.pop("player_ids", [])
             result.update(r)
         elif file_type == "league_goalies":
             r = _import_league_goalies(rows, season, org_id)
+            _instat_player_ids = r.pop("player_ids", [])
             result.update(r)
         elif file_type == "team_skaters":
             if not team_name:
                 raise HTTPException(status_code=400, detail="team_name required for team-specific imports")
             r = _import_team_skaters(rows, season, team_name, org_id)
+            _instat_player_ids = r.pop("player_ids", [])
             result.update(r)
         elif file_type == "team_goalies":
             if not team_name:
                 raise HTTPException(status_code=400, detail="team_name required for team-specific imports")
             r = _import_team_goalies(rows, season, team_name, org_id)
+            _instat_player_ids = r.pop("player_ids", [])
             result.update(r)
         elif file_type == "lines":
             if not team_name:
@@ -3855,6 +4645,13 @@ async def instat_import(
     except Exception as e:
         logger.exception("InStat import error")
         result["errors"].append(str(e))
+
+    # Trigger intelligence generation for imported players (background, non-blocking)
+    # Limit to first 50 players to avoid overwhelming the API on large league imports
+    for pid in _instat_player_ids[:50]:
+        asyncio.create_task(_generate_player_intelligence(pid, org_id, trigger="import"))
+    if _instat_player_ids:
+        logger.info("Intelligence generation triggered for %d players from InStat import", min(len(_instat_player_ids), 50))
 
     return result
 
@@ -3907,6 +4704,7 @@ def _import_league_skaters(rows, season, org_id):
     updated = 0
     stats_imported = 0
     errors = []
+    _affected_player_ids = set()
 
     # Load existing players for matching
     existing_players = conn.execute(
@@ -4009,13 +4807,14 @@ def _import_league_skaters(rows, season, org_id):
                  json.dumps(extended) if extended else None)
             )
             stats_imported += 1
+            _affected_player_ids.add(player_id)
 
         except Exception as e:
             errors.append(f"Row {i+1} ({full_name}): {str(e)}")
 
     conn.commit()
     conn.close()
-    return {"players_created": created, "players_updated": updated, "stats_imported": stats_imported, "errors": errors}
+    return {"players_created": created, "players_updated": updated, "stats_imported": stats_imported, "errors": errors, "player_ids": list(_affected_player_ids)}
 
 
 def _import_league_goalies(rows, season, org_id):
@@ -4025,6 +4824,7 @@ def _import_league_goalies(rows, season, org_id):
     updated = 0
     stats_imported = 0
     errors = []
+    _affected_player_ids = set()
 
     existing_players = conn.execute(
         "SELECT id, first_name, last_name, current_team, position FROM players WHERE org_id = ?",
@@ -4097,13 +4897,14 @@ def _import_league_goalies(rows, season, org_id):
                  json.dumps(extended) if extended else None)
             )
             stats_imported += 1
+            _affected_player_ids.add(player_id)
 
         except Exception as e:
             errors.append(f"Row {i+1}: {str(e)}")
 
     conn.commit()
     conn.close()
-    return {"players_created": created, "players_updated": updated, "stats_imported": stats_imported, "errors": errors}
+    return {"players_created": created, "players_updated": updated, "stats_imported": stats_imported, "errors": errors, "player_ids": list(_affected_player_ids)}
 
 
 def _import_team_skaters(rows, season, team_name, org_id):

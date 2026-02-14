@@ -24,6 +24,12 @@ import {
   User,
   Camera,
   Save,
+  Brain,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Star,
+  AlertTriangle,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -32,8 +38,8 @@ import ExtendedStatTable from "@/components/ExtendedStatTable";
 import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
 import api from "@/lib/api";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry } from "@/types/api";
-import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence } from "@/types/api";
+import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports";
 
@@ -51,6 +57,12 @@ export default function PlayerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("profile");
+
+  // Player Intelligence
+  const [intelligence, setIntelligence] = useState<PlayerIntelligence | null>(null);
+  const [intelHistory, setIntelHistory] = useState<PlayerIntelligence[]>([]);
+  const [showIntelHistory, setShowIntelHistory] = useState(false);
+  const [refreshingIntel, setRefreshingIntel] = useState(false);
 
   // Archetype editing
   const [editingArchetype, setEditingArchetype] = useState(false);
@@ -188,6 +200,41 @@ export default function PlayerDetailPage() {
     setNoteTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
   };
 
+  const handleRefreshIntelligence = async () => {
+    setRefreshingIntel(true);
+    try {
+      const { data } = await api.post<PlayerIntelligence>(`/players/${playerId}/intelligence`);
+      setIntelligence(data);
+      // Update player with new archetype/tags
+      if (data.archetype) {
+        setPlayer((prev) => prev ? { ...prev, archetype: data.archetype || prev.archetype, tags: data.tags || prev.tags } : prev);
+        setArchetypeValue(data.archetype);
+      }
+      // Refresh history
+      try {
+        const histRes = await api.get<PlayerIntelligence[]>(`/players/${playerId}/intelligence/history`);
+        setIntelHistory(histRes.data);
+      } catch { /* ok */ }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to refresh intelligence";
+      alert(msg);
+    } finally {
+      setRefreshingIntel(false);
+    }
+  };
+
+  const loadIntelHistory = async () => {
+    if (intelHistory.length > 0) {
+      setShowIntelHistory(!showIntelHistory);
+      return;
+    }
+    try {
+      const { data } = await api.get<PlayerIntelligence[]>(`/players/${playerId}/intelligence/history`);
+      setIntelHistory(data);
+      setShowIntelHistory(true);
+    } catch { /* ok */ }
+  };
+
   useEffect(() => {
     async function load() {
       try {
@@ -195,19 +242,21 @@ export default function PlayerDetailPage() {
         setPlayer(playerRes.data);
         setArchetypeValue(playerRes.data.archetype || "");
 
-        const [statsRes, reportsRes, notesRes, libRes, sysRes, goalieRes] = await Promise.allSettled([
+        const [statsRes, reportsRes, notesRes, libRes, sysRes, goalieRes, intelRes] = await Promise.allSettled([
           api.get<PlayerStats[]>(`/stats/player/${playerId}`),
           api.get<Report[]>(`/reports?player_id=${playerId}`),
           api.get<ScoutNote[]>(`/players/${playerId}/notes`),
           api.get<SystemLibraryEntry[]>("/hockey-os/systems-library"),
           api.get<TeamSystem[]>("/hockey-os/team-systems"),
           api.get<GoalieStats[]>(`/stats/goalie/${playerId}`),
+          api.get<PlayerIntelligence>(`/players/${playerId}/intelligence`),
         ]);
         if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
         if (goalieRes.status === "fulfilled") setGoalieStats(goalieRes.value.data);
         if (reportsRes.status === "fulfilled") setReports(reportsRes.value.data);
         if (notesRes.status === "fulfilled") setNotes(notesRes.value.data);
         if (libRes.status === "fulfilled") setSystemsLibrary(libRes.value.data);
+        if (intelRes.status === "fulfilled") setIntelligence(intelRes.value.data);
 
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
@@ -610,6 +659,223 @@ export default function PlayerDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* ── ProspectX Intelligence Panel ── */}
+            {intelligence && intelligence.version > 0 && (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-border/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Brain size={16} className="text-teal" />
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">ProspectX Intelligence</h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/10 text-teal font-medium">v{intelligence.version}</span>
+                    {intelligence.trigger && (
+                      <span className="text-[10px] text-muted/50">via {intelligence.trigger}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {intelligence.created_at && (
+                      <span className="text-[10px] text-muted/50">
+                        {new Date(intelligence.created_at).toLocaleDateString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={handleRefreshIntelligence}
+                      disabled={refreshingIntel}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-oswald uppercase tracking-wider rounded-lg border border-teal/30 text-teal hover:bg-teal/10 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={10} className={refreshingIntel ? "animate-spin" : ""} />
+                      {refreshingIntel ? "Analyzing..." : "Refresh"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-5 space-y-5">
+                  {/* Grades Row */}
+                  {intelligence.overall_grade && intelligence.overall_grade !== "NR" && (
+                    <div>
+                      <div className="flex flex-wrap gap-3">
+                        {([
+                          { label: "Overall", grade: intelligence.overall_grade },
+                          { label: "Offensive", grade: intelligence.offensive_grade },
+                          { label: "Defensive", grade: intelligence.defensive_grade },
+                          { label: "Skating", grade: intelligence.skating_grade },
+                          { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
+                          { label: "Compete", grade: intelligence.compete_grade },
+                        ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => {
+                          const gradeInfo = PROSPECT_GRADES[grade!];
+                          return (
+                            <div key={label} className="text-center min-w-[60px]" title={gradeInfo?.nhl || ""}>
+                              <div
+                                className="w-10 h-10 mx-auto rounded-lg flex items-center justify-center text-white font-oswald font-bold text-sm"
+                                style={{ backgroundColor: GRADE_COLORS[grade!] || "#9ca3af" }}
+                              >
+                                {grade}
+                              </div>
+                              <p className="text-[10px] text-muted mt-1">{label}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Archetype + Confidence */}
+                  {intelligence.archetype && (
+                    <div className="flex items-center gap-3">
+                      <div className="px-3 py-1.5 rounded-lg bg-navy/[0.06] border border-navy/10">
+                        <span className="text-sm font-semibold text-navy">{intelligence.archetype}</span>
+                      </div>
+                      {intelligence.archetype_confidence != null && (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-20 h-1.5 bg-border rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.round(intelligence.archetype_confidence * 100)}%`,
+                                backgroundColor: intelligence.archetype_confidence > 0.7 ? "#18B3A6" : intelligence.archetype_confidence > 0.4 ? "#F36F21" : "#9ca3af"
+                              }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-muted">{Math.round(intelligence.archetype_confidence * 100)}% confidence</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* AI Summary */}
+                  {intelligence.summary && (
+                    <div className="pl-3 border-l-2 border-teal/30">
+                      <p className="text-sm text-navy/80 leading-relaxed">{intelligence.summary}</p>
+                    </div>
+                  )}
+
+                  {/* Strengths + Development Areas */}
+                  {(intelligence.strengths.length > 0 || intelligence.development_areas.length > 0) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {intelligence.strengths.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
+                            <Star size={11} className="text-green-500" /> Strengths
+                          </h4>
+                          <ul className="space-y-1">
+                            {intelligence.strengths.map((s, i) => (
+                              <li key={i} className="text-sm text-navy/80 flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-green-500 mt-2 shrink-0" />
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {intelligence.development_areas.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
+                            <AlertTriangle size={11} className="text-orange" /> Development Areas
+                          </h4>
+                          <ul className="space-y-1">
+                            {intelligence.development_areas.map((d, i) => (
+                              <li key={i} className="text-sm text-navy/80 flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-orange mt-2 shrink-0" />
+                                {d}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Stat Signature Chips */}
+                  {intelligence.stat_signature && Object.keys(intelligence.stat_signature).length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Stat Signature</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(intelligence.stat_signature).map(([key, value]) => {
+                          const meta = STAT_SIGNATURE_LABELS[key];
+                          return (
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-navy/[0.04] border border-border/50 text-navy/70"
+                              title={key.replace(/_/g, ' ')}
+                            >
+                              {meta?.emoji && <span>{meta.emoji}</span>}
+                              <span className="font-medium">{meta?.label || key.replace(/_/g, ' ')}:</span> {value}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Projection */}
+                  {intelligence.projection && (
+                    <div className="bg-navy/[0.02] rounded-lg p-3 border border-border/30">
+                      <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-1 flex items-center gap-1.5">
+                        <TrendingUp size={11} className="text-teal" /> Projection
+                      </h4>
+                      <p className="text-sm text-navy/80">{intelligence.projection}</p>
+                    </div>
+                  )}
+
+                  {/* Comparable Players */}
+                  {intelligence.comparable_players.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-1">Comparable Players</h4>
+                      <div className="space-y-1">
+                        {intelligence.comparable_players.map((comp, i) => (
+                          <p key={i} className="text-sm text-navy/70 italic">{comp}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Intelligence History Toggle */}
+                  <div className="pt-2 border-t border-border/30">
+                    <button
+                      onClick={loadIntelHistory}
+                      className="flex items-center gap-1 text-[10px] font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
+                    >
+                      {showIntelHistory ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                      Intelligence History ({intelligence.version} version{intelligence.version !== 1 ? "s" : ""})
+                    </button>
+                    {showIntelHistory && intelHistory.length > 0 && (
+                      <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
+                        {intelHistory.map((h) => (
+                          <div key={h.id || h.version} className="flex items-center gap-3 text-xs text-muted/70 py-1 border-b border-border/20 last:border-0">
+                            <span className="font-medium text-navy/50">v{h.version}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.04]">{h.trigger || "—"}</span>
+                            <span>{h.archetype || "—"}</span>
+                            <span className="font-medium" style={{ color: GRADE_COLORS[h.overall_grade || "NR"] || "#9ca3af" }}>
+                              {h.overall_grade || "NR"}
+                            </span>
+                            <span className="ml-auto text-[10px]">
+                              {h.created_at ? new Date(h.created_at).toLocaleDateString() : "—"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Generate Intelligence CTA (when no intelligence exists) */}
+            {(!intelligence || intelligence.version === 0) && (stats.length > 0 || goalieStats.length > 0 || notes.length > 0) && (
+              <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-5 text-center">
+                <Brain size={28} className="mx-auto text-teal/40 mb-2" />
+                <p className="text-sm text-navy/70 mb-2">This player has data but no intelligence profile yet.</p>
+                <button
+                  onClick={handleRefreshIntelligence}
+                  disabled={refreshingIntel}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50"
+                >
+                  <Brain size={14} />
+                  {refreshingIntel ? "Analyzing Player..." : "Generate Intelligence Profile"}
+                </button>
+              </div>
+            )}
 
             {/* Team System Context */}
             {teamSystem ? (
