@@ -2555,13 +2555,24 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
                     "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
                     "plus_minus": sr["plus_minus"], "pim": sr["pim"],
                 })
-            roster_with_stats.append({
+            p_entry = {
                 "name": f"{p['first_name']} {p['last_name']}",
                 "position": p["position"],
                 "archetype": p.get("archetype", ""),
                 "shoots": p.get("shoots", ""),
+                "dob": p.get("dob", ""),
                 "stats": p_stats,
-            })
+            }
+            # Pre-compute age
+            if p.get("dob"):
+                try:
+                    dob_str = p["dob"][:10]
+                    birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
+                    today = datetime.now().date()
+                    p_entry["age"] = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+                except Exception:
+                    pass
+            roster_with_stats.append(p_entry)
 
         # Gather team system
         team_system = _get_team_system(conn, org_id, team_name)
@@ -2833,8 +2844,21 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
             logger.info("Report input — stats: %d rows (extended: %s), goalie_stats: %d, notes: %d, lines: %d, team_system: %s",
                         len(stats_list), "yes" if has_extended else "no", len(goalie_stats_list), len(notes_list), len(line_combos), "yes" if team_system else "no")
 
+            # Pre-compute age so Claude doesn't have to guess
+            player_for_report = dict(player)
+            if player.get("dob"):
+                try:
+                    dob_str = player["dob"][:10]  # Handle ISO datetime or date strings
+                    birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
+                    today = datetime.now().date()
+                    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+                    player_for_report["age"] = age
+                    player_for_report["age_note"] = f"Born {dob_str} — currently {age} years old (as of {today.isoformat()})"
+                except Exception:
+                    pass
+
             input_data = {
-                "player": player,
+                "player": player_for_report,
                 "stats": stats_list,
                 "scout_notes": notes_list,
                 "request_scope": request.data_scope,
@@ -2898,6 +2922,7 @@ Generate a **{report_type_name}** for the player below. Your report must be:
 - Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, SYSTEM_FIT, PROJECTION, BOTTOM_LINE)
 - Specific to position: Tailor analysis to the player's position (center, wing, defense, goalie)
 - Honest and balanced: Don't inflate or deflate — give an accurate, scout-grade assessment
+- Age-accurate: The player data includes a pre-computed "age" field and "age_note". ALWAYS use the provided age value — do NOT attempt to recalculate it from dob. Today's date is {datetime.now().date().isoformat()}
 - Archetype-aware: The player's archetype may be compound (e.g., "Two-Way Playmaking Forward") indicating multiple dimensions. Analyze ALL archetype traits — if the archetype says "Two-Way Playmaking Forward" you must evaluate both the 200-foot game AND the playmaking IQ separately, then synthesize how these traits combine
 {system_context_block}
 PROSPECT GRADING SCALE (include an overall grade in EXECUTIVE_SUMMARY or BOTTOM_LINE):
