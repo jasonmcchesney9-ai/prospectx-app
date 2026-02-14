@@ -3373,6 +3373,140 @@ TEAM_REPORT_TYPES = [
     "league_benchmarks", "season_projection", "free_agent_market",
 ]
 
+# ── Custom Report Focus Areas → Prompt Sections Map ───────────
+CUSTOM_FOCUS_PROMPTS = {
+    "skating": {
+        "label": "Skating",
+        "prompt": "Provide a detailed SKATING_ASSESSMENT section evaluating: stride mechanics, top-end speed, acceleration, agility/edgework, backward skating, pivots, crossovers, and skating under pressure. Reference specific skating data or observations.",
+        "sections": ["SKATING_ASSESSMENT"],
+    },
+    "offense": {
+        "label": "Offensive Game",
+        "prompt": "Provide a detailed OFFENSIVE_GAME section evaluating: shot release/accuracy, finishing ability, creativity with the puck, zone entry patterns, cycle game involvement, net-front presence, one-timer ability, and offensive instincts. Reference shooting %, goals, xG data if available.",
+        "sections": ["OFFENSIVE_GAME"],
+    },
+    "defense": {
+        "label": "Defensive Game",
+        "prompt": "Provide a detailed DEFENSIVE_GAME section evaluating: gap control, stick positioning, shot blocking, DZ coverage responsibility, backchecking effort, board play defense, take-aways vs turnovers, and defensive reads. Reference +/-, takeaway data, and CORSI if available.",
+        "sections": ["DEFENSIVE_GAME"],
+    },
+    "transition": {
+        "label": "Transition Play",
+        "prompt": "Provide a detailed TRANSITION_GAME section evaluating: breakout passing, zone exit execution, neutral zone play, controlled entries vs dump-ins, transition speed, puck retrieval, and ability to create odd-man rushes. Reference zone entry/breakout data if available.",
+        "sections": ["TRANSITION_GAME"],
+    },
+    "hockey_iq": {
+        "label": "Hockey IQ / Sense",
+        "prompt": "Provide a detailed HOCKEY_SENSE section evaluating: anticipation, read-and-react ability, decision-making speed, understanding of positional play, ability to process the game at speed, coaching adaptability, and spatial awareness. Reference specific game situations.",
+        "sections": ["HOCKEY_SENSE"],
+    },
+    "compete": {
+        "label": "Compete Level",
+        "prompt": "Provide a detailed COMPETE_LEVEL section evaluating: battle intensity, puck battles won/lost, willingness to go to hard areas, physical engagement, effort consistency across shifts, compete in key moments, and work ethic indicators. Reference PIM, hits, puck battle data if available.",
+        "sections": ["COMPETE_LEVEL"],
+    },
+    "special_teams": {
+        "label": "Special Teams",
+        "prompt": "Provide a detailed SPECIAL_TEAMS section evaluating: power play role and effectiveness (PP1/PP2, bumper/flank/net-front/point), penalty kill contributions, PP points, SH points, PP and PK time-on-ice. Recommend optimal special teams deployment.",
+        "sections": ["SPECIAL_TEAMS"],
+    },
+    "projection": {
+        "label": "Projection / Ceiling",
+        "prompt": "Provide a detailed PROJECTION section with: realistic ceiling and floor projections, development timeline, age-curve analysis for their position and league level, comparable players at this stage of development, and pathway to next level. Include Conservative / Expected / Optimistic scenarios with specific stat projections.",
+        "sections": ["PROJECTION", "COMPARABLE_PATHWAYS"],
+    },
+    "trade_value": {
+        "label": "Trade / Acquisition Value",
+        "prompt": "Provide a detailed TRADE_VALUE section with: current market value assessment, contract considerations, acquisition cost (draft picks/prospects), roster fit analysis for acquiring teams, risk/reward profile, and comparable recent transactions. Include a clear BUY/HOLD/SELL recommendation.",
+        "sections": ["TRADE_VALUE", "MARKET_POSITION"],
+    },
+    "development": {
+        "label": "Development Plan",
+        "prompt": "Provide a detailed DEVELOPMENT_PLAN section with: top 3-5 specific skills to develop (ranked by impact), 30-day and 90-day improvement targets, on-ice drill recommendations, off-ice training focus, measurable benchmarks for progress, and recommended coaching approach.",
+        "sections": ["DEVELOPMENT_PLAN", "DEVELOPMENT_PRIORITIES"],
+    },
+    "system_fit": {
+        "label": "System Fit",
+        "prompt": "Provide a detailed SYSTEM_FIT section evaluating: how this player fits the team's tactical systems (forecheck, DZ, OZ, special teams), role within the system (F1/F2/F3, pinch/stay, PP bumper/flank), system compatibility rating (Elite Fit / Strong Fit / Developing Fit / Adjustment Needed), and coaching recommendations for optimizing deployment within the system.",
+        "sections": ["SYSTEM_FIT"],
+    },
+    "draft": {
+        "label": "Draft Analysis",
+        "prompt": "Provide a detailed DRAFT_ANALYSIS section with: draft eligibility status, projected draft round/range, draft stock trajectory (rising/falling/steady), draft-day value proposition, comparable draft picks at similar production levels, and red flags or green flags for drafting teams.",
+        "sections": ["DRAFT_POSITIONING", "DRAFT_ELIGIBILITY"],
+    },
+    "physical": {
+        "label": "Physical Profile",
+        "prompt": "Provide a detailed PHYSICAL_PROFILE section evaluating: size/strength for the level, physical maturity and growth projection, body composition, endurance/stamina across a game, injury history concerns, and how physical tools translate to on-ice impact.",
+        "sections": ["PHYSICAL_PROFILE"],
+    },
+    "goaltending": {
+        "label": "Goaltending (Goalie Only)",
+        "prompt": "Provide a detailed TECHNICAL_ASSESSMENT section for the goaltender: stance and positioning, movement efficiency (butterfly, T-push, shuffle), rebound control, glove/blocker technique, puck tracking, crease management, post integration, puck handling, mental composure, and recovery speed. Reference save %, GAA, high-danger save % if available.",
+        "sections": ["TECHNICAL_ASSESSMENT", "MENTAL_GAME"],
+    },
+}
+
+CUSTOM_AUDIENCE_PROMPTS = {
+    "coaching_staff": {
+        "label": "Coaching Staff",
+        "tone": "Write for an experienced coaching staff. Use tactical hockey language, deployment recommendations, and specific system references. Focus on actionable coaching intel — line combinations, matchup strategies, practice focus areas. Be direct and tactical.",
+    },
+    "gm_management": {
+        "label": "GM / Management",
+        "tone": "Write for a General Manager and hockey operations staff. Focus on player value, roster fit, cap implications, acquisition cost, development timeline, and organizational depth chart impact. Balance analytics with eye-test evaluation.",
+    },
+    "scouts": {
+        "label": "Professional Scouts",
+        "tone": "Write in professional scouting report format. Use standard scouting terminology, letter grades, tool ratings, and projection language. Be concise, honest, and focused on translatable skills and red/green flags.",
+    },
+    "agents": {
+        "label": "Agents / Advisors",
+        "tone": "Write for player agents and advisors. Highlight strengths, marketability, development upside, and career trajectory. Professional and polished, suitable for sharing with teams, but honest about areas for growth.",
+    },
+    "family": {
+        "label": "Player & Family",
+        "tone": "Write for the player and their family. Use clear, accessible language (avoid excessive jargon). Be encouraging but honest. Focus on development, next steps, and actionable goals. Celebrate progress while identifying growth areas.",
+    },
+    "general": {
+        "label": "General Audience",
+        "tone": "Write for a broad audience — hockey fans, media, or general stakeholders. Explain hockey terminology when used. Balance analysis with readability. Keep it engaging and informative.",
+    },
+}
+
+CUSTOM_DEPTH_CONFIG = {
+    "brief": {
+        "label": "Executive Brief",
+        "max_tokens": 3000,
+        "instruction": "Keep the report CONCISE — executive brief format. Each section should be 3-5 sentences maximum. Focus on the key takeaways and bottom-line assessment. Target 500-800 words total.",
+    },
+    "standard": {
+        "label": "Standard Report",
+        "max_tokens": 6000,
+        "instruction": "Produce a standard-depth report. Each section should provide thorough analysis with specific examples and stats. Target 1000-1500 words total.",
+    },
+    "deep_dive": {
+        "label": "Deep Dive",
+        "max_tokens": 8000,
+        "instruction": "Produce an exhaustive deep-dive report. Leave no stone unturned. Provide detailed analysis in every section with multiple data points, comparisons, and tactical breakdowns. Target 2000-3000 words total.",
+    },
+}
+
+CUSTOM_COMPARISON_MODES = {
+    "league_peers": {
+        "label": "Compare to League Peers",
+        "instruction": "Include a PEER_COMPARISON section comparing this player against the top performers at their position in the same league. Use percentile rankings where possible.",
+    },
+    "age_group": {
+        "label": "Compare to Age Group",
+        "instruction": "Include a PEER_COMPARISON section comparing this player against peers in the same age group (birth year cohort). Evaluate where they stand on the development curve relative to same-age players.",
+    },
+    "previous_season": {
+        "label": "Compare to Previous Season",
+        "instruction": "Include a TREND_ANALYSIS section comparing current season performance to the previous season. Highlight improvements, regressions, and trajectory changes with specific stat deltas.",
+    },
+}
+
 
 def _get_team_system(conn, org_id: str, team_name: str) -> Optional[dict]:
     """Fetch and parse a team's system profile."""
@@ -3439,6 +3573,417 @@ TEAM STYLE:
 - Physicality: {team_system.get('physicality', 'Not specified')}
 - Offensive Style: {team_system.get('offensive_style', 'Not specified')}
 """
+
+
+async def _generate_custom_report(request, org_id: str, user_id: str, conn):
+    """Generate a fully customizable report built from user-selected focus areas, audience, depth, and comparison modes."""
+    scope = request.data_scope or {}
+    focus_areas = scope.get("focus_areas", [])
+    audience = scope.get("audience", "general")
+    depth = scope.get("depth", "standard")
+    comparison_mode = scope.get("comparison_mode", "")
+    custom_instructions = (scope.get("custom_instructions", "") or "")[:500]
+    report_title = scope.get("report_title", "")
+
+    is_team = bool(request.team_name and not request.player_id)
+
+    # Create report record
+    report_id = gen_id()
+
+    if is_team:
+        # ── TEAM CUSTOM REPORT ──
+        team_name = request.team_name
+
+        conn.execute("""
+            INSERT INTO reports (id, org_id, player_id, team_name, template_id, report_type, status, input_data, created_by, created_at)
+            VALUES (?, ?, NULL, ?, NULL, 'custom', 'processing', ?, ?, ?)
+        """, (report_id, org_id, team_name, json.dumps(scope), user_id, now_iso()))
+        conn.commit()
+
+        title = report_title or f"Custom Report — {team_name}"
+        start_time = time.perf_counter()
+
+        try:
+            client = get_anthropic_client()
+
+            # Gather roster
+            roster_rows = conn.execute(
+                "SELECT * FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) ORDER BY position, last_name",
+                (org_id, team_name),
+            ).fetchall()
+            roster = [_player_from_row(r) for r in roster_rows]
+
+            roster_with_stats = []
+            for p in roster:
+                stats_rows = conn.execute(
+                    "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 5",
+                    (p["id"],)
+                ).fetchall()
+                p_stats = []
+                for sr in stats_rows:
+                    p_stats.append({
+                        "season": sr["season"], "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
+                        "plus_minus": sr["plus_minus"], "pim": sr["pim"], "shots": sr["shots"], "sog": sr["sog"],
+                    })
+                roster_with_stats.append({"player": p, "stats": p_stats})
+
+            team_system = _get_team_system(conn, org_id, team_name)
+            system_context = _build_system_context_block(conn, team_system) if team_system else ""
+
+            input_data = {"team_name": team_name, "roster": roster_with_stats}
+            if team_system:
+                input_data["team_system"] = team_system
+
+            # Build custom prompt
+            focus_prompt_parts = []
+            required_sections = ["EXECUTIVE_SUMMARY", "BOTTOM_LINE"]
+            for fa in focus_areas:
+                cfg = CUSTOM_FOCUS_PROMPTS.get(fa)
+                if cfg:
+                    focus_prompt_parts.append(cfg["prompt"])
+                    required_sections.extend(cfg["sections"])
+
+            audience_cfg = CUSTOM_AUDIENCE_PROMPTS.get(audience, CUSTOM_AUDIENCE_PROMPTS["general"])
+            depth_cfg = CUSTOM_DEPTH_CONFIG.get(depth, CUSTOM_DEPTH_CONFIG["standard"])
+
+            comparison_block = ""
+            if comparison_mode:
+                comp_cfg = CUSTOM_COMPARISON_MODES.get(comparison_mode)
+                if comp_cfg:
+                    comparison_block = f"\n{comp_cfg['instruction']}\n"
+
+            custom_block = ""
+            if custom_instructions:
+                custom_block = f"\nADDITIONAL USER INSTRUCTIONS:\n{custom_instructions}\n"
+
+            sections_str = ", ".join(sorted(set(required_sections)))
+
+            system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine. You produce professional-grade custom hockey analysis reports.
+
+REPORT CONFIGURATION:
+- Subject: Team — {team_name}
+- Focus Areas: {', '.join(CUSTOM_FOCUS_PROMPTS.get(fa, {}).get('label', fa) for fa in focus_areas) or 'Comprehensive'}
+- Audience: {audience_cfg['label']}
+- Depth: {depth_cfg['label']}
+
+AUDIENCE & TONE:
+{audience_cfg['tone']}
+
+DEPTH INSTRUCTION:
+{depth_cfg['instruction']}
+
+{system_context}
+
+REQUIRED SECTIONS (use ALL_CAPS_WITH_UNDERSCORES format):
+Always include: EXECUTIVE_SUMMARY and BOTTOM_LINE.
+
+{'FOCUS AREA SECTIONS:' if focus_prompt_parts else 'Provide a comprehensive team assessment covering strategy, roster, and identity.'}
+{chr(10).join(focus_prompt_parts)}
+{comparison_block}
+{custom_block}
+
+GRADING: Include "Overall Grade: X" in EXECUTIVE_SUMMARY using scale A (Elite) to D (Developing), NR (Not Rated).
+Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format.
+Today's date is {datetime.now().date().isoformat()}."""
+
+            user_prompt = f"Generate a custom team analysis report for {team_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+
+            if client:
+                llm_model = "claude-sonnet-4-20250514"
+                message = client.messages.create(
+                    model=llm_model,
+                    max_tokens=depth_cfg["max_tokens"],
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                output_text = message.content[0].text
+                total_tokens = message.usage.input_tokens + message.usage.output_tokens
+            else:
+                llm_model = "mock-demo"
+                total_tokens = 0
+                output_text = f"""EXECUTIVE_SUMMARY\nCustom team report for {team_name}. Focus: {', '.join(focus_areas)}. Audience: {audience}.\n\nOverall Grade: NR\n\nBOTTOM_LINE\nThis is a mock custom report. Set your Anthropic API key to generate real analysis."""
+
+            generation_ms = int((time.perf_counter() - start_time) * 1000)
+
+            conn.execute("""
+                UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
+                                  llm_model=?, llm_tokens=?, generation_time_ms=?
+                WHERE id = ?
+            """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+            conn.commit()
+            conn.close()
+
+            return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+
+        except Exception as e:
+            conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+            conn.commit()
+            conn.close()
+            raise HTTPException(status_code=500, detail=f"Custom report generation failed: {str(e)}")
+
+    # ── PLAYER CUSTOM REPORT ──
+    player_row = conn.execute("SELECT * FROM players WHERE id = ? AND org_id = ?", (request.player_id, org_id)).fetchone()
+    if not player_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    player = _player_from_row(player_row)
+    player_name = f"{player['first_name']} {player['last_name']}"
+
+    conn.execute("""
+        INSERT INTO reports (id, org_id, player_id, template_id, report_type, status, input_data, created_by, created_at)
+        VALUES (?, ?, ?, NULL, 'custom', 'processing', ?, ?, ?)
+    """, (report_id, org_id, request.player_id, json.dumps(scope), user_id, now_iso()))
+    conn.commit()
+
+    title = report_title or f"Custom Report — {player_name}"
+    start_time = time.perf_counter()
+
+    try:
+        client = get_anthropic_client()
+
+        def _row_get(row, key, default=None):
+            try:
+                return row[key]
+            except (IndexError, KeyError):
+                return default
+
+        # Gather stats
+        stats_rows = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC, created_at DESC",
+            (request.player_id,),
+        ).fetchall()
+        stats_list = []
+        for sr in stats_rows:
+            stat_entry = {
+                "season": sr["season"], "stat_type": sr["stat_type"],
+                "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
+                "plus_minus": sr["plus_minus"], "pim": sr["pim"],
+                "shots": sr["shots"], "sog": sr["sog"],
+                "shooting_pct": sr["shooting_pct"],
+                "toi_seconds": sr["toi_seconds"],
+            }
+            ext_raw = _row_get(sr, "extended_stats")
+            if ext_raw:
+                try:
+                    ext = json.loads(ext_raw) if isinstance(ext_raw, str) else ext_raw
+                    if ext:
+                        stat_entry["extended_stats"] = ext
+                        stat_entry["data_source"] = _row_get(sr, "data_source", "manual")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            stats_list.append(stat_entry)
+
+        # Goalie stats
+        goalie_stats_list = []
+        goalie_rows = conn.execute(
+            "SELECT * FROM goalie_stats WHERE player_id = ? ORDER BY season DESC",
+            (request.player_id,),
+        ).fetchall()
+        for gr in goalie_rows:
+            goalie_entry = {
+                "season": gr["season"], "gp": gr["gp"],
+                "toi_seconds": gr["toi_seconds"],
+                "ga": gr["ga"], "sa": gr["sa"], "sv": gr["sv"],
+                "sv_pct": gr["sv_pct"], "gaa": gr["gaa"],
+            }
+            ext_raw = _row_get(gr, "extended_stats")
+            if ext_raw:
+                try:
+                    ext = json.loads(ext_raw) if isinstance(ext_raw, str) else ext_raw
+                    if ext:
+                        goalie_entry["extended_stats"] = ext
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            goalie_stats_list.append(goalie_entry)
+
+        # Scout notes
+        notes_rows = conn.execute(
+            "SELECT * FROM scout_notes WHERE player_id = ? AND org_id = ? ORDER BY created_at DESC LIMIT 20",
+            (request.player_id, org_id),
+        ).fetchall()
+        notes_list = [{"date": nr["created_at"], "note_type": nr["note_type"], "content": nr["note_text"], "tags": nr["tags"]} for nr in notes_rows]
+
+        # Team system
+        team_system = None
+        system_context = ""
+        if player.get("current_team"):
+            team_system = _get_team_system(conn, org_id, player["current_team"])
+            if team_system:
+                system_context = _build_system_context_block(conn, team_system)
+
+        # Line combos
+        line_combos = []
+        if player.get("current_team"):
+            lc_rows = conn.execute(
+                "SELECT * FROM line_combinations WHERE org_id = ? AND LOWER(team_name) = LOWER(?) ORDER BY toi_seconds DESC LIMIT 30",
+                (org_id, player["current_team"]),
+            ).fetchall()
+            for lc in lc_rows:
+                player_name_lower = player_name.lower()
+                pn = (lc["player_names"] or "").lower()
+                if player_name_lower.split()[-1] in pn:
+                    lc_entry = {
+                        "line_type": lc["line_type"], "players": lc["player_names"],
+                        "toi_seconds": lc["toi_seconds"], "goals_for": lc["goals_for"],
+                        "goals_against": lc["goals_against"], "plus_minus": lc["plus_minus"],
+                    }
+                    ext_raw = _row_get(lc, "extended_stats")
+                    if ext_raw:
+                        try:
+                            ext = json.loads(ext_raw) if isinstance(ext_raw, str) else ext_raw
+                            if ext:
+                                lc_entry["extended_stats"] = ext
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    line_combos.append(lc_entry)
+
+        # Pre-compute age
+        player_for_report = dict(player)
+        if player.get("dob"):
+            try:
+                dob_str = player["dob"][:10]
+                birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
+                today = datetime.now().date()
+                age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+                player_for_report["age"] = age
+                player_for_report["age_note"] = f"Born {dob_str} — currently {age} years old (as of {today.isoformat()})"
+            except Exception:
+                pass
+
+        input_data = {"player": player_for_report, "stats": stats_list, "scout_notes": notes_list}
+        if goalie_stats_list:
+            input_data["goalie_stats"] = goalie_stats_list
+        if line_combos:
+            input_data["line_combinations"] = line_combos
+        if team_system:
+            input_data["team_system"] = team_system
+
+        # Intelligence data
+        try:
+            indices = _compute_prospectx_indices(
+                stats_list[0] if stats_list else {},
+                player.get("position", ""),
+                conn.execute("SELECT * FROM player_stats WHERE org_id = ?", (org_id,)).fetchall()
+            )
+            input_data["prospectx_indices"] = indices
+        except Exception:
+            pass
+
+        intel_row = conn.execute(
+            "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
+            (request.player_id, org_id)
+        ).fetchone()
+        if intel_row:
+            intel = dict(intel_row)
+            for k in ("strengths", "development_areas", "comparable_players", "tags"):
+                if isinstance(intel.get(k), str):
+                    try: intel[k] = json.loads(intel[k])
+                    except Exception: intel[k] = []
+            if isinstance(intel.get("stat_signature"), str):
+                try: intel["stat_signature"] = json.loads(intel["stat_signature"])
+                except Exception: intel["stat_signature"] = {}
+            input_data["intelligence"] = intel
+
+        # Build custom prompt from selections
+        focus_prompt_parts = []
+        required_sections = ["EXECUTIVE_SUMMARY", "BOTTOM_LINE"]
+        for fa in focus_areas:
+            cfg = CUSTOM_FOCUS_PROMPTS.get(fa)
+            if cfg:
+                focus_prompt_parts.append(cfg["prompt"])
+                required_sections.extend(cfg["sections"])
+
+        audience_cfg = CUSTOM_AUDIENCE_PROMPTS.get(audience, CUSTOM_AUDIENCE_PROMPTS["general"])
+        depth_cfg = CUSTOM_DEPTH_CONFIG.get(depth, CUSTOM_DEPTH_CONFIG["standard"])
+
+        comparison_block = ""
+        if comparison_mode:
+            comp_cfg = CUSTOM_COMPARISON_MODES.get(comparison_mode)
+            if comp_cfg:
+                comparison_block = f"\n{comp_cfg['instruction']}\n"
+
+        custom_block = ""
+        if custom_instructions:
+            custom_block = f"\nADDITIONAL USER INSTRUCTIONS:\n{custom_instructions}\n"
+
+        has_extended = any(s.get("extended_stats") for s in stats_list)
+
+        system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine powered by the Hockey Operating System. You produce professional-grade custom scouting reports.
+
+REPORT CONFIGURATION:
+- Player: {player_name} ({player.get('position', 'Unknown')}) — {player.get('current_team', 'Unknown Team')}
+- Focus Areas: {', '.join(CUSTOM_FOCUS_PROMPTS.get(fa, {}).get('label', fa) for fa in focus_areas) or 'Comprehensive Assessment'}
+- Audience: {audience_cfg['label']}
+- Depth: {depth_cfg['label']}
+
+AUDIENCE & TONE:
+{audience_cfg['tone']}
+
+DEPTH INSTRUCTION:
+{depth_cfg['instruction']}
+
+DATA AVAILABLE: {len(stats_list)} stat rows {'(with InStat extended analytics)' if has_extended else ''}, {len(notes_list)} scout notes, {len(goalie_stats_list)} goalie stat rows, {len(line_combos)} line combinations.
+{'ProspectX Intelligence profile available.' if input_data.get('intelligence') else ''}
+{'ProspectX Indices scores available.' if input_data.get('prospectx_indices') else ''}
+
+{system_context}
+
+{'FOCUS AREA SECTIONS — Generate each of the following:' if focus_prompt_parts else 'Provide a comprehensive player assessment.'}
+{chr(10).join(focus_prompt_parts)}
+{comparison_block}
+{custom_block}
+
+PROSPECT GRADING SCALE (include an Overall Grade in EXECUTIVE_SUMMARY):
+  A = Top-Line / #1 D / Franchise | A- = Top-6 F / Top-4 D
+  B+ = Middle-6 F / Top-4 D | B = Bottom-6 / Backup G
+  B- = NHL Fringe / AHL Top | C+ = AHL Regular
+  C = AHL Depth | C- = ECHL / Junior | D = Junior / College | NR = Insufficient Data
+
+MANDATORY: Include "Overall Grade: X" in EXECUTIVE_SUMMARY on its own line.
+Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format.
+When InStat extended analytics are provided (xG, CORSI, puck battles, zone entries), leverage these advanced metrics.
+Age-accurate: Use the provided "age" field. Today's date is {datetime.now().date().isoformat()}.
+If data is limited for any focus area, note what additional data would strengthen the analysis rather than fabricating observations."""
+
+        user_prompt = f"Generate a custom scouting report for {player_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+
+        if client:
+            llm_model = "claude-sonnet-4-20250514"
+            message = client.messages.create(
+                model=llm_model,
+                max_tokens=depth_cfg["max_tokens"],
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            output_text = message.content[0].text
+            total_tokens = message.usage.input_tokens + message.usage.output_tokens
+        else:
+            llm_model = "mock-demo"
+            total_tokens = 0
+            output_text = f"""EXECUTIVE_SUMMARY\nCustom scouting report for {player_name}. Focus: {', '.join(focus_areas)}. Audience: {audience}.\n\nOverall Grade: NR\n\nBOTTOM_LINE\nThis is a mock custom report. Set your Anthropic API key to generate real analysis."""
+
+        generation_ms = int((time.perf_counter() - start_time) * 1000)
+
+        conn.execute("""
+            UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
+                              llm_model=?, llm_tokens=?, generation_time_ms=?
+            WHERE id = ?
+        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+        conn.commit()
+        conn.close()
+
+        # Trigger intelligence refresh
+        if request.player_id:
+            asyncio.create_task(_extract_report_intelligence(report_id, request.player_id, org_id))
+
+        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+
+    except Exception as e:
+        conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+        conn.commit()
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Custom report generation failed: {str(e)}")
 
 
 async def _generate_team_report(request, org_id: str, user_id: str, conn):
@@ -3688,6 +4233,29 @@ This report was generated in demo mode. Add your Anthropic API key to backend/.e
         raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
+@app.get("/reports/custom-options")
+async def get_custom_report_options(token_data: dict = Depends(verify_token)):
+    """Return the available configuration options for custom report builder."""
+    return {
+        "focus_areas": [
+            {"key": k, "label": v["label"], "sections": v["sections"]}
+            for k, v in CUSTOM_FOCUS_PROMPTS.items()
+        ],
+        "audiences": [
+            {"key": k, "label": v["label"]}
+            for k, v in CUSTOM_AUDIENCE_PROMPTS.items()
+        ],
+        "depths": [
+            {"key": k, "label": v["label"]}
+            for k, v in CUSTOM_DEPTH_CONFIG.items()
+        ],
+        "comparison_modes": [
+            {"key": k, "label": v["label"]}
+            for k, v in CUSTOM_COMPARISON_MODES.items()
+        ],
+    }
+
+
 @app.post("/reports/generate", response_model=ReportGenerateResponse)
 async def generate_report(request: ReportGenerateRequest, token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
@@ -3698,6 +4266,10 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
 
     is_team_report = request.report_type in TEAM_REPORT_TYPES and request.team_name and not request.player_id
     conn = get_db()
+
+    # ── CUSTOM REPORT FLOW ────────────────────────────────
+    if request.report_type == "custom":
+        return await _generate_custom_report(request, org_id, user_id, conn)
 
     # ── TEAM REPORT FLOW ──────────────────────────────────
     if is_team_report:

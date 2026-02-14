@@ -30,6 +30,7 @@ import {
   ChevronUp,
   Star,
   AlertTriangle,
+  Wand2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -395,13 +396,22 @@ export default function PlayerDetailPage() {
               )}
               </div>
             </div>
-            <Link
-              href={`/reports/generate?player=${playerId}`}
-              className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-            >
-              <Zap size={14} />
-              Generate Report
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/reports/custom?player=${playerId}`}
+                className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
+              >
+                <Wand2 size={14} />
+                Custom
+              </Link>
+              <Link
+                href={`/reports/generate?player=${playerId}`}
+                className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+              >
+                <Zap size={14} />
+                Generate Report
+              </Link>
+            </div>
           </div>
         </div>
 

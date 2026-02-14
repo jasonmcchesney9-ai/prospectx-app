@@ -494,6 +494,14 @@ export const SECTION_LABELS: Record<string, string> = {
   DEVELOPMENT_PROJECTION: "Development Projection",
   DRAFT_ELIGIBILITY: "Draft Eligibility",
   DATA_LIMITATIONS: "Data Limitations",
+  // Custom report sections
+  TRANSITION_GAME: "Transition Game",
+  COMPETE_LEVEL: "Compete Level",
+  TRADE_VALUE: "Trade Value",
+  DEVELOPMENT_PLAN: "Development Plan",
+  COMPARABLE_PATHWAYS: "Comparable Pathways",
+  DRAFT_ANALYSIS: "Draft Analysis",
+  PEER_COMPARISON: "Peer Comparison",
   // Team report sections
   TEAM_IDENTITY: "Team Identity",
   ROSTER_ANALYSIS: "Roster Analysis",
@@ -528,6 +536,8 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   practice_plan: "Practice Plan",
   playoff_series: "Playoff Series Prep",
   goalie_tandem: "Goalie Tandem",
+  // Custom reports
+  custom: "Custom Report",
   // Priority 2 reports
   indices_dashboard: "ProspectX Indices Dashboard",
   player_projection: "Next Season Projection",
@@ -942,6 +952,69 @@ export const GRADE_COLORS: Record<string, string> = {
   "D":  "#ef4444",
   "D-": "#f87171",  // red-400
   "NR": "#9ca3af",  // gray-400
+};
+
+// ── Custom Report Builder Types ──────────────────────────────────
+export interface CustomReportFocusArea {
+  key: string;
+  label: string;
+  sections: string[];
+}
+
+export interface CustomReportOption {
+  key: string;
+  label: string;
+}
+
+export interface CustomReportOptions {
+  focus_areas: CustomReportFocusArea[];
+  audiences: CustomReportOption[];
+  depths: CustomReportOption[];
+  comparison_modes: CustomReportOption[];
+}
+
+export interface CustomReportConfig {
+  focus_areas: string[];
+  audience: string;
+  depth: string;
+  comparison_mode: string;
+  custom_instructions: string;
+  report_title: string;
+}
+
+// Focus area icons for UI
+export const FOCUS_AREA_ICONS: Record<string, string> = {
+  skating: "\u26F8\uFE0F",
+  offense: "\u{1F3AF}",
+  defense: "\u{1F6E1}\uFE0F",
+  transition: "\u{1F504}",
+  hockey_iq: "\u{1F9E0}",
+  compete: "\u{1F4AA}",
+  special_teams: "\u26A1",
+  projection: "\u{1F52E}",
+  trade_value: "\u{1F4B0}",
+  development: "\u{1F4C8}",
+  system_fit: "\u2699\uFE0F",
+  draft: "\u{1F4CB}",
+  physical: "\u{1F3CB}\uFE0F",
+  goaltending: "\u{1F94A}",
+};
+
+export const FOCUS_AREA_DESCRIPTIONS: Record<string, string> = {
+  skating: "Stride mechanics, speed, agility, edgework",
+  offense: "Shot, finishing, creativity, zone entries",
+  defense: "Gap control, positioning, board play",
+  transition: "Breakouts, zone exits, neutral zone",
+  hockey_iq: "Reads, decisions, spatial awareness",
+  compete: "Battle intensity, puck battles, effort",
+  special_teams: "PP/PK deployment and effectiveness",
+  projection: "Ceiling/floor, development timeline",
+  trade_value: "Market value, acquisition analysis",
+  development: "Skill development plan and priorities",
+  system_fit: "How player fits team tactical systems",
+  draft: "Draft eligibility, stock, comparisons",
+  physical: "Size, strength, endurance, growth",
+  goaltending: "Technical assessment for goalies",
 };
 
 // ── Data Compartmentalization Labels ─────────────────────────────

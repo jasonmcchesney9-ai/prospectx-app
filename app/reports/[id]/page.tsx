@@ -37,7 +37,8 @@ function parseReportSections(
     const headerMatch = trimmed.match(
       /^(?:#{1,3}\s+)?([A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*)[\s:—\-]*$/
     );
-    if (headerMatch && headerMatch[1] in SECTION_LABELS) {
+    // Accept known section labels OR any valid ALL_CAPS_UNDERSCORED header (for custom reports)
+    if (headerMatch && (headerMatch[1] in SECTION_LABELS || headerMatch[1].length >= 4)) {
       // Save previous section
       if (currentKey) {
         sections.push({

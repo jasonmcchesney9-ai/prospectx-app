@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Zap, Filter, FileText } from "lucide-react";
+import { Search, Zap, Filter, FileText, Wand2 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportCard from "@/components/ReportCard";
@@ -54,13 +54,22 @@ export default function ReportsPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-navy">Reports</h1>
-          <Link
-            href="/reports/generate"
-            className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-          >
-            <Zap size={16} />
-            Generate Report
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/reports/custom"
+              className="flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
+            >
+              <Wand2 size={16} />
+              Custom Report
+            </Link>
+            <Link
+              href="/reports/generate"
+              className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+            >
+              <Zap size={16} />
+              Generate Report
+            </Link>
+          </div>
         </div>
 
         {/* Filters */}
