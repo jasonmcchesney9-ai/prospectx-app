@@ -245,6 +245,12 @@ TEMPLATE_CATEGORIES = {
     "opponent_gameplan":   ("Competitive Intelligence", "Opponent Analysis"),
     "playoff_series":      ("Competitive Intelligence", "Opponent Analysis"),
     "trade_target":        ("Competitive Intelligence", "Market & Acquisitions"),
+    # Priority 2 reports
+    "indices_dashboard":   ("Player Analytics", "Advanced Stats"),
+    "player_projection":   ("Player Analytics", "Projections & Development"),
+    "league_benchmarks":   ("Competitive Intelligence", "League Benchmarks"),
+    "season_projection":   ("Competitive Intelligence", "League Benchmarks"),
+    "free_agent_market":   ("Competitive Intelligence", "Market & Acquisitions"),
 }
 
 
@@ -864,6 +870,41 @@ def seed_templates():
     logger.info("Seeded %d report templates", len(templates))
 
 
+def seed_new_templates():
+    """Add any new report templates that were introduced after initial seeding."""
+    conn = get_db()
+    new_templates = [
+        ("ProspectX Indices Dashboard", "indices_dashboard",
+         "Player Analytics", "Advanced Stats",
+         "Visual dashboard of all ProspectX performance indices with league percentile rankings, position comparisons, and development priorities."),
+        ("League Benchmarks Comparison", "league_benchmarks",
+         "Competitive Intelligence", "League Benchmarks",
+         "Compare a team to league averages across offense, defense, special teams, and statistical leaders with trend analysis."),
+        ("Team Season Projection", "season_projection",
+         "Competitive Intelligence", "League Benchmarks",
+         "Project full season standings, playoff odds, championship probabilities, and remaining schedule difficulty."),
+        ("Next Season Player Projection", "player_projection",
+         "Player Analytics", "Projections & Development",
+         "Project a player's next season performance across conservative, expected, and optimistic scenarios with comparable player analysis."),
+        ("Free Agent Market Analysis", "free_agent_market",
+         "Competitive Intelligence", "Market & Acquisitions",
+         "Analyze available uncommitted players by position, quality grade, and system fit with market trend analysis and timing recommendations."),
+    ]
+    added = 0
+    for name, rtype, cat, subcat, desc in new_templates:
+        existing = conn.execute("SELECT id FROM report_templates WHERE report_type = ?", (rtype,)).fetchone()
+        if not existing:
+            conn.execute(
+                "INSERT INTO report_templates (id, template_name, report_type, is_global, prompt_text, category, subcategory) VALUES (?, ?, ?, 1, ?, ?, ?)",
+                (str(uuid.uuid4()), name, rtype, desc, cat, subcat),
+            )
+            added += 1
+    if added:
+        conn.commit()
+        logger.info("Added %d new report templates", added)
+    conn.close()
+
+
 def seed_leagues():
     """Seed the leagues reference table with Canadian/US junior and college leagues."""
     conn = get_db()
@@ -959,6 +1000,7 @@ def seed_teams():
 # Run on import
 init_db()
 seed_templates()
+seed_new_templates()
 seed_hockey_os()
 seed_leagues()
 seed_teams()
@@ -3328,6 +3370,7 @@ BOTTOM_LINE
 TEAM_REPORT_TYPES = [
     "team_identity", "opponent_gameplan", "line_chemistry", "st_optimization",
     "practice_plan", "playoff_series", "goalie_tandem",
+    "league_benchmarks", "season_projection", "free_agent_market",
 ]
 
 
@@ -3477,6 +3520,60 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             "report_type": request.report_type,
         }
 
+        # ── Enrich team-report input_data for special report types ──
+        if request.report_type in ("league_benchmarks", "season_projection", "free_agent_market"):
+            # Get the team's league from roster or team system
+            team_league = None
+            if roster_with_stats:
+                for rp in roster_with_stats:
+                    if rp.get("current_league"):
+                        team_league = rp["current_league"]
+                        break
+            if not team_league and team_system:
+                team_league = team_system.get("league")
+
+            # Get league-wide stats for all teams
+            if team_league:
+                league_players = conn.execute("""
+                    SELECT p.first_name, p.last_name, p.position, p.current_team, p.birth_year, p.age_group,
+                           ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim, ps.season
+                    FROM players p
+                    JOIN player_stats ps ON p.id = ps.player_id
+                    WHERE p.org_id = ? AND LOWER(p.current_league) = LOWER(?)
+                    ORDER BY ps.p DESC
+                """, (org_id, team_league)).fetchall()
+                input_data["league_data"] = {
+                    "league_name": team_league,
+                    "all_players": [dict(r) for r in league_players[:100]],
+                    "total_players_in_league": len(league_players),
+                }
+
+                # Get all teams with stats for league rankings
+                team_aggs = conn.execute("""
+                    SELECT p.current_team, COUNT(DISTINCT p.id) as roster_size,
+                           SUM(ps.g) as total_goals, SUM(ps.a) as total_assists, SUM(ps.p) as total_points,
+                           AVG(CASE WHEN ps.gp > 0 THEN CAST(ps.p AS FLOAT) / ps.gp END) as avg_ppg,
+                           AVG(ps.plus_minus) as avg_pm
+                    FROM players p
+                    JOIN player_stats ps ON p.id = ps.player_id
+                    WHERE p.org_id = ? AND LOWER(p.current_league) = LOWER(?) AND p.current_team IS NOT NULL
+                    GROUP BY p.current_team
+                    ORDER BY total_points DESC
+                """, (org_id, team_league)).fetchall()
+                input_data["league_data"]["team_rankings"] = [dict(r) for r in team_aggs]
+
+            # For free agent market — include intelligence data
+            if request.report_type == "free_agent_market":
+                intel_rows = conn.execute("""
+                    SELECT pi.player_id, pi.archetype, pi.overall_grade, pi.summary,
+                           p.first_name, p.last_name, p.position, p.current_team, p.birth_year, p.age_group
+                    FROM player_intelligence pi
+                    JOIN players p ON pi.player_id = p.id
+                    WHERE pi.org_id = ? AND pi.version = (SELECT MAX(pi2.version) FROM player_intelligence pi2 WHERE pi2.player_id = pi.player_id)
+                    ORDER BY pi.overall_grade
+                """, (org_id,)).fetchall()
+                input_data["player_intelligence_summary"] = [dict(r) for r in intel_rows[:50]]
+
         if client:
             llm_model = "claude-sonnet-4-20250514"
 
@@ -3492,6 +3589,52 @@ Generate a **{report_type_name}** for the team below. Your report must be:
 {system_context}
 
 Include actionable coaching recommendations. Reference specific players by name when discussing line combinations, deployment, or matchup strategies."""
+
+            # ── Report-type-specific prompt enhancements for team reports ──
+            if request.report_type == "league_benchmarks":
+                system_prompt += f"""
+
+SPECIAL INSTRUCTIONS FOR LEAGUE BENCHMARKS COMPARISON:
+Structure your report as:
+1. EXECUTIVE_SUMMARY — Team's overall standing vs league with key differentiators
+2. TEAM_VS_LEAGUE — Compare this team to league averages across: Goals For, Goals Against, Points Per Game, Plus/Minus differential. Show specific numbers and percentages (e.g., "+35% above league average")
+3. STATISTICAL_LEADERS — Top 10 scoring leaders in the league. Highlight OUR team's players with markers
+4. POSITION_GROUP_RANKINGS — Rank this team's forward group, defense group, and goalies vs other teams in the league
+5. SYSTEM_COMPARISON — Compare this team's tactical effectiveness vs league averages (if system data available)
+6. TREND_ANALYSIS — What's improving vs league? What's declining? Use specific stat trends
+7. COMPETITIVE_ADVANTAGES — Top 3 areas where this team outperforms the league
+8. COMPETITIVE_VULNERABILITIES — Top 3 areas of concern relative to league
+9. BOTTOM_LINE — Overall league standing assessment and playoff implications
+Use the league_data in the input to reference REAL stats and rankings. Today's date is {datetime.now().date().isoformat()}."""
+
+            elif request.report_type == "season_projection":
+                system_prompt += f"""
+
+SPECIAL INSTRUCTIONS FOR TEAM SEASON PROJECTION:
+Structure your report as:
+1. PROJECTED_STANDINGS — Project final standings for ALL teams in the league based on current pace and roster strength. Include W-L-OTL-Points columns and playoff probability percentages
+2. CHAMPIONSHIP_ODDS — Top 5 championship contenders with probability percentages
+3. TEAM_DETAILED_PROJECTION — Deep dive on THIS team: projected record, current pace extrapolation, strengths driving the projection, risks to the projection
+4. KEY_PLAYERS_PROJECTED — Top 5 players on this team with projected final season stats
+5. PLAYOFF_PATH — If team projects to make playoffs: likely first-round opponent, win probability per round, championship odds
+6. REMAINING_SCHEDULE — Assess schedule difficulty for remaining games
+7. RISK_FACTORS — Injuries, goaltending consistency, schedule difficulty, competitive balance concerns
+8. BOTTOM_LINE — Clear projection with confidence level
+Base projections on the actual stats provided. Use points pace (current_points / games_played * total_season_games). Today's date is {datetime.now().date().isoformat()}. The GOJHL regular season is typically 52 games."""
+
+            elif request.report_type == "free_agent_market":
+                system_prompt += f"""
+
+SPECIAL INSTRUCTIONS FOR FREE AGENT MARKET ANALYSIS:
+Structure your report as:
+1. MARKET_SUMMARY — Total available players by position, birth year distribution, quality distribution (Grade A/B/C)
+2. TOP_AVAILABLE_BY_POSITION — For each position group (Centers, Wingers, Defense, Goalies), list top 5 available players with stats, grade, and system fit assessment
+3. TEAM_NEEDS_ANALYSIS — Based on THIS team's current roster composition, identify position gaps and priorities
+4. RECOMMENDED_TARGETS — Top 3-5 recommended acquisition targets with: player profile, stats, system fit rating (Excellent/Good/Moderate/Poor), market value assessment, and recommendation (PURSUE/MONITOR/PASS)
+5. MARKET_TRENDS — Which positions are scarce vs abundant? Where should the team act fast vs wait?
+6. TIMING_RECOMMENDATIONS — Prioritize which positions to address immediately vs later
+7. BOTTOM_LINE — Clear action items for the GM
+Use intelligence grades and archetypes from the player_intelligence_summary in the input. Today's date is {datetime.now().date().isoformat()}."""
 
             user_prompt = f"Generate a {report_type_name} for {team_name}. Here is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
@@ -3761,6 +3904,36 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
             if team_system:
                 input_data["team_system"] = team_system
 
+            # Add ProspectX Indices and Intelligence data for enriched reports
+            try:
+                indices = _compute_prospectx_indices(
+                    stats_list[0] if stats_list else {},
+                    player.get("position", ""),
+                    conn.execute("SELECT * FROM player_stats WHERE org_id = ?", (org_id,)).fetchall()
+                )
+                input_data["prospectx_indices"] = indices
+            except Exception:
+                pass  # Non-critical
+
+            intel_row = conn.execute(
+                "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
+                (request.player_id, org_id)
+            ).fetchone()
+            if intel_row:
+                intel = dict(intel_row)
+                for k in ("strengths", "development_areas", "comparable_players", "tags"):
+                    if isinstance(intel.get(k), str):
+                        try:
+                            intel[k] = json.loads(intel[k])
+                        except Exception:
+                            intel[k] = []
+                if isinstance(intel.get("stat_signature"), str):
+                    try:
+                        intel["stat_signature"] = json.loads(intel["stat_signature"])
+                    except Exception:
+                        intel["stat_signature"] = {}
+                input_data["intelligence"] = intel
+
             report_type_name = template["template_name"]
 
             # Build the system context block for the prompt — resolve codes to full tactical descriptions
@@ -3838,6 +4011,35 @@ MANDATORY GRADING REQUIREMENTS:
 Include quantitative analysis where stats exist. If data is limited, note what additional scouting data would strengthen the assessment.
 
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by the section content."""
+
+            # ── Report-type-specific prompt enhancements ──
+            if request.report_type == "indices_dashboard":
+                system_prompt += """
+
+SPECIAL INSTRUCTIONS FOR PROSPECTX INDICES DASHBOARD:
+This report focuses on the player's ProspectX Index scores. Structure your report as:
+1. OVERALL_PROSPECTX_GRADE — Synthesize all indices into a single letter grade (A through D scale) with numeric score (0-100)
+2. INDICES_BREAKDOWN — For EACH of the 6 indices (SniperIndex, PlaymakerIndex, TransitionIndex, DefensiveIndex, CompeteIndex, HockeyIQIndex), provide: the score, percentile, rating tier (Elite/Above Average/Average/Below Average/Developing), and a 2-3 sentence analysis explaining WHY the player scores at that level
+3. PERCENTILE_RANKINGS — Compare vs position peers, vs league, and vs age group
+4. INDEX_CORRELATION — How do the indices work together? (e.g., high Playmaker + high IQ = elite distributor)
+5. SYSTEM_FIT — Based on indices, what role/system fits this player best?
+6. DEVELOPMENT_PRIORITIES — Based on index analysis, what 3 specific improvements would most impact their game?
+7. COMPARABLE_PLAYERS — Players with similar index profiles
+Use the prospectx_indices data in the input prominently. Show specific numbers."""
+
+            elif request.report_type == "player_projection":
+                system_prompt += f"""
+
+SPECIAL INSTRUCTIONS FOR NEXT SEASON PLAYER PROJECTION:
+Project this player's performance for the NEXT season (2026-27). Structure your report as:
+1. PROJECTION_SUMMARY — Expected points range (Conservative/Expected/Optimistic scenarios)
+2. METHODOLOGY — Explain what data informed the projection (current stats, age curve, league level, development trend)
+3. THREE_SCENARIOS — Detail Conservative (25th percentile), Expected (50th), and Optimistic (75th) with specific point/goal/assist projections
+4. AGE_CURVE_ANALYSIS — How does this player's age and development stage affect projection? Reference typical age-development curves for their league tier
+5. COMPARABLE_PATHWAYS — 3-5 similar players who were at this statistical level at this age, and what they did next season
+6. DEVELOPMENT_FACTORS — What could boost or reduce projection (shooting improvement, ice time changes, linemate quality, etc.)
+7. RECOMMENDATION — Clear actionable guidance
+Use the player's birth_year and age_group from the data. Today's date is {datetime.now().date().isoformat()}. Reference specific stats when projecting."""
 
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 

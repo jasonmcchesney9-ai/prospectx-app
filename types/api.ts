@@ -528,6 +528,12 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   practice_plan: "Practice Plan",
   playoff_series: "Playoff Series Prep",
   goalie_tandem: "Goalie Tandem",
+  // Priority 2 reports
+  indices_dashboard: "ProspectX Indices Dashboard",
+  player_projection: "Next Season Projection",
+  league_benchmarks: "League Benchmarks",
+  season_projection: "Season Projection",
+  free_agent_market: "Free Agent Market",
 };
 
 // ── Report Categories: Player vs Team ──────────────────────────
@@ -544,6 +550,8 @@ export const PLAYER_REPORT_TYPES = [
   "trade_target",
   "draft_comparative",
   "season_progress",
+  "indices_dashboard",
+  "player_projection",
 ] as const;
 
 export const TEAM_REPORT_TYPES = [
@@ -554,6 +562,9 @@ export const TEAM_REPORT_TYPES = [
   "practice_plan",
   "playoff_series",
   "goalie_tandem",
+  "league_benchmarks",
+  "season_projection",
+  "free_agent_market",
 ] as const;
 
 // ── Prospect Grading Scale ─────────────────────────────────────
@@ -864,11 +875,11 @@ export const ANALYTICS_CATEGORIES = {
       },
       advanced: {
         label: "Advanced Stats",
-        types: ["operations", "game_decision"],
+        types: ["operations", "game_decision", "indices_dashboard"],
       },
       projections: {
         label: "Projections & Development",
-        types: ["development_roadmap", "draft_comparative"],
+        types: ["development_roadmap", "draft_comparative", "player_projection"],
       },
       family: {
         label: "Presentation",
@@ -897,16 +908,20 @@ export const ANALYTICS_CATEGORIES = {
   },
   competitive: {
     label: "Competitive Intelligence",
-    description: "Opponent Analysis, Market Data",
+    description: "Opponent Analysis, Market Data, League Benchmarks",
     icon: "Target",
     subcategories: {
       opponents: {
         label: "Opponent Analysis",
         types: ["opponent_gameplan"],
       },
+      benchmarks: {
+        label: "League Benchmarks",
+        types: ["league_benchmarks", "season_projection"],
+      },
       market: {
         label: "Market & Acquisitions",
-        types: ["trade_target", "goalie"],
+        types: ["trade_target", "goalie", "free_agent_market"],
       },
     },
   },
