@@ -38,10 +38,26 @@ import ExtendedStatTable from "@/components/ExtendedStatTable";
 import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
 import api from "@/lib/api";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence } from "@/types/api";
-import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerIndices } from "@/types/api";
+import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, INDEX_COLORS, INDEX_ICONS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports";
+
+const POSITION_LABELS: Record<string, string> = {
+  C: "Center",
+  LW: "Left Wing",
+  RW: "Right Wing",
+  D: "Defense",
+  G: "Goalie",
+  F: "Forward",
+  LD: "Left Defense",
+  RD: "Right Defense",
+};
+
+function fullPosition(pos: string | null | undefined): string {
+  if (!pos) return "Unknown";
+  return POSITION_LABELS[pos.toUpperCase()] || pos;
+}
 
 export default function PlayerDetailPage() {
   const params = useParams();
@@ -63,6 +79,9 @@ export default function PlayerDetailPage() {
   const [intelHistory, setIntelHistory] = useState<PlayerIntelligence[]>([]);
   const [showIntelHistory, setShowIntelHistory] = useState(false);
   const [refreshingIntel, setRefreshingIntel] = useState(false);
+
+  // ProspectX Indices
+  const [playerIndices, setPlayerIndices] = useState<PlayerIndices | null>(null);
 
   // Archetype editing
   const [editingArchetype, setEditingArchetype] = useState(false);
@@ -258,6 +277,12 @@ export default function PlayerDetailPage() {
         if (libRes.status === "fulfilled") setSystemsLibrary(libRes.value.data);
         if (intelRes.status === "fulfilled") setIntelligence(intelRes.value.data);
 
+        // Load ProspectX Indices (non-blocking — may fail if < 5 GP)
+        try {
+          const indicesRes = await api.get<PlayerIndices>(`/analytics/player-indices/${playerId}`);
+          setPlayerIndices(indicesRes.data);
+        } catch { /* Player may not have enough stats */ }
+
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
           const match = sysRes.value.data.find(
@@ -340,8 +365,8 @@ export default function PlayerDetailPage() {
                 {player.first_name} {player.last_name}
               </h1>
               <div className="flex items-center gap-3 mt-2 text-sm text-white/70">
-                <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-xs">
-                  {player.position}
+                <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-xs uppercase tracking-wide">
+                  {fullPosition(player.position)}
                 </span>
                 {player.archetype && (
                   <span className="px-2 py-0.5 bg-orange/20 text-orange rounded font-oswald font-bold text-xs">
@@ -464,7 +489,7 @@ export default function PlayerDetailPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted">Position</span>
-                    <span className="font-semibold text-navy">{player.position}</span>
+                    <span className="font-semibold text-navy">{fullPosition(player.position)}</span>
                   </div>
                   {player.shoots && (
                     <div className="flex justify-between">
@@ -648,13 +673,17 @@ export default function PlayerDetailPage() {
                   </div>
                 )}
 
-                {/* ProspectX Quick Indices */}
-                {stats.length > 0 && (
+                {/* ProspectX Indices */}
+                {(playerIndices || stats.length > 0) && (
                   <div className="mt-4 pt-4 border-t border-border/50">
                     <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">
                       ProspectX Indices
                     </h4>
-                    <QuickIndices stats={stats} position={player.position} />
+                    {playerIndices ? (
+                      <ProspectXIndicesPanel indices={playerIndices} />
+                    ) : (
+                      <QuickIndices stats={stats} position={player.position} />
+                    )}
                   </div>
                 )}
               </div>
@@ -1335,6 +1364,72 @@ function QuickIndices({ stats, position }: { stats: PlayerStats[]; position: str
       <p className="text-[9px] text-muted/50 mt-1">
         Based on {season.gp} GP {season.season ? `(${season.season})` : ""}
       </p>
+    </div>
+  );
+}
+
+// ── ProspectX Indices Panel (6 proprietary indices with percentiles) ──
+function ProspectXIndicesPanel({ indices }: { indices: PlayerIndices }) {
+  const indexOrder = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
+
+  return (
+    <div className="space-y-2.5">
+      {indexOrder.map((key) => {
+        const idx = indices.indices[key];
+        if (!idx) return null;
+        const color = INDEX_COLORS[key] || "#9ca3af";
+        const icon = INDEX_ICONS[key] || "";
+        const pctLabel = idx.percentile >= 90 ? "Elite" :
+          idx.percentile >= 75 ? "Above Avg" :
+          idx.percentile >= 50 ? "Average" :
+          idx.percentile >= 25 ? "Below Avg" : "Developing";
+
+        return (
+          <div key={key} className="group">
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-sm" title={idx.description}>{icon}</span>
+              <span className="text-[10px] font-oswald uppercase tracking-wider text-muted flex-1">
+                {idx.label}
+              </span>
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{
+                  backgroundColor: color + "15",
+                  color: color,
+                }}
+              >
+                {pctLabel} &middot; {idx.percentile}th
+              </span>
+              <span className="text-xs font-bold tabular-nums w-8 text-right" style={{ color }}>
+                {idx.value}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="flex-1 h-2 bg-navy/[0.06] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700 ease-out"
+                  style={{
+                    width: `${idx.value}%`,
+                    backgroundColor: color,
+                    opacity: 0.85,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/30">
+        <p className="text-[9px] text-muted/50">
+          Based on {indices.gp} GP {indices.season ? `(${indices.season})` : ""}
+          {indices.has_extended_stats && (
+            <span className="ml-1 text-teal/60">+ InStat Analytics</span>
+          )}
+        </p>
+        <span className="text-[8px] text-muted/30 font-oswald uppercase tracking-widest">
+          ProspectX
+        </span>
+      </div>
     </div>
   );
 }

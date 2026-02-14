@@ -10,6 +10,7 @@ import {
   FileText,
   Upload,
   BarChart3,
+  TrendingUp,
   Menu,
   X,
   LogOut,
@@ -18,6 +19,7 @@ import { getUser, logout } from "@/lib/auth";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "Analytics", icon: TrendingUp },
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/reports", label: "Reports", icon: FileText },

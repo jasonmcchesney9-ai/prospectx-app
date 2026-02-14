@@ -691,6 +691,213 @@ export const STAT_SIGNATURE_LABELS: Record<string, { emoji: string; label: strin
   goals_against_tier: { emoji: "\u{1F6E1}", label: "GAA" },
 };
 
+// ── Analytics Types ──────────────────────────────────────────
+export interface AnalyticsOverview {
+  total_players: number;
+  total_reports: number;
+  total_notes: number;
+  total_teams: number;
+  players_with_stats: number;
+  players_with_intelligence: number;
+  position_breakdown: Array<{ position: string; count: number }>;
+  reports_by_type: Array<{ report_type: string; count: number }>;
+  reports_by_status: Array<{ status: string; count: number }>;
+}
+
+export interface ScoringLeader {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string;
+  current_team: string | null;
+  season: string | null;
+  gp: number;
+  g: number;
+  a: number;
+  p: number;
+  plus_minus: number;
+  pim: number;
+  ppg: number;
+  gpg: number;
+  apg: number;
+}
+
+export interface TeamRanking {
+  team: string;
+  roster_size: number;
+  qualified_players: number;
+  total_gp: number;
+  total_goals: number;
+  total_assists: number;
+  total_points: number;
+  avg_ppg: number;
+  avg_plus_minus: number;
+  total_pim: number;
+}
+
+export interface PositionStats {
+  position: string;
+  player_count: number;
+  avg_gp: number;
+  avg_g: number;
+  avg_a: number;
+  avg_p: number;
+  avg_ppg: number;
+  avg_gpg: number;
+  avg_plus_minus: number;
+  avg_pim: number;
+  max_goals: number;
+  max_points: number;
+  max_ppg: number;
+}
+
+export interface ScoringDistribution {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string;
+  current_team: string | null;
+  gp: number;
+  g: number;
+  a: number;
+  p: number;
+  plus_minus: number;
+  ppg: number;
+  gpg: number;
+}
+
+export interface ArchetypeBreakdown {
+  archetype: string;
+  count: number;
+  avg_confidence: number;
+}
+
+export interface TagCloudData {
+  scout_note_tags: Array<{ tag: string; count: number }>;
+  intelligence_tags: Array<{ tag: string; count: number }>;
+}
+
+// ── ProspectX Indices ───────────────────────────────────────
+export interface ProspectXIndex {
+  value: number;        // 0-99 scale
+  percentile: number;   // League percentile 1-99
+  label: string;        // e.g. "SniperIndex"
+  description: string;  // Human-readable description
+}
+
+export interface PlayerIndices {
+  player_id: string;
+  player_name: string;
+  position: string;
+  season: string | null;
+  gp: number;
+  indices: {
+    sniper: ProspectXIndex;
+    playmaker: ProspectXIndex;
+    transition: ProspectXIndex;
+    defensive: ProspectXIndex;
+    compete: ProspectXIndex;
+    hockey_iq: ProspectXIndex;
+  };
+  has_extended_stats: boolean;
+}
+
+export interface LeaguePlayerIndices {
+  player_id: string;
+  player_name: string;
+  position: string;
+  current_team: string | null;
+  gp: number;
+  p: number;
+  indices: {
+    sniper: ProspectXIndex;
+    playmaker: ProspectXIndex;
+    transition: ProspectXIndex;
+    defensive: ProspectXIndex;
+    compete: ProspectXIndex;
+    hockey_iq: ProspectXIndex;
+  };
+}
+
+export const INDEX_COLORS: Record<string, string> = {
+  sniper: "#ef4444",      // red-500
+  playmaker: "#3b82f6",   // blue-500
+  transition: "#18B3A6",  // teal
+  defensive: "#0F2A3D",   // navy
+  compete: "#F36F21",     // orange
+  hockey_iq: "#8b5cf6",   // violet-500
+};
+
+export const INDEX_ICONS: Record<string, string> = {
+  sniper: "\u{1F3AF}",       // target
+  playmaker: "\u{1F4E1}",    // satellite
+  transition: "\u{1F504}",   // cycle
+  defensive: "\u{1F6E1}",    // shield
+  compete: "\u{1F4AA}",      // muscle
+  hockey_iq: "\u{1F9E0}",    // brain
+};
+
+// ── Analytics Report Categories ─────────────────────────────
+export const ANALYTICS_CATEGORIES = {
+  player: {
+    label: "Player Analytics",
+    description: "Performance, Advanced Stats, Projections",
+    icon: "Users",
+    subcategories: {
+      performance: {
+        label: "Performance Reports",
+        types: ["pro_skater", "unified_prospect", "season_intelligence", "season_progress"],
+      },
+      advanced: {
+        label: "Advanced Stats",
+        types: ["operations", "game_decision"],
+      },
+      projections: {
+        label: "Projections & Development",
+        types: ["development_roadmap", "draft_comparative"],
+      },
+      family: {
+        label: "Presentation",
+        types: ["family_card", "agent_pack"],
+      },
+    },
+  },
+  team: {
+    label: "Team Analytics",
+    description: "System Analysis, Line Optimization",
+    icon: "Building2",
+    subcategories: {
+      systems: {
+        label: "System Analysis",
+        types: ["team_identity", "practice_plan"],
+      },
+      lines: {
+        label: "Line Optimization",
+        types: ["line_chemistry", "st_optimization", "goalie_tandem"],
+      },
+      playoffs: {
+        label: "Playoff Preparation",
+        types: ["playoff_series"],
+      },
+    },
+  },
+  competitive: {
+    label: "Competitive Intelligence",
+    description: "Opponent Analysis, Market Data",
+    icon: "Target",
+    subcategories: {
+      opponents: {
+        label: "Opponent Analysis",
+        types: ["opponent_gameplan"],
+      },
+      market: {
+        label: "Market & Acquisitions",
+        types: ["trade_target", "goalie"],
+      },
+    },
+  },
+} as const;
+
 // Grade color mapping for UI
 export const GRADE_COLORS: Record<string, string> = {
   "A+": "#16a34a",  // green-600
