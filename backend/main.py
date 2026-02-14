@@ -2693,6 +2693,13 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
         if client:
             llm_model = "claude-sonnet-4-20250514"
 
+            # Helper: safe get from sqlite3.Row (which doesn't support .get())
+            def _row_get(row, key, default=None):
+                try:
+                    return row[key]
+                except (IndexError, KeyError):
+                    return default
+
             # Gather player stats (including extended InStat analytics)
             stats_rows = conn.execute(
                 "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC, created_at DESC",
@@ -2709,12 +2716,13 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     "toi_seconds": sr["toi_seconds"],
                 }
                 # Include extended stats if available (InStat analytics: xG, CORSI, puck battles, entries, etc.)
-                if sr.get("extended_stats"):
+                ext_raw = _row_get(sr, "extended_stats")
+                if ext_raw:
                     try:
-                        ext = json.loads(sr["extended_stats"]) if isinstance(sr["extended_stats"], str) else sr["extended_stats"]
+                        ext = json.loads(ext_raw) if isinstance(ext_raw, str) else ext_raw
                         if ext:
                             stat_entry["extended_stats"] = ext
-                            stat_entry["data_source"] = sr.get("data_source", "manual")
+                            stat_entry["data_source"] = _row_get(sr, "data_source", "manual")
                     except (json.JSONDecodeError, TypeError):
                         pass
                 stats_list.append(stat_entry)
@@ -2732,9 +2740,10 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     "ga": gr["ga"], "sa": gr["sa"], "sv": gr["sv"],
                     "sv_pct": gr["sv_pct"], "gaa": gr["gaa"],
                 }
-                if gr.get("extended_stats"):
+                ext_raw = _row_get(gr, "extended_stats")
+                if ext_raw:
                     try:
-                        ext = json.loads(gr["extended_stats"]) if isinstance(gr["extended_stats"], str) else gr["extended_stats"]
+                        ext = json.loads(ext_raw) if isinstance(ext_raw, str) else ext_raw
                         if ext:
                             goalie_entry["extended_stats"] = ext
                     except (json.JSONDecodeError, TypeError):
@@ -2791,10 +2800,6 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     return f"{lib_row['name']} — {lib_row['description']}"
                 return code
 
-            has_extended = any(s.get("extended_stats") for s in stats_list)
-            logger.info("Report input — stats: %d rows (extended: %s), goalie_stats: %d, notes: %d, lines: %d, team_system: %s",
-                        len(stats_list), "yes" if has_extended else "no", len(goalie_stats_list), len(notes_list), len(line_combos), "yes" if team_system else "no")
-
             # Gather line combinations for the player's team
             line_combos = []
             if player.get("current_team"):
@@ -2814,14 +2819,19 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                             "goals_against": lc["goals_against"],
                             "plus_minus": lc["plus_minus"],
                         }
-                        if lc.get("extended_stats"):
+                        ext_raw = _row_get(lc, "extended_stats")
+                        if ext_raw:
                             try:
-                                ext = json.loads(lc["extended_stats"]) if isinstance(lc["extended_stats"], str) else lc["extended_stats"]
+                                ext = json.loads(ext_raw) if isinstance(ext_raw, str) else ext_raw
                                 if ext:
                                     lc_entry["extended_stats"] = ext
                             except (json.JSONDecodeError, TypeError):
                                 pass
                         line_combos.append(lc_entry)
+
+            has_extended = any(s.get("extended_stats") for s in stats_list)
+            logger.info("Report input — stats: %d rows (extended: %s), goalie_stats: %d, notes: %d, lines: %d, team_system: %s",
+                        len(stats_list), "yes" if has_extended else "no", len(goalie_stats_list), len(notes_list), len(line_combos), "yes" if team_system else "no")
 
             input_data = {
                 "player": player,
