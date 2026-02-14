@@ -39,8 +39,8 @@ import ExtendedStatTable from "@/components/ExtendedStatTable";
 import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
 import api from "@/lib/api";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerIndices } from "@/types/api";
-import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, INDEX_COLORS, INDEX_ICONS } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics } from "@/types/api";
+import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports";
 
@@ -81,8 +81,8 @@ export default function PlayerDetailPage() {
   const [showIntelHistory, setShowIntelHistory] = useState(false);
   const [refreshingIntel, setRefreshingIntel] = useState(false);
 
-  // ProspectX Indices
-  const [playerIndices, setPlayerIndices] = useState<PlayerIndices | null>(null);
+  // ProspectX Metrics
+  const [playerMetrics, setPlayerMetrics] = useState<PlayerMetrics | null>(null);
 
   // Archetype editing
   const [editingArchetype, setEditingArchetype] = useState(false);
@@ -278,10 +278,10 @@ export default function PlayerDetailPage() {
         if (libRes.status === "fulfilled") setSystemsLibrary(libRes.value.data);
         if (intelRes.status === "fulfilled") setIntelligence(intelRes.value.data);
 
-        // Load ProspectX Indices (non-blocking — may fail if < 5 GP)
+        // Load ProspectX Metrics (non-blocking — may fail if < 5 GP)
         try {
-          const indicesRes = await api.get<PlayerIndices>(`/analytics/player-indices/${playerId}`);
-          setPlayerIndices(indicesRes.data);
+          const indicesRes = await api.get<PlayerMetrics>(`/analytics/player-indices/${playerId}`);
+          setPlayerMetrics(indicesRes.data);
         } catch { /* Player may not have enough stats */ }
 
         // Match team system to player's current team
@@ -706,16 +706,16 @@ export default function PlayerDetailPage() {
                   </div>
                 )}
 
-                {/* ProspectX Indices */}
-                {(playerIndices || stats.length > 0) && (
+                {/* ProspectX Metrics */}
+                {(playerMetrics || stats.length > 0) && (
                   <div className="mt-4 pt-4 border-t border-border/50">
                     <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">
-                      ProspectX Indices
+                      ProspectX Metrics
                     </h4>
-                    {playerIndices ? (
-                      <ProspectXIndicesPanel indices={playerIndices} />
+                    {playerMetrics ? (
+                      <ProspectXMetricsPanel indices={playerMetrics} />
                     ) : (
-                      <QuickIndices stats={stats} position={player.position} />
+                      <QuickMetrics stats={stats} position={player.position} />
                     )}
                   </div>
                 )}
@@ -1043,7 +1043,7 @@ export default function PlayerDetailPage() {
                   disabled={uploading}
                   className="block text-sm text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-orange/30 file:text-xs file:font-oswald file:uppercase file:tracking-wider file:font-semibold file:bg-orange/10 file:text-orange hover:file:bg-orange/20 file:transition-colors file:cursor-pointer"
                 />
-                <p className="text-[10px] text-muted/60 mt-1">Supports InStat exports, CSV, Excel</p>
+                <p className="text-[10px] text-muted/60 mt-1">Supports XLSX analytics exports, CSV, Excel</p>
               </div>
             </div>
 
@@ -1077,11 +1077,11 @@ export default function PlayerDetailPage() {
               </p>
             )}
 
-            {/* Extended Stats (InStat Analytics) */}
+            {/* Extended Stats (Advanced Analytics) */}
             {stats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
               <div className="mt-6">
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
-                  InStat Advanced Analytics
+                  Advanced Analytics
                 </h3>
                 {stats
                   .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
@@ -1327,7 +1327,7 @@ export default function PlayerDetailPage() {
 // ── ProspectX Quick Indices ────────────────────────────────
 // Simple performance indices calculated from available season stats.
 // These give scouts a fast snapshot before diving into full reports.
-function QuickIndices({ stats, position }: { stats: PlayerStats[]; position: string }) {
+function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: string }) {
   // Use the most recent season stats (highest GP)
   const season = stats
     .filter((s) => s.stat_type === "season" || s.gp >= 5)
@@ -1401,17 +1401,17 @@ function QuickIndices({ stats, position }: { stats: PlayerStats[]; position: str
   );
 }
 
-// ── ProspectX Indices Panel (6 proprietary indices with percentiles) ──
-function ProspectXIndicesPanel({ indices }: { indices: PlayerIndices }) {
-  const indexOrder = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
+// ── ProspectX Metrics Panel (6 proprietary indices with percentiles) ──
+function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
+  const metricOrder = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
 
   return (
     <div className="space-y-2.5">
-      {indexOrder.map((key) => {
+      {metricOrder.map((key) => {
         const idx = indices.indices[key];
         if (!idx) return null;
-        const color = INDEX_COLORS[key] || "#9ca3af";
-        const icon = INDEX_ICONS[key] || "";
+        const color = METRIC_COLORS[key] || "#9ca3af";
+        const icon = METRIC_ICONS[key] || "";
         const pctLabel = idx.percentile >= 90 ? "Elite" :
           idx.percentile >= 75 ? "Above Avg" :
           idx.percentile >= 50 ? "Average" :
@@ -1456,7 +1456,7 @@ function ProspectXIndicesPanel({ indices }: { indices: PlayerIndices }) {
         <p className="text-[9px] text-muted/50">
           Based on {indices.gp} GP {indices.season ? `(${indices.season})` : ""}
           {indices.has_extended_stats && (
-            <span className="ml-1 text-teal/60">+ InStat Analytics</span>
+            <span className="ml-1 text-teal/60">+ Extended Analytics</span>
           )}
         </p>
         <span className="text-[8px] text-muted/30 font-oswald uppercase tracking-widest">

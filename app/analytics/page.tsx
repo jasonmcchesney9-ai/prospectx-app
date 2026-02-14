@@ -14,26 +14,29 @@ import {
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
+  Filter,
+  X,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import type {
   AnalyticsOverview,
+  AnalyticsFilterOptions,
   ScoringLeader,
   TeamRanking,
   PositionStats,
   ScoringDistribution,
   ArchetypeBreakdown,
   TagCloudData,
-  LeaguePlayerIndices,
+  LeaguePlayerMetrics,
 } from "@/types/api";
 import {
   REPORT_TYPE_LABELS,
   ANALYTICS_CATEGORIES,
   NOTE_TAG_LABELS,
-  INDEX_COLORS,
-  INDEX_ICONS,
+  METRIC_COLORS,
+  METRIC_ICONS,
 } from "@/types/api";
 import {
   BarChart,
@@ -78,6 +81,13 @@ export default function AnalyticsPage() {
 }
 
 function AnalyticsDashboard() {
+  // Filter state
+  const [filterOptions, setFilterOptions] = useState<AnalyticsFilterOptions | null>(null);
+  const [selectedLeague, setSelectedLeague] = useState("");
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const [selectedPosition, setSelectedPosition] = useState("");
+
+  // Data state
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [leaders, setLeaders] = useState<ScoringLeader[]>([]);
   const [teamRankings, setTeamRankings] = useState<TeamRanking[]>([]);
@@ -85,23 +95,60 @@ function AnalyticsDashboard() {
   const [scoringDist, setScoringDist] = useState<ScoringDistribution[]>([]);
   const [archetypes, setArchetypes] = useState<ArchetypeBreakdown[]>([]);
   const [tagCloud, setTagCloud] = useState<TagCloudData | null>(null);
-  const [leagueIndices, setLeagueIndices] = useState<LeaguePlayerIndices[]>([]);
+  const [leagueMetrics, setLeagueMetrics] = useState<LeaguePlayerMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Teams filtered by selected league for the dropdown
+  const filteredTeamOptions = useMemo(() => {
+    if (!filterOptions) return [];
+    if (!selectedLeague) return filterOptions.teams;
+    return filterOptions.teams.filter((t) => t.league === selectedLeague);
+  }, [filterOptions, selectedLeague]);
+
+  // Build query string from filters
+  const filterParams = useMemo(() => {
+    const p = new URLSearchParams();
+    if (selectedLeague) p.set("league", selectedLeague);
+    if (selectedTeam) p.set("team", selectedTeam);
+    if (selectedPosition) p.set("position", selectedPosition);
+    return p.toString();
+  }, [selectedLeague, selectedTeam, selectedPosition]);
+
+  const hasFilters = selectedLeague || selectedTeam || selectedPosition;
+
+  // Load filter options once
+  useEffect(() => {
+    api.get<AnalyticsFilterOptions>("/analytics/filters").then((r) => setFilterOptions(r.data)).catch(() => {});
+  }, []);
+
+  // Clear team if league changes and team no longer in that league
+  useEffect(() => {
+    if (selectedLeague && selectedTeam && filterOptions) {
+      const teamInLeague = filterOptions.teams.find(
+        (t) => t.name === selectedTeam && t.league === selectedLeague
+      );
+      if (!teamInLeague) setSelectedTeam("");
+    }
+  }, [selectedLeague, selectedTeam, filterOptions]);
+
+  // Load analytics data (re-fetches when filters change)
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
       try {
-        const [overviewRes, leadersRes, teamsRes, posRes, distRes, archRes, tagRes, indicesRes] =
+        const sep = filterParams ? "&" : "";
+        const [overviewRes, leadersRes, teamsRes, posRes, distRes, archRes, tagRes, metricsRes] =
           await Promise.all([
-            api.get<AnalyticsOverview>("/analytics/overview"),
-            api.get<ScoringLeader[]>("/analytics/scoring-leaders?limit=15"),
-            api.get<TeamRanking[]>("/analytics/team-rankings"),
-            api.get<PositionStats[]>("/analytics/position-stats"),
-            api.get<ScoringDistribution[]>("/analytics/scoring-distribution?min_gp=5"),
-            api.get<ArchetypeBreakdown[]>("/analytics/archetype-breakdown"),
-            api.get<TagCloudData>("/analytics/tag-cloud"),
-            api.get<LeaguePlayerIndices[]>("/analytics/league-indices?min_gp=10&limit=20"),
+            api.get<AnalyticsOverview>(`/analytics/overview?${filterParams}`),
+            api.get<ScoringLeader[]>(`/analytics/scoring-leaders?limit=15${sep}${filterParams}`),
+            api.get<TeamRanking[]>(`/analytics/team-rankings?${filterParams}`),
+            api.get<PositionStats[]>(`/analytics/position-stats?${filterParams}`),
+            api.get<ScoringDistribution[]>(`/analytics/scoring-distribution?min_gp=5${sep}${filterParams}`),
+            api.get<ArchetypeBreakdown[]>(`/analytics/archetype-breakdown?${filterParams}`),
+            api.get<TagCloudData>(`/analytics/tag-cloud?${filterParams}`),
+            api.get<LeaguePlayerMetrics[]>(`/analytics/league-indices?min_gp=10&limit=20${sep}${filterParams}`),
           ]);
         setOverview(overviewRes.data);
         setLeaders(leadersRes.data);
@@ -110,7 +157,7 @@ function AnalyticsDashboard() {
         setScoringDist(distRes.data);
         setArchetypes(archRes.data);
         setTagCloud(tagRes.data);
-        setLeagueIndices(indicesRes.data);
+        setLeagueMetrics(metricsRes.data);
       } catch (err: unknown) {
         const msg =
           (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -122,7 +169,7 @@ function AnalyticsDashboard() {
       }
     }
     load();
-  }, []);
+  }, [filterParams]);
 
   if (loading) {
     return (
@@ -153,6 +200,9 @@ function AnalyticsDashboard() {
           <p className="text-muted text-sm mt-1">
             Hockey intelligence across {overview?.total_players || 0} players and{" "}
             {overview?.total_teams || 0} teams
+            {hasFilters && (
+              <span className="ml-1 text-teal font-medium">(filtered)</span>
+            )}
           </p>
         </div>
         <Link
@@ -163,6 +213,113 @@ function AnalyticsDashboard() {
           Generate Report
         </Link>
       </div>
+
+      {/* Filter Bar */}
+      {filterOptions && (filterOptions.leagues.length > 1 || filterOptions.teams.length > 1) && (
+        <div className="bg-white rounded-xl border border-border p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Filter size={14} className="text-muted" />
+            <span className="text-xs font-oswald uppercase tracking-wider text-muted">
+              Filter Analytics
+            </span>
+            {hasFilters && (
+              <button
+                onClick={() => { setSelectedLeague(""); setSelectedTeam(""); setSelectedPosition(""); }}
+                className="ml-auto flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
+              >
+                <X size={12} />
+                Clear Filters
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {/* League Filter */}
+            {filterOptions.leagues.length > 1 && (
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">
+                  League
+                </label>
+                <select
+                  value={selectedLeague}
+                  onChange={(e) => setSelectedLeague(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+                >
+                  <option value="">All Leagues</option>
+                  {filterOptions.leagues.map((l) => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Team Filter */}
+            <div className="flex-1 min-w-[180px]">
+              <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">
+                Team
+              </label>
+              <select
+                value={selectedTeam}
+                onChange={(e) => setSelectedTeam(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+              >
+                <option value="">All Teams</option>
+                {filteredTeamOptions.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}{t.league && !selectedLeague ? ` (${t.league})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Position Filter */}
+            <div className="min-w-[120px]">
+              <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">
+                Position
+              </label>
+              <select
+                value={selectedPosition}
+                onChange={(e) => setSelectedPosition(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+              >
+                <option value="">All Positions</option>
+                {filterOptions.positions.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Active filter chips */}
+          {hasFilters && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border">
+              {selectedLeague && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal/10 text-teal text-xs rounded-full">
+                  {selectedLeague}
+                  <button onClick={() => setSelectedLeague("")} className="hover:text-teal/70">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {selectedTeam && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange/10 text-orange text-xs rounded-full">
+                  {selectedTeam}
+                  <button onClick={() => setSelectedTeam("")} className="hover:text-orange/70">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {selectedPosition && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-navy/10 text-navy text-xs rounded-full">
+                  {selectedPosition}
+                  <button onClick={() => setSelectedPosition("")} className="hover:text-navy/70">
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Overview Stat Cards */}
       {overview && <OverviewCards overview={overview} />}
@@ -193,9 +350,9 @@ function AnalyticsDashboard() {
         {archetypes.length > 0 && <ArchetypeChart data={archetypes} />}
       </div>
 
-      {/* ProspectX Indices Leaderboard */}
-      {leagueIndices.length > 0 && (
-        <LeagueIndicesTable data={leagueIndices} />
+      {/* ProspectX Metrics Leaderboard */}
+      {leagueMetrics.length > 0 && (
+        <LeagueMetricsTable data={leagueMetrics} />
       )}
 
       {/* Scouting Tag Frequency */}
@@ -780,19 +937,19 @@ function LeaderboardTable({ leaders }: { leaders: ScoringLeader[] }) {
   );
 }
 
-// ── League ProspectX Indices Table ───────────────
-function LeagueIndicesTable({ data }: { data: LeaguePlayerIndices[] }) {
-  const indexKeys = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
+// ── League ProspectX Metrics Table ───────────────
+function LeagueMetricsTable({ data }: { data: LeaguePlayerMetrics[] }) {
+  const metricKeys = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
 
   return (
     <div className="bg-white rounded-xl border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div>
           <h3 className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider">
-            ProspectX Indices — League View
+            ProspectX Metrics — League View
           </h3>
           <p className="text-xs text-muted mt-0.5">
-            Proprietary performance indices across {data.length} qualified players (min 10 GP)
+            Proprietary performance metrics across {data.length} qualified players (min 10 GP)
           </p>
         </div>
         <span className="text-[8px] font-oswald uppercase tracking-widest text-muted/40 bg-navy/[0.03] px-2 py-1 rounded">
@@ -806,14 +963,14 @@ function LeagueIndicesTable({ data }: { data: LeaguePlayerIndices[] }) {
               <th className="px-4 py-2 font-oswald text-xs uppercase tracking-wider text-muted w-8">#</th>
               <th className="px-4 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Player</th>
               <th className="px-4 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Pos</th>
-              {indexKeys.map((key) => (
+              {metricKeys.map((key) => (
                 <th
                   key={key}
                   className="px-2 py-2 font-oswald text-[10px] uppercase tracking-wider text-center"
-                  style={{ color: INDEX_COLORS[key] }}
+                  style={{ color: METRIC_COLORS[key] }}
                   title={data[0]?.indices[key]?.description || ""}
                 >
-                  {INDEX_ICONS[key]} {key === "hockey_iq" ? "IQ" : key.charAt(0).toUpperCase() + key.slice(1, 5)}
+                  {METRIC_ICONS[key]} {key === "hockey_iq" ? "IQ" : key.charAt(0).toUpperCase() + key.slice(1, 5)}
                 </th>
               ))}
               <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">Avg</th>
@@ -822,7 +979,7 @@ function LeagueIndicesTable({ data }: { data: LeaguePlayerIndices[] }) {
           <tbody>
             {data.map((player, i) => {
               const avg = Math.round(
-                indexKeys.reduce((sum, k) => sum + (player.indices[k]?.value || 0), 0) / indexKeys.length
+                metricKeys.reduce((sum, k) => sum + (player.indices[k]?.value || 0), 0) / metricKeys.length
               );
               return (
                 <tr key={player.player_id} className="border-t border-border hover:bg-gray-50 transition-colors">
@@ -847,10 +1004,10 @@ function LeagueIndicesTable({ data }: { data: LeaguePlayerIndices[] }) {
                       {player.position}
                     </span>
                   </td>
-                  {indexKeys.map((key) => {
+                  {metricKeys.map((key) => {
                     const idx = player.indices[key];
                     const val = idx?.value || 0;
-                    const color = INDEX_COLORS[key] || "#9ca3af";
+                    const color = METRIC_COLORS[key] || "#9ca3af";
                     return (
                       <td key={key} className="px-2 py-2 text-center">
                         <div className="flex flex-col items-center gap-0.5">

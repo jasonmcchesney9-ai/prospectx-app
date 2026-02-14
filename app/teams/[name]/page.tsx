@@ -868,8 +868,8 @@ export default function TeamDetailPage() {
                 <BarChart3 size={28} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted">No team statistics imported yet.</p>
                 <p className="text-xs text-muted/60 mt-1">
-                  Upload an InStat Teams XLSX export from the{" "}
-                  <Link href="/instat" className="text-teal hover:underline">InStat Import</Link> page.
+                  Upload a Teams XLSX export from the{" "}
+                  <Link href="/instat" className="text-teal hover:underline">Import Stats</Link> page.
                 </p>
               </div>
             )}
@@ -890,8 +890,8 @@ export default function TeamDetailPage() {
                 <Layers size={28} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted">No line combinations imported yet.</p>
                 <p className="text-xs text-muted/60 mt-1">
-                  Upload InStat Lines XLSX files from the{" "}
-                  <Link href="/instat" className="text-teal hover:underline">InStat Import</Link> page.
+                  Upload Lines XLSX files from the{" "}
+                  <Link href="/instat" className="text-teal hover:underline">Import Stats</Link> page.
                 </p>
               </div>
             )}

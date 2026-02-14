@@ -122,7 +122,7 @@ export interface PlayerStats {
   created_at: string;
 }
 
-// ── InStat Extended Stats (organized by category) ────────────
+// ── Extended Stats (organized by category) ────────────────────
 export interface ExtendedStats {
   main?: Record<string, number | string>;
   shots?: Record<string, number>;
@@ -194,7 +194,7 @@ export interface LineCombination {
   created_at: string;
 }
 
-export interface InStatImportResponse {
+export interface StatsImportResult {
   file_type: string;
   total_rows: number;
   players_created: number;
@@ -202,6 +202,9 @@ export interface InStatImportResponse {
   stats_imported: number;
   errors: string[];
 }
+
+/** @deprecated Use StatsImportResult instead */
+export type InStatImportResponse = StatsImportResult;
 
 export interface Report {
   id: string;
@@ -539,7 +542,7 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   // Custom reports
   custom: "Custom Report",
   // Priority 2 reports
-  indices_dashboard: "ProspectX Indices Dashboard",
+  indices_dashboard: "ProspectX Metrics Dashboard",
   player_projection: "Next Season Projection",
   league_benchmarks: "League Benchmarks",
   season_projection: "Season Projection",
@@ -580,7 +583,7 @@ export const TEAM_REPORT_TYPES = [
 // ── Prospect Grading Scale ─────────────────────────────────────
 // Used in Pro/Amateur Skater, Unified Prospect, and other scouting reports.
 // Grades reflect NHL trajectory projection based on current tools & development curve.
-// ── InStat Stat Category Labels ──────────────────────────────
+// ── Stat Category Labels ─────────────────────────────────────
 export const STAT_CATEGORIES: Record<string, string> = {
   main: "Main Statistics",
   shots: "Shots",
@@ -727,6 +730,12 @@ export const STAT_SIGNATURE_LABELS: Record<string, { emoji: string; label: strin
 };
 
 // ── Analytics Types ──────────────────────────────────────────
+export interface AnalyticsFilterOptions {
+  leagues: string[];
+  teams: Array<{ name: string; league: string }>;
+  positions: string[];
+}
+
 export interface AnalyticsOverview {
   total_players: number;
   total_reports: number;
@@ -812,32 +821,38 @@ export interface TagCloudData {
   intelligence_tags: Array<{ tag: string; count: number }>;
 }
 
-// ── ProspectX Indices ───────────────────────────────────────
-export interface ProspectXIndex {
+// ── ProspectX Metrics ──────────────────────────────────────
+export interface ProspectXMetric {
   value: number;        // 0-99 scale
   percentile: number;   // League percentile 1-99
-  label: string;        // e.g. "SniperIndex"
+  label: string;        // e.g. "SniperMetric"
   description: string;  // Human-readable description
 }
 
-export interface PlayerIndices {
+/** @deprecated Use ProspectXMetric instead */
+export type ProspectXIndex = ProspectXMetric;
+
+export interface PlayerMetrics {
   player_id: string;
   player_name: string;
   position: string;
   season: string | null;
   gp: number;
   indices: {
-    sniper: ProspectXIndex;
-    playmaker: ProspectXIndex;
-    transition: ProspectXIndex;
-    defensive: ProspectXIndex;
-    compete: ProspectXIndex;
-    hockey_iq: ProspectXIndex;
+    sniper: ProspectXMetric;
+    playmaker: ProspectXMetric;
+    transition: ProspectXMetric;
+    defensive: ProspectXMetric;
+    compete: ProspectXMetric;
+    hockey_iq: ProspectXMetric;
   };
   has_extended_stats: boolean;
 }
 
-export interface LeaguePlayerIndices {
+/** @deprecated Use PlayerMetrics instead */
+export type PlayerIndices = PlayerMetrics;
+
+export interface LeaguePlayerMetrics {
   player_id: string;
   player_name: string;
   position: string;
@@ -845,16 +860,19 @@ export interface LeaguePlayerIndices {
   gp: number;
   p: number;
   indices: {
-    sniper: ProspectXIndex;
-    playmaker: ProspectXIndex;
-    transition: ProspectXIndex;
-    defensive: ProspectXIndex;
-    compete: ProspectXIndex;
-    hockey_iq: ProspectXIndex;
+    sniper: ProspectXMetric;
+    playmaker: ProspectXMetric;
+    transition: ProspectXMetric;
+    defensive: ProspectXMetric;
+    compete: ProspectXMetric;
+    hockey_iq: ProspectXMetric;
   };
 }
 
-export const INDEX_COLORS: Record<string, string> = {
+/** @deprecated Use LeaguePlayerMetrics instead */
+export type LeaguePlayerIndices = LeaguePlayerMetrics;
+
+export const METRIC_COLORS: Record<string, string> = {
   sniper: "#ef4444",      // red-500
   playmaker: "#3b82f6",   // blue-500
   transition: "#18B3A6",  // teal
@@ -863,7 +881,10 @@ export const INDEX_COLORS: Record<string, string> = {
   hockey_iq: "#8b5cf6",   // violet-500
 };
 
-export const INDEX_ICONS: Record<string, string> = {
+/** @deprecated Use METRIC_COLORS instead */
+export const INDEX_COLORS = METRIC_COLORS;
+
+export const METRIC_ICONS: Record<string, string> = {
   sniper: "\u{1F3AF}",       // target
   playmaker: "\u{1F4E1}",    // satellite
   transition: "\u{1F504}",   // cycle
@@ -871,6 +892,9 @@ export const INDEX_ICONS: Record<string, string> = {
   compete: "\u{1F4AA}",      // muscle
   hockey_iq: "\u{1F9E0}",    // brain
 };
+
+/** @deprecated Use METRIC_ICONS instead */
+export const INDEX_ICONS = METRIC_ICONS;
 
 // ── Analytics Report Categories ─────────────────────────────
 export const ANALYTICS_CATEGORIES = {

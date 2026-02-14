@@ -144,9 +144,9 @@ function InStatUploader() {
             <BarChart3 size={20} className="text-teal" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-oswald text-navy">InStat Analytics Import</h1>
+            <h1 className="text-2xl font-bold font-oswald text-navy">Advanced Stats Import</h1>
             <p className="text-muted text-sm">
-              Upload InStat XLSX exports — teams, skaters, goalies, or line combinations
+              Upload XLSX stat exports — teams, skaters, goalies, or line combinations
             </p>
           </div>
         </div>
@@ -234,7 +234,7 @@ function InStatUploader() {
           {/* File Picker */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-navy mb-2">
-              InStat XLSX File
+              Stats File (XLSX)
             </label>
             <div
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
@@ -267,7 +267,7 @@ function InStatUploader() {
                 <div>
                   <Upload size={32} className="mx-auto text-muted/40 mb-2" />
                   <p className="text-sm text-muted">
-                    Click to select or drop an InStat .xlsx file
+                    Click to select or drop an .xlsx stats file
                   </p>
                   <p className="text-xs text-muted/60 mt-1">
                     Supports: Teams, Skaters, Goalies, Lines exports

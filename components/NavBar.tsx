@@ -23,8 +23,8 @@ const NAV_ITEMS = [
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/instat", label: "InStat", icon: BarChart3 },
-  { href: "/players/import", label: "Import", icon: Upload },
+  { href: "/instat", label: "Import Stats", icon: BarChart3 },
+  { href: "/players/import", label: "Import Players", icon: Upload },
 ];
 
 export default function NavBar() {

@@ -27,8 +27,8 @@ const FAQ_SECTIONS = [
         a: "ProspectX is the first hockey intelligence platform with a built-in Hockey Operating System. We analyze players within YOUR team's specific tactical structure \u2014 not just stats, but system-specific fit and deployment. We turn your stats into tactical decisions in under 60 seconds.",
       },
       {
-        q: "How is ProspectX different from InStat or RinkNet?",
-        a: "InStat and RinkNet track stats and video but produce generic reports with no tactical context. ProspectX understands 19+ professional hockey systems, analyzes players within YOUR forecheck, DZ, and OZ structures, evaluates system fit and role deployment, and generates 19 different report types \u2014 all at 50-75% lower cost.",
+        q: "How is ProspectX different from traditional analytics platforms?",
+        a: "Traditional platforms track stats and video but produce generic reports with no tactical context. ProspectX understands 19+ professional hockey systems, analyzes players within YOUR forecheck, DZ, and OZ structures, evaluates system fit and role deployment, and generates 24+ different report types \u2014 including a fully customizable report builder.",
       },
       {
         q: "How is ProspectX different from ChatGPT or PowerPlay AI?",
@@ -57,7 +57,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "What data formats do you accept?",
-        a: "We accept CSV files, Excel (.xlsx, .xls), and manual data entry. InStat and RinkNet export support is coming soon. Required data: player name, position, and basic stats (GP, G, A, P, +/-, PIM). Optional data like advanced stats, microstats, and scout notes enhance report quality.",
+        a: "We accept CSV files, Excel (.xlsx, .xls), XLSX analytics exports (InStat, internal systems, and more), and manual data entry. Required data: player name, position, and basic stats (GP, G, A, P, +/-, PIM). Optional data like advanced stats, microstats, and scout notes enhance report quality.",
       },
       {
         q: "Can I add scout notes?",
@@ -107,7 +107,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Can ProspectX integrate with our existing tools?",
-        a: "Currently supports CSV/Excel import. RinkNet API connector and InStat export integration coming in 2-3 months. Sportlogiq, HockeyTech, and custom API integrations planned for 6-12 months. Enterprise tier includes dedicated integration support.",
+        a: "Currently supports CSV/Excel import and XLSX analytics exports from InStat, internal systems, and other platforms. RinkNet API connector coming in 2-3 months. Sportlogiq, HockeyTech, and custom API integrations planned for 6-12 months. Enterprise tier includes dedicated integration support.",
       },
     ],
   },
@@ -169,8 +169,8 @@ const FEATURES = [
   },
   {
     icon: BarChart3,
-    title: "ProspectX Indices",
-    desc: "PPG, GPG, shooting efficiency, offense index, two-way index \u2014 instant player snapshots.",
+    title: "ProspectX Metrics",
+    desc: "Sniper, Playmaker, Transition, Defensive, Compete, Hockey IQ \u2014 6 proprietary performance metrics.",
     color: "text-orange",
     bg: "bg-orange/10",
   },
@@ -314,7 +314,7 @@ export default function LandingPage() {
             Not Another Stats Platform
           </h2>
           <p className="text-white/50 max-w-2xl mx-auto text-sm leading-relaxed">
-            InStat gives you numbers. ChatGPT gives you generic paragraphs. ProspectX gives you
+            Other platforms give you numbers. AI chatbots give you generic paragraphs. ProspectX gives you
             <span className="text-teal font-semibold"> tactical intelligence </span>
             that speaks your language.
           </p>

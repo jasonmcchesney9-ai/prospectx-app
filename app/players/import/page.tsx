@@ -96,7 +96,7 @@ export default function BatchImportPage() {
         </Link>
 
         <h1 className="text-2xl font-bold text-navy mb-1">Import Players</h1>
-        <p className="text-sm text-muted mb-6">Upload a CSV or Excel roster to batch-add players. For InStat game stats, upload from the player&apos;s profile page instead.</p>
+        <p className="text-sm text-muted mb-6">Upload a CSV or Excel roster to batch-add players. For advanced game stats, upload from the player&apos;s profile page or the Import Stats page.</p>
 
         {error && (
           <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center gap-2">
@@ -116,7 +116,7 @@ export default function BatchImportPage() {
               Optional: Position, DOB, Team, League, Shoots, GP, G, A, P, PIM.
             </p>
             <p className="text-xs text-muted/60 mb-4 max-w-md mx-auto">
-              <strong>Note:</strong> InStat game logs and stat exports should be uploaded from each player&apos;s profile page (Stats tab), not here.
+              <strong>Note:</strong> Advanced game stats and analytics exports should be uploaded from each player&apos;s profile page (Stats tab) or the Import Stats page.
             </p>
 
             <input

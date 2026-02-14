@@ -874,9 +874,9 @@ def seed_new_templates():
     """Add any new report templates that were introduced after initial seeding."""
     conn = get_db()
     new_templates = [
-        ("ProspectX Indices Dashboard", "indices_dashboard",
+        ("ProspectX Metrics Dashboard", "indices_dashboard",
          "Player Analytics", "Advanced Stats",
-         "Visual dashboard of all ProspectX performance indices with league percentile rankings, position comparisons, and development priorities."),
+         "Visual dashboard of all ProspectX performance metrics with league percentile rankings, position comparisons, and development priorities."),
         ("League Benchmarks Comparison", "league_benchmarks",
          "Competitive Intelligence", "League Benchmarks",
          "Compare a team to league averages across offense, defense, special teams, and statistical leaders with trend analysis."),
@@ -2916,7 +2916,7 @@ async def ingest_stats(
             conn.close()
             raise HTTPException(
                 status_code=400,
-                detail="InStat game log detected — please upload this from the player's profile page so we know which player to attach stats to."
+                detail="Per-game stats log detected — please upload this from the player's profile page so we know which player to attach stats to."
             )
 
         # Verify player belongs to org
@@ -3055,7 +3055,7 @@ async def ingest_stats(
             asyncio.create_task(_generate_player_intelligence(player_id, org_id, trigger="import"))
 
         return {
-            "detail": f"Imported {inserted} game logs + season summary from InStat",
+            "detail": f"Imported {inserted} game logs + season summary",
             "inserted": inserted + (1 if default_season and inserted > 0 else 0),
             "format": "instat_game_log",
             "errors": errors[:10],
@@ -3137,7 +3137,7 @@ async def ingest_stats(
             asyncio.create_task(_generate_player_intelligence(_pid, org_id, trigger="import"))
 
         return {
-            "detail": f"Imported {inserted} stat rows from InStat team stats",
+            "detail": f"Imported {inserted} stat rows from team stats file",
             "inserted": inserted,
             "format": "instat_team_stats",
             "errors": errors[:10],
@@ -3923,9 +3923,9 @@ AUDIENCE & TONE:
 DEPTH INSTRUCTION:
 {depth_cfg['instruction']}
 
-DATA AVAILABLE: {len(stats_list)} stat rows {'(with InStat extended analytics)' if has_extended else ''}, {len(notes_list)} scout notes, {len(goalie_stats_list)} goalie stat rows, {len(line_combos)} line combinations.
+DATA AVAILABLE: {len(stats_list)} stat rows {'(with extended analytics)' if has_extended else ''}, {len(notes_list)} scout notes, {len(goalie_stats_list)} goalie stat rows, {len(line_combos)} line combinations.
 {'ProspectX Intelligence profile available.' if input_data.get('intelligence') else ''}
-{'ProspectX Indices scores available.' if input_data.get('prospectx_indices') else ''}
+{'ProspectX Metrics scores available.' if input_data.get('prospectx_indices') else ''}
 
 {system_context}
 
@@ -3942,7 +3942,7 @@ PROSPECT GRADING SCALE (include an Overall Grade in EXECUTIVE_SUMMARY):
 
 MANDATORY: Include "Overall Grade: X" in EXECUTIVE_SUMMARY on its own line.
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format.
-When InStat extended analytics are provided (xG, CORSI, puck battles, zone entries), leverage these advanced metrics.
+When extended analytics are provided (xG, CORSI, puck battles, zone entries), leverage these advanced metrics.
 Age-accurate: Use the provided "age" field. Today's date is {datetime.now().date().isoformat()}.
 If data is limited for any focus area, note what additional data would strengthen the analysis rather than fabricating observations."""
 
@@ -4332,7 +4332,7 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     "shooting_pct": sr["shooting_pct"],
                     "toi_seconds": sr["toi_seconds"],
                 }
-                # Include extended stats if available (InStat analytics: xG, CORSI, puck battles, entries, etc.)
+                # Include extended stats if available (xG, CORSI, puck battles, entries, etc.)
                 ext_raw = _row_get(sr, "extended_stats")
                 if ext_raw:
                     try:
@@ -4553,7 +4553,7 @@ Use elite hockey language. Write like you're briefing an NHL coaching staff. Ref
             system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine powered by the Hockey Operating System. You produce professional-grade scouting reports using tactical hockey terminology that NHL scouts, junior hockey GMs, agents, and player development staff expect.
 
 Generate a **{report_type_name}** for the player below. Your report must be:
-- Data-driven: Reference specific stats (GP, G, A, P, +/-, PIM, S%, etc.) when available. When InStat extended analytics are provided (xG, CORSI, Fenwick, puck battles, zone entries, breakouts, scoring chances, slot shots, passes, faceoffs by zone), leverage these advanced metrics prominently in your analysis
+- Data-driven: Reference specific stats (GP, G, A, P, +/-, PIM, S%, etc.) when available. When extended analytics are provided (xG, CORSI, Fenwick, puck battles, zone entries, breakouts, scoring chances, slot shots, passes, faceoffs by zone), leverage these advanced metrics prominently in your analysis
 - Tactically literate: Use real hockey language — forecheck roles (F1/F2/F3), transition play, gap control, cycle game, net-front presence, breakout patterns, DZ coverage. When CORSI/Fenwick data is available, discuss possession metrics. When xG data is available, compare expected vs actual goals
 - Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, SYSTEM_FIT, PROJECTION, BOTTOM_LINE)
 - Specific to position: Tailor analysis to the player's position (center, wing, defense, goalie)
@@ -4588,15 +4588,15 @@ Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, 
             if request.report_type == "indices_dashboard":
                 system_prompt += """
 
-SPECIAL INSTRUCTIONS FOR PROSPECTX INDICES DASHBOARD:
-This report focuses on the player's ProspectX Index scores. Structure your report as:
-1. OVERALL_PROSPECTX_GRADE — Synthesize all indices into a single letter grade (A through D scale) with numeric score (0-100)
-2. INDICES_BREAKDOWN — For EACH of the 6 indices (SniperIndex, PlaymakerIndex, TransitionIndex, DefensiveIndex, CompeteIndex, HockeyIQIndex), provide: the score, percentile, rating tier (Elite/Above Average/Average/Below Average/Developing), and a 2-3 sentence analysis explaining WHY the player scores at that level
+SPECIAL INSTRUCTIONS FOR PROSPECTX METRICS DASHBOARD:
+This report focuses on the player's ProspectX Metric scores. Structure your report as:
+1. OVERALL_PROSPECTX_GRADE — Synthesize all metrics into a single letter grade (A through D scale) with numeric score (0-100)
+2. METRICS_BREAKDOWN — For EACH of the 6 metrics (SniperMetric, PlaymakerMetric, TransitionMetric, DefensiveMetric, CompeteMetric, HockeyIQMetric), provide: the score, percentile, rating tier (Elite/Above Average/Average/Below Average/Developing), and a 2-3 sentence analysis explaining WHY the player scores at that level
 3. PERCENTILE_RANKINGS — Compare vs position peers, vs league, and vs age group
-4. INDEX_CORRELATION — How do the indices work together? (e.g., high Playmaker + high IQ = elite distributor)
-5. SYSTEM_FIT — Based on indices, what role/system fits this player best?
-6. DEVELOPMENT_PRIORITIES — Based on index analysis, what 3 specific improvements would most impact their game?
-7. COMPARABLE_PLAYERS — Players with similar index profiles
+4. METRIC_CORRELATION — How do the metrics work together? (e.g., high Playmaker + high IQ = elite distributor)
+5. SYSTEM_FIT — Based on metrics, what role/system fits this player best?
+6. DEVELOPMENT_PRIORITIES — Based on metric analysis, what 3 specific improvements would most impact their game?
+7. COMPARABLE_PLAYERS — Players with similar metric profiles
 Use the prospectx_indices data in the input prominently. Show specific numbers."""
 
             elif request.report_type == "player_projection":
@@ -5303,14 +5303,14 @@ async def preview_import(
         detected_headers = list(parsed_rows[0].keys())
         logger.info("Import headers detected: %s", detected_headers)
 
-        # ── InStat format detection — give helpful guidance ───────
+        # ── Analytics format detection — give helpful guidance ─────
         if _detect_instat_game_log(detected_headers):
             raise HTTPException(
                 status_code=400,
-                detail="This looks like an InStat game log (per-game stats for one player). "
+                detail="This looks like a per-game stats log for one player. "
                        "To import game stats, go to the player's profile page and use the "
-                       "stats upload button on the Stats tab instead. "
-                       "This Import page is for adding new players to the database."
+                       "stats upload button on the Stats tab, or use the Import Stats page. "
+                       "This Import Players page is for adding new players to the database."
             )
         if _detect_instat_team_stats(detected_headers) and not any(
             h in detected_headers for h in ["first_name", "first", "firstname", "last_name", "last", "lastname"]
@@ -6070,42 +6070,111 @@ async def health_check():
 # ANALYTICS
 # ============================================================
 
-@app.get("/analytics/overview")
-async def analytics_overview(token_data: dict = Depends(verify_token)):
-    """Platform overview stats: counts, averages, distributions."""
+@app.get("/analytics/filters")
+async def analytics_filters(token_data: dict = Depends(verify_token)):
+    """Return available filter options: leagues, teams, positions for the org."""
     org_id = token_data["org_id"]
     conn = get_db()
 
-    # Total counts
-    total_players = conn.execute("SELECT COUNT(*) FROM players WHERE org_id=?", (org_id,)).fetchone()[0]
-    total_reports = conn.execute("SELECT COUNT(*) FROM reports WHERE org_id=?", (org_id,)).fetchone()[0]
-    total_notes = conn.execute("SELECT COUNT(*) FROM scout_notes WHERE org_id=?", (org_id,)).fetchone()[0]
-    total_teams = conn.execute("SELECT COUNT(*) FROM teams WHERE org_id=?", (org_id,)).fetchone()[0]
+    # Distinct leagues (from players table)
+    leagues = conn.execute("""
+        SELECT DISTINCT p.league FROM players p
+        WHERE p.org_id = ? AND p.league IS NOT NULL AND p.league != ''
+        ORDER BY p.league
+    """, (org_id,)).fetchall()
+
+    # Distinct teams (from players current_team)
+    teams = conn.execute("""
+        SELECT DISTINCT p.current_team, p.league
+        FROM players p
+        WHERE p.org_id = ? AND p.current_team IS NOT NULL AND p.current_team != ''
+        ORDER BY p.league, p.current_team
+    """, (org_id,)).fetchall()
+
+    # Distinct positions
+    positions = conn.execute("""
+        SELECT DISTINCT p.position FROM players p
+        WHERE p.org_id = ? AND p.position IS NOT NULL AND p.position != ''
+        ORDER BY p.position
+    """, (org_id,)).fetchall()
+
+    conn.close()
+    return {
+        "leagues": [r["league"] for r in leagues],
+        "teams": [{"name": r["current_team"], "league": r["league"] or ""} for r in teams],
+        "positions": [r["position"] for r in positions],
+    }
+
+
+@app.get("/analytics/overview")
+async def analytics_overview(
+    league: str = None,
+    team: str = None,
+    position: str = None,
+    token_data: dict = Depends(verify_token),
+):
+    """Platform overview stats: counts, averages, distributions. Optionally filter by league/team/position."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # Build player filter
+    p_where = ["p.org_id = ?"]
+    p_params: list = [org_id]
+    if league:
+        p_where.append("p.league = ?")
+        p_params.append(league)
+    if team:
+        p_where.append("p.current_team = ?")
+        p_params.append(team)
+    if position:
+        p_where.append("p.position = ?")
+        p_params.append(position)
+
+    p_filter = " AND ".join(p_where)
+
+    # Total counts (filtered)
+    total_players = conn.execute(f"SELECT COUNT(*) FROM players p WHERE {p_filter}", p_params).fetchone()[0]
+    total_reports = conn.execute(
+        f"SELECT COUNT(*) FROM reports r JOIN players p ON p.id = r.player_id WHERE {p_filter}",
+        p_params
+    ).fetchone()[0] if (league or team or position) else conn.execute(
+        "SELECT COUNT(*) FROM reports WHERE org_id=?", (org_id,)
+    ).fetchone()[0]
+    total_notes = conn.execute(
+        f"SELECT COUNT(*) FROM scout_notes sn JOIN players p ON p.id = sn.player_id WHERE {p_filter}",
+        p_params
+    ).fetchone()[0] if (league or team or position) else conn.execute(
+        "SELECT COUNT(*) FROM scout_notes WHERE org_id=?", (org_id,)
+    ).fetchone()[0]
+    total_teams = conn.execute(
+        f"SELECT COUNT(DISTINCT p.current_team) FROM players p WHERE {p_filter} AND p.current_team IS NOT NULL AND p.current_team != ''",
+        p_params
+    ).fetchone()[0]
 
     # Players with stats (at least 5 GP)
-    players_with_stats = conn.execute("""
+    players_with_stats = conn.execute(f"""
         SELECT COUNT(DISTINCT ps.player_id)
         FROM player_stats ps
         JOIN players p ON p.id = ps.player_id
-        WHERE p.org_id=? AND ps.gp >= 5
-    """, (org_id,)).fetchone()[0]
+        WHERE {p_filter} AND ps.gp >= 5
+    """, p_params).fetchone()[0]
 
     # Players with intelligence
-    players_with_intel = conn.execute("""
+    players_with_intel = conn.execute(f"""
         SELECT COUNT(DISTINCT pi.player_id)
         FROM player_intelligence pi
         JOIN players p ON p.id = pi.player_id
-        WHERE p.org_id=?
-    """, (org_id,)).fetchone()[0]
+        WHERE {p_filter}
+    """, p_params).fetchone()[0]
 
     # Position breakdown
-    positions = conn.execute("""
-        SELECT position, COUNT(*) as count
-        FROM players WHERE org_id=?
-        GROUP BY position ORDER BY count DESC
-    """, (org_id,)).fetchall()
+    positions_data = conn.execute(f"""
+        SELECT p.position, COUNT(*) as count
+        FROM players p WHERE {p_filter}
+        GROUP BY p.position ORDER BY count DESC
+    """, p_params).fetchall()
 
-    # Reports by type
+    # Reports by type (unfiltered — these are global stats)
     reports_by_type = conn.execute("""
         SELECT report_type, COUNT(*) as count
         FROM reports WHERE org_id=?
@@ -6127,7 +6196,7 @@ async def analytics_overview(token_data: dict = Depends(verify_token)):
         "total_teams": total_teams,
         "players_with_stats": players_with_stats,
         "players_with_intelligence": players_with_intel,
-        "position_breakdown": [dict(r) for r in positions],
+        "position_breakdown": [dict(r) for r in positions_data],
         "reports_by_type": [dict(r) for r in reports_by_type],
         "reports_by_status": [dict(r) for r in reports_by_status],
     }
@@ -6138,6 +6207,7 @@ async def analytics_scoring_leaders(
     limit: int = 20,
     position: str = None,
     team: str = None,
+    league: str = None,
     min_gp: int = 5,
     token_data: dict = Depends(verify_token),
 ):
@@ -6154,6 +6224,9 @@ async def analytics_scoring_leaders(
     if team:
         where.append("p.current_team = ?")
         params.append(team)
+    if league:
+        where.append("p.league = ?")
+        params.append(league)
 
     rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
@@ -6172,12 +6245,29 @@ async def analytics_scoring_leaders(
 
 
 @app.get("/analytics/team-rankings")
-async def analytics_team_rankings(token_data: dict = Depends(verify_token)):
+async def analytics_team_rankings(
+    league: str = None,
+    team: str = None,
+    position: str = None,
+    token_data: dict = Depends(verify_token),
+):
     """Team aggregate stats: total goals, points, avg PPG, player counts."""
     org_id = token_data["org_id"]
     conn = get_db()
 
-    rows = conn.execute("""
+    where = ["p.org_id = ?", "p.current_team IS NOT NULL", "p.current_team != ''"]
+    params: list = [org_id]
+    if league:
+        where.append("p.league = ?")
+        params.append(league)
+    if team:
+        where.append("p.current_team = ?")
+        params.append(team)
+    if position:
+        where.append("p.position = ?")
+        params.append(position)
+
+    rows = conn.execute(f"""
         SELECT p.current_team as team,
                COUNT(DISTINCT p.id) as roster_size,
                COUNT(DISTINCT CASE WHEN ps.gp >= 5 THEN p.id END) as qualified_players,
@@ -6190,11 +6280,11 @@ async def analytics_team_rankings(token_data: dict = Depends(verify_token)):
                SUM(ps.pim) as total_pim
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
-        WHERE p.org_id = ? AND p.current_team IS NOT NULL AND p.current_team != ''
+        WHERE {" AND ".join(where)}
         GROUP BY p.current_team
-        HAVING qualified_players >= 3
+        HAVING qualified_players >= 1
         ORDER BY total_points DESC
-    """, (org_id,)).fetchall()
+    """, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -6258,12 +6348,25 @@ async def analytics_player_compare(
 
 
 @app.get("/analytics/position-stats")
-async def analytics_position_stats(token_data: dict = Depends(verify_token)):
+async def analytics_position_stats(
+    league: str = None,
+    team: str = None,
+    token_data: dict = Depends(verify_token),
+):
     """Average stats by position for league benchmarking."""
     org_id = token_data["org_id"]
     conn = get_db()
 
-    rows = conn.execute("""
+    where = ["p.org_id = ?", "ps.gp >= 5"]
+    params: list = [org_id]
+    if league:
+        where.append("p.league = ?")
+        params.append(league)
+    if team:
+        where.append("p.current_team = ?")
+        params.append(team)
+
+    rows = conn.execute(f"""
         SELECT p.position,
                COUNT(DISTINCT p.id) as player_count,
                ROUND(AVG(ps.gp), 1) as avg_gp,
@@ -6279,10 +6382,10 @@ async def analytics_position_stats(token_data: dict = Depends(verify_token)):
                MAX(CAST(ps.p AS REAL) / NULLIF(ps.gp, 0)) as max_ppg
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
-        WHERE p.org_id = ? AND ps.gp >= 5
+        WHERE {" AND ".join(where)}
         GROUP BY p.position
         ORDER BY avg_ppg DESC
-    """, (org_id,)).fetchall()
+    """, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -6316,23 +6419,38 @@ async def analytics_grade_distribution(token_data: dict = Depends(verify_token))
 
 
 @app.get("/analytics/archetype-breakdown")
-async def analytics_archetype_breakdown(token_data: dict = Depends(verify_token)):
+async def analytics_archetype_breakdown(
+    league: str = None,
+    team: str = None,
+    position: str = None,
+    token_data: dict = Depends(verify_token),
+):
     """Count of players by AI-assigned archetype."""
     org_id = token_data["org_id"]
     conn = get_db()
 
-    rows = conn.execute("""
+    where = ["p.org_id = ?", "pi.archetype IS NOT NULL",
+             "pi.id IN (SELECT id FROM player_intelligence pi2 WHERE pi2.player_id = pi.player_id ORDER BY pi2.version DESC LIMIT 1)"]
+    params: list = [org_id]
+    if league:
+        where.append("p.league = ?")
+        params.append(league)
+    if team:
+        where.append("p.current_team = ?")
+        params.append(team)
+    if position:
+        where.append("p.position = ?")
+        params.append(position)
+
+    rows = conn.execute(f"""
         SELECT pi.archetype, COUNT(DISTINCT pi.player_id) as count,
                ROUND(AVG(pi.archetype_confidence), 2) as avg_confidence
         FROM player_intelligence pi
         JOIN players p ON p.id = pi.player_id
-        WHERE p.org_id = ? AND pi.archetype IS NOT NULL
-          AND pi.id IN (SELECT id FROM player_intelligence pi2
-                        WHERE pi2.player_id = pi.player_id
-                        ORDER BY pi2.version DESC LIMIT 1)
+        WHERE {" AND ".join(where)}
         GROUP BY pi.archetype
         ORDER BY count DESC
-    """, (org_id,)).fetchall()
+    """, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -6340,36 +6458,73 @@ async def analytics_archetype_breakdown(token_data: dict = Depends(verify_token)
 @app.get("/analytics/scoring-distribution")
 async def analytics_scoring_distribution(
     min_gp: int = 5,
+    league: str = None,
+    team: str = None,
+    position: str = None,
     token_data: dict = Depends(verify_token),
 ):
     """Points-per-game distribution for histogram/scatter charts."""
     org_id = token_data["org_id"]
     conn = get_db()
 
-    rows = conn.execute("""
+    where = ["p.org_id = ?", "ps.gp >= ?"]
+    params: list = [org_id, min_gp]
+    if league:
+        where.append("p.league = ?")
+        params.append(league)
+    if team:
+        where.append("p.current_team = ?")
+        params.append(team)
+    if position:
+        where.append("p.position = ?")
+        params.append(position)
+
+    rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
                ps.gp, ps.g, ps.a, ps.p, ps.plus_minus,
                ROUND(CAST(ps.p AS REAL) / ps.gp, 3) as ppg,
                ROUND(CAST(ps.g AS REAL) / ps.gp, 3) as gpg
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
-        WHERE p.org_id = ? AND ps.gp >= ?
+        WHERE {" AND ".join(where)}
         ORDER BY ppg DESC
-    """, (org_id, min_gp)).fetchall()
+    """, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
 @app.get("/analytics/tag-cloud")
-async def analytics_tag_cloud(token_data: dict = Depends(verify_token)):
+async def analytics_tag_cloud(
+    league: str = None,
+    team: str = None,
+    position: str = None,
+    token_data: dict = Depends(verify_token),
+):
     """Frequency of scout note tags and intelligence tags across all players."""
     org_id = token_data["org_id"]
     conn = get_db()
 
+    # Build player filter for joins
+    p_where = ["p.org_id = ?"]
+    p_params: list = [org_id]
+    if league:
+        p_where.append("p.league = ?")
+        p_params.append(league)
+    if team:
+        p_where.append("p.current_team = ?")
+        p_params.append(team)
+    if position:
+        p_where.append("p.position = ?")
+        p_params.append(position)
+
+    p_filter = " AND ".join(p_where)
+
     # Scout note tags
-    note_rows = conn.execute("""
-        SELECT tags FROM scout_notes WHERE org_id=?
-    """, (org_id,)).fetchall()
+    note_rows = conn.execute(f"""
+        SELECT sn.tags FROM scout_notes sn
+        JOIN players p ON p.id = sn.player_id
+        WHERE {p_filter}
+    """, p_params).fetchall()
 
     tag_counts = {}
     for row in note_rows:
@@ -6381,14 +6536,14 @@ async def analytics_tag_cloud(token_data: dict = Depends(verify_token)):
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
     # Intelligence tags
-    intel_rows = conn.execute("""
+    intel_rows = conn.execute(f"""
         SELECT pi.tags FROM player_intelligence pi
         JOIN players p ON p.id = pi.player_id
-        WHERE p.org_id = ?
+        WHERE {p_filter}
           AND pi.id IN (SELECT id FROM player_intelligence pi2
                         WHERE pi2.player_id = pi.player_id
                         ORDER BY pi2.version DESC LIMIT 1)
-    """, (org_id,)).fetchall()
+    """, p_params).fetchall()
 
     intel_tag_counts = {}
     for row in intel_rows:
@@ -6407,10 +6562,10 @@ async def analytics_tag_cloud(token_data: dict = Depends(verify_token)):
 
 
 # ============================================================
-# PROSPECTX INDICES ENGINE
+# PROSPECTX METRICS ENGINE
 # ============================================================
-# Six proprietary indices calculated from aggregate stats.
-# Each index is 0-100 scale with league percentile context.
+# Six proprietary metrics calculated from aggregate stats.
+# Each metric is 0-100 scale with league percentile context.
 # These are ProspectX's competitive moat — no competitor has these.
 
 def _calc_percentile(value: float, all_values: list) -> int:
@@ -6423,16 +6578,16 @@ def _calc_percentile(value: float, all_values: list) -> int:
 
 def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: list) -> dict:
     """
-    Compute 6 ProspectX Indices from aggregate stats.
-    Returns dict with index values (0-100) + percentiles.
+    Compute 6 ProspectX Metrics from aggregate stats.
+    Returns dict with metric values (0-100) + percentiles.
 
-    Indices:
-    1. SniperIndex      — Pure goal-scoring ability & finishing
-    2. PlaymakerIndex   — Passing, assists, vision
-    3. TransitionIndex   — Two-way play, offensive impact while being reliable
-    4. DefensiveIndex    — Defensive reliability & impact
-    5. CompeteIndex      — Physical engagement, discipline, toughness
-    6. HockeyIQIndex     — Smart play indicators (efficiency, +/-, situation reads)
+    Metrics:
+    1. SniperMetric      — Pure goal-scoring ability & finishing
+    2. PlaymakerMetric   — Passing, assists, vision
+    3. TransitionMetric  — Two-way play, offensive impact while being reliable
+    4. DefensiveMetric   — Defensive reliability & impact
+    5. CompeteMetric     — Physical engagement, discipline, toughness
+    6. HockeyIQMetric    — Smart play indicators (efficiency, +/-, situation reads)
     """
     gp = max(player_stats.get("gp", 1), 1)
     g = player_stats.get("g", 0)
@@ -6688,37 +6843,37 @@ def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: 
         "sniper": {
             "value": sniper_index,
             "percentile": _calc_percentile(sniper_index, league_sniper),
-            "label": "SniperIndex",
+            "label": "SniperMetric",
             "description": "Goal-scoring ability and finishing efficiency",
         },
         "playmaker": {
             "value": playmaker_index,
             "percentile": _calc_percentile(playmaker_index, league_playmaker),
-            "label": "PlaymakerIndex",
+            "label": "PlaymakerMetric",
             "description": "Passing, assists, and offensive vision",
         },
         "transition": {
             "value": transition_index,
             "percentile": _calc_percentile(transition_index, league_transition),
-            "label": "TransitionIndex",
+            "label": "TransitionMetric",
             "description": "Two-way impact and zone transition play",
         },
         "defensive": {
             "value": defensive_index,
             "percentile": _calc_percentile(defensive_index, league_defensive),
-            "label": "DefensiveIndex",
+            "label": "DefensiveMetric",
             "description": "Defensive reliability and suppression",
         },
         "compete": {
             "value": compete_index,
             "percentile": _calc_percentile(compete_index, league_compete),
-            "label": "CompeteIndex",
+            "label": "CompeteMetric",
             "description": "Physical engagement and battle level",
         },
         "hockey_iq": {
             "value": iq_index,
             "percentile": _calc_percentile(iq_index, league_iq),
-            "label": "HockeyIQIndex",
+            "label": "HockeyIQMetric",
             "description": "Decision-making, efficiency, and smart play",
         },
     }
@@ -6726,7 +6881,7 @@ def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: 
 
 @app.get("/analytics/player-indices/{player_id}")
 async def get_player_indices(player_id: str, token_data: dict = Depends(verify_token)):
-    """Compute ProspectX Indices for a single player with league percentiles."""
+    """Compute ProspectX Metrics for a single player with league percentiles."""
     org_id = token_data["org_id"]
     conn = get_db()
 
@@ -6798,9 +6953,11 @@ async def get_league_indices(
     min_gp: int = 10,
     limit: int = 50,
     position: str = None,
+    league: str = None,
+    team: str = None,
     token_data: dict = Depends(verify_token),
 ):
-    """Compute ProspectX Indices for all qualified players — league-wide view."""
+    """Compute ProspectX Metrics for all qualified players — league-wide view."""
     org_id = token_data["org_id"]
     conn = get_db()
 
@@ -6809,6 +6966,12 @@ async def get_league_indices(
     if position:
         where.append("p.position = ?")
         params.append(position)
+    if league:
+        where.append("p.league = ?")
+        params.append(league)
+    if team:
+        where.append("p.current_team = ?")
+        params.append(team)
 
     rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
