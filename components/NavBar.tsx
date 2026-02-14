@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -14,6 +14,9 @@ import {
   Menu,
   X,
   LogOut,
+  ChevronDown,
+  Settings,
+  UserPlus,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 
@@ -23,8 +26,12 @@ const NAV_ITEMS = [
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/instat", label: "Import Stats", icon: BarChart3 },
-  { href: "/players/import", label: "Import Players", icon: Upload },
+];
+
+const IMPORT_ITEMS = [
+  { href: "/instat", label: "Import Stats (XLSX)", icon: BarChart3 },
+  { href: "/players/import", label: "Import Players (CSV)", icon: UserPlus },
+  { href: "/players/manage", label: "Manage Players", icon: Settings },
 ];
 
 export default function NavBar() {
@@ -68,6 +75,9 @@ export default function NavBar() {
                 </Link>
               );
             })}
+
+            {/* Import dropdown */}
+            <ImportDropdown pathname={pathname} />
           </div>
 
           {/* User Menu */}
@@ -116,6 +126,27 @@ export default function NavBar() {
               </Link>
             );
           })}
+          <div className="border-t border-white/10 mt-1 pt-1">
+            <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+              Import & Manage
+            </p>
+            {IMPORT_ITEMS.map(({ href, label, icon: Icon }) => {
+              const active = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                    active ? "text-teal" : "text-white/70"
+                  }`}
+                >
+                  <Icon size={16} />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
           <button
             onClick={logout}
             className="flex items-center gap-2 px-3 py-3 text-sm text-white/50 hover:text-white w-full"
@@ -126,5 +157,62 @@ export default function NavBar() {
         </div>
       )}
     </nav>
+  );
+}
+
+function ImportDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = IMPORT_ITEMS.some((item) => pathname === item.href);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <Upload size={16} />
+        Import
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {IMPORT_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
