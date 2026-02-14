@@ -542,6 +542,29 @@ export default function PlayerDetailPage() {
                       </span>
                     </div>
                   )}
+                  {player.league_tier && player.league_tier !== "Unknown" && (
+                    <div className="flex justify-between">
+                      <span className="text-muted">League Tier</span>
+                      <span className="font-semibold text-navy text-xs">{player.league_tier}</span>
+                    </div>
+                  )}
+                  {player.age_group && (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Age Group</span>
+                      <span className={`font-semibold text-xs px-1.5 py-0.5 rounded ${
+                        player.age_group === "U16" ? "bg-green-50 text-green-700" :
+                        player.age_group === "U18" ? "bg-blue-50 text-blue-700" :
+                        player.age_group === "U20" ? "bg-orange/10 text-orange" :
+                        "bg-gray-50 text-gray-600"
+                      }`}>{player.age_group}</span>
+                    </div>
+                  )}
+                  {player.draft_eligible_year && (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Draft Eligible</span>
+                      <span className="font-semibold text-navy">{player.draft_eligible_year}</span>
+                    </div>
+                  )}
                   {player.passports && player.passports.length > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted">Nationality</span>

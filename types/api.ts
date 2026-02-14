@@ -34,7 +34,21 @@ export interface Player {
   tags: string[];
   archetype: string | null;
   image_url: string | null;
+  birth_year: number | null;
+  age_group: string | null;
+  draft_eligible_year: number | null;
+  league_tier: string | null;
   created_at: string;
+}
+
+export interface PlayerFilterOptions {
+  leagues: string[];
+  teams: string[];
+  birth_years: number[];
+  age_groups: string[];
+  league_tiers: string[];
+  positions: string[];
+  draft_years: number[];
 }
 
 export interface PlayerCreate {
@@ -913,4 +927,23 @@ export const GRADE_COLORS: Record<string, string> = {
   "D":  "#ef4444",
   "D-": "#f87171",  // red-400
   "NR": "#9ca3af",  // gray-400
+};
+
+// ── Data Compartmentalization Labels ─────────────────────────────
+export const AGE_GROUP_LABELS: Record<string, string> = {
+  U16: "Under 16",
+  U18: "Under 18",
+  U20: "Under 20",
+  Over20: "Over 20",
+};
+
+export const LEAGUE_TIER_LABELS: Record<string, string> = {
+  Tier1: "Major Junior (OHL/WHL/QMJHL)",
+  Tier2: "Junior A (OJHL/BCHL/USHL)",
+  Tier3: "Junior B / Tier 2",
+  NCAA: "NCAA Division I",
+  NCAA_D3: "NCAA Division III",
+  USports: "U Sports (Canada)",
+  Pro: "Professional",
+  Unknown: "Other",
 };

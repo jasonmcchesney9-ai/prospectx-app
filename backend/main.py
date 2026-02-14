@@ -130,6 +130,134 @@ def get_db() -> sqlite3.Connection:
     return conn
 
 
+# ── League Tier Classification ──────────────────────────────────────────────
+LEAGUE_TIERS = {
+    # Tier 1 — Major Junior (CHL)
+    "OHL": "Tier1", "WHL": "Tier1", "QMJHL": "Tier1", "CHL": "Tier1",
+    # Tier 2 — Junior A
+    "OJHL": "Tier2", "BCHL": "Tier2", "USHL": "Tier2", "AJHL": "Tier2",
+    "CCHL": "Tier2", "NOJHL": "Tier2", "SJHL": "Tier2", "MHL": "Tier2",
+    "MJHL": "Tier2",
+    # Tier 3 — Junior B / Tier 2 Jr
+    "GOJHL": "Tier3", "NAHL": "Tier3", "GMHL": "Tier3", "PJHL": "Tier3",
+    "WOAA": "Tier3", "SIJHL": "Tier3",
+    # College / University
+    "NCAA": "NCAA", "NCAA DI": "NCAA", "NCAA DIII": "NCAA_D3",
+    "USports": "USports", "U SPORTS": "USports",
+    # International
+    "KHL": "Pro", "SHL": "Pro", "AHL": "Pro", "ECHL": "Pro",
+    "NHL": "Pro", "Liiga": "Pro", "NLA": "Pro", "DEL": "Pro",
+}
+
+
+def _get_league_tier(league_name: str | None) -> str | None:
+    """Classify league into tier."""
+    if not league_name:
+        return None
+    # Exact match first
+    if league_name in LEAGUE_TIERS:
+        return LEAGUE_TIERS[league_name]
+    # Case-insensitive
+    upper = league_name.upper().strip()
+    for key, tier in LEAGUE_TIERS.items():
+        if key.upper() == upper:
+            return tier
+    return "Unknown"
+
+
+def _get_age_group(birth_year: int | None) -> str | None:
+    """Classify player into age group based on birth year."""
+    if not birth_year:
+        return None
+    current_year = datetime.now().year
+    age = current_year - birth_year
+    if age <= 16:
+        return "U16"
+    elif age <= 18:
+        return "U18"
+    elif age <= 20:
+        return "U20"
+    else:
+        return "Over20"
+
+
+def _populate_derived_player_fields(conn):
+    """Auto-populate birth_year, age_group, draft_eligible_year, league_tier
+    for any players that have NULL values but have the source data."""
+    # Birth year / age group / draft eligible year from dob
+    rows = conn.execute(
+        "SELECT id, dob, current_league, birth_year, league_tier FROM players"
+    ).fetchall()
+    updated = 0
+    for row in rows:
+        pid = row[0]
+        dob = row[1]
+        league = row[2]
+        existing_by = row[3]
+        existing_lt = row[4]
+
+        updates = {}
+        params = []
+
+        # Derive birth_year, age_group, draft_eligible_year from dob
+        if dob and not existing_by:
+            try:
+                by = int(dob[:4])
+                updates["birth_year"] = by
+                updates["age_group"] = _get_age_group(by)
+                updates["draft_eligible_year"] = by + 18
+            except (ValueError, IndexError):
+                pass
+
+        # Derive league_tier from current_league
+        if league and not existing_lt:
+            updates["league_tier"] = _get_league_tier(league)
+
+        if updates:
+            set_clauses = ", ".join(f"{k} = ?" for k in updates)
+            params = list(updates.values()) + [pid]
+            conn.execute(f"UPDATE players SET {set_clauses} WHERE id = ?", params)
+            updated += 1
+
+    if updated:
+        conn.commit()
+        logger.info("Populated derived fields for %d players", updated)
+
+
+# ── Template Category Mapping ──────────────────────────────────────────────
+TEMPLATE_CATEGORIES = {
+    "pro_skater":          ("Player Analytics", "Performance Metrics"),
+    "season_intelligence": ("Player Analytics", "Performance Metrics"),
+    "family_card":         ("Player Analytics", "Presentation"),
+    "agent_pack":          ("Player Analytics", "Presentation"),
+    "unified_prospect":    ("Player Analytics", "Advanced Stats"),
+    "game_decision":       ("Player Analytics", "Advanced Stats"),
+    "development_roadmap": ("Player Analytics", "Projections & Development"),
+    "draft_comparative":   ("Player Analytics", "Projections & Development"),
+    "season_progress":     ("Player Analytics", "Performance Metrics"),
+    "team_identity":       ("Team Analytics", "System Analysis"),
+    "operations":          ("Team Analytics", "System Analysis"),
+    "practice_plan":       ("Team Analytics", "System Analysis"),
+    "line_chemistry":      ("Team Analytics", "Line Optimization"),
+    "st_optimization":     ("Team Analytics", "Special Teams"),
+    "goalie_tandem":       ("Team Analytics", "Special Teams"),
+    "goalie":              ("Competitive Intelligence", "Market & Acquisitions"),
+    "opponent_gameplan":   ("Competitive Intelligence", "Opponent Analysis"),
+    "playoff_series":      ("Competitive Intelligence", "Opponent Analysis"),
+    "trade_target":        ("Competitive Intelligence", "Market & Acquisitions"),
+}
+
+
+def _seed_template_categories(conn):
+    """Set category/subcategory on report_templates if not already set."""
+    for rtype, (cat, subcat) in TEMPLATE_CATEGORIES.items():
+        conn.execute(
+            "UPDATE report_templates SET category = ?, subcategory = ? WHERE report_type = ? AND (category IS NULL OR category = '')",
+            (cat, subcat, rtype),
+        )
+    conn.commit()
+
+
 def init_db():
     """Create all tables if they don't exist."""
     conn = get_db()
@@ -574,6 +702,48 @@ def init_db():
         conn.execute("ALTER TABLE players ADD COLUMN intelligence_version INTEGER DEFAULT 0")
         conn.commit()
         logger.info("Migration: added intelligence_version column to players")
+
+    # ── Data Compartmentalization: birth_year, age_group, draft_eligible_year, league_tier ──
+    player_cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    new_player_cols = {
+        "birth_year": "INTEGER",
+        "age_group": "TEXT",
+        "draft_eligible_year": "INTEGER",
+        "league_tier": "TEXT",
+    }
+    for col_name, col_type in new_player_cols.items():
+        if col_name not in player_cols:
+            conn.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to players", col_name)
+
+    # Auto-populate birth_year / age_group / draft_eligible_year from dob
+    _populate_derived_player_fields(conn)
+
+    # Add category / subcategory columns to report_templates
+    tmpl_cols = [col[1] for col in conn.execute("PRAGMA table_info(report_templates)").fetchall()]
+    if "category" not in tmpl_cols:
+        conn.execute("ALTER TABLE report_templates ADD COLUMN category TEXT")
+        conn.commit()
+        logger.info("Migration: added category column to report_templates")
+    if "subcategory" not in tmpl_cols:
+        conn.execute("ALTER TABLE report_templates ADD COLUMN subcategory TEXT")
+        conn.commit()
+        logger.info("Migration: added subcategory column to report_templates")
+
+    # Seed template categories
+    _seed_template_categories(conn)
+
+    # Create indexes for fast queries
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_players_birth_year ON players(birth_year)",
+        "CREATE INDEX IF NOT EXISTS idx_players_age_group ON players(age_group)",
+        "CREATE INDEX IF NOT EXISTS idx_players_league_tier ON players(league_tier)",
+        "CREATE INDEX IF NOT EXISTS idx_players_team_league ON players(current_team, current_league)",
+        "CREATE INDEX IF NOT EXISTS idx_players_position ON players(position)",
+    ]:
+        conn.execute(idx_sql)
+    conn.commit()
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -1214,6 +1384,10 @@ class PlayerResponse(BaseModel):
     tags: Optional[List[str]] = []
     archetype: Optional[str] = None
     image_url: Optional[str] = None
+    birth_year: Optional[int] = None
+    age_group: Optional[str] = None
+    draft_eligible_year: Optional[int] = None
+    league_tier: Optional[str] = None
     created_at: str
 
 # --- Reports ---
@@ -2018,11 +2192,48 @@ async def _extract_report_intelligence(report_id: str, player_id: str, org_id: s
         logger.error("Post-report intelligence refresh failed for %s: %s", player_id, str(e))
 
 
+@app.get("/players/filter-options")
+async def get_player_filter_options(token_data: dict = Depends(verify_token)):
+    """Return unique values for all filter dimensions (for populating dropdowns)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    result = {}
+    # Unique leagues
+    rows = conn.execute("SELECT DISTINCT current_league FROM players WHERE org_id = ? AND current_league IS NOT NULL AND current_league != '' ORDER BY current_league", (org_id,)).fetchall()
+    result["leagues"] = [r[0] for r in rows]
+    # Unique teams
+    rows = conn.execute("SELECT DISTINCT current_team FROM players WHERE org_id = ? AND current_team IS NOT NULL AND current_team != '' ORDER BY current_team", (org_id,)).fetchall()
+    result["teams"] = [r[0] for r in rows]
+    # Unique birth years
+    rows = conn.execute("SELECT DISTINCT birth_year FROM players WHERE org_id = ? AND birth_year IS NOT NULL ORDER BY birth_year DESC", (org_id,)).fetchall()
+    result["birth_years"] = [r[0] for r in rows]
+    # Unique age groups
+    rows = conn.execute("SELECT DISTINCT age_group FROM players WHERE org_id = ? AND age_group IS NOT NULL ORDER BY age_group", (org_id,)).fetchall()
+    result["age_groups"] = [r[0] for r in rows]
+    # Unique league tiers
+    rows = conn.execute("SELECT DISTINCT league_tier FROM players WHERE org_id = ? AND league_tier IS NOT NULL AND league_tier != 'Unknown' ORDER BY league_tier", (org_id,)).fetchall()
+    result["league_tiers"] = [r[0] for r in rows]
+    # Unique positions
+    rows = conn.execute("SELECT DISTINCT position FROM players WHERE org_id = ? AND position IS NOT NULL ORDER BY position", (org_id,)).fetchall()
+    result["positions"] = [r[0] for r in rows]
+    # Unique draft eligible years
+    rows = conn.execute("SELECT DISTINCT draft_eligible_year FROM players WHERE org_id = ? AND draft_eligible_year IS NOT NULL ORDER BY draft_eligible_year DESC", (org_id,)).fetchall()
+    result["draft_years"] = [r[0] for r in rows]
+
+    conn.close()
+    return result
+
+
 @app.get("/players", response_model=List[PlayerResponse])
 async def list_players(
     search: Optional[str] = None,
     position: Optional[str] = None,
     team: Optional[str] = None,
+    league: Optional[str] = None,
+    birth_year: Optional[int] = None,
+    age_group: Optional[str] = None,
+    league_tier: Optional[str] = None,
+    draft_year: Optional[int] = None,
     limit: int = Query(default=200, ge=1, le=500),
     skip: int = Query(default=0, ge=0),
     token_data: dict = Depends(verify_token),
@@ -2046,6 +2257,26 @@ async def list_players(
         query += " AND LOWER(current_team) = LOWER(?)"
         params.append(team)
 
+    if league:
+        query += " AND LOWER(current_league) = LOWER(?)"
+        params.append(league)
+
+    if birth_year:
+        query += " AND birth_year = ?"
+        params.append(birth_year)
+
+    if age_group:
+        query += " AND age_group = ?"
+        params.append(age_group)
+
+    if league_tier:
+        query += " AND league_tier = ?"
+        params.append(league_tier)
+
+    if draft_year:
+        query += " AND draft_eligible_year = ?"
+        params.append(draft_year)
+
     query += " ORDER BY last_name, first_name LIMIT ? OFFSET ?"
     params.extend([limit, skip])
 
@@ -2061,16 +2292,33 @@ async def create_player(player: PlayerCreate, token_data: dict = Depends(verify_
     now = now_iso()
     conn = get_db()
 
+    # Derive compartmentalization fields
+    birth_year = None
+    age_group = None
+    draft_eligible_year = None
+    if player.dob:
+        try:
+            birth_year = int(player.dob[:4])
+            age_group = _get_age_group(birth_year)
+            draft_eligible_year = birth_year + 18
+        except (ValueError, IndexError):
+            pass
+    league_tier = _get_league_tier(player.current_league)
+
     conn.execute("""
         INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots, height_cm, weight_kg,
-                             current_team, current_league, passports, notes, tags, archetype, image_url, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             current_team, current_league, passports, notes, tags, archetype, image_url,
+                             birth_year, age_group, draft_eligible_year, league_tier,
+                             created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         player_id, org_id, player.first_name, player.last_name, player.dob,
         player.position.upper(), player.shoots, player.height_cm, player.weight_kg,
         player.current_team, player.current_league,
         json.dumps(player.passports or []), player.notes, json.dumps(player.tags or []),
-        player.archetype, player.image_url, now, now,
+        player.archetype, player.image_url,
+        birth_year, age_group, draft_eligible_year, league_tier,
+        now, now,
     ))
     conn.commit()
 
@@ -2100,15 +2348,31 @@ async def update_player(player_id: str, player: PlayerCreate, token_data: dict =
         conn.close()
         raise HTTPException(status_code=404, detail="Player not found")
 
+    # Derive compartmentalization fields
+    birth_year = None
+    age_group = None
+    draft_eligible_year = None
+    if player.dob:
+        try:
+            birth_year = int(player.dob[:4])
+            age_group = _get_age_group(birth_year)
+            draft_eligible_year = birth_year + 18
+        except (ValueError, IndexError):
+            pass
+    league_tier = _get_league_tier(player.current_league)
+
     conn.execute("""
         UPDATE players SET first_name=?, last_name=?, dob=?, position=?, shoots=?, height_cm=?, weight_kg=?,
-                          current_team=?, current_league=?, passports=?, notes=?, tags=?, archetype=?, image_url=?, updated_at=?
+                          current_team=?, current_league=?, passports=?, notes=?, tags=?, archetype=?, image_url=?,
+                          birth_year=?, age_group=?, draft_eligible_year=?, league_tier=?, updated_at=?
         WHERE id = ? AND org_id = ?
     """, (
         player.first_name, player.last_name, player.dob, player.position.upper(), player.shoots,
         player.height_cm, player.weight_kg, player.current_team, player.current_league,
         json.dumps(player.passports or []), player.notes, json.dumps(player.tags or []),
-        player.archetype, player.image_url, now_iso(), player_id, org_id,
+        player.archetype, player.image_url,
+        birth_year, age_group, draft_eligible_year, league_tier,
+        now_iso(), player_id, org_id,
     ))
     conn.commit()
     row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
