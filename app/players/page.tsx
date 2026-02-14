@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, PlusCircle, Filter, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Search, PlusCircle, Filter, ChevronDown, ChevronUp, X, Settings } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -46,7 +46,7 @@ export default function PlayersPage() {
       try {
         setError("");
         const params = new URLSearchParams();
-        params.set("limit", "500");
+        params.set("limit", "1000");
         if (search) params.set("search", search);
         if (posFilter) params.set("position", posFilter);
         if (teamFilter) params.set("team", teamFilter);
@@ -85,13 +85,22 @@ export default function PlayersPage() {
               <p className="text-xs text-muted mt-0.5">{players.length} player{players.length !== 1 ? "s" : ""}</p>
             )}
           </div>
-          <Link
-            href="/players/new"
-            className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-          >
-            <PlusCircle size={16} />
-            Add Player
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/players/manage"
+              className="flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
+            >
+              <Settings size={16} />
+              Manage
+            </Link>
+            <Link
+              href="/players/new"
+              className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+            >
+              <PlusCircle size={16} />
+              Add Player
+            </Link>
+          </div>
         </div>
 
         {/* Primary Filters */}

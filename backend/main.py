@@ -2276,7 +2276,7 @@ async def list_players(
     age_group: Optional[str] = None,
     league_tier: Optional[str] = None,
     draft_year: Optional[int] = None,
-    limit: int = Query(default=200, ge=1, le=500),
+    limit: int = Query(default=200, ge=1, le=2000),
     skip: int = Query(default=0, ge=0),
     token_data: dict = Depends(verify_token),
 ):
@@ -2379,6 +2379,56 @@ async def get_player(player_id: str, token_data: dict = Depends(verify_token)):
     if not row:
         raise HTTPException(status_code=404, detail="Player not found")
     return PlayerResponse(**_player_from_row(row))
+
+
+@app.patch("/players/{player_id}")
+async def patch_player(
+    player_id: str,
+    updates: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Partially update a player — only send fields you want to change.
+    Useful for transfers, position changes, etc."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    existing = conn.execute("SELECT * FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    allowed = {"first_name", "last_name", "dob", "position", "shoots", "height_cm", "weight_kg",
+               "current_team", "current_league", "notes", "archetype", "image_url"}
+    sets = []
+    params = []
+    for field, value in updates.items():
+        if field in allowed:
+            sets.append(f"{field} = ?")
+            params.append(value)
+    if not sets:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    # Auto-derive compartmentalization if DOB or league changed
+    if "dob" in updates and updates["dob"]:
+        try:
+            by = int(updates["dob"][:4])
+            sets.extend(["birth_year = ?", "age_group = ?", "draft_eligible_year = ?"])
+            params.extend([by, _get_age_group(by), by + 18])
+        except (ValueError, IndexError):
+            pass
+    if "current_league" in updates:
+        sets.append("league_tier = ?")
+        params.append(_get_league_tier(updates["current_league"]))
+
+    sets.append("updated_at = ?")
+    params.append(now_iso())
+    params.append(player_id)
+
+    conn.execute(f"UPDATE players SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
+    conn.close()
+    return dict(row)
 
 
 @app.put("/players/{player_id}", response_model=PlayerResponse)
@@ -5744,9 +5794,9 @@ def _import_league_skaters(rows, season, org_id):
     errors = []
     _affected_player_ids = set()
 
-    # Load existing players for matching
+    # Load existing players for matching (include DOB for stronger dedup)
     existing_players = conn.execute(
-        "SELECT id, first_name, last_name, current_team, position FROM players WHERE org_id = ?",
+        "SELECT id, first_name, last_name, current_team, position, dob FROM players WHERE org_id = ?",
         (org_id,)
     ).fetchall()
     existing_list = [dict(p) for p in existing_players]
@@ -5774,29 +5824,48 @@ def _import_league_skaters(rows, season, org_id):
                 if val:
                     bio[field] = val
 
-            # Match against existing players
+            # Match against existing players — multi-signal matching
             player_id = None
             csv_name = f"{first_name} {last_name}".lower()
+            csv_last = last_name.lower().strip()
+            csv_dob = bio.get("dob", "")
+            best_score = 0.0
+            best_match = None
 
             for ep in existing_list:
                 existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
-                score = _fuzzy_name_match(csv_name, existing_name)
-                if score >= 0.85:
-                    # Also check team if available
-                    if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
-                        score += 0.1
-                    if score >= 0.85:
-                        player_id = ep["id"]
-                        break
+                existing_last = ep["last_name"].lower().strip()
+                existing_dob = ep.get("dob", "") or ""
 
-            if player_id:
+                # Start with name similarity
+                score = _fuzzy_name_match(csv_name, existing_name)
+
+                # DOB match is a very strong signal
+                if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
+                    if csv_dob == existing_dob:
+                        # Same DOB: huge boost — if last names also match, it's nearly certain
+                        if csv_last == existing_last:
+                            score = max(score, 0.98)  # Same last name + same DOB = same person
+                        else:
+                            score += 0.15  # Same DOB, different last name — minor boost
+
+                # Team match bonus
+                if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
+                    score += 0.1
+
+                if score > best_score and score >= 0.85:
+                    best_score = score
+                    best_match = ep
+
+            if best_match:
+                player_id = best_match["id"]
                 # Update existing player with any new bio data
                 updates = []
                 params = []
                 if team and team != "":
                     updates.append("current_team = ?")
                     params.append(team)
-                if bio.get("dob"):
+                if bio.get("dob") and bio["dob"] not in ("-", ""):
                     updates.append("dob = ?")
                     params.append(bio["dob"])
                 if bio.get("shoots"):
@@ -5819,8 +5888,9 @@ def _import_league_skaters(rows, season, org_id):
                     (player_id, org_id, first_name, last_name, position,
                      bio.get("shoots", ""), team, "GOJHL", bio.get("dob", ""))
                 )
-                # Add to existing list for matching remaining rows
-                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name, "current_team": team, "position": position})
+                # Add to existing list for matching remaining rows (include DOB for future matching)
+                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
+                                     "current_team": team, "position": position, "dob": bio.get("dob", "")})
                 created += 1
 
             # Parse stats
@@ -5865,7 +5935,7 @@ def _import_league_goalies(rows, season, org_id):
     _affected_player_ids = set()
 
     existing_players = conn.execute(
-        "SELECT id, first_name, last_name, current_team, position FROM players WHERE org_id = ?",
+        "SELECT id, first_name, last_name, current_team, position, dob FROM players WHERE org_id = ?",
         (org_id,)
     ).fetchall()
     existing_list = [dict(p) for p in existing_players]
@@ -5889,16 +5959,35 @@ def _import_league_goalies(rows, season, org_id):
                 if val:
                     bio[field] = val
 
-            # Match player
+            # Match player — multi-signal matching (same as skaters)
             player_id = None
             csv_name = f"{first_name} {last_name}".lower()
+            csv_last = last_name.lower().strip()
+            csv_dob = bio.get("dob", "")
+            best_score = 0.0
+            best_match = None
+
             for ep in existing_list:
                 existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
-                if _fuzzy_name_match(csv_name, existing_name) >= 0.85:
-                    player_id = ep["id"]
-                    break
+                existing_last = ep["last_name"].lower().strip()
+                existing_dob = ep.get("dob", "") or ""
 
-            if player_id:
+                score = _fuzzy_name_match(csv_name, existing_name)
+
+                # DOB match is a very strong signal
+                if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
+                    if csv_dob == existing_dob and csv_last == existing_last:
+                        score = max(score, 0.98)
+
+                if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
+                    score += 0.1
+
+                if score > best_score and score >= 0.85:
+                    best_score = score
+                    best_match = ep
+
+            if best_match:
+                player_id = best_match["id"]
                 updated += 1
                 # Update position to G
                 conn.execute("UPDATE players SET position = 'G' WHERE id = ?", (player_id,))
@@ -5911,7 +6000,8 @@ def _import_league_goalies(rows, season, org_id):
                     (player_id, org_id, first_name, last_name,
                      bio.get("shoots", ""), team, "GOJHL", bio.get("dob", ""))
                 )
-                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name, "current_team": team, "position": "G"})
+                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
+                                     "current_team": team, "position": "G", "dob": bio.get("dob", "")})
                 created += 1
 
             # Parse goalie stats
@@ -6078,17 +6168,17 @@ async def analytics_filters(token_data: dict = Depends(verify_token)):
 
     # Distinct leagues (from players table)
     leagues = conn.execute("""
-        SELECT DISTINCT p.league FROM players p
-        WHERE p.org_id = ? AND p.league IS NOT NULL AND p.league != ''
-        ORDER BY p.league
+        SELECT DISTINCT p.current_league as league FROM players p
+        WHERE p.org_id = ? AND p.current_league IS NOT NULL AND p.current_league != ''
+        ORDER BY p.current_league
     """, (org_id,)).fetchall()
 
     # Distinct teams (from players current_team)
     teams = conn.execute("""
-        SELECT DISTINCT p.current_team, p.league
+        SELECT DISTINCT p.current_team, p.current_league as league
         FROM players p
         WHERE p.org_id = ? AND p.current_team IS NOT NULL AND p.current_team != ''
-        ORDER BY p.league, p.current_team
+        ORDER BY p.current_league, p.current_team
     """, (org_id,)).fetchall()
 
     # Distinct positions
@@ -6121,7 +6211,7 @@ async def analytics_overview(
     p_where = ["p.org_id = ?"]
     p_params: list = [org_id]
     if league:
-        p_where.append("p.league = ?")
+        p_where.append("p.current_league = ?")
         p_params.append(league)
     if team:
         p_where.append("p.current_team = ?")
@@ -6225,7 +6315,7 @@ async def analytics_scoring_leaders(
         where.append("p.current_team = ?")
         params.append(team)
     if league:
-        where.append("p.league = ?")
+        where.append("p.current_league = ?")
         params.append(league)
 
     rows = conn.execute(f"""
@@ -6258,7 +6348,7 @@ async def analytics_team_rankings(
     where = ["p.org_id = ?", "p.current_team IS NOT NULL", "p.current_team != ''"]
     params: list = [org_id]
     if league:
-        where.append("p.league = ?")
+        where.append("p.current_league = ?")
         params.append(league)
     if team:
         where.append("p.current_team = ?")
@@ -6360,7 +6450,7 @@ async def analytics_position_stats(
     where = ["p.org_id = ?", "ps.gp >= 5"]
     params: list = [org_id]
     if league:
-        where.append("p.league = ?")
+        where.append("p.current_league = ?")
         params.append(league)
     if team:
         where.append("p.current_team = ?")
@@ -6433,7 +6523,7 @@ async def analytics_archetype_breakdown(
              "pi.id IN (SELECT id FROM player_intelligence pi2 WHERE pi2.player_id = pi.player_id ORDER BY pi2.version DESC LIMIT 1)"]
     params: list = [org_id]
     if league:
-        where.append("p.league = ?")
+        where.append("p.current_league = ?")
         params.append(league)
     if team:
         where.append("p.current_team = ?")
@@ -6470,7 +6560,7 @@ async def analytics_scoring_distribution(
     where = ["p.org_id = ?", "ps.gp >= ?"]
     params: list = [org_id, min_gp]
     if league:
-        where.append("p.league = ?")
+        where.append("p.current_league = ?")
         params.append(league)
     if team:
         where.append("p.current_team = ?")
@@ -6508,7 +6598,7 @@ async def analytics_tag_cloud(
     p_where = ["p.org_id = ?"]
     p_params: list = [org_id]
     if league:
-        p_where.append("p.league = ?")
+        p_where.append("p.current_league = ?")
         p_params.append(league)
     if team:
         p_where.append("p.current_team = ?")
@@ -6967,7 +7057,7 @@ async def get_league_indices(
         where.append("p.position = ?")
         params.append(position)
     if league:
-        where.append("p.league = ?")
+        where.append("p.current_league = ?")
         params.append(league)
     if team:
         where.append("p.current_team = ?")
@@ -7010,6 +7100,348 @@ async def get_league_indices(
         })
 
     return results
+
+
+# ============================================================
+# PLAYER MANAGEMENT — Duplicates, Merge, Bulk Operations
+# ============================================================
+
+@app.get("/players/duplicates")
+async def find_duplicate_players(token_data: dict = Depends(verify_token)):
+    """Detect potential duplicate player profiles.
+    Groups players by exact name match and by same-last-name + same-DOB.
+    Returns groups of likely duplicates for admin review."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT p.id, p.first_name, p.last_name, p.current_team, p.current_league,
+               p.position, p.dob, p.shoots, p.created_at,
+               (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
+               (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
+               (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count,
+               (SELECT COUNT(*) FROM player_intelligence pi WHERE pi.player_id = p.id) as intel_count
+        FROM players p WHERE p.org_id = ?
+        ORDER BY p.last_name, p.first_name
+    """, (org_id,)).fetchall()
+
+    # Group 1: Exact first+last name matches
+    from collections import defaultdict
+    by_full_name = defaultdict(list)
+    for r in rows:
+        key = f"{r['first_name'].lower().strip()} {r['last_name'].lower().strip()}"
+        by_full_name[key].append(dict(r))
+
+    # Group 2: Same last name + same DOB (different first name — name variants)
+    by_last_dob = defaultdict(list)
+    for r in rows:
+        dob = r["dob"] or ""
+        if dob and dob not in ("-", ""):
+            key = f"{r['last_name'].lower().strip()}|{dob}"
+            by_last_dob[key].append(dict(r))
+
+    duplicate_groups = []
+
+    # Add exact name matches
+    for name, group in by_full_name.items():
+        if len(group) > 1:
+            duplicate_groups.append({
+                "match_type": "exact_name",
+                "match_key": name,
+                "confidence": "high",
+                "players": group,
+            })
+
+    # Add DOB matches (only if not already covered by exact name)
+    exact_ids = set()
+    for g in duplicate_groups:
+        for p in g["players"]:
+            exact_ids.add(p["id"])
+
+    for key, group in by_last_dob.items():
+        if len(group) > 1:
+            # Check if first names differ (otherwise it's already in exact matches)
+            names = set(p["first_name"].lower().strip() for p in group)
+            if len(names) > 1:
+                # Only add if not all players are already in exact-name groups
+                group_ids = set(p["id"] for p in group)
+                if not group_ids.issubset(exact_ids):
+                    duplicate_groups.append({
+                        "match_type": "name_variant",
+                        "match_key": key,
+                        "confidence": "medium",
+                        "players": group,
+                    })
+
+    # Sort by confidence (high first), then by player count
+    duplicate_groups.sort(key=lambda g: (0 if g["confidence"] == "high" else 1, -len(g["players"])))
+
+    conn.close()
+    return {
+        "total_groups": len(duplicate_groups),
+        "total_duplicate_players": sum(len(g["players"]) for g in duplicate_groups),
+        "groups": duplicate_groups,
+    }
+
+
+@app.post("/players/merge")
+async def merge_players(
+    request: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Merge duplicate player profiles into a single canonical record.
+
+    Body: {
+        "keep_id": "player-id-to-keep",
+        "merge_ids": ["player-id-to-merge-1", "player-id-to-merge-2"],
+        "update_fields": { optional fields to update on the kept player }
+    }
+
+    All stats, notes, reports, and intelligence from merge_ids are reassigned to keep_id.
+    The merged player records are then deleted.
+    """
+    org_id = token_data["org_id"]
+    keep_id = request.get("keep_id")
+    merge_ids = request.get("merge_ids", [])
+    update_fields = request.get("update_fields", {})
+
+    if not keep_id or not merge_ids:
+        raise HTTPException(status_code=400, detail="Provide keep_id and at least one merge_id")
+
+    if keep_id in merge_ids:
+        raise HTTPException(status_code=400, detail="keep_id cannot be in merge_ids")
+
+    conn = get_db()
+
+    # Verify all players exist and belong to this org
+    all_ids = [keep_id] + merge_ids
+    placeholders = ",".join(["?"] * len(all_ids))
+    found = conn.execute(
+        f"SELECT id FROM players WHERE id IN ({placeholders}) AND org_id = ?",
+        all_ids + [org_id]
+    ).fetchall()
+    found_ids = set(r["id"] for r in found)
+
+    missing = set(all_ids) - found_ids
+    if missing:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Players not found: {', '.join(missing)}")
+
+    stats_moved = 0
+    notes_moved = 0
+    reports_moved = 0
+    intel_moved = 0
+
+    for mid in merge_ids:
+        # Reassign stats
+        result = conn.execute(
+            "UPDATE player_stats SET player_id = ? WHERE player_id = ?",
+            (keep_id, mid)
+        )
+        stats_moved += result.rowcount
+
+        # Reassign scout notes
+        result = conn.execute(
+            "UPDATE scout_notes SET player_id = ? WHERE player_id = ?",
+            (keep_id, mid)
+        )
+        notes_moved += result.rowcount
+
+        # Reassign reports
+        result = conn.execute(
+            "UPDATE reports SET player_id = ? WHERE player_id = ?",
+            (keep_id, mid)
+        )
+        reports_moved += result.rowcount
+
+        # Reassign intelligence records
+        result = conn.execute(
+            "UPDATE player_intelligence SET player_id = ? WHERE player_id = ?",
+            (keep_id, mid)
+        )
+        intel_moved += result.rowcount
+
+        # Delete the merged player record
+        conn.execute("DELETE FROM players WHERE id = ?", (mid,))
+
+    # Optionally update fields on the kept player
+    allowed_fields = {"first_name", "last_name", "position", "shoots", "dob",
+                      "current_team", "current_league", "height_cm", "weight_kg",
+                      "birth_year", "age_group", "draft_eligible_year", "league_tier"}
+    updates = []
+    params = []
+    for field, value in update_fields.items():
+        if field in allowed_fields:
+            updates.append(f"{field} = ?")
+            params.append(value)
+    if updates:
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(keep_id)
+        conn.execute(f"UPDATE players SET {', '.join(updates)} WHERE id = ?", params)
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "merged",
+        "kept_player_id": keep_id,
+        "merged_player_ids": merge_ids,
+        "stats_moved": stats_moved,
+        "notes_moved": notes_moved,
+        "reports_moved": reports_moved,
+        "intel_moved": intel_moved,
+    }
+
+
+@app.delete("/players/{player_id}")
+async def delete_player(
+    player_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    """Delete a player and all associated data (stats, notes, reports, intelligence)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    player = conn.execute(
+        "SELECT id, first_name, last_name FROM players WHERE id = ? AND org_id = ?",
+        (player_id, org_id)
+    ).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # Delete all associated data
+    conn.execute("DELETE FROM player_stats WHERE player_id = ?", (player_id,))
+    conn.execute("DELETE FROM scout_notes WHERE player_id = ?", (player_id,))
+    conn.execute("DELETE FROM reports WHERE player_id = ?", (player_id,))
+    conn.execute("DELETE FROM player_intelligence WHERE player_id = ?", (player_id,))
+    conn.execute("DELETE FROM players WHERE id = ?", (player_id,))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "deleted",
+        "player_id": player_id,
+        "player_name": f"{player['first_name']} {player['last_name']}",
+    }
+
+
+@app.post("/players/bulk-assign-league")
+async def bulk_assign_league(
+    request: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Assign league to players based on their team membership.
+    Uses the reference teams table to look up the league for each team.
+
+    Body: { "league": "GOJHL" }  — optional, if not provided uses reference_teams table
+    """
+    org_id = token_data["org_id"]
+    league = request.get("league")
+    conn = get_db()
+
+    if league:
+        # Simple: set league for all players in the org that don't have one
+        result = conn.execute(
+            "UPDATE players SET current_league = ? WHERE org_id = ? AND (current_league IS NULL OR current_league = '')",
+            (league, org_id)
+        )
+        updated = result.rowcount
+    else:
+        # Smart: look up league from reference_teams table by team name
+        ref_teams = conn.execute(
+            "SELECT name, league FROM reference_teams"
+        ).fetchall()
+        team_league_map = {r["name"].lower(): r["league"] for r in ref_teams}
+
+        # Get all players without a league
+        players = conn.execute(
+            "SELECT id, current_team FROM players WHERE org_id = ? AND (current_league IS NULL OR current_league = '') AND current_team IS NOT NULL AND current_team != ''",
+            (org_id,)
+        ).fetchall()
+
+        updated = 0
+        for p in players:
+            team = p["current_team"].lower()
+            matched_league = team_league_map.get(team)
+            if not matched_league:
+                # Try partial match
+                for ref_name, ref_league in team_league_map.items():
+                    if ref_name in team or team in ref_name:
+                        matched_league = ref_league
+                        break
+            if matched_league:
+                conn.execute(
+                    "UPDATE players SET current_league = ? WHERE id = ?",
+                    (matched_league, p["id"])
+                )
+                updated += 1
+
+    conn.commit()
+    conn.close()
+    return {"status": "updated", "players_updated": updated}
+
+
+@app.post("/players/auto-assign-teams")
+async def auto_assign_teams_from_stats(
+    token_data: dict = Depends(verify_token),
+):
+    """Auto-assign current_team and current_league to players based on their most recent stats.
+
+    For each player, finds the most recent stat row that has a data_source containing
+    team information, and updates the player's current_team accordingly.
+    Also uses the reference_teams table to assign leagues.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # Build team-to-league lookup from reference teams
+    ref_teams = conn.execute("SELECT name, league FROM reference_teams").fetchall()
+    team_league_map = {}
+    for r in ref_teams:
+        team_league_map[r["name"].lower()] = r["league"]
+
+    # Find players and their teams from latest import data
+    # The import functions set current_team during import, so look at which team
+    # was last assigned based on stat import timestamp
+    players = conn.execute("""
+        SELECT p.id, p.first_name, p.last_name, p.current_team, p.current_league,
+               (SELECT ps.data_source FROM player_stats ps
+                WHERE ps.player_id = p.id ORDER BY ps.rowid DESC LIMIT 1) as latest_source
+        FROM players p
+        WHERE p.org_id = ?
+    """, (org_id,)).fetchall()
+
+    updated_team = 0
+    updated_league = 0
+
+    for p in players:
+        pid = p["id"]
+        needs_league = not p["current_league"] or p["current_league"] == ""
+
+        if needs_league and p["current_team"]:
+            team_lower = p["current_team"].lower()
+            league = team_league_map.get(team_lower)
+            if not league:
+                for ref_name, ref_league in team_league_map.items():
+                    if ref_name in team_lower or team_lower in ref_name:
+                        league = ref_league
+                        break
+            if league:
+                conn.execute(
+                    "UPDATE players SET current_league = ? WHERE id = ?",
+                    (league, pid)
+                )
+                updated_league += 1
+
+    conn.commit()
+    conn.close()
+    return {
+        "status": "updated",
+        "teams_assigned": updated_team,
+        "leagues_assigned": updated_league,
+    }
 
 
 # ============================================================

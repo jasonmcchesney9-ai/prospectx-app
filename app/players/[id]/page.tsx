@@ -88,6 +88,18 @@ export default function PlayerDetailPage() {
   const [editingArchetype, setEditingArchetype] = useState(false);
   const [archetypeValue, setArchetypeValue] = useState("");
 
+  // Inline bio editing
+  const [editingBio, setEditingBio] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editFields, setEditFields] = useState({
+    current_team: "",
+    current_league: "",
+    position: "",
+    shoots: "",
+    dob: "",
+  });
+
   // CSV upload
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
@@ -243,6 +255,37 @@ export default function PlayerDetailPage() {
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!player) return;
+    setSavingEdit(true);
+    setEditError("");
+    try {
+      // Only send changed fields
+      const updates: Record<string, string> = {};
+      if (editFields.current_team !== (player.current_team || "")) updates.current_team = editFields.current_team;
+      if (editFields.current_league !== (player.current_league || "")) updates.current_league = editFields.current_league;
+      if (editFields.position !== (player.position || "")) updates.position = editFields.position;
+      if (editFields.shoots !== (player.shoots || "")) updates.shoots = editFields.shoots;
+      if (editFields.dob !== (player.dob || "")) updates.dob = editFields.dob;
+
+      if (Object.keys(updates).length === 0) {
+        setEditingBio(false);
+        return;
+      }
+
+      await api.patch(`/players/${playerId}`, updates);
+      // Reload player data
+      const { data } = await api.get<Player>(`/players/${playerId}`);
+      setPlayer(data);
+      setEditingBio(false);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Save failed";
+      setEditError(msg);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const loadIntelHistory = async () => {
     if (intelHistory.length > 0) {
       setShowIntelHistory(!showIntelHistory);
@@ -261,6 +304,13 @@ export default function PlayerDetailPage() {
         const playerRes = await api.get<Player>(`/players/${playerId}`);
         setPlayer(playerRes.data);
         setArchetypeValue(playerRes.data.archetype || "");
+        setEditFields({
+          current_team: playerRes.data.current_team || "",
+          current_league: playerRes.data.current_league || "",
+          position: playerRes.data.position || "",
+          shoots: playerRes.data.shoots || "",
+          dob: playerRes.data.dob || "",
+        });
 
         const [statsRes, reportsRes, notesRes, libRes, sysRes, goalieRes, intelRes] = await Promise.allSettled([
           api.get<PlayerStats[]>(`/stats/player/${playerId}`),
@@ -447,9 +497,90 @@ export default function PlayerDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Bio Card */}
               <div className="bg-white rounded-xl border border-border p-5">
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
-                  <User size={14} className="text-teal" /> Player Info
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
+                    <User size={14} className="text-teal" /> Player Info
+                  </h3>
+                  <button
+                    onClick={() => setEditingBio(!editingBio)}
+                    className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+                  >
+                    {editingBio ? <X size={12} /> : <Edit3 size={12} />}
+                    {editingBio ? "Cancel" : "Edit"}
+                  </button>
+                </div>
+
+                {/* Inline edit form */}
+                {editingBio && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-border space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Team</label>
+                        <input
+                          type="text"
+                          value={editFields.current_team}
+                          onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
+                        <input
+                          type="text"
+                          value={editFields.current_league}
+                          onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Position</label>
+                        <select
+                          value={editFields.position}
+                          onChange={(e) => setEditFields((f) => ({ ...f, position: e.target.value }))}
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        >
+                          <option value="C">Center</option>
+                          <option value="LW">Left Wing</option>
+                          <option value="RW">Right Wing</option>
+                          <option value="D">Defense</option>
+                          <option value="G">Goalie</option>
+                          <option value="F">Forward</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Shoots</label>
+                        <select
+                          value={editFields.shoots}
+                          onChange={(e) => setEditFields((f) => ({ ...f, shoots: e.target.value }))}
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        >
+                          <option value="">—</option>
+                          <option value="L">Left</option>
+                          <option value="R">Right</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">DOB</label>
+                        <input
+                          type="date"
+                          value={editFields.dob}
+                          onChange={(e) => setEditFields((f) => ({ ...f, dob: e.target.value }))}
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={savingEdit}
+                      className="w-full mt-2 bg-teal text-white py-1.5 rounded text-xs font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      {savingEdit ? "Saving..." : <><Save size={12} /> Save Changes</>}
+                    </button>
+                    {editError && <p className="text-xs text-red-500 mt-1">{editError}</p>}
+                  </div>
+                )}
 
                 {/* Player Photo Upload */}
                 <div className="flex items-center gap-4 mb-4 pb-4 border-b border-border/50">
