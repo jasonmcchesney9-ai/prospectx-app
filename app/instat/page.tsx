@@ -201,12 +201,15 @@ function InStatUploader() {
                   </ul>
                 </div>
               )}
-              <div className="mt-4 flex gap-3">
+              <div className="mt-4 flex gap-3 flex-wrap">
                 <Link href="/players" className="text-sm text-teal hover:underline">
                   View Players →
                 </Link>
                 <Link href="/teams" className="text-sm text-teal hover:underline">
                   View Teams →
+                </Link>
+                <Link href="/players/manage" className="text-sm text-navy hover:underline">
+                  Manage Players →
                 </Link>
                 <button onClick={reset} className="text-sm text-navy hover:underline">
                   Import Another File

@@ -31,18 +31,29 @@ import {
   Star,
   AlertTriangle,
   Wand2,
+  Flame,
 } from "lucide-react";
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  Radar,
+  ResponsiveContainer,
+} from "recharts";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import StatTable from "@/components/StatTable";
 import ExtendedStatTable from "@/components/ExtendedStatTable";
 import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
-import api from "@/lib/api";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics } from "@/types/api";
-import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS } from "@/types/api";
+import api, { assetUrl, hasRealImage } from "@/lib/api";
+import ProgressionChart from "@/components/ProgressionChart";
+import GameLogTable from "@/components/GameLogTable";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection } from "@/types/api";
+import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports";
+type StatsSubView = "current" | "progression" | "gamelog";
 
 const POSITION_LABELS: Record<string, string> = {
   C: "Center",
@@ -75,6 +86,15 @@ export default function PlayerDetailPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("profile");
 
+  // Stats sub-views
+  const [statsSubView, setStatsSubView] = useState<StatsSubView>("current");
+  const [progression, setProgression] = useState<Progression | null>(null);
+  const [gameLog, setGameLog] = useState<GameStatsResponse | null>(null);
+  const [gameLogOffset, setGameLogOffset] = useState(0);
+  const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
+  const [loadingProgression, setLoadingProgression] = useState(false);
+  const [loadingGameLog, setLoadingGameLog] = useState(false);
+
   // Player Intelligence
   const [intelligence, setIntelligence] = useState<PlayerIntelligence | null>(null);
   const [intelHistory, setIntelHistory] = useState<PlayerIntelligence[]>([]);
@@ -98,7 +118,14 @@ export default function PlayerDetailPage() {
     position: "",
     shoots: "",
     dob: "",
+    height_cm: "" as string | number,
+    weight_kg: "" as string | number,
   });
+  // Reference data for league/team dropdowns
+  const [editLeagues, setEditLeagues] = useState<League[]>([]);
+  const [editRefTeams, setEditRefTeams] = useState<TeamReference[]>([]);
+  const [customLeague, setCustomLeague] = useState(false);
+  const [customTeam, setCustomTeam] = useState(false);
 
   // CSV upload
   const [uploading, setUploading] = useState(false);
@@ -106,6 +133,16 @@ export default function PlayerDetailPage() {
 
   // Image upload
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Correction form
+  const [showCorrectionForm, setShowCorrectionForm] = useState(false);
+  const [correctionField, setCorrectionField] = useState("");
+  const [correctionValue, setCorrectionValue] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionConfidence, setCorrectionConfidence] = useState<"low" | "medium" | "high">("medium");
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
+  const [correctionMsg, setCorrectionMsg] = useState("");
+  const [pendingCorrections, setPendingCorrections] = useState(0);
 
   // Note form
   const [showNoteForm, setShowNoteForm] = useState(false);
@@ -255,18 +292,46 @@ export default function PlayerDetailPage() {
     }
   };
 
+  // Load reference data for league/team dropdowns when edit opens
+  useEffect(() => {
+    if (!editingBio || editLeagues.length > 0) return;
+    Promise.all([
+      api.get<League[]>("/leagues"),
+      api.get<TeamReference[]>("/teams/reference"),
+    ]).then(([l, t]) => {
+      setEditLeagues(l.data);
+      setEditRefTeams(t.data);
+      // Auto-detect custom mode if current values aren't in the dropdown lists
+      if (player) {
+        const leagueInList = l.data.some((lg) => lg.name === player.current_league);
+        if (player.current_league && !leagueInList) setCustomLeague(true);
+        const teamInList = t.data.some((tm) => tm.name === player.current_team);
+        if (player.current_team && !teamInList) setCustomTeam(true);
+      }
+    }).catch(() => { /* Non-critical — fallback to text inputs */ });
+  }, [editingBio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Filter teams by selected league
+  const filteredEditTeams = editFields.current_league
+    ? editRefTeams.filter((t) => t.league === editFields.current_league)
+    : editRefTeams;
+
   const handleSaveEdit = async () => {
     if (!player) return;
     setSavingEdit(true);
     setEditError("");
     try {
       // Only send changed fields
-      const updates: Record<string, string> = {};
+      const updates: Record<string, string | number | null> = {};
       if (editFields.current_team !== (player.current_team || "")) updates.current_team = editFields.current_team;
       if (editFields.current_league !== (player.current_league || "")) updates.current_league = editFields.current_league;
       if (editFields.position !== (player.position || "")) updates.position = editFields.position;
       if (editFields.shoots !== (player.shoots || "")) updates.shoots = editFields.shoots;
       if (editFields.dob !== (player.dob || "")) updates.dob = editFields.dob;
+      const newHeight = editFields.height_cm === "" ? null : Number(editFields.height_cm);
+      const newWeight = editFields.weight_kg === "" ? null : Number(editFields.weight_kg);
+      if (newHeight !== (player.height_cm ?? null)) updates.height_cm = newHeight;
+      if (newWeight !== (player.weight_kg ?? null)) updates.weight_kg = newWeight;
 
       if (Object.keys(updates).length === 0) {
         setEditingBio(false);
@@ -310,6 +375,8 @@ export default function PlayerDetailPage() {
           position: playerRes.data.position || "",
           shoots: playerRes.data.shoots || "",
           dob: playerRes.data.dob || "",
+          height_cm: playerRes.data.height_cm ?? "",
+          weight_kg: playerRes.data.weight_kg ?? "",
         });
 
         const [statsRes, reportsRes, notesRes, libRes, sysRes, goalieRes, intelRes] = await Promise.allSettled([
@@ -334,6 +401,18 @@ export default function PlayerDetailPage() {
           setPlayerMetrics(indicesRes.data);
         } catch { /* Player may not have enough stats */ }
 
+        // Load recent form (non-blocking — for profile badge)
+        try {
+          const formRes = await api.get<RecentForm>(`/stats/player/${playerId}/recent-form?last_n=5`);
+          setRecentForm(formRes.data);
+        } catch { /* May not have game data */ }
+
+        // Load pending corrections count (non-blocking)
+        try {
+          const corrRes = await api.get<PlayerCorrection[]>(`/players/${playerId}/corrections`);
+          setPendingCorrections(corrRes.data.filter((c: PlayerCorrection) => c.status === "pending").length);
+        } catch { /* Non-critical */ }
+
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
           const match = sysRes.value.data.find(
@@ -350,6 +429,34 @@ export default function PlayerDetailPage() {
     }
     if (playerId) load();
   }, [playerId]);
+
+  // Lazy-load progression/game log when sub-view switches
+  useEffect(() => {
+    if (statsSubView === "progression" && !progression && !loadingProgression) {
+      setLoadingProgression(true);
+      api.get<Progression>(`/stats/player/${playerId}/progression`)
+        .then((res) => setProgression(res.data))
+        .catch(() => setProgression({ seasons: [], trend: "insufficient_data", yoy_delta: {} }))
+        .finally(() => setLoadingProgression(false));
+    }
+    if (statsSubView === "gamelog" && !gameLog && !loadingGameLog) {
+      setLoadingGameLog(true);
+      api.get<GameStatsResponse>(`/stats/player/${playerId}/games?limit=50&offset=0`)
+        .then((res) => setGameLog(res.data))
+        .catch(() => setGameLog({ games: [], total: 0, source: "none" }))
+        .finally(() => setLoadingGameLog(false));
+    }
+  }, [statsSubView, playerId, progression, gameLog, loadingProgression, loadingGameLog]);
+
+  // Handle game log pagination
+  const handleGameLogPageChange = (newOffset: number) => {
+    setGameLogOffset(newOffset);
+    setLoadingGameLog(true);
+    api.get<GameStatsResponse>(`/stats/player/${playerId}/games?limit=50&offset=${newOffset}`)
+      .then((res) => setGameLog(res.data))
+      .catch(() => {})
+      .finally(() => setLoadingGameLog(false));
+  };
 
   if (loading) {
     return (
@@ -397,10 +504,10 @@ export default function PlayerDetailPage() {
             <div className="flex items-start gap-4">
               {/* Player Photo */}
               <div className="shrink-0">
-                {player.image_url ? (
+                {hasRealImage(player.image_url) ? (
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-white/20 bg-white/10">
                     <img
-                      src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${player.image_url}`}
+                      src={assetUrl(player.image_url)}
                       alt={`${player.first_name} ${player.last_name}`}
                       className="w-full h-full object-cover"
                     />
@@ -422,6 +529,13 @@ export default function PlayerDetailPage() {
                 {player.archetype && (
                   <span className="px-2 py-0.5 bg-orange/20 text-orange rounded font-oswald font-bold text-xs">
                     {player.archetype}
+                  </span>
+                )}
+                {player.commitment_status && player.commitment_status !== "Uncommitted" && (
+                  <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs ${
+                    COMMITMENT_STATUS_COLORS[player.commitment_status]?.bg || "bg-white/10"
+                  } ${COMMITMENT_STATUS_COLORS[player.commitment_status]?.text || "text-white/70"}`}>
+                    {player.commitment_status}
                   </span>
                 )}
                 {player.shoots && <span>Shoots {player.shoots}</span>}
@@ -513,26 +627,93 @@ export default function PlayerDetailPage() {
                 {/* Inline edit form */}
                 {editingBio && (
                   <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-border space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Team</label>
-                        <input
-                          type="text"
-                          value={editFields.current_team}
-                          onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
-                        <input
-                          type="text"
+                    {/* League */}
+                    <div>
+                      <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
+                      {customLeague ? (
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={editFields.current_league}
+                            onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
+                            placeholder="Enter league name"
+                            className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setCustomLeague(false); setEditFields((f) => ({ ...f, current_league: "" })); }}
+                            className="text-[10px] text-teal hover:underline px-1 shrink-0"
+                          >
+                            List
+                          </button>
+                        </div>
+                      ) : (
+                        <select
                           value={editFields.current_league}
-                          onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
+                          onChange={(e) => {
+                            if (e.target.value === "__custom__") {
+                              setCustomLeague(true);
+                              setEditFields((f) => ({ ...f, current_league: "", current_team: "" }));
+                              setCustomTeam(true);
+                            } else {
+                              setEditFields((f) => ({ ...f, current_league: e.target.value, current_team: "" }));
+                              setCustomTeam(false);
+                            }
+                          }}
                           className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        />
-                      </div>
+                        >
+                          <option value="">Select league...</option>
+                          {editLeagues.map((lg) => (
+                            <option key={lg.id} value={lg.name}>{lg.name}</option>
+                          ))}
+                          <option value="__custom__">Custom...</option>
+                        </select>
+                      )}
                     </div>
+                    {/* Team */}
+                    <div>
+                      <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Team</label>
+                      {customTeam ? (
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={editFields.current_team}
+                            onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
+                            placeholder="Enter team name"
+                            className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          />
+                          {!customLeague && (
+                            <button
+                              type="button"
+                              onClick={() => { setCustomTeam(false); setEditFields((f) => ({ ...f, current_team: "" })); }}
+                              className="text-[10px] text-teal hover:underline px-1 shrink-0"
+                            >
+                              List
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <select
+                          value={editFields.current_team}
+                          onChange={(e) => {
+                            if (e.target.value === "__custom__") {
+                              setCustomTeam(true);
+                              setEditFields((f) => ({ ...f, current_team: "" }));
+                            } else {
+                              setEditFields((f) => ({ ...f, current_team: e.target.value }));
+                            }
+                          }}
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        >
+                          <option value="">Select team...</option>
+                          {filteredEditTeams.map((t) => (
+                            <option key={t.id} value={t.name}>{t.name}{t.city ? ` (${t.city})` : ""}</option>
+                          ))}
+                          <option value="__custom__">Custom...</option>
+                        </select>
+                      )}
+                    </div>
+                    {/* Position, Shoots, DOB */}
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Position</label>
@@ -571,6 +752,29 @@ export default function PlayerDetailPage() {
                         />
                       </div>
                     </div>
+                    {/* Height & Weight */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Height (cm)</label>
+                        <input
+                          type="number"
+                          value={editFields.height_cm}
+                          onChange={(e) => setEditFields((f) => ({ ...f, height_cm: e.target.value }))}
+                          placeholder="e.g. 183"
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Weight (kg)</label>
+                        <input
+                          type="number"
+                          value={editFields.weight_kg}
+                          onChange={(e) => setEditFields((f) => ({ ...f, weight_kg: e.target.value }))}
+                          placeholder="e.g. 82"
+                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        />
+                      </div>
+                    </div>
                     <button
                       onClick={handleSaveEdit}
                       disabled={savingEdit}
@@ -585,10 +789,10 @@ export default function PlayerDetailPage() {
                 {/* Player Photo Upload */}
                 <div className="flex items-center gap-4 mb-4 pb-4 border-b border-border/50">
                   <div className="relative group">
-                    {player.image_url ? (
+                    {hasRealImage(player.image_url) ? (
                       <div className="w-20 h-20 rounded-lg overflow-hidden border border-border bg-navy/5">
                         <img
-                          src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${player.image_url}`}
+                          src={assetUrl(player.image_url)}
                           alt={`${player.first_name} ${player.last_name}`}
                           className="w-full h-full object-cover"
                         />
@@ -604,7 +808,7 @@ export default function PlayerDetailPage() {
                     <div className="flex items-center gap-2">
                       <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal border border-teal/20 hover:bg-teal/20 transition-colors">
                         <Camera size={12} />
-                        {uploadingImage ? "Uploading..." : player.image_url ? "Change" : "Upload"}
+                        {uploadingImage ? "Uploading..." : hasRealImage(player.image_url) ? "Change" : "Upload"}
                         <input
                           type="file"
                           accept="image/jpeg,image/png,image/webp"
@@ -613,7 +817,7 @@ export default function PlayerDetailPage() {
                           className="hidden"
                         />
                       </label>
-                      {player.image_url && (
+                      {hasRealImage(player.image_url) && (
                         <button
                           onClick={handleImageDelete}
                           className="text-xs text-muted hover:text-red-600 transition-colors"
@@ -706,6 +910,28 @@ export default function PlayerDetailPage() {
                       <span className="font-semibold text-navy">{player.draft_eligible_year}</span>
                     </div>
                   )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted">Status</span>
+                    <select
+                      value={player.commitment_status || "Uncommitted"}
+                      onChange={async (e) => {
+                        const newStatus = e.target.value;
+                        try {
+                          await api.patch(`/players/${playerId}`, { commitment_status: newStatus });
+                          setPlayer((prev) => prev ? { ...prev, commitment_status: newStatus } : prev);
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-border cursor-pointer pr-5 py-0.5 rounded ${
+                        COMMITMENT_STATUS_COLORS[player.commitment_status || "Uncommitted"]?.text || "text-gray-600"
+                      }`}
+                    >
+                      {COMMITMENT_STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
                   {player.passports && player.passports.length > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted">Nationality</span>
@@ -844,7 +1070,10 @@ export default function PlayerDetailPage() {
                       ProspectX Metrics
                     </h4>
                     {playerMetrics ? (
-                      <ProspectXMetricsPanel indices={playerMetrics} />
+                      <>
+                        <MetricsRadarChart indices={playerMetrics} />
+                        <ProspectXMetricsPanel indices={playerMetrics} />
+                      </>
                     ) : (
                       <QuickMetrics stats={stats} position={player.position} />
                     )}
@@ -1158,94 +1387,307 @@ export default function PlayerDetailPage() {
                 <p className="text-sm text-navy/80 whitespace-pre-wrap">{player.notes}</p>
               </div>
             )}
+
+            {/* Suggest Correction */}
+            <div className="bg-white rounded-xl border border-border p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-orange" />
+                  Data Corrections
+                  {pendingCorrections > 0 && (
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange text-white text-[10px] font-bold">
+                      {pendingCorrections}
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={() => setShowCorrectionForm(!showCorrectionForm)}
+                  className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+                >
+                  {showCorrectionForm ? <X size={12} /> : <Edit3 size={12} />}
+                  {showCorrectionForm ? "Cancel" : "Suggest Correction"}
+                </button>
+              </div>
+
+              {correctionMsg && (
+                <div className="mb-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-700 text-xs flex items-center gap-2">
+                  <CheckCircle size={12} />
+                  {correctionMsg}
+                  <button onClick={() => setCorrectionMsg("")} className="ml-auto"><X size={10} /></button>
+                </div>
+              )}
+
+              {showCorrectionForm && (
+                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-border">
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Field to Correct</label>
+                    <select
+                      value={correctionField}
+                      onChange={(e) => setCorrectionField(e.target.value)}
+                      className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    >
+                      <option value="">Select field...</option>
+                      {CORRECTABLE_FIELDS.map((f) => (
+                        <option key={f} value={f}>{CORRECTABLE_FIELD_LABELS[f] || f}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {correctionField && (
+                    <div className="text-[10px] text-muted">
+                      Current value: <span className="font-medium text-navy">
+                        {String((player as unknown as Record<string, unknown>)[correctionField] ?? "—")}
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Correct Value</label>
+                    <input
+                      type="text"
+                      value={correctionValue}
+                      onChange={(e) => setCorrectionValue(e.target.value)}
+                      placeholder="Enter the correct value..."
+                      className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Reason (optional)</label>
+                    <textarea
+                      value={correctionReason}
+                      onChange={(e) => setCorrectionReason(e.target.value)}
+                      placeholder="Why is this incorrect?"
+                      rows={2}
+                      className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Confidence</label>
+                    <div className="flex gap-2 mt-1">
+                      {(["low", "medium", "high"] as const).map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setCorrectionConfidence(c)}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                            correctionConfidence === c
+                              ? c === "high" ? "bg-green-100 text-green-700 border border-green-300"
+                                : c === "medium" ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                : "bg-red-100 text-red-700 border border-red-300"
+                              : "bg-gray-100 text-muted border border-border hover:bg-gray-200"
+                          }`}
+                        >
+                          {c.charAt(0).toUpperCase() + c.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (!correctionField || !correctionValue) return;
+                      setSubmittingCorrection(true);
+                      try {
+                        await api.post(`/players/${playerId}/corrections`, {
+                          field_name: correctionField,
+                          new_value: correctionValue,
+                          reason: correctionReason,
+                          confidence: correctionConfidence,
+                        });
+                        setCorrectionMsg("Correction submitted for review!");
+                        setCorrectionField("");
+                        setCorrectionValue("");
+                        setCorrectionReason("");
+                        setShowCorrectionForm(false);
+                        setPendingCorrections((p) => p + 1);
+                      } catch (err: unknown) {
+                        const msg = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+                        alert(typeof msg === "string" ? msg : "Failed to submit correction");
+                      } finally {
+                        setSubmittingCorrection(false);
+                      }
+                    }}
+                    disabled={submittingCorrection || !correctionField || !correctionValue}
+                    className="w-full bg-gradient-to-r from-orange to-orange/80 text-white py-2 rounded-lg font-oswald font-semibold uppercase tracking-wider text-sm hover:shadow-md transition-shadow disabled:opacity-50"
+                  >
+                    {submittingCorrection ? "Submitting..." : "Submit Correction"}
+                  </button>
+                </div>
+              )}
+
+              {!showCorrectionForm && pendingCorrections === 0 && (
+                <p className="text-xs text-muted">
+                  See incorrect data? Click &quot;Suggest Correction&quot; to submit a fix for review.
+                </p>
+              )}
+            </div>
           </section>
         )}
 
         {/* Stats Tab */}
         {activeTab === "stats" && (
           <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-navy">Season Stats</h2>
-              <div className="text-right">
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,.xls,.xlsm"
-                  onChange={handleCsvUpload}
-                  disabled={uploading}
-                  className="block text-sm text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-orange/30 file:text-xs file:font-oswald file:uppercase file:tracking-wider file:font-semibold file:bg-orange/10 file:text-orange hover:file:bg-orange/20 file:transition-colors file:cursor-pointer"
-                />
-                <p className="text-[10px] text-muted/60 mt-1">Supports XLSX analytics exports, CSV, Excel</p>
-              </div>
+            {/* Sub-view switcher */}
+            <div className="flex items-center gap-1 mb-4 p-0.5 bg-navy/[0.04] rounded-lg w-fit">
+              {([
+                { key: "current" as StatsSubView, label: "Current" },
+                { key: "progression" as StatsSubView, label: "Progression" },
+                { key: "gamelog" as StatsSubView, label: "Game Log" },
+              ]).map((sv) => (
+                <button
+                  key={sv.key}
+                  onClick={() => setStatsSubView(sv.key)}
+                  className={`px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-md transition-all ${
+                    statsSubView === sv.key
+                      ? "bg-white text-navy shadow-sm font-bold"
+                      : "text-muted hover:text-navy"
+                  }`}
+                >
+                  {sv.label}
+                </button>
+              ))}
             </div>
 
-            {uploadMsg && (
-              <div className={`mb-3 px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                uploadMsg.startsWith("✓") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
-              }`}>
-                {uploadMsg.startsWith("✓") ? <CheckCircle size={14} /> : null}
-                {uploadMsg}
-              </div>
-            )}
-
-            {/* Goalie Stats (if goalie position) */}
-            {goalieStats.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Goaltending</h3>
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <GoalieStatTable stats={goalieStats} />
+            {/* Current Stats Sub-View */}
+            {statsSubView === "current" && (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-navy">Season Stats</h2>
+                  <div className="text-right">
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls,.xlsm"
+                      onChange={handleCsvUpload}
+                      disabled={uploading}
+                      className="block text-sm text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-orange/30 file:text-xs file:font-oswald file:uppercase file:tracking-wider file:font-semibold file:bg-orange/10 file:text-orange hover:file:bg-orange/20 file:transition-colors file:cursor-pointer"
+                    />
+                    <p className="text-[10px] text-muted/60 mt-1">Supports XLSX analytics exports, CSV, Excel</p>
+                  </div>
                 </div>
-              </div>
+
+                {uploadMsg && (
+                  <div className={`mb-3 px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                    uploadMsg.startsWith("✓") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    {uploadMsg.startsWith("✓") ? <CheckCircle size={14} /> : null}
+                    {uploadMsg}
+                  </div>
+                )}
+
+                {/* Recent Form Badge */}
+                {recentForm && recentForm.games_found > 0 && (
+                  <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-transparent border border-teal/15">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-teal font-bold">Last {recentForm.games_found} Games</span>
+                      <span className="text-xs text-navy font-medium">{recentForm.totals.g}G {recentForm.totals.a}A {recentForm.totals.p}P</span>
+                      <span className="text-xs text-muted">({recentForm.averages.ppg} PPG)</span>
+                      {recentForm.streak && recentForm.streak !== "No active streak" && recentForm.streak !== "No game data available" && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal/10 text-teal text-[10px] font-bold">
+                          <Flame size={9} />
+                          {recentForm.streak}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Goalie Stats (if goalie position) */}
+                {goalieStats.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Goaltending</h3>
+                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                      <GoalieStatTable stats={goalieStats} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Skater Stats */}
+                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                  <StatTable stats={stats} />
+                </div>
+
+                {stats.length === 0 && goalieStats.length === 0 && (
+                  <p className="text-xs text-muted mt-2">
+                    No stats yet. Upload a CSV or Excel file with columns: season, gp, g, a, p, plus_minus, pim, shots, sog, shooting_pct
+                  </p>
+                )}
+
+                {/* Extended Stats (Advanced Analytics) */}
+                {stats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
+                      Advanced Analytics
+                    </h3>
+                    {stats
+                      .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
+                      .slice(0, 1)
+                      .map((s) => (
+                        <ExtendedStatTable
+                          key={s.id}
+                          stats={s.extended_stats!}
+                          season={s.season}
+                          source={s.data_source || undefined}
+                        />
+                      ))}
+                  </div>
+                )}
+
+                {/* Goalie Extended Stats */}
+                {goalieStats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
+                      Goaltending Advanced Analytics
+                    </h3>
+                    {goalieStats
+                      .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
+                      .slice(0, 1)
+                      .map((s) => (
+                        <ExtendedStatTable
+                          key={s.id}
+                          stats={s.extended_stats!}
+                          season={s.season}
+                          source={s.data_source || undefined}
+                        />
+                      ))}
+                  </div>
+                )}
+              </>
             )}
 
-            {/* Skater Stats */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <StatTable stats={stats} />
-            </div>
-
-            {stats.length === 0 && goalieStats.length === 0 && (
-              <p className="text-xs text-muted mt-2">
-                No stats yet. Upload a CSV or Excel file with columns: season, gp, g, a, p, plus_minus, pim, shots, sog, shooting_pct
-              </p>
+            {/* Progression Sub-View */}
+            {statsSubView === "progression" && (
+              <>
+                <h2 className="text-lg font-semibold text-navy mb-3">Season Progression</h2>
+                {loadingProgression ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-navy border-t-teal mx-auto" />
+                    <p className="text-xs text-muted mt-2">Loading progression data...</p>
+                  </div>
+                ) : progression ? (
+                  <ProgressionChart data={progression} />
+                ) : null}
+              </>
             )}
 
-            {/* Extended Stats (Advanced Analytics) */}
-            {stats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
-              <div className="mt-6">
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
-                  Advanced Analytics
-                </h3>
-                {stats
-                  .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
-                  .slice(0, 1)
-                  .map((s) => (
-                    <ExtendedStatTable
-                      key={s.id}
-                      stats={s.extended_stats!}
-                      season={s.season}
-                      source={s.data_source || undefined}
-                    />
-                  ))}
-              </div>
-            )}
-
-            {/* Goalie Extended Stats */}
-            {goalieStats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
-              <div className="mt-6">
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
-                  Goaltending Advanced Analytics
-                </h3>
-                {goalieStats
-                  .filter((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0)
-                  .slice(0, 1)
-                  .map((s) => (
-                    <ExtendedStatTable
-                      key={s.id}
-                      stats={s.extended_stats!}
-                      season={s.season}
-                      source={s.data_source || undefined}
-                    />
-                  ))}
-              </div>
+            {/* Game Log Sub-View */}
+            {statsSubView === "gamelog" && (
+              <>
+                <h2 className="text-lg font-semibold text-navy mb-3">Game Log</h2>
+                {loadingGameLog ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-navy border-t-teal mx-auto" />
+                    <p className="text-xs text-muted mt-2">Loading game log...</p>
+                  </div>
+                ) : gameLog ? (
+                  <GameLogTable
+                    data={gameLog}
+                    onPageChange={handleGameLogPageChange}
+                    currentOffset={gameLogOffset}
+                    pageSize={50}
+                  />
+                ) : null}
+              </>
             )}
           </section>
         )}
@@ -1528,6 +1970,48 @@ function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: str
       <p className="text-[9px] text-muted/50 mt-1">
         Based on {season.gp} GP {season.season ? `(${season.season})` : ""}
       </p>
+    </div>
+  );
+}
+
+// ── Metrics Radar Chart ──────────────────────────────────────
+const RADAR_LABEL_MAP: Record<string, string> = {
+  sniper: "Sniper",
+  playmaker: "Playmaker",
+  transition: "Transition",
+  defensive: "Defensive",
+  compete: "Compete",
+  hockey_iq: "Hockey IQ",
+};
+
+function MetricsRadarChart({ indices }: { indices: PlayerMetrics }) {
+  const metricOrder = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
+  const data = metricOrder.map((key) => ({
+    axis: RADAR_LABEL_MAP[key],
+    value: indices.indices[key]?.value ?? 0,
+    fullMark: 99,
+  }));
+
+  return (
+    <div className="h-[200px] mb-3">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadarChart cx="50%" cy="50%" outerRadius="75%" data={data}>
+          <PolarGrid stroke="#e5e7eb" strokeWidth={0.5} />
+          <PolarAngleAxis
+            dataKey="axis"
+            tick={{ fontSize: 10, fill: "#6b7280", fontFamily: "Oswald, sans-serif" }}
+            tickLine={false}
+          />
+          <Radar
+            dataKey="value"
+            stroke={METRIC_COLORS.transition}
+            fill={METRIC_COLORS.transition}
+            fillOpacity={0.2}
+            strokeWidth={2}
+            dot={{ r: 3, fill: METRIC_COLORS.transition }}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

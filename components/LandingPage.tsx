@@ -36,7 +36,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Who is ProspectX for?",
-        a: "GMs & Hockey Ops for roster construction and draft strategy. Scouts for amateur/pro scouting and list building. Coaches for game plans, deployment, and practice planning. Player Development staff for improvement plans and progress tracking. Agents for player marketing and recruiting. We serve junior hockey (GOJHL, OJHL, OHL, BCHL, USHL), AAA organizations, NCAA programs, and professional scouts.",
+        a: "GMs & Hockey Ops for roster construction and draft strategy. Scouts for amateur/pro scouting and list building. Coaches for game plans, deployment, and practice planning. Player Development staff for improvement plans and progress tracking. Agents for player marketing and recruiting. We serve junior hockey (GOHL, OJHL, OHL, BCHL, USHL), AAA organizations, NCAA programs, and professional scouts.",
       },
     ],
   },
@@ -78,7 +78,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "How much does ProspectX cost?",
-        a: "Founding Member pricing (first 10 customers, locked forever): GOJHL $299/mo, OJHL $499/mo, OHL $999/mo. Standard pricing after that: GOJHL $399/mo, OJHL $699/mo, OHL $1,499/mo. Annual discounts of 16-20% available. AAA organizations start at $599/mo, agents at $149/mo per player.",
+        a: "Founding Member pricing (first 10 customers, locked forever): GOHL $299/mo, OJHL $499/mo, OHL $999/mo. Standard pricing after that: GOHL $399/mo, OJHL $699/mo, OHL $1,499/mo. Annual discounts of 16-20% available. AAA organizations start at $599/mo, agents at $149/mo per player.",
       },
       {
         q: "Can I try ProspectX for free?",
@@ -99,7 +99,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Can multiple users access ProspectX?",
-        a: "Yes! GOJHL tier includes 3 users, OJHL includes 5, OHL includes unlimited. User roles: Admin (full access), Coach (reports + notes), Scout (notes + view), and Read-Only (view reports only). All users share the player database, team systems, scout notes, and reports.",
+        a: "Yes! GOHL tier includes 3 users, OJHL includes 5, OHL includes unlimited. User roles: Admin (full access), Coach (reports + notes), Scout (notes + view), and Read-Only (view reports only). All users share the player database, team systems, scout notes, and reports.",
       },
       {
         q: "Does ProspectX work on mobile?",
@@ -421,9 +421,9 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* GOJHL */}
+            {/* GOHL */}
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">GOJHL Tier</div>
+              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">GOHL Tier</div>
               <div className="flex items-baseline gap-1 mb-4">
                 <span className="text-3xl font-oswald font-bold text-white">$299</span>
                 <span className="text-sm text-white/30">/month</span>

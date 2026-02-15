@@ -37,4 +37,25 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Resolve an image/asset URL. External URLs (http/https) are returned as-is.
+ * Local paths (e.g. /uploads/...) get the API base URL prepended.
+ * HockeyTech "nophoto" placeholder URLs are treated as empty.
+ */
+export function assetUrl(path: string | null | undefined): string {
+  if (!path) return "";
+  if (path.toLowerCase().includes("nophoto")) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${API_BASE}${path}`;
+}
+
+/**
+ * Check if a player has a real image (not null, empty, or a HockeyTech nophoto placeholder).
+ */
+export function hasRealImage(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.toLowerCase().includes("nophoto")) return false;
+  return true;
+}
+
 export default api;

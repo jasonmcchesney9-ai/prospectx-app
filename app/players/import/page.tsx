@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -14,11 +14,13 @@ import {
   Loader2,
   FileSpreadsheet,
   X,
+  ChevronDown,
+  Settings,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
-import type { ImportDuplicate, ImportPreview, ImportResult } from "@/types/api";
+import type { ImportDuplicate, ImportPreview, ImportResult, TeamReference } from "@/types/api";
 
 type Step = "upload" | "preview" | "importing" | "done";
 
@@ -30,8 +32,46 @@ export default function BatchImportPage() {
   const [uploading, setUploading] = useState(false);
   const [executing, setExecuting] = useState(false);
 
+  // Team / League / Season overrides
+  const [season, setSeason] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    return now.getMonth() < 8 ? `${y - 1}-${y}` : `${y}-${y + 1}`;
+  });
+  const [teamName, setTeamName] = useState("");
+  const [leagueName, setLeagueName] = useState("");
+  const [teams, setTeams] = useState<TeamReference[]>([]);
+  const [teamSearch, setTeamSearch] = useState("");
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   // Duplicate resolutions: row_index -> action
   const [resolutions, setResolutions] = useState<Record<number, string>>({});
+
+  // Load reference teams for autocomplete
+  useEffect(() => {
+    api.get<TeamReference[]>("/teams/reference").then((r) => setTeams(r.data)).catch(() => {});
+  }, []);
+
+  // Close team dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowTeamDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filteredTeams = teams.filter(
+    (t) =>
+      t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+      (t.league || "").toLowerCase().includes(teamSearch.toLowerCase())
+  );
+
+  // Extract unique leagues from reference teams
+  const leagues = Array.from(new Set(teams.map((t) => t.league).filter(Boolean))).sort();
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -41,7 +81,15 @@ export default function BatchImportPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const { data } = await api.post<ImportPreview>("/import/preview", formData);
+
+      // Build query params for overrides
+      const params = new URLSearchParams();
+      if (teamName) params.set("team_override", teamName);
+      if (leagueName) params.set("league_override", leagueName);
+      if (season) params.set("season_override", season);
+
+      const url = `/import/preview${params.toString() ? `?${params.toString()}` : ""}`;
+      const { data } = await api.post<ImportPreview>(url, formData);
       setPreview(data);
       // Default all duplicates to "skip"
       const defaultRes: Record<number, string> = {};
@@ -91,12 +139,30 @@ export default function BatchImportPage() {
     <ProtectedRoute>
       <NavBar />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <Link href="/players" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-6">
-          <ArrowLeft size={14} /> Back to Players
-        </Link>
+        <div className="flex items-center justify-between mb-6">
+          <Link href="/players" className="flex items-center gap-1 text-sm text-muted hover:text-navy">
+            <ArrowLeft size={14} /> Back to Players
+          </Link>
+          <Link
+            href="/players/manage"
+            className="flex items-center gap-1.5 text-sm text-navy hover:text-teal transition-colors"
+          >
+            <Settings size={14} />
+            Manage Players
+          </Link>
+        </div>
 
-        <h1 className="text-2xl font-bold text-navy mb-1">Import Players</h1>
-        <p className="text-sm text-muted mb-6">Upload a CSV or Excel roster to batch-add players. For advanced game stats, upload from the player&apos;s profile page or the Import Stats page.</p>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center">
+            <Users size={20} className="text-teal" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold font-oswald text-navy">Import Players</h1>
+            <p className="text-sm text-muted">
+              Upload a CSV or Excel roster to batch-add players with team and season context
+            </p>
+          </div>
+        </div>
 
         {error && (
           <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center gap-2">
@@ -108,39 +174,132 @@ export default function BatchImportPage() {
 
         {/* Step 1: Upload */}
         {step === "upload" && (
-          <div className="bg-white rounded-xl border border-border p-8 text-center">
-            <FileSpreadsheet size={48} className="mx-auto text-teal/40 mb-4" />
-            <h2 className="text-lg font-semibold text-navy mb-2">Upload Player Roster</h2>
-            <p className="text-sm text-muted mb-6 max-w-md mx-auto">
-              Upload a CSV or Excel file (.xlsx) with player roster data. Required columns: <strong>First Name</strong>, <strong>Last Name</strong>.
-              Optional: Position, DOB, Team, League, Shoots, GP, G, A, P, PIM.
-            </p>
-            <p className="text-xs text-muted/60 mb-4 max-w-md mx-auto">
-              <strong>Note:</strong> Advanced game stats and analytics exports should be uploaded from each player&apos;s profile page (Stats tab) or the Import Stats page.
-            </p>
-
-            <input
-              type="file"
-              accept=".csv,.CSV,.xlsx,.xls,.xlsm"
-              onChange={handleFileUpload}
-              disabled={uploading}
-              className="block mx-auto text-sm text-muted file:mr-3 file:py-2.5 file:px-6 file:rounded-xl file:border-0 file:text-sm file:font-oswald file:uppercase file:tracking-wider file:font-semibold file:bg-teal file:text-white hover:file:bg-teal/90 file:transition-colors file:cursor-pointer"
-            />
-            {uploading && (
-              <div className="flex items-center justify-center gap-2 mt-3 text-sm text-muted">
-                <Loader2 size={16} className="animate-spin" />
-                Processing...
+          <div className="bg-white rounded-xl border border-border p-6">
+            {/* Season / Team / League fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-navy mb-1">Season</label>
+                <input
+                  type="text"
+                  value={season}
+                  onChange={(e) => setSeason(e.target.value)}
+                  placeholder="e.g. 2025-2026"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                />
               </div>
-            )}
+
+              {/* Team Name with autocomplete */}
+              <div ref={dropdownRef}>
+                <label className="block text-sm font-semibold text-navy mb-1">
+                  Default Team
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={teamName || teamSearch}
+                    onChange={(e) => {
+                      setTeamSearch(e.target.value);
+                      setTeamName("");
+                      setShowTeamDropdown(true);
+                    }}
+                    onFocus={() => setShowTeamDropdown(true)}
+                    placeholder="Search teams..."
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  />
+                  <ChevronDown size={14} className="absolute right-3 top-3 text-muted" />
+                  {showTeamDropdown && filteredTeams.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredTeams.slice(0, 20).map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setTeamName(t.name);
+                            setTeamSearch("");
+                            setShowTeamDropdown(false);
+                            // Auto-fill league if the team has one
+                            if (t.league && !leagueName) {
+                              setLeagueName(t.league);
+                            }
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-navy/[0.02] flex items-center justify-between"
+                        >
+                          <span className="text-navy">{t.name}</span>
+                          <span className="text-xs text-muted">{t.league}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted/60 mt-1">Applied if CSV has no Team column</p>
+              </div>
+
+              {/* League */}
+              <div>
+                <label className="block text-sm font-semibold text-navy mb-1">
+                  Default League
+                </label>
+                {leagues.length > 0 ? (
+                  <select
+                    value={leagueName}
+                    onChange={(e) => setLeagueName(e.target.value)}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  >
+                    <option value="">Select league...</option>
+                    {leagues.map((lg) => (
+                      <option key={lg} value={lg!}>{lg}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={leagueName}
+                    onChange={(e) => setLeagueName(e.target.value)}
+                    placeholder="e.g. GOHL"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  />
+                )}
+                <p className="text-xs text-muted/60 mt-1">Applied if CSV has no League column</p>
+              </div>
+            </div>
+
+            {/* File Picker */}
+            <div className="border-t border-border pt-6">
+              <label className="block text-sm font-semibold text-navy mb-2">Player File (CSV or XLSX)</label>
+              <div className="text-center">
+                <FileSpreadsheet size={40} className="mx-auto text-teal/40 mb-3" />
+                <p className="text-sm text-muted mb-2 max-w-md mx-auto">
+                  Required columns: <strong>First Name</strong>, <strong>Last Name</strong>.
+                  Optional: Position, DOB, Team, League, Shoots, GP, G, A, P, PIM.
+                </p>
+                <p className="text-xs text-muted/60 mb-4 max-w-md mx-auto">
+                  Team/League/Season from CSV columns take priority over the defaults above.
+                  For advanced game stats, use the <Link href="/instat" className="text-teal hover:underline">Import Stats</Link> page instead.
+                </p>
+
+                <input
+                  type="file"
+                  accept=".csv,.CSV,.xlsx,.xls,.xlsm"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  className="block mx-auto text-sm text-muted file:mr-3 file:py-2.5 file:px-6 file:rounded-xl file:border-0 file:text-sm file:font-oswald file:uppercase file:tracking-wider file:font-semibold file:bg-teal file:text-white hover:file:bg-teal/90 file:transition-colors file:cursor-pointer"
+                />
+                {uploading && (
+                  <div className="flex items-center justify-center gap-2 mt-3 text-sm text-muted">
+                    <Loader2 size={16} className="animate-spin" />
+                    Processing...
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Sample CSV format */}
-            <div className="mt-8 text-left max-w-lg mx-auto">
+            <div className="mt-6 border-t border-border pt-6">
               <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Example CSV Format</p>
               <pre className="text-xs bg-navy/[0.03] p-3 rounded-lg border border-border overflow-x-auto">
 {`First Name,Last Name,Position,DOB,Team,League,GP,G,A,P
-Ewan,McChesney,C,2005-03-15,Chatham Maroons,GOJHL,25,12,18,30
-Connor,Smith,LW,2006-01-20,Chatham Maroons,GOJHL,24,8,10,18
-Jake,Wilson,D,2005-11-05,Chatham Maroons,GOJHL,25,2,8,10`}
+Ewan,McChesney,C,2005-03-15,Chatham Maroons,GOHL,25,12,18,30
+Connor,Smith,LW,2006-01-20,Chatham Maroons,GOHL,24,8,10,18
+Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
               </pre>
             </div>
           </div>
@@ -149,6 +308,16 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOJHL,25,2,8,10`}
         {/* Step 2: Preview + Duplicate Review */}
         {step === "preview" && preview && (
           <div className="space-y-4">
+            {/* Applied Defaults Banner */}
+            {(teamName || leagueName || season) && (
+              <div className="bg-teal/5 border border-teal/20 rounded-xl px-4 py-3 text-xs text-navy flex items-center gap-2 flex-wrap">
+                <span className="font-semibold">Defaults applied:</span>
+                {season && <span className="px-2 py-0.5 bg-white rounded border border-border">Season: {season}</span>}
+                {teamName && <span className="px-2 py-0.5 bg-white rounded border border-border">Team: {teamName}</span>}
+                {leagueName && <span className="px-2 py-0.5 bg-white rounded border border-border">League: {leagueName}</span>}
+              </div>
+            )}
+
             {/* Summary Cards */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white rounded-xl border border-border p-4 text-center">
@@ -260,6 +429,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOJHL,25,2,8,10`}
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Name</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Pos</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Team</th>
+                      <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">League</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">DOB</th>
                       <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-muted">GP</th>
                       <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-muted">G</th>
@@ -273,6 +443,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOJHL,25,2,8,10`}
                         <td className="px-3 py-2 font-medium text-navy">{row.first_name} {row.last_name}</td>
                         <td className="px-3 py-2">{row.position}</td>
                         <td className="px-3 py-2">{row.current_team || "—"}</td>
+                        <td className="px-3 py-2">{row.current_league || "—"}</td>
                         <td className="px-3 py-2">{row.dob || "—"}</td>
                         <td className="px-3 py-2 text-center">{row.gp || "—"}</td>
                         <td className="px-3 py-2 text-center">{row.g || "—"}</td>
@@ -351,6 +522,13 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOJHL,25,2,8,10`}
               >
                 Import Another
               </button>
+              <Link
+                href="/players/manage"
+                className="px-4 py-2 text-sm text-navy hover:text-navy/80 border border-navy/30 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <Settings size={14} />
+                Manage Players
+              </Link>
               <Link
                 href="/players"
                 className="px-4 py-2 text-sm bg-teal text-white rounded-lg hover:bg-teal/90 font-oswald uppercase tracking-wider font-semibold transition-colors"

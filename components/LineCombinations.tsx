@@ -114,8 +114,9 @@ export default function LineCombinations({ lines, availableTypes }: Props) {
               const players = line.player_refs || [];
               const playerDisplay =
                 players.length > 0
-                  ? players.map((p) => `#${p.jersey} ${p.name}`).join(", ")
+                  ? players.map((p) => p.jersey ? `#${p.jersey} ${p.name}` : p.name).join(", ")
                   : line.player_names;
+              const label = line.line_label;
 
               return (
                 <tr
@@ -123,6 +124,11 @@ export default function LineCombinations({ lines, availableTypes }: Props) {
                   className="border-b border-border/30 hover:bg-navy/[0.02]"
                 >
                   <td className="py-2 px-2 text-xs text-navy max-w-xs truncate" title={playerDisplay}>
+                    {label && (
+                      <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded bg-navy/5 text-[9px] font-oswald font-bold uppercase tracking-wider text-navy/60">
+                        {label}
+                      </span>
+                    )}
                     {playerDisplay}
                   </td>
                   <td className="py-2 px-1 text-center text-xs text-navy font-medium">

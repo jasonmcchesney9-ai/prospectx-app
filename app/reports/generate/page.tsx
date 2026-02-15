@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Zap, Loader2, CheckCircle2, AlertCircle, Users, Building2 } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, CheckCircle2, AlertCircle, Users, Building2, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -15,7 +15,9 @@ import type {
   ReportStatusResponse,
   TeamReference,
 } from "@/types/api";
-import { REPORT_TYPE_LABELS, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES } from "@/types/api";
+import { REPORT_TYPE_LABELS, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES, DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS } from "@/types/api";
+import { getUser } from "@/lib/auth";
+import UpgradeModal from "@/components/UpgradeModal";
 
 type GenerationState = "idle" | "submitting" | "polling" | "complete" | "failed";
 
@@ -58,6 +60,14 @@ function GenerateReportContent() {
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
+
+  // Drill options
+  const [includeDrills, setIncludeDrills] = useState(false);
+  const [drillExpanded, setDrillExpanded] = useState(false);
+  const [drillFocus, setDrillFocus] = useState<string[]>([]);
+  const [drillAgeLevel, setDrillAgeLevel] = useState("");
+  const [drillIntensity, setDrillIntensity] = useState("");
 
   // Determine if current selection is a team report type
   const isTeamReportType = (TEAM_REPORT_TYPES as readonly string[]).includes(selectedType);
@@ -172,6 +182,16 @@ function GenerateReportContent() {
       } else {
         payload.player_id = selectedPlayer;
       }
+      // Include drill options if enabled
+      if (includeDrills) {
+        payload.data_scope = {
+          ...payload.data_scope,
+          include_drills: true,
+          ...(drillFocus.length > 0 && { drill_focus: drillFocus }),
+          ...(drillAgeLevel && { drill_age_level: drillAgeLevel }),
+          ...(drillIntensity && { drill_intensity: drillIntensity }),
+        };
+      }
 
       const { data } = await api.post<ReportGenerateResponse>(
         "/reports/generate",
@@ -187,11 +207,20 @@ function GenerateReportContent() {
         pollStatus(data.report_id);
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Failed to generate report.";
-      setError(msg);
-      setGenState("failed");
+      const resp = (err as { response?: { status?: number; data?: { detail?: { used?: number; limit?: number; error?: string } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const used = typeof detail === "object" ? detail?.used || 0 : 0;
+        const limit = typeof detail === "object" ? detail?.limit || 0 : 0;
+        setUpgradeModal({ open: true, used, limit });
+        setError("You've reached your monthly report limit. Upgrade your plan to generate more reports.");
+        setGenState("failed");
+      } else {
+        const msg =
+          (typeof resp?.data?.detail === "string" ? resp.data.detail : null) || "Failed to generate report.";
+        setError(msg);
+        setGenState("failed");
+      }
     }
   };
 
@@ -458,6 +487,117 @@ function GenerateReportContent() {
               </div>
             )}
 
+            {/* Drill Recommendations Option */}
+            <div className="border border-border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!includeDrills) {
+                    setIncludeDrills(true);
+                    setDrillExpanded(true);
+                  } else {
+                    setDrillExpanded(!drillExpanded);
+                  }
+                }}
+                className="w-full flex items-center justify-between px-4 py-3 bg-navy/[0.02] hover:bg-navy/[0.04] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <ClipboardList size={14} className="text-teal" />
+                  <span className="text-sm font-semibold text-navy">Include Drill Recommendations</span>
+                  {includeDrills && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/15 text-teal font-oswald uppercase tracking-wider font-bold">On</span>
+                  )}
+                </div>
+                {drillExpanded ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
+              </button>
+
+              {drillExpanded && (
+                <div className="px-4 py-4 space-y-4 border-t border-border/50">
+                  <p className="text-xs text-muted/70 leading-relaxed">
+                    Include relevant drills from the ProspectX Drill Library with setup instructions, coaching points, and rink diagrams. The AI will recommend drills tailored to the player/team&apos;s development needs.
+                  </p>
+
+                  {/* Enable/Disable Toggle */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeDrills}
+                      onChange={(e) => setIncludeDrills(e.target.checked)}
+                      className="w-4 h-4 rounded border-border text-teal focus:ring-teal"
+                    />
+                    <span className="text-sm text-navy font-medium">Include drills with diagrams in report</span>
+                  </label>
+
+                  {includeDrills && (
+                    <div className="space-y-3 pl-7">
+                      {/* Drill Category Filter */}
+                      <div>
+                        <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">
+                          Focus Categories (optional)
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(DRILL_CATEGORIES).map(([key, label]) => {
+                            const isActive = drillFocus.includes(key);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setDrillFocus(prev =>
+                                  isActive ? prev.filter(f => f !== key) : [...prev, key]
+                                )}
+                                className={`px-2 py-1 rounded text-[10px] font-oswald uppercase tracking-wider transition-colors ${
+                                  isActive
+                                    ? "bg-teal/15 text-teal font-bold border border-teal/30"
+                                    : "bg-navy/[0.04] text-navy/50 border border-transparent hover:border-navy/20"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[10px] text-muted/50 mt-1">Leave empty for all categories</p>
+                      </div>
+
+                      {/* Age Level Filter */}
+                      <div>
+                        <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">
+                          Age Level (optional)
+                        </label>
+                        <select
+                          value={drillAgeLevel}
+                          onChange={(e) => setDrillAgeLevel(e.target.value)}
+                          className="px-3 py-1.5 border border-border rounded-lg text-xs bg-white w-full max-w-xs"
+                        >
+                          <option value="">All Ages</option>
+                          {DRILL_AGE_LEVELS.map((a) => (
+                            <option key={a} value={a}>{DRILL_AGE_LEVEL_LABELS[a]}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Intensity Filter */}
+                      <div>
+                        <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">
+                          Intensity (optional)
+                        </label>
+                        <select
+                          value={drillIntensity}
+                          onChange={(e) => setDrillIntensity(e.target.value)}
+                          className="px-3 py-1.5 border border-border rounded-lg text-xs bg-white w-full max-w-xs"
+                        >
+                          <option value="">All Intensities</option>
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Divider */}
             <div className="ice-stripe rounded-full" />
 
@@ -532,6 +672,16 @@ function GenerateReportContent() {
           </div>
         )}
       </main>
+
+      {/* Upgrade Modal for report limits */}
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ ...upgradeModal, open: false })}
+        limitType="report"
+        currentTier={getUser()?.subscription_tier || "rookie"}
+        used={upgradeModal.used}
+        limit={upgradeModal.limit}
+      />
     </ProtectedRoute>
   );
 }

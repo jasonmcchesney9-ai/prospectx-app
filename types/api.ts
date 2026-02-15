@@ -9,6 +9,10 @@ export interface User {
   first_name: string | null;
   last_name: string | null;
   role: string;
+  hockey_role: string;
+  subscription_tier: string;
+  monthly_reports_used: number;
+  monthly_bench_talks_used: number;
 }
 
 export interface TokenResponse {
@@ -38,6 +42,7 @@ export interface Player {
   age_group: string | null;
   draft_eligible_year: number | null;
   league_tier: string | null;
+  commitment_status: string | null;
   created_at: string;
 }
 
@@ -49,6 +54,21 @@ export interface PlayerFilterOptions {
   league_tiers: string[];
   positions: string[];
   draft_years: number[];
+  commitment_statuses: string[];
+  shoots: string[];
+  archetypes: string[];
+  overall_grades: string[];
+  height_range: { min: number; max: number } | null;
+  weight_range: { min: number; max: number } | null;
+}
+
+export interface SavedSearch {
+  id: string;
+  org_id: string;
+  user_id: string;
+  name: string;
+  filters: Record<string, string | number | boolean | null>;
+  created_at: string;
 }
 
 export interface PlayerCreate {
@@ -65,7 +85,63 @@ export interface PlayerCreate {
   notes?: string;
   tags?: string[];
   archetype?: string;
+  commitment_status?: string;
 }
+
+// ── Player Card Data (enriched for visual cards) ──────────────
+export interface PlayerCardData {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string;
+  current_team: string | null;
+  current_league: string | null;
+  image_url: string | null;
+  archetype: string | null;
+  commitment_status: string | null;
+  age_group: string | null;
+  birth_year: number | null;
+  overall_grade: string | null;
+  offensive_grade: string | null;
+  defensive_grade: string | null;
+  skating_grade: string | null;
+  hockey_iq_grade: string | null;
+  compete_grade: string | null;
+  archetype_confidence: number | null;
+  gp: number;
+  g: number;
+  a: number;
+  p: number;
+  metrics: {
+    sniper: number;
+    playmaker: number;
+    transition: number;
+    defensive: number;
+    compete: number;
+    hockey_iq: number;
+  } | null;
+}
+
+// ── Commitment Status ────────────────────────────────────
+export const COMMITMENT_STATUS_OPTIONS = [
+  "Uncommitted",
+  "Committed",
+  "Verbal Commit",
+  "Signed",
+  "Draft Eligible",
+  "Drafted",
+  "Undrafted FA",
+] as const;
+
+export const COMMITMENT_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  "Uncommitted":     { bg: "bg-gray-100",   text: "text-gray-600" },
+  "Committed":       { bg: "bg-green-100",  text: "text-green-700" },
+  "Verbal Commit":   { bg: "bg-blue-100",   text: "text-blue-700" },
+  "Signed":          { bg: "bg-green-200",  text: "text-green-800" },
+  "Draft Eligible":  { bg: "bg-orange/10",  text: "text-orange" },
+  "Drafted":         { bg: "bg-teal/10",    text: "text-teal" },
+  "Undrafted FA":    { bg: "bg-amber-100",  text: "text-amber-700" },
+};
 
 export interface Team {
   id: string;
@@ -165,6 +241,86 @@ export interface GoalieStats {
   created_at: string;
 }
 
+// ── Stats History & Game-by-Game Tracking ────────────────────
+export interface PlayerStatsHistory {
+  id: string;
+  player_id: string;
+  season: string | null;
+  date_recorded: string;
+  gp: number;
+  g: number;
+  a: number;
+  p: number;
+  plus_minus: number;
+  pim: number;
+  ppg: number;
+  ppa: number;
+  shg: number;
+  gwg: number;
+  shots: number;
+  shooting_pct: number | null;
+  data_source: string;
+  league: string | null;
+  team_name: string | null;
+  synced_at: string;
+  // Computed on read
+  ppg_rate?: number;
+  gpg_rate?: number;
+  apg_rate?: number;
+}
+
+export interface PlayerGameStat {
+  id: string;
+  player_id: string;
+  game_id: string | null;
+  ht_game_id: number | null;
+  game_date: string | null;
+  opponent: string | null;
+  home_away: string | null;
+  goals: number;
+  assists: number;
+  points: number;
+  plus_minus: number;
+  pim: number;
+  shots: number;
+  ppg: number;
+  shg: number;
+  gwg: number;
+  toi_seconds: number;
+  season: string | null;
+  league: string | null;
+  data_source: string;
+  created_at: string;
+}
+
+export interface Progression {
+  seasons: PlayerStatsHistory[];
+  trend: "improving" | "declining" | "stable" | "insufficient_data";
+  yoy_delta: {
+    p?: number;
+    g?: number;
+    a?: number;
+    ppg_rate?: number;
+  };
+}
+
+export interface RecentForm {
+  last_n_games: number;
+  games_found: number;
+  games: PlayerGameStat[];
+  totals: { g: number; a: number; p: number; pim: number; shots: number; plus_minus: number };
+  averages: { gpg: number; apg: number; ppg: number };
+  streak: string;
+  goal_streak: string | null;
+  source: "hockeytech" | "instat" | "none";
+}
+
+export interface GameStatsResponse {
+  games: PlayerGameStat[];
+  total: number;
+  source: "hockeytech" | "instat" | "none";
+}
+
 export interface TeamStats {
   id: string;
   org_id: string;
@@ -183,16 +339,67 @@ export interface LineCombination {
   team_name: string;
   season: string | null;
   line_type: string;
+  line_label: string | null;
+  line_order: number;
   player_names: string;
-  player_refs: Array<{ jersey: string; name: string }> | null;
+  player_refs: Array<{ jersey: string; name: string; player_id?: string; position?: string }> | null;
   plus_minus: string | null;
   shifts: number;
   toi_seconds: number;
   goals_for: number;
   goals_against: number;
   extended_stats: Record<string, unknown> | null;
+  data_source: string | null;
+  updated_at: string | null;
   created_at: string;
 }
+
+export interface LineCombinationCreate {
+  team_name: string;
+  season?: string;
+  line_type: string;
+  line_label?: string;
+  line_order?: number;
+  player_refs: Array<{
+    player_id?: string;
+    name: string;
+    jersey?: string;
+    position?: string;
+  }>;
+}
+
+export interface LineCombinationUpdate {
+  line_label?: string;
+  line_order?: number;
+  player_refs?: Array<{
+    player_id?: string;
+    name: string;
+    jersey?: string;
+    position?: string;
+  }>;
+}
+
+export const LINE_SLOT_CONFIG: Record<string, Array<{ label: string; order: number; slots: number; positions: string[] }>> = {
+  forwards: [
+    { label: "1st Line", order: 1, slots: 3, positions: ["LW", "C", "RW"] },
+    { label: "2nd Line", order: 2, slots: 3, positions: ["LW", "C", "RW"] },
+    { label: "3rd Line", order: 3, slots: 3, positions: ["LW", "C", "RW"] },
+    { label: "4th Line", order: 4, slots: 3, positions: ["LW", "C", "RW"] },
+  ],
+  defense: [
+    { label: "1st Pair", order: 1, slots: 2, positions: ["LD", "RD"] },
+    { label: "2nd Pair", order: 2, slots: 2, positions: ["LD", "RD"] },
+    { label: "3rd Pair", order: 3, slots: 2, positions: ["LD", "RD"] },
+  ],
+  pp: [
+    { label: "PP1", order: 1, slots: 5, positions: ["F", "F", "F", "D", "D"] },
+    { label: "PP2", order: 2, slots: 5, positions: ["F", "F", "F", "D", "D"] },
+  ],
+  pk: [
+    { label: "PK1", order: 1, slots: 4, positions: ["F", "F", "D", "D"] },
+    { label: "PK2", order: 2, slots: 4, positions: ["F", "F", "D", "D"] },
+  ],
+};
 
 export interface StatsImportResult {
   file_type: string;
@@ -517,6 +724,8 @@ export const SECTION_LABELS: Record<string, string> = {
   MATCHUP_STRATEGY: "Matchup Strategy",
   SERIES_STRATEGY: "Series Strategy",
   GOALTENDING: "Goaltending",
+  // Drill recommendation sections
+  RECOMMENDED_DRILLS: "Recommended Drills",
 };
 
 export const REPORT_TYPE_LABELS: Record<string, string> = {
@@ -961,6 +1170,69 @@ export const ANALYTICS_CATEGORIES = {
   },
 } as const;
 
+// ── Bench Talk Chat Types ────────────────────────────────────
+export interface BenchTalkConversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  last_message: string | null;
+  message_count: number;
+}
+
+export interface BenchTalkMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  metadata: string | null;
+  tokens_used: number;
+  created_at: string;
+}
+
+export interface BenchTalkMessageMetadata {
+  tool_calls: number;
+  tokens: number;
+  player_ids: string[];
+  report_ids: string[];
+}
+
+export interface BenchTalkContextResponse {
+  players: Array<Player & { gp?: number; g?: number; a?: number; p?: number; ppg?: number }>;
+  reports: Report[];
+}
+
+export interface BenchTalkMessageResponse {
+  message: BenchTalkMessage;
+}
+
+export interface BenchTalkSuggestion {
+  text: string;
+  icon: string;
+}
+
+// ── Subscription Types ──────────────────────────────────────
+export interface SubscriptionTier {
+  name: string;
+  price: number;
+  monthly_reports: number;
+  monthly_bench_talks: number;
+  max_seats: number;
+  features: string[];
+  description: string;
+}
+
+export interface SubscriptionUsage {
+  tier: string;
+  tier_config: SubscriptionTier;
+  monthly_reports_used: number;
+  monthly_reports_limit: number;
+  monthly_bench_talks_used: number;
+  monthly_bench_talks_limit: number;
+  usage_reset_at: string | null;
+  reports_remaining: number | string;
+  bench_talks_remaining: number | string;
+}
+
 // Grade color mapping for UI
 export const GRADE_COLORS: Record<string, string> = {
   "A+": "#16a34a",  // green-600
@@ -1059,3 +1331,596 @@ export const LEAGUE_TIER_LABELS: Record<string, string> = {
   Pro: "Professional",
   Unknown: "Other",
 };
+
+// ============================================================
+// HockeyTech Live League Data
+// ============================================================
+
+export interface HTLeague {
+  code: string;
+  name: string;
+  client_code: string;
+}
+
+export interface HTSeason {
+  id: number;
+  name: string;
+  shortname: string;
+  career: boolean;
+  playoff: boolean;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+export interface HTTeam {
+  id: number;
+  name: string;
+  code: string;
+  city: string;
+  nickname: string;
+  division: string;
+  logo: string;
+}
+
+export interface HTRosterPlayer {
+  id: number;
+  first_name: string;
+  last_name: string;
+  name: string;
+  jersey: string;
+  position: string;
+  shoots: string;
+  dob: string;
+  birthplace: string;
+  height: string;
+  weight: string;
+  rookie: boolean;
+  draft_status: string;
+  team_name: string;
+  photo: string;
+}
+
+export interface HTSkaterStats {
+  player_id: number;
+  name: string;
+  first_name: string;
+  last_name: string;
+  team_name: string;
+  team_code: string;
+  team_id: number;
+  position: string;
+  jersey: string;
+  age: string;
+  shoots: string;
+  gp: number | null;
+  goals: number | null;
+  assists: number | null;
+  points: number | null;
+  pim: number | null;
+  plus_minus: number | null;
+  ppg: number | null;
+  ppa: number | null;
+  shg: number | null;
+  gwg: number | null;
+  shots: number | null;
+  shooting_pct: string;
+  rookie: boolean;
+  photo: string;
+  logo: string;
+}
+
+export interface HTGoalieStats {
+  player_id: number;
+  name: string;
+  team_name: string;
+  team_code: string;
+  gp: number | null;
+  wins: number | null;
+  losses: number | null;
+  otl: number | null;
+  gaa: string;
+  save_pct: string;
+  shutouts: number | null;
+  minutes: string;
+  shots_against: number | null;
+  saves: number | null;
+  photo: string;
+}
+
+export interface HTStandings {
+  team_id: number;
+  name: string;
+  team_code: string;
+  city: string;
+  gp: number | null;
+  wins: number | null;
+  losses: number | null;
+  otl: number | null;
+  points: number | null;
+  gf: number | null;
+  ga: number | null;
+  diff: number | null;
+  pct: string;
+  streak: string;
+  pp_pct: string;
+  pk_pct: string;
+  regulation_wins: number | null;
+}
+
+export interface HTGame {
+  game_id: number;
+  date: string;
+  game_date: string;
+  time: string;
+  home_id: number;
+  home_team: string;
+  home_code: string;
+  home_score: string;
+  home_logo: string;
+  away_id: number;
+  away_team: string;
+  away_code: string;
+  away_score: string;
+  away_logo: string;
+  status: string;
+  period: string;
+  game_clock: string;
+  venue: string;
+}
+
+// ============================================================
+// Drill Library & Practice Plans
+// ============================================================
+
+export interface Drill {
+  id: string;
+  org_id: string | null;
+  name: string;
+  category: string;
+  description: string;
+  coaching_points: string | null;
+  setup: string | null;
+  duration_minutes: number;
+  players_needed: number;
+  ice_surface: string;
+  equipment: string | null;
+  age_levels: string[];
+  tags: string[];
+  diagram_url: string | null;
+  skill_focus: string | null;
+  intensity: string;
+  concept_id: string | null;
+  created_at: string;
+}
+
+export interface PracticePlanDrill {
+  id: string;
+  drill_id: string;
+  phase: string;
+  sequence_order: number;
+  duration_minutes: number;
+  coaching_notes: string | null;
+  // Joined drill fields
+  drill_name?: string;
+  drill_category?: string;
+  drill_description?: string;
+  drill_coaching_points?: string;
+  drill_setup?: string;
+  drill_ice_surface?: string;
+  drill_intensity?: string;
+  drill_skill_focus?: string;
+  drill_concept_id?: string;
+  drill_age_levels?: string[];
+  drill_tags?: string[];
+  drill_equipment?: string;
+  drill_diagram_url?: string | null;
+}
+
+export interface PracticePlan {
+  id: string;
+  org_id: string;
+  user_id: string;
+  team_name: string | null;
+  title: string;
+  age_level: string | null;
+  duration_minutes: number;
+  focus_areas: string[];
+  plan_data: {
+    title?: string;
+    phases?: Array<{
+      phase: string;
+      phase_label: string;
+      duration_minutes: number;
+      drills: Array<{
+        drill_id: string | null;
+        drill_name: string;
+        duration_minutes: number;
+        coaching_notes: string;
+      }>;
+    }>;
+    coaching_summary?: string;
+  } | null;
+  notes: string | null;
+  status: "draft" | "active" | "completed";
+  drills?: PracticePlanDrill[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PracticePlanGenerateRequest {
+  team_name: string;
+  duration_minutes?: number;
+  focus_areas?: string[];
+  age_level?: string;
+  notes?: string;
+}
+
+export const DRILL_CATEGORIES: Record<string, string> = {
+  warm_up: "Warm Up",
+  skating: "Skating",
+  passing: "Passing",
+  shooting: "Shooting",
+  stickhandling: "Stickhandling",
+  puck_handling: "Puck Handling",
+  offensive: "Offensive",
+  defensive: "Defensive",
+  systems: "Systems",
+  goalie: "Goalie",
+  conditioning: "Conditioning",
+  battle: "Battle Drills",
+  small_area_games: "Small Area Games",
+  transition: "Transition",
+  special_teams: "Special Teams",
+  cool_down: "Cool Down",
+  fun: "Fun & Team Building",
+};
+
+export const DRILL_AGE_LEVELS = [
+  "U8", "U10", "U12", "U14", "U16_U18", "JUNIOR_COLLEGE_PRO",
+] as const;
+
+export const DRILL_AGE_LEVEL_LABELS: Record<string, string> = {
+  U8: "Under 8",
+  U10: "Under 10",
+  U12: "Under 12",
+  U14: "Under 14",
+  U16_U18: "U16 / U18",
+  JUNIOR_COLLEGE_PRO: "Junior / College / Pro",
+};
+
+export const ICE_SURFACES: Record<string, string> = {
+  full: "Full Ice",
+  half: "Half Ice",
+  quarter: "Quarter Ice",
+  third: "Third Ice",
+  sixth: "Sixth Ice",
+};
+
+export const PRACTICE_PHASES: Record<string, string> = {
+  warm_up: "Warm Up",
+  skill_work: "Skill Work",
+  systems: "Team Systems",
+  scrimmage: "Game Situations",
+  conditioning: "Conditioning",
+  cool_down: "Cool Down",
+};
+
+export const INTENSITY_COLORS: Record<string, { label: string; bg: string; text: string }> = {
+  low: { label: "Low", bg: "bg-green-50", text: "text-green-700" },
+  medium: { label: "Medium", bg: "bg-orange/10", text: "text-orange" },
+  high: { label: "High", bg: "bg-red-50", text: "text-red-600" },
+};
+
+export const PRACTICE_FOCUS_OPTIONS = [
+  "skating", "passing", "shooting", "puck_handling", "offensive_systems",
+  "defensive_systems", "checking", "special_teams", "conditioning",
+  "compete_level", "transition", "battle_drills",
+] as const;
+
+export const PRACTICE_FOCUS_LABELS: Record<string, string> = {
+  skating: "Skating",
+  passing: "Passing",
+  shooting: "Shooting",
+  puck_handling: "Puck Handling",
+  offensive_systems: "Offensive Systems",
+  defensive_systems: "Defensive Systems",
+  checking: "Checking",
+  special_teams: "Special Teams",
+  conditioning: "Conditioning",
+  compete_level: "Compete Level",
+  transition: "Transition",
+  battle_drills: "Battle Drills",
+};
+
+// ============================================================
+// Corrections
+// ============================================================
+
+export const CORRECTABLE_FIELDS = [
+  "first_name", "last_name", "position", "shoots", "dob",
+  "current_team", "current_league", "height_cm", "weight_kg",
+  "commitment_status", "image_url",
+] as const;
+
+export const CORRECTABLE_FIELD_LABELS: Record<string, string> = {
+  first_name: "First Name",
+  last_name: "Last Name",
+  position: "Position",
+  shoots: "Shoots",
+  dob: "Date of Birth",
+  current_team: "Team",
+  current_league: "League",
+  height_cm: "Height (cm)",
+  weight_kg: "Weight (kg)",
+  commitment_status: "Commitment Status",
+  image_url: "Photo URL",
+};
+
+export interface PlayerCorrection {
+  id: string;
+  org_id: string;
+  user_id: string;
+  player_id: string;
+  field_name: string;
+  old_value: string;
+  new_value: string;
+  reason: string;
+  confidence: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  review_note: string | null;
+  first_name?: string;
+  last_name?: string;
+  submitter_email?: string;
+}
+
+export interface CorrectionCreate {
+  field_name: string;
+  new_value: string;
+  reason: string;
+  confidence: "low" | "medium" | "high";
+}
+
+// ============================================================
+// Merge History
+// ============================================================
+
+export interface PlayerMerge {
+  id: string;
+  primary_player_id: string;
+  primary_player_name: string;
+  duplicate_player_ids: string[];
+  stats_moved: number;
+  notes_moved: number;
+  reports_moved: number;
+  intel_moved: number;
+  merged_by: string;
+  merged_at: string;
+  can_undo: boolean;
+  undo_before: string | null;
+  undone_at: string | null;
+}
+
+// ============================================================
+// Deleted Players
+// ============================================================
+
+export interface DeletedPlayer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string | null;
+  current_team: string | null;
+  current_league: string | null;
+  deleted_at: string;
+  deleted_reason: string | null;
+  deleted_by: string | null;
+  days_since_deleted: number;
+  days_remaining: number;
+  can_restore: boolean;
+}
+
+// ============================================================
+// Game Plans
+// ============================================================
+
+export type SessionType = "pre_game" | "post_game" | "practice" | "season_notes";
+
+export const SESSION_TYPES: { value: SessionType; label: string }[] = [
+  { value: "pre_game", label: "Pre-Game" },
+  { value: "post_game", label: "Post-Game" },
+  { value: "practice", label: "Practice" },
+  { value: "season_notes", label: "Season Notes" },
+];
+
+export const TACTICAL_OPTIONS = {
+  forecheck: [
+    { value: "1-2-2_aggressive", label: "1-2-2 Aggressive" },
+    { value: "2-1-2_neutral", label: "2-1-2 Neutral Zone" },
+    { value: "1-3-1_conservative", label: "1-3-1 Conservative" },
+    { value: "2-3_passive", label: "2-3 Passive" },
+  ],
+  breakout: [
+    { value: "quick_up", label: "Quick Up" },
+    { value: "reverse", label: "Reverse" },
+    { value: "stretch_pass", label: "Stretch Pass" },
+    { value: "rim_play", label: "Rim Play" },
+  ],
+  defensive_system: [
+    { value: "man_on_man", label: "Man-on-Man" },
+    { value: "zone", label: "Zone Coverage" },
+    { value: "hybrid", label: "Hybrid" },
+    { value: "collapsing", label: "Collapsing" },
+  ],
+} as const;
+
+export interface GamePlan {
+  id: string;
+  org_id: string;
+  user_id: string;
+  team_name: string;
+  opponent_team_name: string;
+  game_date: string | null;
+  opponent_analysis: string;
+  our_strategy: string;
+  matchups: string;
+  special_teams_plan: string;
+  keys_to_game: string;
+  lines_snapshot: string;
+  status: "draft" | "active" | "completed";
+  session_type: SessionType;
+  talking_points: string;
+  forecheck: string;
+  breakout: string;
+  defensive_system: string;
+  what_worked: string | null;
+  what_didnt_work: string | null;
+  game_result: string | null;
+  game_score: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GamePlanCreate {
+  team_name: string;
+  opponent_team_name: string;
+  game_date?: string;
+  opponent_analysis?: string;
+  our_strategy?: string;
+  matchups?: Record<string, unknown>;
+  special_teams_plan?: string;
+  keys_to_game?: string;
+  lines_snapshot?: Record<string, unknown>;
+  status?: string;
+  session_type?: SessionType;
+  talking_points?: Record<string, unknown>;
+  forecheck?: string;
+  breakout?: string;
+  defensive_system?: string;
+  what_worked?: string;
+  what_didnt_work?: string;
+  game_result?: string;
+  game_score?: string;
+}
+
+// ============================================================
+// Series Plans
+// ============================================================
+
+export const SERIES_FORMATS = [
+  { value: "best_of_3", label: "Best of 3" },
+  { value: "best_of_5", label: "Best of 5" },
+  { value: "best_of_7", label: "Best of 7" },
+  { value: "round_robin", label: "Round Robin" },
+  { value: "single_elim", label: "Single Elimination" },
+] as const;
+
+export interface SeriesPlan {
+  id: string;
+  org_id: string;
+  user_id: string;
+  team_name: string;
+  opponent_team_name: string;
+  series_name: string;
+  series_format: string;
+  current_score: string;
+  game_notes: string;
+  working_strategies: string;
+  needs_adjustment: string;
+  opponent_systems: string;
+  key_players_dossier: string;
+  matchup_plan: string;
+  adjustments: string;
+  momentum_log: string;
+  status: "active" | "won" | "lost" | "completed";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeriesPlanCreate {
+  team_name: string;
+  opponent_team_name: string;
+  series_name: string;
+  series_format?: string;
+  current_score?: string;
+  game_notes?: unknown[];
+  working_strategies?: unknown[];
+  needs_adjustment?: unknown[];
+  opponent_systems?: Record<string, unknown>;
+  key_players_dossier?: unknown[];
+  matchup_plan?: Record<string, unknown>;
+  adjustments?: unknown[];
+  momentum_log?: unknown[];
+  status?: string;
+}
+
+// ============================================================
+// Scouting List
+// ============================================================
+
+export interface ScoutingListItem {
+  id: string;
+  org_id: string;
+  user_id: string;
+  player_id: string;
+  priority: "high" | "medium" | "low";
+  target_reason: string;
+  scout_notes: string;
+  tags: string;
+  is_active: number;
+  list_order: number;
+  last_viewed: string | null;
+  times_viewed: number;
+  created_at: string;
+  updated_at: string;
+  // Joined player fields
+  first_name: string;
+  last_name: string;
+  position: string | null;
+  current_team: string | null;
+  current_league: string | null;
+  image_url: string | null;
+}
+
+export interface ScoutingListCreate {
+  player_id: string;
+  priority?: "high" | "medium" | "low";
+  target_reason?: string;
+  scout_notes?: string;
+  tags?: string[];
+}
+
+export const TARGET_REASONS = [
+  { value: "draft", label: "Draft Prospect" },
+  { value: "trade", label: "Trade Target" },
+  { value: "recruit", label: "Recruit" },
+  { value: "watch", label: "Watch List" },
+] as const;
+
+// ============================================================
+// My Data
+// ============================================================
+
+export interface MyDataSummary {
+  players_created: number;
+  uploads: number;
+  corrections_submitted: number;
+  corrections_approved: number;
+  reports_generated: number;
+  notes_created: number;
+}
+
+export interface MyDataUpload {
+  id: string;
+  org_id: string;
+  user_id: string;
+  filename: string;
+  status: string;
+  total_rows: number;
+  imported: number;
+  duplicates_found: number;
+  errors: number;
+  created_at: string;
+}

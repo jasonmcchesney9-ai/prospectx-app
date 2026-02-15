@@ -169,7 +169,7 @@ export default function NewPlayerPage() {
                     type="text"
                     value={form.current_league || ""}
                     onChange={(e) => update("current_league", e.target.value)}
-                    placeholder="e.g., GOJHL"
+                    placeholder="e.g., GOHL"
                     className="w-full px-3 py-2 border border-border rounded-lg text-sm"
                   />
                   {leagues.length > 0 && (

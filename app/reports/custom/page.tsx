@@ -15,6 +15,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  ClipboardList,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -27,7 +28,9 @@ import type {
   ReportStatusResponse,
   CustomReportOptions,
 } from "@/types/api";
-import { FOCUS_AREA_ICONS, FOCUS_AREA_DESCRIPTIONS } from "@/types/api";
+import { FOCUS_AREA_ICONS, FOCUS_AREA_DESCRIPTIONS, DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS } from "@/types/api";
+import { getUser } from "@/lib/auth";
+import UpgradeModal from "@/components/UpgradeModal";
 
 type GenerationState = "idle" | "submitting" | "polling" | "complete" | "failed";
 type SubjectMode = "player" | "team";
@@ -77,10 +80,17 @@ function CustomReportContent() {
   const [reportTitle, setReportTitle] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Drill options
+  const [includeDrills, setIncludeDrills] = useState(false);
+  const [drillFocus, setDrillFocus] = useState<string[]>([]);
+  const [drillAgeLevel, setDrillAgeLevel] = useState("");
+  const [drillIntensity, setDrillIntensity] = useState("");
+
   // Generation state
   const [genState, setGenState] = useState<GenerationState>("idle");
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load data
@@ -186,6 +196,12 @@ function CustomReportContent() {
           comparison_mode: comparisonMode,
           custom_instructions: customInstructions,
           report_title: reportTitle,
+          ...(includeDrills && {
+            include_drills: true,
+            ...(drillFocus.length > 0 && { drill_focus: drillFocus }),
+            ...(drillAgeLevel && { drill_age_level: drillAgeLevel }),
+            ...(drillIntensity && { drill_intensity: drillIntensity }),
+          }),
         },
       };
       if (subjectMode === "team") {
@@ -207,11 +223,20 @@ function CustomReportContent() {
         pollStatus(data.report_id);
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Failed to generate report.";
-      setError(msg);
-      setGenState("failed");
+      const resp = (err as { response?: { status?: number; data?: { detail?: { used?: number; limit?: number; error?: string } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const used = typeof detail === "object" ? detail?.used || 0 : 0;
+        const limit = typeof detail === "object" ? detail?.limit || 0 : 0;
+        setUpgradeModal({ open: true, used, limit });
+        setError("You've reached your monthly report limit. Upgrade your plan to generate more reports.");
+        setGenState("failed");
+      } else {
+        const msg =
+          (typeof resp?.data?.detail === "string" ? resp.data.detail : null) || "Failed to generate report.";
+        setError(msg);
+        setGenState("failed");
+      }
     }
   };
 
@@ -619,6 +644,94 @@ function CustomReportContent() {
               )}
             </div>
 
+            {/* ── Step 5: Drill Recommendations (Optional) ── */}
+            <div className="bg-white rounded-xl border border-border overflow-hidden">
+              <button
+                onClick={() => setIncludeDrills(!includeDrills)}
+                className="w-full flex items-center justify-between px-6 py-4"
+              >
+                <div className="flex items-center gap-2">
+                  <ClipboardList size={14} className="text-teal" />
+                  <h2 className="text-sm font-oswald uppercase tracking-wider text-navy">Include Drill Recommendations</h2>
+                  {includeDrills && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/15 text-teal font-oswald uppercase tracking-wider font-bold">On</span>
+                  )}
+                </div>
+                {includeDrills ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
+              </button>
+
+              {includeDrills && (
+                <div className="px-6 pb-6 space-y-4 border-t border-border/50 pt-4">
+                  <p className="text-xs text-muted/70 leading-relaxed">
+                    Add relevant drills from the ProspectX Drill Library with rink diagrams, setup instructions, and coaching points tailored to the report subject.
+                  </p>
+
+                  {/* Drill Category Filter */}
+                  <div>
+                    <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">
+                      Drill Categories (optional)
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(DRILL_CATEGORIES).map(([key, lbl]) => {
+                        const isActive = drillFocus.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setDrillFocus(prev =>
+                              isActive ? prev.filter(f => f !== key) : [...prev, key]
+                            )}
+                            disabled={isGenerating}
+                            className={`px-2 py-1 rounded text-[10px] font-oswald uppercase tracking-wider transition-colors ${
+                              isActive
+                                ? "bg-teal/15 text-teal font-bold border border-teal/30"
+                                : "bg-navy/[0.04] text-navy/50 border border-transparent hover:border-navy/20"
+                            }`}
+                          >
+                            {lbl}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted/50 mt-1">Leave empty for all categories</p>
+                  </div>
+
+                  <div className="flex gap-4">
+                    {/* Age Level */}
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">Age Level</label>
+                      <select
+                        value={drillAgeLevel}
+                        onChange={(e) => setDrillAgeLevel(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-border rounded-lg text-xs bg-white"
+                        disabled={isGenerating}
+                      >
+                        <option value="">All Ages</option>
+                        {DRILL_AGE_LEVELS.map((a) => (
+                          <option key={a} value={a}>{DRILL_AGE_LEVEL_LABELS[a]}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Intensity */}
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">Intensity</label>
+                      <select
+                        value={drillIntensity}
+                        onChange={(e) => setDrillIntensity(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-border rounded-lg text-xs bg-white"
+                        disabled={isGenerating}
+                      >
+                        <option value="">All</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* ── Preview Summary ── */}
             {(selectedPlayer || selectedTeam) && focusAreas.length > 0 && (
               <div className="bg-gradient-to-r from-navy/[0.03] to-teal/[0.03] rounded-xl border border-border/50 p-4">
@@ -734,6 +847,16 @@ function CustomReportContent() {
           </div>
         )}
       </main>
+
+      {/* Upgrade Modal for report limits */}
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ ...upgradeModal, open: false })}
+        limitType="report"
+        currentTier={getUser()?.subscription_tier || "rookie"}
+        used={upgradeModal.used}
+        limit={upgradeModal.limit}
+      />
     </ProtectedRoute>
   );
 }

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import BenchTalkProvider from "@/components/BenchTalkProvider";
+import BenchTalkDrawer from "@/components/BenchTalkDrawer";
+import ContentWrapper from "@/components/ContentWrapper";
 
 export const metadata: Metadata = {
   title: "ProspectX Intelligence",
@@ -13,7 +16,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased" suppressHydrationWarning>{children}</body>
+      <body className="antialiased" suppressHydrationWarning>
+        <BenchTalkProvider>
+          <ContentWrapper>{children}</ContentWrapper>
+          <BenchTalkDrawer />
+        </BenchTalkProvider>
+      </body>
     </html>
   );
 }

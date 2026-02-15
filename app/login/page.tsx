@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [orgName, setOrgName] = useState("");
+  const [hockeyRole, setHockeyRole] = useState("scout");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +28,7 @@ export default function LoginPage() {
       const body =
         mode === "login"
           ? { email, password }
-          : { email, password, first_name: firstName, last_name: lastName, org_name: orgName, org_type: "team" };
+          : { email, password, first_name: firstName, last_name: lastName, org_name: orgName, org_type: "team", hockey_role: hockeyRole };
 
       const { data } = await api.post<TokenResponse>(endpoint, body);
       setToken(data.access_token);
@@ -103,6 +104,34 @@ export default function LoginPage() {
                     placeholder="e.g., Chatham Maroons"
                     className="w-full px-3 py-2 border border-border rounded-lg text-sm"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">
+                    Your Role in Hockey
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {[
+                      { value: "scout", label: "Scout", icon: "🔍" },
+                      { value: "gm", label: "GM", icon: "📋" },
+                      { value: "coach", label: "Coach", icon: "📣" },
+                      { value: "player", label: "Player", icon: "🏒" },
+                      { value: "parent", label: "Parent", icon: "👨‍👩‍👦" },
+                    ].map((r) => (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => setHockeyRole(r.value)}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          hockeyRole === r.value
+                            ? "border-teal bg-teal/10 text-teal ring-1 ring-teal/30"
+                            : "border-border text-muted hover:border-teal/40 hover:text-navy"
+                        }`}
+                      >
+                        <span>{r.icon}</span>
+                        <span className="font-oswald text-xs uppercase tracking-wider">{r.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </>
             )}

@@ -15,10 +15,14 @@ import {
   ArrowRightLeft,
   Search,
   X,
+  History,
+  Undo2,
+  RotateCcw,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import type { PlayerMerge, DeletedPlayer } from "@/types/api";
 
 interface DuplicatePlayer {
   id: string;
@@ -61,7 +65,7 @@ export default function PlayerManagePage() {
 }
 
 function PlayerManagement() {
-  const [activeTab, setActiveTab] = useState<"duplicates" | "bulk">("duplicates");
+  const [activeTab, setActiveTab] = useState<"duplicates" | "bulk" | "history" | "deleted">("duplicates");
 
   return (
     <div>
@@ -108,10 +112,34 @@ function PlayerManagement() {
           <ArrowRightLeft size={14} className="inline mr-1.5" />
           Bulk Operations
         </button>
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`px-4 py-2 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
+            activeTab === "history"
+              ? "bg-white text-navy shadow-sm"
+              : "text-muted hover:text-navy"
+          }`}
+        >
+          <History size={14} className="inline mr-1.5" />
+          Merge History
+        </button>
+        <button
+          onClick={() => setActiveTab("deleted")}
+          className={`px-4 py-2 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
+            activeTab === "deleted"
+              ? "bg-white text-navy shadow-sm"
+              : "text-muted hover:text-navy"
+          }`}
+        >
+          <Trash2 size={14} className="inline mr-1.5" />
+          Deleted Players
+        </button>
       </div>
 
       {activeTab === "duplicates" && <DuplicateManager />}
       {activeTab === "bulk" && <BulkOperations />}
+      {activeTab === "history" && <MergeHistory />}
+      {activeTab === "deleted" && <DeletedPlayersTab />}
     </div>
   );
 }
@@ -528,11 +556,11 @@ function BulkOperations() {
             {assigningLeague ? "Assigning..." : "Auto-Detect Leagues"}
           </button>
           <button
-            onClick={() => handleBulkAssignLeague("GOJHL")}
+            onClick={() => handleBulkAssignLeague("GOHL")}
             disabled={assigningLeague}
             className="px-4 py-2 bg-navy text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors disabled:opacity-50"
           >
-            Assign All → GOJHL
+            Assign All → GOHL
           </button>
         </div>
 
@@ -658,7 +686,7 @@ function BulkOperations() {
               type="text"
               value={targetLeague}
               onChange={(e) => setTargetLeague(e.target.value)}
-              placeholder="e.g. GOJHL"
+              placeholder="e.g. GOHL"
               className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
             />
           </div>
@@ -679,6 +707,246 @@ function BulkOperations() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Merge History ───────────────────────────────────
+function MergeHistory() {
+  const [merges, setMerges] = useState<PlayerMerge[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [undoing, setUndoing] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState("");
+
+  const loadMerges = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get<PlayerMerge[]>("/merges");
+      setMerges(data);
+    } catch {
+      setError("Failed to load merge history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadMerges(); }, []);
+
+  const handleUndo = async (mergeId: string) => {
+    setUndoing(mergeId);
+    setSuccessMsg("");
+    try {
+      const { data } = await api.post(`/merges/${mergeId}/undo`);
+      setSuccessMsg(`Merge undone. ${data.players_restored} player(s) restored.`);
+      loadMerges();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Undo failed";
+      setError(msg);
+    } finally {
+      setUndoing(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {successMsg && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
+          <CheckCircle size={16} className="text-green-600" />
+          <p className="text-green-700 text-sm">{successMsg}</p>
+          <button onClick={() => setSuccessMsg("")} className="ml-auto text-green-500 hover:text-green-700"><X size={14} /></button>
+        </div>
+      )}
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">{error}</div>
+      )}
+
+      {merges.length === 0 ? (
+        <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+          <History size={32} className="mx-auto text-muted mb-3" />
+          <h3 className="font-oswald font-semibold text-navy">No Merge History</h3>
+          <p className="text-muted text-sm mt-1">Merges will appear here after combining duplicate profiles.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {merges.map((m) => (
+            <div key={m.id} className="bg-white rounded-xl border border-border p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <GitMerge size={14} className="text-teal" />
+                    <span className="font-medium text-navy text-sm">
+                      Merged into {m.primary_player_name}
+                    </span>
+                    {m.undone_at && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 font-medium">
+                        UNDONE
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted">
+                    <span>{m.duplicate_player_ids.length} profile(s) merged</span>
+                    <span>•</span>
+                    <span>{m.stats_moved} stats</span>
+                    <span>{m.notes_moved} notes</span>
+                    <span>{m.reports_moved} reports</span>
+                    <span>{m.intel_moved} intel</span>
+                  </div>
+                  <div className="text-[10px] text-muted/60 mt-1">
+                    {new Date(m.merged_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                    {m.undo_before && !m.undone_at && (
+                      <span className="ml-2">
+                        Undo available until {new Date(m.undo_before).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {m.can_undo && !m.undone_at && (
+                  <button
+                    onClick={() => handleUndo(m.id)}
+                    disabled={undoing === m.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-orange/10 text-orange text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors disabled:opacity-50"
+                  >
+                    {undoing === m.id ? (
+                      <span className="animate-spin rounded-full h-3 w-3 border border-orange border-t-transparent inline-block" />
+                    ) : (
+                      <Undo2 size={12} />
+                    )}
+                    Undo
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Deleted Players ─────────────────────────────────
+function DeletedPlayersTab() {
+  const [players, setPlayers] = useState<DeletedPlayer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState("");
+
+  const loadDeleted = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get<DeletedPlayer[]>("/players/deleted");
+      setPlayers(data);
+    } catch {
+      setError("Failed to load deleted players");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadDeleted(); }, []);
+
+  const handleRestore = async (playerId: string) => {
+    setRestoring(playerId);
+    setSuccessMsg("");
+    try {
+      const { data } = await api.post(`/players/${playerId}/restore`);
+      setSuccessMsg(`${data.player_name} has been restored.`);
+      loadDeleted();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Restore failed";
+      setError(msg);
+    } finally {
+      setRestoring(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {successMsg && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
+          <CheckCircle size={16} className="text-green-600" />
+          <p className="text-green-700 text-sm">{successMsg}</p>
+          <button onClick={() => setSuccessMsg("")} className="ml-auto text-green-500 hover:text-green-700"><X size={14} /></button>
+        </div>
+      )}
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">{error}</div>
+      )}
+
+      {players.length === 0 ? (
+        <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+          <Trash2 size={32} className="mx-auto text-muted mb-3" />
+          <h3 className="font-oswald font-semibold text-navy">No Deleted Players</h3>
+          <p className="text-muted text-sm mt-1">Deleted players can be restored within 30 days.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {players.map((p) => (
+            <div key={p.id} className="bg-white rounded-xl border border-border p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-navy text-sm">
+                      {p.first_name} {p.last_name}
+                    </span>
+                    {p.position && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-muted">{p.position}</span>
+                    )}
+                    {p.current_team && (
+                      <span className="text-xs text-muted">{p.current_team}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted">
+                    <span>Reason: {p.deleted_reason || "N/A"}</span>
+                    <span>•</span>
+                    <span>Deleted {p.days_since_deleted} day(s) ago</span>
+                  </div>
+                  <div className="text-[10px] mt-1">
+                    {p.can_restore ? (
+                      <span className="text-green-600">
+                        {p.days_remaining} day(s) remaining to restore
+                      </span>
+                    ) : (
+                      <span className="text-red-500">Recovery window expired</span>
+                    )}
+                  </div>
+                </div>
+                {p.can_restore && (
+                  <button
+                    onClick={() => handleRestore(p.id)}
+                    disabled={restoring === p.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/20 transition-colors disabled:opacity-50"
+                  >
+                    {restoring === p.id ? (
+                      <span className="animate-spin rounded-full h-3 w-3 border border-teal border-t-transparent inline-block" />
+                    ) : (
+                      <RotateCcw size={12} />
+                    )}
+                    Restore
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

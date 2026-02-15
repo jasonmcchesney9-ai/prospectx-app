@@ -21,16 +21,19 @@ import {
   Upload,
   Camera,
   Layers,
+  RefreshCw,
+  Activity,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportCard from "@/components/ReportCard";
 import ExtendedStatTable from "@/components/ExtendedStatTable";
 import LineCombinations from "@/components/LineCombinations";
-import api from "@/lib/api";
+import LineBuilder from "@/components/LineBuilder";
+import api, { assetUrl, hasRealImage } from "@/lib/api";
 import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination } from "@/types/api";
 
-type Tab = "roster" | "systems" | "reports" | "stats";
+type Tab = "roster" | "lines" | "systems" | "reports" | "stats";
 
 // ── Position grouping ─────────────────────────────────────
 const FORWARD_POS = ["C", "LW", "RW", "F"];
@@ -113,6 +116,12 @@ export default function TeamDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>("roster");
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
+  // ── HockeyTech Sync State ──────────────────────────────
+  const [htInfo, setHtInfo] = useState<{ hockeytech_team_id: number | null; hockeytech_league: string | null; linked: boolean; has_ht_players?: boolean } | null>(null);
+  const [syncingStats, setSyncingStats] = useState(false);
+  const [syncingGameLogs, setSyncingGameLogs] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
   // ── Systems inline CRUD state ───────────────────────────
   const [sysEditing, setSysEditing] = useState(false);
   const [sysForm, setSysForm] = useState({ ...EMPTY_FORM });
@@ -154,6 +163,14 @@ export default function TeamDetailPage() {
         );
         if (match) setTeamRef(match);
       }
+
+      // Load HockeyTech integration info (non-blocking)
+      try {
+        const htRes = await api.get<{ hockeytech_team_id: number | null; hockeytech_league: string | null; linked: boolean; has_ht_players?: boolean }>(
+          `/teams/${encodeURIComponent(teamName)}/hockeytech-info`
+        );
+        setHtInfo(htRes.data);
+      } catch { /* non-critical */ }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load team";
       setError(msg);
@@ -273,6 +290,37 @@ export default function TeamDetailPage() {
     }
   };
 
+  // ── HockeyTech Sync Handlers ───────────────────────────
+  const handleSyncStats = async () => {
+    if (!htInfo?.hockeytech_team_id || !htInfo?.hockeytech_league) return;
+    setSyncingStats(true);
+    setSyncResult(null);
+    try {
+      const { data } = await api.post(`/hockeytech/${htInfo.hockeytech_league}/sync-stats/${htInfo.hockeytech_team_id}`);
+      setSyncResult(`Stats synced: ${data.synced_skaters} skaters, ${data.synced_goalies} goalies, ${data.snapshots_created} snapshots`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail || "Sync failed";
+      setSyncResult(`Error: ${msg}`);
+    } finally {
+      setSyncingStats(false);
+    }
+  };
+
+  const handleSyncGameLogs = async () => {
+    if (!htInfo?.hockeytech_team_id || !htInfo?.hockeytech_league) return;
+    setSyncingGameLogs(true);
+    setSyncResult(null);
+    try {
+      const { data } = await api.post(`/hockeytech/${htInfo.hockeytech_league}/sync-team-gamelogs/${htInfo.hockeytech_team_id}`);
+      setSyncResult(`Game logs synced: ${data.players_synced} players, ${data.total_games} games${data.errors?.length ? ` (${data.errors.length} errors)` : ""}`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail || "Sync failed";
+      setSyncResult(`Error: ${msg}`);
+    } finally {
+      setSyncingGameLogs(false);
+    }
+  };
+
   // ── Roster grouping ─────────────────────────────────────
   const forwards = roster.filter((p) => posGroup(p.position) === "forwards");
   const defense = roster.filter((p) => posGroup(p.position) === "defense");
@@ -308,7 +356,7 @@ export default function TeamDetailPage() {
                 {teamRef?.logo_url ? (
                   <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border-2 border-white/20 bg-white/10">
                     <img
-                      src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${teamRef.logo_url}`}
+                      src={assetUrl(teamRef.logo_url)}
                       alt={teamName}
                       className="w-full h-full object-contain"
                     />
@@ -367,6 +415,7 @@ export default function TeamDetailPage() {
         <div className="flex gap-1 mb-6 border-b border-border">
           {([
             { key: "roster" as Tab, label: "Roster", icon: Users, count: roster.length },
+            { key: "lines" as Tab, label: "Lines", icon: Layers, count: null },
             { key: "systems" as Tab, label: "Systems", icon: Shield, count: null },
             { key: "reports" as Tab, label: "Reports", icon: FileText, count: reports.length },
             { key: "stats" as Tab, label: "Stats", icon: BarChart3, count: null },
@@ -390,6 +439,53 @@ export default function TeamDetailPage() {
         {/* ── Roster Tab ─────────────────────────────────── */}
         {activeTab === "roster" && (
           <section>
+            {/* HockeyTech Sync Bar */}
+            {htInfo && (htInfo.linked || htInfo.has_ht_players) && (
+              <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-navy/[0.02] border border-teal/15">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Activity size={14} className="text-teal" />
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-teal font-bold">League Hub</span>
+                    {htInfo.hockeytech_league && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.06] text-navy/60 font-oswald uppercase">
+                        {htInfo.hockeytech_league}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSyncStats}
+                      disabled={syncingStats || !htInfo.linked}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/20 transition-colors disabled:opacity-40"
+                      title={!htInfo.linked ? "Sync roster from League Hub first to enable stats sync" : ""}
+                    >
+                      <RefreshCw size={11} className={syncingStats ? "animate-spin" : ""} />
+                      {syncingStats ? "Syncing..." : "Sync Stats"}
+                    </button>
+                    <button
+                      onClick={handleSyncGameLogs}
+                      disabled={syncingGameLogs || !htInfo.linked}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-navy/[0.06] text-navy/70 hover:bg-navy/[0.1] border border-navy/10 transition-colors disabled:opacity-40"
+                      title={!htInfo.linked ? "Sync roster from League Hub first to enable game log sync" : ""}
+                    >
+                      <RefreshCw size={11} className={syncingGameLogs ? "animate-spin" : ""} />
+                      {syncingGameLogs ? "Syncing..." : "Sync Game Logs"}
+                    </button>
+                  </div>
+                </div>
+                {syncResult && (
+                  <p className={`mt-2 text-xs ${syncResult.startsWith("Error") ? "text-red-600" : "text-green-700"}`}>
+                    {syncResult}
+                  </p>
+                )}
+                {!htInfo.linked && htInfo.has_ht_players && (
+                  <p className="mt-1 text-[10px] text-muted/60">
+                    Sync roster from <Link href="/leagues" className="text-teal hover:underline">League Hub</Link> to enable stats and game log sync.
+                  </p>
+                )}
+              </div>
+            )}
+
             {roster.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-border">
                 <Users size={32} className="mx-auto text-muted/40 mb-3" />
@@ -426,10 +522,10 @@ export default function TeamDetailPage() {
                             <tr key={p.id} className="border-b border-border/50 hover:bg-navy/[0.02] transition-colors">
                               <td className="px-4 py-2.5">
                                 <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors">
-                                  {p.image_url ? (
+                                  {hasRealImage(p.image_url) ? (
                                     <span className="inline-flex items-center gap-2">
                                       <img
-                                        src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${p.image_url}`}
+                                        src={assetUrl(p.image_url)}
                                         alt=""
                                         className="w-7 h-7 rounded-full object-cover"
                                       />
@@ -485,6 +581,24 @@ export default function TeamDetailPage() {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* ── Lines Tab ──────────────────────────────────── */}
+        {activeTab === "lines" && (
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Layers size={18} className="text-orange" />
+              <h2 className="text-lg font-semibold text-navy">Line Combinations</h2>
+              <span className="text-xs text-muted ml-1">Assign players to lines, pairs, and special teams</span>
+            </div>
+            <LineBuilder
+              teamName={teamName}
+              season="2025-26"
+              roster={roster}
+              existingLines={lineCombinations}
+              onLinesChanged={loadData}
+            />
           </section>
         )}
 

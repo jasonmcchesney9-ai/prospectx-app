@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { User, MapPin } from "lucide-react";
 import type { Player } from "@/types/api";
+import { assetUrl, hasRealImage } from "@/lib/api";
 
 export default function PlayerCard({ player }: { player: Player }) {
   return (
@@ -10,10 +11,10 @@ export default function PlayerCard({ player }: { player: Player }) {
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          {player.image_url ? (
+          {hasRealImage(player.image_url) ? (
             <div className="w-10 h-10 rounded-full overflow-hidden bg-navy/10 shrink-0">
               <img
-                src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${player.image_url}`}
+                src={assetUrl(player.image_url)}
                 alt={`${player.first_name} ${player.last_name}`}
                 className="w-full h-full object-cover"
               />
