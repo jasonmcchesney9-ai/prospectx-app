@@ -1,0 +1,31 @@
+# ============================================================
+# ProspectX Backend — FastAPI + SQLite
+# ============================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies for bcrypt and SQLite
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend source
+COPY backend/ .
+
+# Create data directory for SQLite DB + images
+RUN mkdir -p /root/.prospectx
+
+EXPOSE 8000
+
+# Default environment
+ENV PORT=8000
+ENV ENVIRONMENT=production
+
+CMD ["python", "main.py"]

@@ -1,0 +1,80 @@
+# ============================================================
+# ProspectX — Docker Compose
+# ============================================================
+# Usage:
+#   docker compose up --build        # Build & start all services
+#   docker compose up -d             # Start in background
+#   docker compose down              # Stop all services
+#   docker compose down -v           # Stop & remove data (clean slate)
+#   docker compose logs -f backend   # Tail backend logs
+#
+# Environment variables (set in .env or export):
+#   ANTHROPIC_API_KEY   — Required for AI features (PXI, reports)
+#   JWT_SECRET          — JWT signing key (auto-generated default for dev)
+# ============================================================
+
+services:
+  # ── Frontend (Next.js) ─────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    restart: unless-stopped
+
+  # ── Backend (FastAPI + SQLite) ─────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_started
+    volumes:
+      - prospectx-data:/root/.prospectx
+    environment:
+      - PORT=8000
+      - JWT_SECRET=${JWT_SECRET:-prospectx_dev_secret_2026}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - FRONTEND_URL=http://localhost:3000
+      - REDIS_URL=redis://redis:6379/0
+    restart: unless-stopped
+
+  # ── Celery Worker (background tasks) ───────────────────────
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: celery -A celery_worker worker --loglevel=info
+    depends_on:
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
+    volumes:
+      - prospectx-data:/root/.prospectx
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - REDIS_URL=redis://redis:6379/0
+    restart: unless-stopped
+
+  # ── Redis (message broker for Celery) ──────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  prospectx-data:
+    driver: local

@@ -18,6 +18,7 @@ import {
   Crosshair,
   Users,
   Zap,
+  Download,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -122,6 +123,7 @@ function SeriesDetail() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [printMode, setPrintMode] = useState(false);
 
   // Parsed JSON fields
   const [gameNotes, setGameNotes] = useState<GameNote[]>([]);
@@ -189,6 +191,21 @@ function SeriesDetail() {
     } catch {
       alert("Failed to delete series");
     }
+  };
+
+  const handleDownloadPDF = () => {
+    if (!series) return;
+    setPrintMode(true);
+    setTimeout(() => {
+      const prev = document.title;
+      const fileName = `${series.series_name}_${series.team_name}_vs_${series.opponent_team_name}`.replace(/\s+/g, "_");
+      document.title = fileName;
+      window.print();
+      setTimeout(() => {
+        document.title = prev;
+        setPrintMode(false);
+      }, 1000);
+    }, 100);
   };
 
   const handleStatusChange = (newStatus: string) => {
@@ -348,7 +365,7 @@ function SeriesDetail() {
     <div>
       {/* ── Header ──────────────────────────────────────────── */}
       <div className="flex items-start gap-3 mb-4">
-        <Link href="/series" className="text-muted hover:text-navy transition-colors mt-1">
+        <Link href="/series" className="no-print text-muted hover:text-navy transition-colors mt-1">
           <ArrowLeft size={20} />
         </Link>
         <div className="flex-1 min-w-0">
@@ -363,10 +380,18 @@ function SeriesDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
+            title="Download as PDF"
+          >
+            <Download size={14} />
+            PDF
+          </button>
           <select
             value={series.status}
             onChange={(e) => handleStatusChange(e.target.value)}
-            className={`text-[10px] px-2 py-1 rounded-full font-oswald uppercase tracking-wider border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal/30 ${STATUS_COLORS[series.status] || "bg-gray-100 text-gray-600"}`}
+            className={`no-print text-[10px] px-2 py-1 rounded-full font-oswald uppercase tracking-wider border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal/30 ${STATUS_COLORS[series.status] || "bg-gray-100 text-gray-600"}`}
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -374,7 +399,7 @@ function SeriesDetail() {
           </select>
           <button
             onClick={handleDelete}
-            className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+            className="no-print p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
             title="Delete series"
           >
             <Trash2 size={14} />
@@ -415,7 +440,7 @@ function SeriesDetail() {
               {series.current_score || "0-0"}
             </button>
           )}
-          <p className="text-[10px] text-muted mt-1">Click to update</p>
+          <p className="no-print text-[10px] text-muted mt-1">Click to update</p>
         </div>
       </div>
 
@@ -428,7 +453,7 @@ function SeriesDetail() {
       )}
 
       {/* ── Tab Navigation ──────────────────────────────────── */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+      <div className="no-print flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -446,7 +471,7 @@ function SeriesDetail() {
       </div>
 
       {/* ── Overview Tab ────────────────────────────────────── */}
-      {activeTab === "overview" && (
+      {(activeTab === "overview" || printMode) && (
         <div className="space-y-4">
           {/* Working Strategies */}
           <div className="bg-white rounded-xl border border-border p-5">
@@ -459,7 +484,7 @@ function SeriesDetail() {
                 <div key={i} className="flex items-start gap-2 text-xs">
                   <span className="text-green-600 mt-0.5">&#10003;</span>
                   <span className="flex-1 text-navy/80">{s}</span>
-                  <button onClick={() => removeStrategy(i)} className="text-muted hover:text-red-500 shrink-0">
+                  <button onClick={() => removeStrategy(i)} className="no-print text-muted hover:text-red-500 shrink-0">
                     <X size={10} />
                   </button>
                 </div>
@@ -468,7 +493,7 @@ function SeriesDetail() {
                 <p className="text-xs text-muted">No strategies recorded yet.</p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="no-print flex gap-2">
               <input
                 type="text"
                 value={newStrategy}
@@ -498,7 +523,7 @@ function SeriesDetail() {
                 <div key={i} className="flex items-start gap-2 text-xs">
                   <span className="text-orange mt-0.5">!</span>
                   <span className="flex-1 text-navy/80">{s}</span>
-                  <button onClick={() => removeNeedsAdj(i)} className="text-muted hover:text-red-500 shrink-0">
+                  <button onClick={() => removeNeedsAdj(i)} className="no-print text-muted hover:text-red-500 shrink-0">
                     <X size={10} />
                   </button>
                 </div>
@@ -507,7 +532,7 @@ function SeriesDetail() {
                 <p className="text-xs text-muted">Nothing flagged for adjustment.</p>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="no-print flex gap-2">
               <input
                 type="text"
                 value={newNeedsAdj}
@@ -529,7 +554,8 @@ function SeriesDetail() {
       )}
 
       {/* ── Dossier Tab ─────────────────────────────────────── */}
-      {activeTab === "dossier" && (
+      {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Opponent Dossier</h2>}
+      {(activeTab === "dossier" || printMode) && (
         <div className="space-y-4">
           {/* Opponent Systems */}
           <div className="bg-white rounded-xl border border-border p-5">
@@ -570,7 +596,7 @@ function SeriesDetail() {
               </h3>
               <button
                 onClick={addKeyPlayer}
-                className="text-xs text-teal hover:text-teal/70 flex items-center gap-1"
+                className="no-print text-xs text-teal hover:text-teal/70 flex items-center gap-1"
               >
                 <Plus size={12} /> Add Player
               </button>
@@ -624,7 +650,7 @@ function SeriesDetail() {
                       </select>
                       <button
                         onClick={() => removeKeyPlayer(i)}
-                        className="text-muted hover:text-red-500"
+                        className="no-print text-muted hover:text-red-500"
                         title="Remove player"
                       >
                         <Trash2 size={12} />
@@ -692,7 +718,8 @@ function SeriesDetail() {
       )}
 
       {/* ── Games Tab ───────────────────────────────────────── */}
-      {activeTab === "games" && (
+      {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Game Notes</h2>}
+      {(activeTab === "games" || printMode) && (
         <div className="space-y-4">
           {/* Add Game */}
           <div className="bg-white rounded-xl border border-border p-5">
@@ -703,7 +730,7 @@ function SeriesDetail() {
               </h3>
               <button
                 onClick={() => setAddingGameNote(!addingGameNote)}
-                className="text-xs text-teal hover:text-teal/70 flex items-center gap-1"
+                className="no-print text-xs text-teal hover:text-teal/70 flex items-center gap-1"
               >
                 {addingGameNote ? <X size={12} /> : <Plus size={12} />}
                 {addingGameNote ? "Cancel" : "Add Game"}
@@ -711,7 +738,7 @@ function SeriesDetail() {
             </div>
 
             {addingGameNote && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-border space-y-3">
+              <div className="no-print mb-4 p-3 bg-gray-50 rounded-lg border border-border space-y-3">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-medium text-navy">Game {gameNotes.length + 1}</span>
                   <select
@@ -866,7 +893,8 @@ function SeriesDetail() {
       )}
 
       {/* ── Adjustments Tab ─────────────────────────────────── */}
-      {activeTab === "adjustments" && (
+      {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Adjustments</h2>}
+      {(activeTab === "adjustments" || printMode) && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-border p-5">
             <div className="flex items-center justify-between mb-4">
@@ -876,7 +904,7 @@ function SeriesDetail() {
               </h3>
               <button
                 onClick={addAdjustment}
-                className="text-xs text-teal hover:text-teal/70 flex items-center gap-1"
+                className="no-print text-xs text-teal hover:text-teal/70 flex items-center gap-1"
               >
                 <Plus size={12} /> Add Adjustment
               </button>
@@ -956,7 +984,7 @@ function SeriesDetail() {
                       </div>
                       <button
                         onClick={() => removeAdjustment(i)}
-                        className="text-muted hover:text-red-500 shrink-0"
+                        className="no-print text-muted hover:text-red-500 shrink-0"
                         title="Remove adjustment"
                       >
                         <Trash2 size={12} />
@@ -969,6 +997,14 @@ function SeriesDetail() {
           </div>
         </div>
       )}
+
+      {/* ── Print Footer ────────────────────────────────────── */}
+      <div className="print-footer mt-8 pt-4 border-t border-navy/10 justify-center items-center gap-2 text-xs text-muted">
+        <div className="text-center">
+          <p className="font-oswald text-navy text-sm">ProspectX Intelligence</p>
+          <p>Exported {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
     </div>
   );
 }

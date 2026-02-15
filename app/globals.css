@@ -51,9 +51,9 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Print / PDF Download Styles ──────────────────────────── */
 @media print {
-  nav {
-    display: none !important;
-  }
+  @page { margin: 0.75in; }
+
+  nav { display: none !important; }
 
   body {
     background: white !important;
@@ -66,4 +66,39 @@ input:focus, select:focus, textarea:focus {
     padding: 0 !important;
     margin: 0 !important;
   }
+
+  /* Hide interactive UI in print */
+  button { display: none !important; }
+  .no-print { display: none !important; }
+
+  /* Show print-only elements */
+  .print-only { display: block !important; }
+
+  /* Clean up form elements */
+  input, textarea, select {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  /* Full width tables */
+  table { width: 100% !important; font-size: 11px !important; }
+
+  /* Prevent breaks inside cards */
+  .rounded-xl, .rounded-lg { page-break-inside: avoid; }
+
+  /* Page breaks */
+  .print-break-before { page-break-before: always; }
+  .print-break-avoid { page-break-inside: avoid; }
+
+  /* Show all print sections (for tabbed pages) */
+  .print-section { display: block !important; }
+
+  /* Print footer branding */
+  .print-footer { display: flex !important; }
 }
+
+/* Hide print-only elements on screen */
+.print-only { display: none; }
+.print-footer { display: none; }

@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   Wand2,
   Flame,
+  Download,
 } from "lucide-react";
 import {
   RadarChart,
@@ -200,6 +201,14 @@ export default function PlayerDetailPage() {
       setUploadingImage(false);
       e.target.value = "";
     }
+  };
+
+  const handleDownloadPDF = () => {
+    const prev = document.title;
+    const fileName = `${player?.first_name}_${player?.last_name}_profile`.replace(/\s+/g, "_");
+    document.title = fileName;
+    window.print();
+    setTimeout(() => { document.title = prev; }, 1000);
   };
 
   const handleImageDelete = async () => {
@@ -494,7 +503,7 @@ export default function PlayerDetailPage() {
     <ProtectedRoute>
       <NavBar />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <Link href="/players" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-6">
+        <Link href="/players" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-6 no-print">
           <ArrowLeft size={14} /> Back to Players
         </Link>
 
@@ -561,16 +570,24 @@ export default function PlayerDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownloadPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
+                title="Download as PDF"
+              >
+                <Download size={14} />
+                PDF
+              </button>
               <Link
                 href={`/reports/custom?player=${playerId}`}
-                className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors no-print"
               >
                 <Wand2 size={14} />
                 Custom
               </Link>
               <Link
                 href={`/reports/generate?player=${playerId}`}
-                className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors no-print"
               >
                 <Zap size={14} />
                 Generate Report
@@ -582,7 +599,7 @@ export default function PlayerDetailPage() {
         <div className="ice-stripe mb-6 rounded-b-full" />
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-border">
+        <div className="flex gap-1 mb-6 border-b border-border no-print">
           {([
             { key: "profile" as Tab, label: "Profile", count: null },
             { key: "stats" as Tab, label: "Stats", count: stats.length },
@@ -1389,7 +1406,7 @@ export default function PlayerDetailPage() {
             )}
 
             {/* Suggest Correction */}
-            <div className="bg-white rounded-xl border border-border p-5">
+            <div className="bg-white rounded-xl border border-border p-5 no-print">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                   <AlertTriangle size={14} className="text-orange" />
@@ -1892,6 +1909,14 @@ export default function PlayerDetailPage() {
             )}
           </section>
         )}
+
+        {/* Print Footer */}
+        <div className="print-footer mt-8 pt-4 border-t border-navy/10 justify-center items-center gap-2 text-xs text-muted">
+          <div className="text-center">
+            <p className="font-oswald text-navy text-sm">ProspectX Intelligence</p>
+            <p>Exported {new Date().toLocaleDateString()}</p>
+          </div>
+        </div>
       </main>
     </ProtectedRoute>
   );

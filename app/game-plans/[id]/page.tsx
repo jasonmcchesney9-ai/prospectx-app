@@ -18,6 +18,8 @@ import {
   MessageSquare,
   TrendingUp,
   TrendingDown,
+  Printer,
+  Download,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -178,6 +180,14 @@ function GamePlanDetail() {
     }
   };
 
+  const handleDownloadPDF = () => {
+    const prev = document.title;
+    const fileName = `${plan?.team_name}_vs_${plan?.opponent_team_name}_${plan?.session_type || "gameplan"}_${plan?.game_date || "draft"}`.replace(/\s+/g, "_");
+    document.title = fileName;
+    window.print();
+    setTimeout(() => { document.title = prev; }, 1000);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -224,7 +234,7 @@ function GamePlanDetail() {
     <div>
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/game-plans" className="text-muted hover:text-navy transition-colors">
+        <Link href="/game-plans" className="text-muted hover:text-navy transition-colors no-print">
           <ArrowLeft size={20} />
         </Link>
         <div className="flex-1">
@@ -249,10 +259,18 @@ function GamePlanDetail() {
         <div className="flex items-center gap-2">
           {!editing && (
             <>
+              <button
+                onClick={handleDownloadPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
+                title="Download as PDF"
+              >
+                <Download size={14} />
+                PDF
+              </button>
               {plan.status === "draft" && (
                 <button
                   onClick={() => handleStatusChange("active")}
-                  className="px-3 py-1.5 bg-green-100 text-green-700 text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 bg-green-100 text-green-700 text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 no-print"
                 >
                   <CheckCircle size={12} />
                   Activate
@@ -261,7 +279,7 @@ function GamePlanDetail() {
               {plan.status === "active" && (
                 <button
                   onClick={() => handleStatusChange("completed")}
-                  className="px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1 no-print"
                 >
                   <CheckCircle size={12} />
                   Complete
@@ -269,14 +287,14 @@ function GamePlanDetail() {
               )}
               <button
                 onClick={() => setEditing(true)}
-                className="px-3 py-1.5 bg-teal/10 text-teal text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/20 transition-colors flex items-center gap-1"
+                className="px-3 py-1.5 bg-teal/10 text-teal text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/20 transition-colors flex items-center gap-1 no-print"
               >
                 <Edit3 size={12} />
                 Edit
               </button>
               <button
                 onClick={handleDelete}
-                className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1"
+                className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 no-print"
               >
                 <Trash2 size={12} />
               </button>
@@ -466,7 +484,7 @@ function GamePlanDetail() {
           </button>
 
           {talkingPointsOpen && (
-            <div className="px-5 pb-5 space-y-4 border-t border-border pt-4">
+            <div className="px-5 pb-5 space-y-4 border-t border-border pt-4 print-section">
               {/* Pre-Game */}
               <div>
                 <p className="text-xs font-oswald uppercase tracking-wider text-navy mb-1.5">Pre-Game Speech</p>
@@ -627,6 +645,14 @@ function GamePlanDetail() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Print Footer ───────────────────────────────────────── */}
+      <div className="print-footer mt-8 pt-4 border-t border-navy/10 justify-center items-center gap-2 text-xs text-muted">
+        <div className="text-center">
+          <p className="font-oswald text-navy text-sm">ProspectX Intelligence</p>
+          <p>Exported {new Date().toLocaleDateString()}</p>
+        </div>
       </div>
     </div>
   );
