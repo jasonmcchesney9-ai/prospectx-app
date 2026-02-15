@@ -13396,8 +13396,13 @@ You have access to the ProspectX database with:
 - 19 professional report templates
 - Player comparison engine
 - League leader rankings
-- 44+ hockey drill library across 13 categories (skating, passing, shooting, offensive, defensive, battle, etc.)
+- 60+ hockey drill library across 13 categories (skating, passing, shooting, offensive, defensive, battle, etc.)
 - AI-powered practice plan generator (uses drills, roster, team systems, and glossary)
+- Live league standings, schedules, and scores (via HockeyTech)
+- Team line combinations, roster breakdowns, and tactical systems
+- Active game plans, chalk talk sessions, and series strategies
+- Scouting observations (notes, tags) across the organization
+- Personal scouting watchlist with priority tracking
 
 # TOOLS
 1. **query_players** — Search with filters (position, league, team, stats)
@@ -13407,6 +13412,28 @@ You have access to the ProspectX database with:
 5. **league_leaders** — Top performers by stat category
 6. **query_drills** — Search the drill library by category, age level, tags, intensity, or keyword
 7. **generate_practice_plan** — Generate a complete AI practice plan for a team (warm-up through cool-down, using the drill library + team systems)
+8. **get_player_recent_form** — Recent game log, streaks, season-over-season progression
+9. **get_team_context** — Team's current lines, roster by position, tactical systems
+10. **get_game_context** — Live standings, upcoming games, recent scores from HockeyTech
+11. **get_coaching_prep** — Active game plans, chalk talk sessions, series strategies
+12. **search_scout_notes** — Search scouting observations by player, tag, or type
+13. **get_scouting_list** — User's personal scouting watchlist with priorities
+
+# TOOL ROUTING GUIDE
+When the user asks about...
+- Team lines, roster, systems → use `get_team_context`
+- Standings, upcoming games, scores, schedule → use `get_game_context`
+- Game plan, prep for tonight, series strategy, chalk talk → use `get_coaching_prep`
+- Scouting notes, observations, what did we write about → use `search_scout_notes`
+- Scouting list, who am I watching, priority targets → use `get_scouting_list`
+- Player search, stats, who plays for a team → use `query_players`
+- Deep player profile, grades, projection → use `get_player_intelligence`
+- Side-by-side comparison → use `compare_players`
+- Generate a report → use `start_report_generation`
+- League leaders, top scorers → use `league_leaders`
+- Find drills, practice activities → use `query_drills`
+- Build a practice plan → use `generate_practice_plan`
+- Recent form, hot streak, game log → use `get_player_recent_form`
 
 # REPORT TYPES — suggest based on {hockey_role_label}'s needs:
 - **Scouting:** pro_skater, unified_prospect, draft_comparative
@@ -13420,12 +13447,14 @@ You have access to the ProspectX database with:
 A (Elite NHL) → B+ (Solid NHL) → B (Depth NHL) → B- (NHL Fringe/AHL Top) → C+ (AHL Regular) → C (AHL Depth) → D (Junior/College)
 
 # HOW TO RESPOND
-- Always use your tools — don't guess, pull the data
+- ALWAYS use your tools — don't guess, pull the data
 - Keep it conversational but backed by numbers
 - 2-3 paragraphs max unless they ask for detail
 - Use bullets when listing stats or comparisons
 - Always include a "what next?" nudge — suggest a report, comparison, or deeper dive
 - Cite "ProspectX Intelligence" when referencing grades
+- When a coach asks about game prep, use get_coaching_prep to pull their actual plans
+- When asked about standings or schedule, use get_game_context for live data
 
 **NEVER:**
 - Invent player data — use tools or say "I don't have that in the system"
@@ -14573,7 +14602,351 @@ def _pt_get_player_recent_form(params: dict, org_id: str) -> tuple[dict, dict]:
         conn.close()
 
 
-def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str, user_id: str) -> tuple[dict, dict]:
+def _pt_get_team_context(params: dict, org_id: str) -> tuple[dict, dict]:
+    """Get a team's lines, roster overview, and tactical systems."""
+    team_name = params.get("team_name", "")
+    conn = get_db()
+    try:
+        # Roster count by position
+        pos_rows = conn.execute("""
+            SELECT position, COUNT(*) as cnt FROM players
+            WHERE org_id = ? AND current_team = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+            GROUP BY position ORDER BY cnt DESC
+        """, (org_id, team_name)).fetchall()
+        positions = {r["position"]: r["cnt"] for r in pos_rows if r["position"]}
+        roster_count = sum(positions.values())
+
+        # Line combinations
+        line_rows = conn.execute("""
+            SELECT line_type, line_label, line_order, player_names, player_refs,
+                   toi_seconds, goals_for, goals_against, data_source
+            FROM line_combinations
+            WHERE org_id = ? AND team_name = ?
+            ORDER BY line_order ASC
+        """, (org_id, team_name)).fetchall()
+
+        lines = []
+        for lr in line_rows:
+            line_data = {
+                "type": lr["line_type"],
+                "label": lr["line_label"] or lr["line_type"],
+                "players": lr["player_names"],
+                "toi_seconds": lr["toi_seconds"] or 0,
+                "goals_for": lr["goals_for"] or 0,
+                "goals_against": lr["goals_against"] or 0,
+                "source": lr["data_source"] or "manual",
+            }
+            # Parse player_refs JSON for names
+            if lr["player_refs"]:
+                try:
+                    refs = json.loads(lr["player_refs"])
+                    line_data["player_details"] = [
+                        {"name": r.get("name", ""), "position": r.get("position", "")}
+                        for r in refs if isinstance(r, dict)
+                    ]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            lines.append(line_data)
+
+        # Team systems
+        sys_row = conn.execute("""
+            SELECT forecheck, dz_structure, oz_setup, pp_formation, pk_formation,
+                   neutral_zone, breakout, pace, physicality, offensive_style, notes
+            FROM team_systems WHERE org_id = ? AND team_name = ?
+            ORDER BY created_at DESC LIMIT 1
+        """, (org_id, team_name)).fetchone()
+
+        systems = {}
+        if sys_row:
+            systems = {k: sys_row[k] for k in sys_row.keys() if sys_row[k]}
+
+        return {
+            "team": team_name,
+            "roster_count": roster_count,
+            "positions": positions,
+            "lines": lines,
+            "systems": systems,
+        }, {}
+    finally:
+        conn.close()
+
+
+async def _pt_get_game_context(params: dict, org_id: str) -> tuple[dict, dict]:
+    """Get live standings, upcoming games, and recent scores from HockeyTech."""
+    league = params.get("league", "gojhl")
+    team_name = params.get("team_name")
+
+    try:
+        client = HockeyTechClient(league)
+    except ValueError:
+        return {"error": f"Unknown league: {league}"}, {}
+
+    try:
+        season_id = await client.get_current_season_id()
+        if not season_id:
+            return {"error": "No current season found"}, {}
+
+        # Get standings
+        raw_standings = await client.get_standings(season_id)
+        standings = []
+        team_rank = None
+        for i, s in enumerate(raw_standings[:15], 1):
+            entry = {
+                "rank": i,
+                "team": s.get("team_name", s.get("name", "")),
+                "gp": s.get("games_played", 0),
+                "wins": s.get("wins", 0),
+                "losses": s.get("losses", 0),
+                "otl": s.get("ot_losses", 0),
+                "points": s.get("points", 0),
+            }
+            standings.append(entry)
+            if team_name and team_name.lower() in entry["team"].lower():
+                team_rank = entry
+
+        # Get scorebar (recent + upcoming)
+        raw_games = await client.get_scorebar(days_back=3, days_ahead=7)
+        upcoming = []
+        recent = []
+        now_str = datetime.now().strftime("%Y-%m-%d")
+        for g in raw_games:
+            game_date = g.get("date_with_day", g.get("game_date", ""))
+            game_info = {
+                "date": game_date,
+                "home": g.get("home_team", ""),
+                "away": g.get("visiting_team", g.get("away_team", "")),
+                "home_score": g.get("home_goal_count", g.get("home_score")),
+                "away_score": g.get("visiting_goal_count", g.get("away_score")),
+                "status": g.get("game_status", g.get("status", "")),
+            }
+            # Categorize as upcoming or recent
+            raw_date = g.get("game_date", "")
+            if raw_date >= now_str and game_info["status"] in ("", "Not Started", None, "0"):
+                upcoming.append(game_info)
+            else:
+                recent.append(game_info)
+
+        result = {
+            "league": league,
+            "standings": standings[:10],
+            "upcoming_games": upcoming[:5],
+            "recent_results": recent[:5],
+        }
+        if team_rank:
+            result["your_team"] = team_rank
+
+        return result, {}
+    except Exception as e:
+        logger.warning("get_game_context error: %s", str(e))
+        return {"error": f"Failed to fetch game context: {str(e)}"}, {}
+
+
+def _pt_get_coaching_prep(params: dict, org_id: str) -> tuple[dict, dict]:
+    """Get active game plans and series strategies."""
+    team_name = params.get("team_name")
+    opponent = params.get("opponent")
+    conn = get_db()
+    try:
+        # Active/draft game plans
+        gp_query = "SELECT * FROM game_plans WHERE org_id = ? AND status IN ('active', 'draft')"
+        gp_params_list: list = [org_id]
+        if team_name:
+            gp_query += " AND team_name LIKE ?"
+            gp_params_list.append(f"%{team_name}%")
+        if opponent:
+            gp_query += " AND opponent_team_name LIKE ?"
+            gp_params_list.append(f"%{opponent}%")
+        gp_query += " ORDER BY game_date ASC LIMIT 5"
+
+        gp_rows = conn.execute(gp_query, gp_params_list).fetchall()
+        game_plans = []
+        for gp in gp_rows:
+            plan = {
+                "id": gp["id"],
+                "team": gp["team_name"],
+                "opponent": gp["opponent_team_name"],
+                "date": gp["game_date"],
+                "session_type": gp["session_type"] if "session_type" in gp.keys() else "pre_game",
+                "status": gp["status"],
+                "opponent_analysis": gp["opponent_analysis"] or "",
+                "our_strategy": gp["our_strategy"] or "",
+                "keys_to_game": gp["keys_to_game"] or "",
+                "special_teams_plan": gp["special_teams_plan"] or "",
+            }
+            # Parse JSON fields
+            for json_field in ["matchups", "talking_points"]:
+                val = gp[json_field] if json_field in gp.keys() else None
+                if val:
+                    try:
+                        plan[json_field] = json.loads(val)
+                    except (json.JSONDecodeError, TypeError):
+                        plan[json_field] = val
+            game_plans.append(plan)
+
+        # Active series
+        sp_query = "SELECT * FROM series_plans WHERE org_id = ? AND status = 'active'"
+        sp_params_list: list = [org_id]
+        if team_name:
+            sp_query += " AND team_name LIKE ?"
+            sp_params_list.append(f"%{team_name}%")
+        sp_query += " LIMIT 5"
+
+        sp_rows = conn.execute(sp_query, sp_params_list).fetchall()
+        active_series = []
+        for sp in sp_rows:
+            series = {
+                "id": sp["id"],
+                "team": sp["team_name"],
+                "opponent": sp["opponent_team_name"],
+                "series_name": sp["series_name"],
+                "format": sp["series_format"],
+                "score": sp["current_score"],
+                "status": sp["status"],
+            }
+            for json_field in ["working_strategies", "needs_adjustment", "game_notes"]:
+                val = sp[json_field] if json_field in sp.keys() else None
+                if val:
+                    try:
+                        series[json_field] = json.loads(val)
+                    except (json.JSONDecodeError, TypeError):
+                        series[json_field] = val
+            active_series.append(series)
+
+        return {
+            "game_plans": game_plans,
+            "active_series": active_series,
+            "total_plans": len(game_plans),
+            "total_series": len(active_series),
+        }, {}
+    finally:
+        conn.close()
+
+
+def _pt_search_scout_notes(params: dict, org_id: str, user_id: str) -> tuple[dict, dict]:
+    """Search scouting observations with filters."""
+    player_name = params.get("player_name")
+    tag_filter = params.get("tag")
+    note_type = params.get("note_type")
+    limit = min(params.get("limit", 10), 25)
+
+    conn = get_db()
+    try:
+        query = """
+            SELECT sn.note_text, sn.note_type, sn.tags, sn.is_private, sn.created_at,
+                   p.id as player_id, p.first_name, p.last_name, p.position, p.current_team,
+                   u.first_name as scout_first, u.last_name as scout_last
+            FROM scout_notes sn
+            JOIN players p ON sn.player_id = p.id
+            JOIN users u ON sn.scout_id = u.id
+            WHERE sn.org_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+              AND (sn.is_private = 0 OR sn.scout_id = ?)
+        """
+        query_params: list = [org_id, user_id]
+
+        if player_name:
+            query += " AND (p.first_name || ' ' || p.last_name LIKE ?)"
+            query_params.append(f"%{player_name}%")
+        if note_type:
+            query += " AND sn.note_type = ?"
+            query_params.append(note_type)
+
+        query += " ORDER BY sn.created_at DESC LIMIT ?"
+        query_params.append(limit * 3 if tag_filter else limit)  # over-fetch if filtering by tag
+
+        rows = conn.execute(query, query_params).fetchall()
+
+        notes = []
+        player_ids = set()
+        for r in rows:
+            tags = []
+            try:
+                tags = json.loads(r["tags"]) if r["tags"] else []
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            # Tag filter (post-query since tags are JSON)
+            if tag_filter and not any(tag_filter.lower() in t.lower() for t in tags):
+                continue
+
+            player_ids.add(r["player_id"])
+            notes.append({
+                "player_name": f"{r['first_name']} {r['last_name']}",
+                "position": r["position"],
+                "team": r["current_team"],
+                "scout": f"{r['scout_first']} {r['scout_last']}",
+                "note": r["note_text"],
+                "type": r["note_type"],
+                "tags": tags,
+                "date": r["created_at"][:10] if r["created_at"] else "",
+            })
+            if len(notes) >= limit:
+                break
+
+        return {
+            "notes": notes,
+            "total_found": len(notes),
+        }, {"player_ids": list(player_ids)}
+    finally:
+        conn.close()
+
+
+def _pt_get_scouting_list(params: dict, org_id: str, user_id: str) -> tuple[dict, dict]:
+    """Get the user's active scouting watchlist."""
+    priority = params.get("priority")
+    limit = min(params.get("limit", 10), 20)
+
+    conn = get_db()
+    try:
+        query = """
+            SELECT sl.priority, sl.target_reason, sl.scout_notes, sl.tags, sl.created_at,
+                   p.id as player_id, p.first_name, p.last_name, p.position,
+                   p.current_team, p.current_league
+            FROM scouting_list sl
+            JOIN players p ON sl.player_id = p.id
+            WHERE sl.user_id = ? AND sl.org_id = ? AND sl.is_active = 1
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        """
+        query_params: list = [user_id, org_id]
+
+        if priority:
+            query += " AND sl.priority = ?"
+            query_params.append(priority)
+
+        query += " ORDER BY CASE sl.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, sl.created_at DESC LIMIT ?"
+        query_params.append(limit)
+
+        rows = conn.execute(query, query_params).fetchall()
+
+        items = []
+        player_ids = set()
+        for r in rows:
+            player_ids.add(r["player_id"])
+            tags = []
+            try:
+                tags = json.loads(r["tags"]) if r["tags"] else []
+            except (json.JSONDecodeError, TypeError):
+                pass
+            items.append({
+                "player_name": f"{r['first_name']} {r['last_name']}",
+                "position": r["position"],
+                "team": r["current_team"],
+                "league": r["current_league"],
+                "priority": r["priority"],
+                "target_reason": r["target_reason"],
+                "notes": r["scout_notes"],
+                "tags": tags,
+                "added_date": r["created_at"][:10] if r["created_at"] else "",
+            })
+
+        return {
+            "items": items,
+            "total": len(items),
+        }, {"player_ids": list(player_ids)}
+    finally:
+        conn.close()
+
+
+async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str, user_id: str) -> tuple[dict, dict]:
     """Route Bench Talk tool calls to the appropriate function.
     Returns (tool_result, entity_refs) tuple."""
     if tool_name == "query_players":
@@ -14592,6 +14965,17 @@ def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str, user
         return _pt_generate_practice_plan(tool_input, org_id, user_id)
     elif tool_name == "get_player_recent_form":
         return _pt_get_player_recent_form(tool_input, org_id)
+    # Phase 2 tools
+    elif tool_name == "get_team_context":
+        return _pt_get_team_context(tool_input, org_id)
+    elif tool_name == "get_game_context":
+        return await _pt_get_game_context(tool_input, org_id)
+    elif tool_name == "get_coaching_prep":
+        return _pt_get_coaching_prep(tool_input, org_id)
+    elif tool_name == "search_scout_notes":
+        return _pt_search_scout_notes(tool_input, org_id, user_id)
+    elif tool_name == "get_scouting_list":
+        return _pt_get_scouting_list(tool_input, org_id, user_id)
     else:
         return {"error": f"Unknown tool: {tool_name}"}, {}
 
@@ -14810,6 +15194,12 @@ async def send_bench_talk_message(
 
         messages = [{"role": h["role"], "content": h["content"]} for h in history]
 
+        # Conversation management: prevent token overflow on long conversations
+        MAX_MESSAGES = 20  # ~10 turns of back-and-forth
+        if len(messages) > MAX_MESSAGES:
+            # Keep first message for topic context + last (MAX_MESSAGES - 1) messages
+            messages = [messages[0]] + messages[-(MAX_MESSAGES - 1):]
+
         system_prompt = BENCH_TALK_SYSTEM_PROMPT.format(
             current_date=datetime.now().strftime("%B %d, %Y"),
             user_first_name=user_first_name,
@@ -14836,7 +15226,7 @@ async def send_bench_talk_message(
             if block.type == "text":
                 assistant_text += block.text
             elif block.type == "tool_use":
-                tool_result, entity_refs = _execute_bench_talk_tool(block.name, block.input, org_id, user_id)
+                tool_result, entity_refs = await _execute_bench_talk_tool(block.name, block.input, org_id, user_id)
                 referenced_players.update(entity_refs.get("player_ids", []))
                 referenced_reports.update(entity_refs.get("report_ids", []))
                 tool_results_for_api.append({
