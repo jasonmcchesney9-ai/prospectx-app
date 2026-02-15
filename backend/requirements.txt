@@ -16,4 +16,4 @@ anthropic>=0.18.1
 # Environment
 python-dotenv>=1.0.0
 # Database
-aiosqlite>=0.19.0
+aiosqlite>=0.19.0matplotlib>=3.7.0
