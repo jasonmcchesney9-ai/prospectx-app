@@ -3799,9 +3799,10 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserOut
 
-class SubscriptionUpgradeRequest(BaseModel):class SubscriptionUpgradeRequest(BaseModel):
+class SubscriptionUpgradeRequest(BaseModel):
     tier: str
-    tier: str
+
+# --- Players ---
 class PlayerCreate(BaseModel):
     first_name: str
     last_name: str
@@ -14991,6 +14992,7 @@ class BenchTalkFeedbackRequest(BaseModel):
     message_id: str
     rating: str = Field(..., pattern="^(positive|negative)$")
     feedback_text: Optional[str] = None
+
 
 # ── Bench Talk Endpoints ──────────────────────────────────────────
 
