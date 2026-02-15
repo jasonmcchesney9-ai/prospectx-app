@@ -13556,7 +13556,9 @@ BENCH_TALK_TOOLS = [
                         "pro_skater", "unified_prospect", "goalie", "game_decision",
                         "season_intelligence", "operations", "agent_pack",
                         "development_roadmap", "family_card", "trade_target",
-                        "draft_comparative", "season_progress"
+                        "draft_comparative", "season_progress",
+                        "team_identity", "opponent_gameplan", "st_optimization",
+                        "line_chemistry", "playoff_series", "goalie_tandem", "practice_plan"
                     ]
                 }
             },
@@ -13676,6 +13678,102 @@ BENCH_TALK_TOOLS = [
                 }
             },
             "required": ["player_name"]
+        }
+    },
+    # ── Phase 2 Tools ────────────────────────────────────────────
+    {
+        "name": "get_team_context",
+        "description": "Get a team's current line combinations, roster overview by position, and tactical systems (forecheck, breakout, defensive scheme). Use when asked about lines, roster, or team systems.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "team_name": {
+                    "type": "string",
+                    "description": "Team name (e.g. 'Chatham Maroons')"
+                }
+            },
+            "required": ["team_name"]
+        }
+    },
+    {
+        "name": "get_game_context",
+        "description": "Get live league standings, upcoming games, and recent scores from HockeyTech. Use when asked about standings, schedule, upcoming opponents, or recent results.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "league": {
+                    "type": "string",
+                    "default": "gojhl",
+                    "description": "League code (gojhl, ohl, ojhl)"
+                },
+                "team_name": {
+                    "type": "string",
+                    "description": "Optional team name to highlight in standings"
+                }
+            }
+        }
+    },
+    {
+        "name": "get_coaching_prep",
+        "description": "Get active game plans and series strategies. Shows upcoming game prep, opponent analysis, matchups, talking points, and active series with scores and adjustments. Use when asked about game prep, tonight's plan, or series status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "team_name": {
+                    "type": "string",
+                    "description": "Filter by team name"
+                },
+                "opponent": {
+                    "type": "string",
+                    "description": "Filter by opponent name"
+                }
+            }
+        }
+    },
+    {
+        "name": "search_scout_notes",
+        "description": "Search scouting observations across the organization. Filter by player name, tags (e.g. 'speed', 'compete', 'shot'), or note type. Use when asked about what scouts have observed or noted about a player.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player name (partial match)"
+                },
+                "tag": {
+                    "type": "string",
+                    "description": "Filter by tag (e.g. 'speed', 'skating', 'compete', 'leadership')"
+                },
+                "note_type": {
+                    "type": "string",
+                    "description": "Filter by type",
+                    "enum": ["general", "game", "workout", "interview"]
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Max notes to return (1-25)"
+                }
+            }
+        }
+    },
+    {
+        "name": "get_scouting_list",
+        "description": "Get the user's active scouting watchlist — players they are tracking with priority levels, target reasons, and notes. Use when asked about who they're watching or scouting priorities.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "priority": {
+                    "type": "string",
+                    "description": "Filter by priority level",
+                    "enum": ["high", "medium", "low"]
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Max items to return (1-20)"
+                }
+            }
         }
     }
 ]
