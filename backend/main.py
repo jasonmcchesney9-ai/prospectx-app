@@ -9,11 +9,17 @@ import logging
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+# Ensure backend directory is on sys.path so sibling modules (rink_diagrams, hockeytech) are importable
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+if _this_dir not in sys.path:
+    sys.path.insert(0, _this_dir)
 
 import csv
 import io
@@ -27,7 +33,13 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
-from rink_diagrams import generate_drill_diagram
+try:
+    from rink_diagrams import generate_drill_diagram
+except ImportError:
+    generate_drill_diagram = None
+    logging.getLogger("prospectx").warning(
+        "rink_diagrams not available — drill diagram generation disabled"
+    )
 
 # Load .env from the backend directory (works regardless of CWD)
 _backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12295,7 +12307,14 @@ async def auto_assign_teams_from_stats(
 # HockeyTech Live League API
 # ============================================================
 
-from hockeytech import HockeyTechClient, LEAGUES as HT_LEAGUES
+try:
+    from hockeytech import HockeyTechClient, LEAGUES as HT_LEAGUES
+except ImportError:
+    HockeyTechClient = None
+    HT_LEAGUES = {}
+    logging.getLogger("prospectx").warning(
+        "hockeytech module not available — live league data disabled"
+    )
 
 @app.get("/hockeytech/leagues")
 async def ht_list_leagues():
