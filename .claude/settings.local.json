@@ -93,7 +93,9 @@
       "Bash(cmd /c \"taskkill /F /IM node.exe\")",
       "Bash(cmd /c \"wmic process where ProcessId=17916 delete\")",
       "Bash(cmd /c \"wmic process where ProcessId=17916 get Name,CommandLine\")",
-      "Bash(cmd /c \"tasklist /FI \"\"PID eq 17916\"\"\")"
+      "Bash(cmd /c \"tasklist /FI \"\"PID eq 17916\"\"\")",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)"
     ]
   }
 }

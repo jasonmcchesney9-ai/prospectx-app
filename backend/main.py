@@ -352,19 +352,19 @@ app.mount("/uploads", StaticFiles(directory=_IMAGES_DIR), name="uploads")
 _allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://prospectx-app-ten.vercel.app",
     FRONTEND_URL,
 ]
-# Also allow any Vercel preview/deployment URLs
-if FRONTEND_URL and "vercel.app" in FRONTEND_URL:
-    _allowed_origins.append("https://*.vercel.app")
+# Remove duplicates and empty strings
+_allowed_origins = list({o for o in _allowed_origins if o})
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Accept", "Accept-Language", "Authorization", "Content-Language", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
     max_age=600,
 )
 
@@ -1493,6 +1493,13 @@ def init_db():
         conn.execute(idx_sql)
 
     conn.commit()
+
+    # ── Migration: Add diagram_data column to drills ──────────
+    drill_cols = [col[1] for col in conn.execute("PRAGMA table_info(drills)").fetchall()]
+    if "diagram_data" not in drill_cols:
+        conn.execute("ALTER TABLE drills ADD COLUMN diagram_data TEXT DEFAULT NULL")
+        conn.commit()
+        logger.info("Migration: added diagram_data column to drills table")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -5337,6 +5344,7 @@ class DrillCreate(BaseModel):
     skill_focus: Optional[str] = None
     intensity: str = "medium"
     concept_id: Optional[str] = None
+    diagram_data: Optional[dict] = None
 
 class DrillUpdate(BaseModel):
     name: Optional[str] = None
@@ -5354,6 +5362,7 @@ class DrillUpdate(BaseModel):
     skill_focus: Optional[str] = None
     intensity: Optional[str] = None
     concept_id: Optional[str] = None
+    diagram_data: Optional[dict] = None
 
 class PracticePlanCreate(BaseModel):
     team_name: Optional[str] = None
@@ -6271,6 +6280,15 @@ def _drill_row_to_dict(row) -> dict:
     d = dict(row)
     d["age_levels"] = json.loads(d.get("age_levels") or "[]")
     d["tags"] = json.loads(d.get("tags") or "[]")
+    # Parse diagram_data from JSON string if present
+    dd = d.get("diagram_data")
+    if dd and isinstance(dd, str):
+        try:
+            d["diagram_data"] = json.loads(dd)
+        except (json.JSONDecodeError, TypeError):
+            d["diagram_data"] = None
+    elif not dd:
+        d["diagram_data"] = None
     return d
 
 
@@ -6356,16 +6374,17 @@ async def create_drill(body: DrillCreate, token_data: dict = Depends(verify_toke
     org_id = token_data["org_id"]
     drill_id = gen_id()
     conn = get_db()
+    diagram_data_str = json.dumps(body.diagram_data) if body.diagram_data else None
     conn.execute("""
         INSERT INTO drills (id, org_id, name, category, description, coaching_points, setup,
             duration_minutes, players_needed, ice_surface, equipment, age_levels, tags,
-            diagram_url, skill_focus, intensity, concept_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            diagram_url, skill_focus, intensity, concept_id, diagram_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         drill_id, org_id, body.name, body.category, body.description,
         body.coaching_points, body.setup, body.duration_minutes, body.players_needed,
         body.ice_surface, body.equipment, json.dumps(body.age_levels), json.dumps(body.tags),
-        body.diagram_url, body.skill_focus, body.intensity, body.concept_id
+        body.diagram_url, body.skill_focus, body.intensity, body.concept_id, diagram_data_str
     ))
     conn.commit()
     row = conn.execute("SELECT * FROM drills WHERE id = ?", (drill_id,)).fetchone()
@@ -6387,6 +6406,8 @@ async def update_drill(drill_id: str, body: DrillUpdate, token_data: dict = Depe
     params = []
     for field, val in body.model_dump(exclude_unset=True).items():
         if field in ("age_levels", "tags") and val is not None:
+            val = json.dumps(val)
+        elif field == "diagram_data" and val is not None:
             val = json.dumps(val)
         updates.append(f"{field} = ?")
         params.append(val)
@@ -6517,6 +6538,50 @@ async def delete_drill_diagram(
     conn.commit()
     conn.close()
     return {"detail": "Custom diagram removed, SVG regenerated", "diagram_url": diagram_url}
+
+
+@app.put("/drills/{drill_id}/diagram/canvas")
+async def save_canvas_diagram(
+    drill_id: str,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Save interactive rink diagram data + rendered SVG from the canvas editor."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM drills WHERE id = ? AND (org_id IS NULL OR org_id = ?)",
+        (drill_id, org_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Drill not found")
+
+    diagram_data = body.get("diagram_data")
+    svg_string = body.get("svg_string", "")
+
+    # Store diagram_data as JSON
+    diagram_data_str = json.dumps(diagram_data) if diagram_data else None
+    conn.execute("UPDATE drills SET diagram_data = ? WHERE id = ?", (diagram_data_str, drill_id))
+
+    # Write SVG to file if provided
+    if svg_string:
+        svg_filename = f"drill_{drill_id}.svg"
+        svg_path = os.path.join(_IMAGES_DIR, svg_filename)
+        # Remove any existing non-SVG diagram files
+        for ext in ("jpg", "jpeg", "png", "webp"):
+            old_path = os.path.join(_IMAGES_DIR, f"drill_{drill_id}.{ext}")
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        with open(svg_path, "w", encoding="utf-8") as f:
+            f.write(svg_string)
+        diagram_url = f"/uploads/{svg_filename}"
+        conn.execute("UPDATE drills SET diagram_url = ? WHERE id = ?", (diagram_url, drill_id))
+
+    conn.commit()
+    result_row = conn.execute("SELECT * FROM drills WHERE id = ?", (drill_id,)).fetchone()
+    conn.close()
+    return _drill_row_to_dict(result_row)
 
 
 # ============================================================
