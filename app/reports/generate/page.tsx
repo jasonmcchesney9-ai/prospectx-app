@@ -77,7 +77,7 @@ function GenerateReportContent() {
     async function load() {
       try {
         const [playersRes, templatesRes, teamsRes] = await Promise.all([
-          api.get<Player[]>("/players?limit=500"),
+          api.get<Player[]>("/players?limit=2000"),
           api.get<ReportTemplate[]>("/templates"),
           api.get<TeamReference[]>("/teams/reference"),
         ]);
@@ -85,13 +85,14 @@ function GenerateReportContent() {
         setTemplates(templatesRes.data);
         setTeams(teamsRes.data);
 
-        // Default to first template type if available
+        // Default to a sensible report type
         if (templatesRes.data.length > 0 && !selectedType) {
-          // If team preselected, default to team_identity
           if (preselectedTeam) {
             setSelectedType("team_identity");
           } else {
-            setSelectedType(templatesRes.data[0].report_type);
+            // Default to pro_skater (most common), fall back to first template
+            const hasProSkater = templatesRes.data.some((t: ReportTemplate) => t.report_type === "pro_skater");
+            setSelectedType(hasProSkater ? "pro_skater" : templatesRes.data[0].report_type);
           }
         }
       } catch (err: unknown) {
@@ -112,16 +113,36 @@ function GenerateReportContent() {
     };
   }, []);
 
-  // Filter players by search
-  const filteredPlayers = players.filter((p) => {
-    if (!playerSearch) return true;
-    const q = playerSearch.toLowerCase();
-    return (
-      p.first_name.toLowerCase().includes(q) ||
-      p.last_name.toLowerCase().includes(q) ||
-      (p.current_team || "").toLowerCase().includes(q)
-    );
-  });
+  // Filter and sort players by search relevance
+  const filteredPlayers = players
+    .filter((p) => {
+      if (!playerSearch) return true;
+      const q = playerSearch.toLowerCase();
+      return (
+        p.first_name.toLowerCase().includes(q) ||
+        p.last_name.toLowerCase().includes(q) ||
+        (p.current_team || "").toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (!playerSearch) {
+        // Default: alphabetical by last name, then first name
+        const ln = a.last_name.localeCompare(b.last_name);
+        return ln !== 0 ? ln : a.first_name.localeCompare(b.first_name);
+      }
+      const q = playerSearch.toLowerCase();
+      // Score: exact first name start = 0 (best), last name start = 1, contains = 2
+      const score = (p: Player) => {
+        if (p.first_name.toLowerCase().startsWith(q)) return 0;
+        if (p.last_name.toLowerCase().startsWith(q)) return 1;
+        return 2;
+      };
+      const sa = score(a), sb = score(b);
+      if (sa !== sb) return sa - sb;
+      // Tie-break: alphabetical by last name, then first name
+      const ln = a.last_name.localeCompare(b.last_name);
+      return ln !== 0 ? ln : a.first_name.localeCompare(b.first_name);
+    });
 
   // Filter teams by search
   const filteredTeams = teams.filter((t) => {
@@ -349,6 +370,9 @@ function GenerateReportContent() {
                           >
                             <span className="font-semibold text-navy text-sm">
                               {p.first_name} {p.last_name}
+                              {p.birth_year && (
+                                <span className="font-normal text-muted ml-1">({p.birth_year})</span>
+                              )}
                             </span>
                             <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
                               {p.position}
@@ -395,9 +419,12 @@ function GenerateReportContent() {
 
             {/* Report Type Selection — Player Reports */}
             <div>
-              <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
-                Player Reports
-              </label>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-5 w-1 rounded-full bg-teal" />
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
+                  Player Reports
+                </h3>
+              </div>
               <p className="text-[11px] text-muted/60 mb-3">Individual player evaluation, scouting, and development reports.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {reportTypes
@@ -438,9 +465,12 @@ function GenerateReportContent() {
             {/* Report Type Selection — Team Reports */}
             {reportTypes.some((type) => (TEAM_REPORT_TYPES as readonly string[]).includes(type)) && (
               <div>
-                <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
-                  Team Reports
-                </label>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-5 w-1 rounded-full bg-orange" />
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
+                    Team Reports
+                  </h3>
+                </div>
                 <p className="text-[11px] text-muted/60 mb-3">Team strategy, identity, game-planning, and lineup optimization reports. Select a team below.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {reportTypes

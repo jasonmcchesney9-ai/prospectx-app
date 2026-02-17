@@ -13,6 +13,10 @@ import {
   Printer,
   FileText,
   Download,
+  Link2,
+  Users,
+  Check,
+  Mail,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -110,6 +114,10 @@ export default function ReportViewerPage() {
   const [polling, setPolling] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
+  // Share state
+  const [copied, setCopied] = useState(false);
+  const [sharedWithOrg, setSharedWithOrg] = useState(false);
+
   useEffect(() => {
     let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -117,6 +125,7 @@ export default function ReportViewerPage() {
       try {
         const { data } = await api.get<Report>(`/reports/${reportId}`);
         setReport(data);
+        setSharedWithOrg(!!data.shared_with_org);
 
         // Fetch player info
         if (data.player_id) {
@@ -238,6 +247,63 @@ export default function ReportViewerPage() {
     }, 1000);
   };
 
+  const handleCopyLink = async () => {
+    try {
+      const { data } = await api.post(`/reports/${reportId}/share`);
+      await navigator.clipboard.writeText(data.share_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: copy current URL
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleTeamShare = async () => {
+    try {
+      const { data } = await api.put(`/reports/${reportId}/team-share`);
+      setSharedWithOrg(data.shared_with_org);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleDownloadDocx = async () => {
+    try {
+      const response = await api.get(`/reports/${reportId}/export/docx`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${reportFileName}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // silently fail — DOCX export may not be available
+    }
+  };
+
+  const handleEmailShare = async () => {
+    try {
+      const { data } = await api.post(`/reports/${reportId}/email-preview`);
+      const mailtoUrl = `mailto:?subject=${encodeURIComponent(data.subject)}&body=${encodeURIComponent(data.body)}`;
+      window.open(mailtoUrl, "_self");
+    } catch {
+      // Fallback: open mailto with just the current URL
+      const subject = `ProspectX Report`;
+      const body = `Check out this report: ${window.location.href}`;
+      window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, "_self");
+    }
+  };
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -341,21 +407,70 @@ export default function ReportViewerPage() {
 
             {/* Grade Badge + Actions */}
             <div className="flex flex-col items-end gap-3 shrink-0 ml-4">
-              {/* Grade Badge — prominent display */}
-              {grade && (
-                <div className={`flex flex-col items-center px-3 py-2 rounded-lg ring-1 ${gradeColors(grade).bg} ${gradeColors(grade).ring}`}>
-                  <span className="text-[10px] font-oswald uppercase tracking-wider text-white/50 leading-none">Grade</span>
-                  <span className={`text-2xl font-oswald font-bold leading-tight ${gradeColors(grade).text}`}>{grade}</span>
-                  {PROSPECT_GRADES[grade] && (
-                    <span className="text-[9px] text-white/40 leading-none mt-0.5 text-center max-w-[100px]">
-                      {PROSPECT_GRADES[grade].nhl.split(" / ")[0]}
+              {/* Grade Badge + Quality Score — prominent display */}
+              <div className="flex items-center gap-2">
+                {grade && (
+                  <div className={`flex flex-col items-center px-3 py-2 rounded-lg ring-1 ${gradeColors(grade).bg} ${gradeColors(grade).ring}`}>
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-white/50 leading-none">Grade</span>
+                    <span className={`text-2xl font-oswald font-bold leading-tight ${gradeColors(grade).text}`}>{grade}</span>
+                    {PROSPECT_GRADES[grade] && (
+                      <span className="text-[9px] text-white/40 leading-none mt-0.5 text-center max-w-[100px]">
+                        {PROSPECT_GRADES[grade].nhl.split(" / ")[0]}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {report?.quality_score != null && (
+                  <div
+                    className={`flex flex-col items-center px-3 py-2 rounded-lg ring-1 ${
+                      report.quality_score >= 80
+                        ? "bg-teal/20 ring-teal/40"
+                        : report.quality_score >= 60
+                        ? "bg-orange/20 ring-orange/40"
+                        : "bg-red-500/20 ring-red-400/40"
+                    }`}
+                    title={(() => {
+                      try {
+                        const details = report.quality_details ? JSON.parse(report.quality_details) : null;
+                        if (!details?.breakdown) return `Quality: ${report.quality_score}/100`;
+                        const b = details.breakdown;
+                        return `Quality: ${report.quality_score}/100\nSections: ${b.section_completeness}/25\nEvidence: ${b.evidence_discipline}/25\nDepth: ${b.depth_adequacy}/25\nGrade: ${b.grade_presence}/10\nClean: ${b.cleanliness}/15`;
+                      } catch { return `Quality: ${report.quality_score}/100`; }
+                    })()}
+                  >
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-white/50 leading-none">Quality</span>
+                    <span className={`text-2xl font-oswald font-bold leading-tight ${
+                      report.quality_score >= 80 ? "text-teal" : report.quality_score >= 60 ? "text-orange" : "text-red-300"
+                    }`}>
+                      {Math.round(report.quality_score)}
                     </span>
-                  )}
-                </div>
-              )}
+                    <span className="text-[9px] text-white/40 leading-none mt-0.5">/ 100</span>
+                  </div>
+                )}
+              </div>
 
               {/* Action buttons — hidden in print */}
               <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={handleCopyLink}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors"
+                  title="Copy shareable link"
+                >
+                  {copied ? <Check size={14} className="text-green-400" /> : <Link2 size={14} />}
+                  {copied ? "Copied" : "Link"}
+                </button>
+                <button
+                  onClick={handleTeamShare}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
+                    sharedWithOrg
+                      ? "bg-teal/20 text-teal"
+                      : "bg-white/10 hover:bg-white/20"
+                  }`}
+                  title={sharedWithOrg ? "Shared with team — click to unshare" : "Share with team"}
+                >
+                  <Users size={14} />
+                  {sharedWithOrg ? "Shared" : "Share"}
+                </button>
                 <button
                   onClick={handleDownloadPDF}
                   className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors"
@@ -363,6 +478,22 @@ export default function ReportViewerPage() {
                 >
                   <Download size={14} />
                   PDF
+                </button>
+                <button
+                  onClick={handleDownloadDocx}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors"
+                  title={`Download as Word (${reportFileName}.docx)`}
+                >
+                  <FileText size={14} />
+                  DOCX
+                </button>
+                <button
+                  onClick={handleEmailShare}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors"
+                  title="Email this report"
+                >
+                  <Mail size={14} />
+                  Email
                 </button>
                 <button
                   onClick={() => window.print()}

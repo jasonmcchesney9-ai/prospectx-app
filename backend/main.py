@@ -28,7 +28,7 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
@@ -40,6 +40,28 @@ except ImportError:
     logging.getLogger("prospectx").warning(
         "rink_diagrams not available — drill diagram generation disabled"
     )
+
+try:
+    from docx import Document as DocxDocument
+    from docx.shared import Inches, Pt, Cm, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    _docx_available = True
+except ImportError:
+    _docx_available = False
+    logging.getLogger("prospectx").warning(
+        "python-docx not available — DOCX export disabled"
+    )
+
+from pxi_prompt_core import (
+    PXI_CORE_GUARDRAILS,
+    PXI_MODE_BLOCKS,
+    PXI_MODES,
+    VALID_MODES,
+    MODE_TEMPLATE_WIRING,
+    REQUIRED_SECTIONS_BY_TYPE,
+    build_report_system_prompt,
+    resolve_mode,
+)
 
 # Load .env from the backend directory (works regardless of CWD)
 _backend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1540,6 +1562,39 @@ def init_db():
         conn.commit()
         logger.info("Migration: added diagram_data column to drills table")
 
+    # ── Migration: PXI mode column on bench_talk_conversations ──
+    bt_cols = {r[1] for r in conn.execute("PRAGMA table_info(bench_talk_conversations)").fetchall()}
+    if "mode" not in bt_cols:
+        conn.execute("ALTER TABLE bench_talk_conversations ADD COLUMN mode TEXT DEFAULT NULL")
+        conn.commit()
+        logger.info("Migration: added mode column to bench_talk_conversations")
+
+    # ── Migration: Share columns on reports ──
+    rpt_cols = {r[1] for r in conn.execute("PRAGMA table_info(reports)").fetchall()}
+    for col_name, col_type in [
+        ("share_token", "TEXT DEFAULT NULL"),
+        ("shared_with_org", "INTEGER DEFAULT 0"),
+    ]:
+        if col_name not in rpt_cols:
+            conn.execute(f"ALTER TABLE reports ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to reports", col_name)
+
+    # Index for share token lookups
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_reports_share_token ON reports(share_token)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_reports_shared_org ON reports(org_id, shared_with_org)")
+    conn.commit()
+
+    # ── Migration: Quality score columns on reports ──
+    for col_name, col_type in [
+        ("quality_score", "REAL DEFAULT NULL"),
+        ("quality_details", "TEXT DEFAULT NULL"),
+    ]:
+        if col_name not in rpt_cols:
+            conn.execute(f"ALTER TABLE reports ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to reports", col_name)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -1831,6 +1886,12 @@ def seed_new_templates():
         ("Free Agent Market Analysis", "free_agent_market",
          "Competitive Intelligence", "Market & Acquisitions",
          "Analyze available uncommitted players by position, quality grade, and system fit with market trend analysis and timing recommendations."),
+        ("Pre-Game Intel Brief", "pre_game_intel",
+         "Coaching", "Game Prep",
+         "Concise, bench-ready pre-game briefing with opponent snapshot, key matchups, goaltending report, special teams intel, and game keys."),
+        ("Prep/College Player Guide", "player_guide_prep_college",
+         "Player Development", "Pathway Guides",
+         "Comprehensive guide for players transitioning to prep school or college hockey with readiness assessment, pathway options, and family action items."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -1854,9 +1915,25 @@ def _migrate_template_prompts():
     check = conn.execute(
         "SELECT LENGTH(prompt_text) as len FROM report_templates WHERE report_type = 'pro_skater' LIMIT 1"
     ).fetchone()
-    if check and check["len"] and check["len"] > 200:
+    already_migrated = check and check["len"] and check["len"] > 200
+
+    # Even if base migration is done, check for new templates with short prompts
+    if already_migrated:
+        # Catch-up: update any newly seeded templates that still have short prompt_text
+        from seed_templates import TEMPLATES as _seed_tpls
+        _catchup = 0
+        for tpl_name, tpl_type, tpl_prompt, _tpl_inputs in _seed_tpls:
+            row = conn.execute(
+                "SELECT LENGTH(prompt_text) as len FROM report_templates WHERE report_type = ?", (tpl_type,)
+            ).fetchone()
+            if row and row["len"] and row["len"] < 200 and len(tpl_prompt) > 200:
+                conn.execute("UPDATE report_templates SET prompt_text = ? WHERE report_type = ?", (tpl_prompt, tpl_type))
+                _catchup += 1
+        if _catchup:
+            conn.commit()
+            logger.info("Catch-up: updated %d new template prompts to rich format", _catchup)
         conn.close()
-        return  # Already migrated
+        return
 
     RICH_PROMPTS = {
         "pro_skater": """You are an elite hockey scouting director writing a professional scouting report on a skater (forward or defense). Your job is to turn structured stats and notes into a clear, honest report that a GM and head coach can trust for real decisions.
@@ -4470,8 +4547,10 @@ class ReportGenerateRequest(BaseModel):
     report_type: str
     template_id: Optional[str] = None
     data_scope: Optional[Dict[str, Any]] = None
+    mode: Optional[str] = None  # PXI mode override (scout, coach, analyst, etc.)
 
 class ReportResponse(BaseModel):
+    model_config = {"extra": "ignore"}
     id: str
     org_id: str
     player_id: Optional[str] = None
@@ -4486,6 +4565,10 @@ class ReportResponse(BaseModel):
     llm_model: Optional[str] = None
     llm_tokens: Optional[int] = None
     created_at: str
+    share_token: Optional[str] = None
+    shared_with_org: Optional[int] = 0
+    quality_score: Optional[float] = None
+    quality_details: Optional[str] = None
 
 class ReportGenerateResponse(BaseModel):
     report_id: str
@@ -8643,8 +8726,9 @@ _REPORT_SLANG_WORDS = [
 ]
 
 
-def _validate_and_repair_report(output_text: str, report_type: str, client, llm_model: str) -> tuple:
+def _validate_and_repair_report(output_text: str, report_type: str, client, llm_model: str, mode: str = None) -> tuple:
     """Validate report output format and attempt repair if needed.
+    Mode-aware: adjusts slang/jargon checks based on PXI mode.
     Returns (possibly_repaired_text, list_of_warnings)."""
     warnings = []
 
@@ -8676,9 +8760,39 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # ── Soft checks (log warning, accept report) ──
-    found_slang = [w for w in _REPORT_SLANG_WORDS if w.lower() in output_text.lower()]
-    if found_slang:
-        warnings.append(f"SOFT: Slang detected in report: {', '.join(found_slang[:5])}")
+
+    # Mode-aware slang/jargon checking
+    # Strict modes: scout, gm, analyst, agent — no slang allowed
+    # Relaxed modes: coach, broadcast — allow hockey colloquialisms (reduced slang list)
+    # Parent mode: check for excessive jargon/complexity instead of slang
+    _STRICT_SLANG_MODES = {"scout", "gm", "analyst", "agent", "skill_coach", "mental_coach"}
+    _RELAXED_SLANG_MODES = {"coach", "broadcast", "producer"}
+    # Slang terms that are acceptable in coaching/broadcast context (hockey vernacular)
+    _COACHING_OK_SLANG = {"dangle", "mitts", "top cheese", "biscuit", "twig"}
+    # Jargon terms that should be flagged in parent mode (too technical for families)
+    _PARENT_JARGON_WORDS = [
+        "corsi", "fenwick", "xgf", "xga", "war", "gamescore", "gar",
+        "expected goals", "shot suppression", "zone exit rate", "controlled entry",
+        "high-danger chance", "slot shot", "royal road", "net-front deflection rate",
+        "d-zone coverage index", "gap control metric", "transition xg",
+    ]
+
+    if mode == "parent":
+        # Parent mode: check for excessive hockey jargon instead of slang
+        found_jargon = [w for w in _PARENT_JARGON_WORDS if w.lower() in output_text.lower()]
+        if found_jargon:
+            warnings.append(f"SOFT: Jargon detected in parent-mode report (should be plain language): {', '.join(found_jargon[:5])}")
+    elif mode in _RELAXED_SLANG_MODES:
+        # Coach/broadcast/producer: only flag egregious slang (exclude acceptable hockey terms)
+        strict_slang = [w for w in _REPORT_SLANG_WORDS if w.lower() not in _COACHING_OK_SLANG]
+        found_slang = [w for w in strict_slang if w.lower() in output_text.lower()]
+        if found_slang:
+            warnings.append(f"SOFT: Slang detected in report: {', '.join(found_slang[:5])}")
+    else:
+        # Default / strict modes (scout, gm, analyst, agent, skill_coach, mental_coach): full slang check
+        found_slang = [w for w in _REPORT_SLANG_WORDS if w.lower() in output_text.lower()]
+        if found_slang:
+            warnings.append(f"SOFT: Slang detected in report: {', '.join(found_slang[:5])}")
 
     has_confidence = bool(re.search(r'Confidence:\s*(HIGH|MED|LOW)', output_text, re.IGNORECASE))
     if not has_confidence:
@@ -8690,16 +8804,38 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
     if not has_grade and report_type not in report_types_without_grade:
         warnings.append("SOFT: No Overall Grade found in report")
 
+    # ── Mode-aware section expectations (log if mode-expected sections missing) ──
+    if mode:
+        wiring = MODE_TEMPLATE_WIRING.get(report_type)
+        if wiring:
+            expected_mode = wiring.get("primary", "scout")
+            if mode != expected_mode:
+                warnings.append(f"INFO: Report generated in {mode} mode but template {report_type} is wired for {expected_mode} mode")
+
+    # ── Template-specific section completeness check ──
+    expected_sections = REQUIRED_SECTIONS_BY_TYPE.get(report_type)
+    if expected_sections:
+        found_headers = set(re.findall(r'^([A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*)\s*[:—\-]?\s*$', output_text, re.MULTILINE))
+        missing_sections = [s for s in expected_sections if s not in found_headers]
+        if missing_sections:
+            warnings.append(f"SOFT: Missing expected sections for {report_type}: {', '.join(missing_sections[:5])}")
+
     # ── Repair if hard checks failed ──
     if needs_repair and client:
         try:
+            # Build expected sections hint for the repair prompt
+            _expected_hint = ""
+            _repair_sections = REQUIRED_SECTIONS_BY_TYPE.get(report_type)
+            if _repair_sections:
+                _expected_hint = f"\n7. Expected sections for this report type: {', '.join(_repair_sections)}"
+
             repair_prompt = f"""The following report has formatting issues. Reformat it to meet these requirements:
 1. Use ALL_CAPS_WITH_UNDERSCORES section headers on their own lines (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, BOTTOM_LINE)
 2. Ensure EXECUTIVE_SUMMARY and BOTTOM_LINE sections exist
 3. Remove any === delimiters and replace with plain ALL_CAPS headers
 4. Remove any markdown code block wrappers
 5. Keep all content and analysis intact — only fix the formatting
-6. Do NOT use markdown formatting (no **, no #, no ```)
+6. Do NOT use markdown formatting (no **, no #, no ```){_expected_hint}
 
 Report to reformat:
 
@@ -8724,6 +8860,123 @@ Report to reformat:
             warnings.append(f"REPAIR: Exception during repair: {str(e)[:200]}")
 
     return output_text, warnings
+
+
+def _score_report_quality(output_text: str, report_type: str, mode: str = None) -> dict:
+    """Score a generated report on quality dimensions (0-100).
+    Returns {"score": float, "breakdown": {dimension: points}, "flags": [str]}."""
+    breakdown = {}
+    flags = []
+
+    # Find all section headers in the report
+    found_sections = re.findall(r'^([A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*)\s*[:—\-]?\s*$', output_text, re.MULTILINE)
+    found_set = set(found_sections)
+
+    # 1. Section completeness (0-25)
+    expected = REQUIRED_SECTIONS_BY_TYPE.get(report_type, ["EXECUTIVE_SUMMARY", "BOTTOM_LINE"])
+    if expected:
+        present = sum(1 for s in expected if s in found_set)
+        section_ratio = present / len(expected) if expected else 1.0
+        breakdown["section_completeness"] = round(section_ratio * 25, 1)
+        if section_ratio < 1.0:
+            missing = [s for s in expected if s not in found_set]
+            flags.append(f"Missing sections: {', '.join(missing)}")
+    else:
+        breakdown["section_completeness"] = 25.0
+
+    # 2. Evidence discipline (0-25)
+    ev_score = 0.0
+    has_confidence = bool(re.search(r'Confidence:\s*(HIGH|MED|LOW)', output_text, re.IGNORECASE))
+    if has_confidence:
+        ev_score += 10.0
+    else:
+        flags.append("No CONFIDENCE tag found")
+
+    # Check for INFERENCE labels (good practice)
+    inference_count = len(re.findall(r'INFERENCE\s*[-—]', output_text))
+    if inference_count > 0:
+        ev_score += min(5.0, inference_count * 1.5)
+
+    # Check for DATA NOT AVAILABLE usage (shows data awareness)
+    dna_count = len(re.findall(r'DATA NOT AVAILABLE', output_text))
+    # Having 0 is fine (may have full data), having some shows awareness
+    if dna_count > 0:
+        ev_score += 3.0
+
+    # Check for quantitative references (stats cited)
+    stat_refs = len(re.findall(r'\d+\.\d+%|\d+\s*(?:GP|G|A|P|PIM|SOG|S%)', output_text))
+    if stat_refs >= 5:
+        ev_score += 7.0
+    elif stat_refs >= 2:
+        ev_score += 4.0
+    elif stat_refs >= 1:
+        ev_score += 2.0
+    else:
+        flags.append("Few quantitative stat references")
+
+    breakdown["evidence_discipline"] = min(25.0, round(ev_score, 1))
+
+    # 3. Depth adequacy (0-25)
+    # Split by section headers and check word counts
+    sections_text = re.split(r'^[A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*\s*[:—\-]?\s*$', output_text, flags=re.MULTILINE)
+    total_words = len(output_text.split())
+    depth_score = 0.0
+
+    # Overall length check
+    if total_words >= 800:
+        depth_score += 10.0
+    elif total_words >= 400:
+        depth_score += 6.0
+    elif total_words >= 200:
+        depth_score += 3.0
+    else:
+        flags.append(f"Report very short ({total_words} words)")
+
+    # Section depth — check that we have multiple substantial sections
+    substantial_sections = sum(1 for s in sections_text if len(s.split()) >= 30)
+    if substantial_sections >= 5:
+        depth_score += 15.0
+    elif substantial_sections >= 3:
+        depth_score += 10.0
+    elif substantial_sections >= 2:
+        depth_score += 6.0
+    else:
+        flags.append(f"Only {substantial_sections} substantial sections (30+ words each)")
+
+    breakdown["depth_adequacy"] = min(25.0, round(depth_score, 1))
+
+    # 4. Grade presence (0-10)
+    grade_exempt = ("practice_plan", "team_identity", "opponent_gameplan", "game_decision",
+                    "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem",
+                    "pre_game_intel", "player_guide_prep_college")
+    has_grade = bool(re.search(r'Overall\s*Grade[:\s]*[A-D][+-]?', output_text, re.IGNORECASE))
+    if report_type in grade_exempt:
+        breakdown["grade_presence"] = 10.0  # Full marks — not applicable
+    elif has_grade:
+        breakdown["grade_presence"] = 10.0
+    else:
+        breakdown["grade_presence"] = 0.0
+        flags.append("Missing Overall Grade")
+
+    # 5. Cleanliness (0-15)
+    clean_score = 15.0
+    if output_text.strip().startswith('```'):
+        clean_score -= 5.0
+        flags.append("Wrapped in markdown code block")
+    if re.search(r'^===\s+\w+', output_text, re.MULTILINE):
+        clean_score -= 5.0
+        flags.append("Contains === delimited sections")
+    if 'the JSON' in output_text.lower() or 'the data payload' in output_text.lower():
+        clean_score -= 3.0
+        flags.append("References 'the JSON' or 'the data payload'")
+    if re.search(r'\*\*[^*]+\*\*', output_text):
+        clean_score -= 2.0
+        flags.append("Contains markdown bold formatting")
+
+    breakdown["cleanliness"] = max(0.0, round(clean_score, 1))
+
+    total = round(sum(breakdown.values()), 1)
+    return {"score": total, "breakdown": breakdown, "flags": flags}
 
 
 def _generate_mock_report(player: dict, report_type: str) -> str:
@@ -8784,6 +9037,7 @@ TEAM_REPORT_TYPES = [
     "team_identity", "opponent_gameplan", "line_chemistry", "st_optimization",
     "practice_plan", "playoff_series", "goalie_tandem",
     "league_benchmarks", "season_projection", "free_agent_market",
+    "pre_game_intel",
 ]
 
 # ── Custom Report Focus Areas → Prompt Sections Map ───────────
@@ -9133,11 +9387,15 @@ Today's date is {datetime.now().date().isoformat()}."""
 
             generation_ms = int((time.perf_counter() - start_time) * 1000)
 
+            # Score quality
+            quality = _score_report_quality(output_text, "custom_team")
             conn.execute("""
                 UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
-                                  llm_model=?, llm_tokens=?, generation_time_ms=?
+                                  llm_model=?, llm_tokens=?, generation_time_ms=?,
+                                  quality_score=?, quality_details=?
                 WHERE id = ?
-            """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+            """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms,
+                  quality["score"], json.dumps(quality), report_id))
             conn.commit()
 
             # Track report usage
@@ -9412,11 +9670,15 @@ If data is limited for any focus area, note what additional data would strengthe
 
         generation_ms = int((time.perf_counter() - start_time) * 1000)
 
+        # Score quality
+        quality = _score_report_quality(output_text, "custom_player")
         conn.execute("""
             UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
-                              llm_model=?, llm_tokens=?, generation_time_ms=?
+                              llm_model=?, llm_tokens=?, generation_time_ms=?,
+                              quality_score=?, quality_details=?
             WHERE id = ?
-        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms,
+              quality["score"], json.dumps(quality), report_id))
         conn.commit()
         # Track report usage
         _increment_usage(user_id, "report", report_id, org_id, conn)
@@ -9650,9 +9912,10 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
             output_text = message.content[0].text
             total_tokens = message.usage.input_tokens + message.usage.output_tokens
 
-            # Validate team report output
+            # Validate team report output (mode-aware)
+            _team_mode = resolve_mode(template_slug=request.report_type) if request.report_type else None
             output_text, validation_warnings = _validate_and_repair_report(
-                output_text, request.report_type, client, llm_model
+                output_text, request.report_type, client, llm_model, mode=getattr(request, 'mode', None) or _team_mode
             )
             if validation_warnings:
                 for w in validation_warnings:
@@ -9680,14 +9943,19 @@ This report was generated in demo mode. Add your Anthropic API key to backend/.e
 
         generation_ms = int((time.perf_counter() - start_time) * 1000)
 
+        # Score quality
+        _team_rpt_mode = getattr(request, 'mode', None) or resolve_mode(template_slug=request.report_type)
+        quality = _score_report_quality(output_text, request.report_type, mode=_team_rpt_mode)
         conn.execute("""
             UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
-                              llm_model=?, llm_tokens=?, generation_time_ms=?
+                              llm_model=?, llm_tokens=?, generation_time_ms=?,
+                              quality_score=?, quality_details=?
             WHERE id = ?
-        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms,
+              quality["score"], json.dumps(quality), report_id))
         conn.commit()
 
-        logger.info("Team report generated: %s (%s) in %d ms", title, request.report_type, generation_ms)
+        logger.info("Team report generated: %s (%s) in %d ms, quality=%.1f", title, request.report_type, generation_ms, quality["score"])
         # Track report usage
         _increment_usage(user_id, "report", report_id, org_id, conn)
         conn.close()
@@ -10245,6 +10513,18 @@ Include quantitative analysis where stats exist. If data is limited, note what a
 
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by the section content."""
 
+            # ── PXI Mode injection (guardrails + mode block before base prompt) ──
+            # Fetch user hockey_role for mode resolution fallback
+            _user_role_row = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+            _user_hockey_role = _user_role_row["hockey_role"] if _user_role_row and _user_role_row["hockey_role"] else "scout"
+            _resolved_mode = resolve_mode(
+                user_hockey_role=_user_hockey_role,
+                explicit_mode=request.mode,
+                template_slug=request.report_type,
+            )
+            _mode_block = PXI_MODE_BLOCKS.get(_resolved_mode, "")
+            system_prompt = PXI_CORE_GUARDRAILS + "\n\n" + _mode_block + "\n\n" + system_prompt
+
             # ── Report-type-specific prompt enhancements ──
             if request.report_type == "indices_dashboard":
                 system_prompt += """
@@ -10275,8 +10555,8 @@ Project this player's performance for the NEXT season (2026-27). Structure your 
 Use the player's birth_year and age_group from the data. Today's date is {datetime.now().date().isoformat()}. Reference specific stats when projecting."""
 
             # ── Append template-specific instructions from DB ──
-            if template and template.get("prompt_text"):
-                tpl_prompt = template["prompt_text"]
+            tpl_prompt = template["prompt_text"] if template else None
+            if tpl_prompt:
                 # Only append if it's a rich prompt (not the old generic one-liner)
                 if len(tpl_prompt) > 200:
                     system_prompt += f"""
@@ -10304,7 +10584,7 @@ Note: Follow the section structure specified in the template instructions above.
 
             # ── Validate and optionally repair the report output ──
             output_text, validation_warnings = _validate_and_repair_report(
-                output_text, request.report_type, client, llm_model
+                output_text, request.report_type, client, llm_model, mode=_resolved_mode
             )
             if validation_warnings:
                 for w in validation_warnings:
@@ -10319,14 +10599,18 @@ Note: Follow the section structure specified in the template instructions above.
 
         generation_ms = int((time.perf_counter() - start_time) * 1000)
 
+        # Score quality
+        quality = _score_report_quality(output_text, request.report_type, mode=_resolved_mode)
         conn.execute("""
             UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
-                              llm_model=?, llm_tokens=?, generation_time_ms=?
+                              llm_model=?, llm_tokens=?, generation_time_ms=?,
+                              quality_score=?, quality_details=?
             WHERE id = ?
-        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms, report_id))
+        """, (title, output_text, now_iso(), llm_model, total_tokens, generation_ms,
+              quality["score"], json.dumps(quality), report_id))
         conn.commit()
 
-        logger.info("Report generated: %s (%s) in %d ms", title, request.report_type, generation_ms)
+        logger.info("Report generated: %s (%s) in %d ms, quality=%.1f", title, request.report_type, generation_ms, quality["score"])
         # Track report usage
         _increment_usage(user_id, "report", report_id, org_id, conn)
         conn.close()
@@ -14595,6 +14879,7 @@ You have access to the ProspectX database with:
 11. **get_coaching_prep** — Active game plans, chalk talk sessions, series strategies
 12. **search_scout_notes** — Search scouting observations by player, tag, or type
 13. **get_scouting_list** — User's personal scouting watchlist with priorities
+14. **diagnose_player_struggles** — Analyze declining metrics, drought streaks, and potential causes for a struggling player
 
 # TOOL ROUTING GUIDE
 When the user asks about...
@@ -14611,6 +14896,7 @@ When the user asks about...
 - Find drills, practice activities → use `query_drills`
 - Build a practice plan → use `generate_practice_plan`
 - Recent form, hot streak, game log → use `get_player_recent_form`
+- What's wrong with, why is struggling, diagnose player → use `diagnose_player_struggles`
 
 # REPORT TYPES — suggest based on {hockey_role_label}'s needs:
 - **Scouting:** pro_skater, unified_prospect, draft_comparative
@@ -14643,49 +14929,9 @@ A (Elite NHL) → B+ (Solid NHL) → B (Depth NHL) → B- (NHL Fringe/AHL Top) �
 Current date: {current_date}
 """
 
-# Role-specific instruction blocks inserted into the system prompt
-BENCH_TALK_ROLE_INSTRUCTIONS = {
-    "scout": """You're talking to a scout. They live at the rink and they've seen it all.
-- Use full scouting language: projection, compete level, hockey sense, skating mechanics, puck protection
-- Give ProspectX Intelligence grades, comparable players, and projection timelines
-- Think in terms of "does this kid have a next level?" — always frame around projectability
-- Suggest pro_skater, unified_prospect, or draft_comparative reports
-- Don't over-explain hockey concepts — they know what Corsi is""",
-
-    "gm": """You're talking to a General Manager. They think big picture — roster construction, value, and fit.
-- Frame everything through roster impact: "Where does this kid fit in your lineup?"
-- Talk about value, trade scenarios, roster holes, and organizational depth
-- Compare players in terms of cost vs. production, not just raw talent
-- Suggest operations, trade_target, or season_intelligence reports
-- Use analytics confidently — GMs want the numbers that tell the story""",
-
-    "coach": """You're talking to a Head Coach. They think in systems, matchups, and deployment.
-- Frame players through systems fit: "He's your bumper guy on PP1" or "Natural F1 on the forecheck"
-- Talk about line combinations, special teams roles, and tactical matchups
-- Think about usage: who plays in what situations, who can you trust in the third period of a tight game
-- Suggest game_decision, line_chemistry, opponent_gameplan, or practice_plan reports
-- You can build practice plans! If they mention practice, suggest using the generate_practice_plan tool
-- You can also search the drill library — suggest drills for specific skills or situations
-- Coaches want actionable intel, not just grades — tell them how to use the player""",
-
-    "player": """You're talking to a player working on their game. Be real but encouraging.
-- Be honest about strengths and areas to improve, but frame everything as a development opportunity
-- Use language they relate to: "your shot release" not "offensive output metrics"
-- Compare them to relatable pros: "You've got a bit of that Bergeron two-way game developing"
-- Focus on what they can control: habits, fitness, skills, compete level
-- Suggest development_roadmap or season_progress reports
-- Hype them up when they earn it — "You're putting up numbers, keep doing your thing"
-- Don't sugarcoat — players respect honest feedback more than empty praise""",
-
-    "parent": """You're talking to a hockey parent. They love their kid and want to understand the game better.
-- Translate everything into plain English — no acronyms without explaining them
-- Be encouraging and supportive — this is their child you're talking about
-- Help them understand what scouts look for, what stats actually matter, and what development looks like
-- Suggest family_card reports — they're designed to be parent-friendly
-- If their kid's stats aren't elite, focus on development trajectory and what they can work on
-- Never crush a dream — frame honestly but with a path forward: "He's got work to do, but here's how to get there"
-- Explain the league landscape: what GOHL means, what the path to OHL/NCAA/CHL looks like""",
-}
+# Role-specific instruction blocks — NOW SERVED BY pxi_prompt_core.PXI_MODE_BLOCKS
+# The old BENCH_TALK_ROLE_INSTRUCTIONS dict has been replaced by 10 PXI mode blocks
+# imported from pxi_prompt_core.py. See resolve_mode() and PXI_MODE_BLOCKS.
 
 
 BENCH_TALK_TOOLS = [
@@ -14767,6 +15013,11 @@ BENCH_TALK_TOOLS = [
                         "team_identity", "opponent_gameplan", "st_optimization",
                         "line_chemistry", "playoff_series", "goalie_tandem", "practice_plan"
                     ]
+                },
+                "mode": {
+                    "type": "string",
+                    "description": "PXI mode for report tone and analytical focus. If not specified, uses the wiring table default for the report type.",
+                    "enum": ["scout", "coach", "analyst", "gm", "agent", "parent", "skill_coach", "mental_coach", "broadcast", "producer"]
                 }
             },
             "required": ["player_name", "report_type"]
@@ -14981,6 +15232,25 @@ BENCH_TALK_TOOLS = [
                     "description": "Max items to return (1-20)"
                 }
             }
+        }
+    },
+    {
+        "name": "diagnose_player_struggles",
+        "description": "Analyze what's going wrong with a struggling player. Compares recent form (last N games) to season averages, identifies declining metrics, streak data, and provides a structured diagnostic with potential causes. Use when someone asks 'what's wrong with [player]', 'why is [player] struggling', or 'diagnose [player]'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_name": {
+                    "type": "string",
+                    "description": "Player's full or partial name"
+                },
+                "look_back_games": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Number of recent games to analyze (5-20)"
+                }
+            },
+            "required": ["player_name"]
         }
     }
 ]
@@ -15378,16 +15648,21 @@ def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, pl
 
         # Recent form (last 10 games)
         recent_form = []
-        game_rows = conn.execute(
-            "SELECT * FROM game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 10",
-            (player_id,),
-        ).fetchall()
-        for gr in game_rows:
-            recent_form.append({
-                "game_date": gr["game_date"], "opponent": gr.get("opponent"),
-                "g": gr["g"], "a": gr["a"], "p": gr["p"],
-                "plus_minus": gr.get("plus_minus"), "pim": gr.get("pim"),
-            })
+        try:
+            game_rows = conn.execute(
+                "SELECT * FROM player_game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 10",
+                (player_id,),
+            ).fetchall()
+            for gr in game_rows:
+                recent_form.append({
+                    "game_date": gr["game_date"],
+                    "opponent": gr["opponent"] if "opponent" in gr.keys() else None,
+                    "g": gr["goals"], "a": gr["assists"], "p": gr["points"],
+                    "plus_minus": gr["plus_minus"] if "plus_minus" in gr.keys() else None,
+                    "pim": gr["pim"] if "pim" in gr.keys() else None,
+                })
+        except Exception:
+            pass  # Table may not exist or be empty
 
         # ── Build system prompt (aligned with main report generator) ──
         bg_system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine. Generate a professional-grade {report_type_name} report.
@@ -15415,11 +15690,12 @@ Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, 
 Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
 
         # Append template-specific instructions if rich prompt exists
-        if template and template.get("prompt_text") and len(template["prompt_text"]) > 200:
+        bg_tpl_prompt = template["prompt_text"] if template else None
+        if bg_tpl_prompt and len(bg_tpl_prompt) > 200:
             bg_system_prompt += f"""
 
 TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
-{template['prompt_text']}"""
+{bg_tpl_prompt}"""
 
         # ── Build input data ──
         input_data = {
@@ -15450,9 +15726,10 @@ TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
         tokens_used = response.usage.input_tokens + response.usage.output_tokens
         generation_time = int((time.perf_counter() - start_time) * 1000)
 
-        # ── Validate and optionally repair the report output ──
+        # ── Validate and optionally repair the report output (mode-aware) ──
+        _bg_mode = resolve_mode(template_slug=report_type)
         output_text, validation_warnings = _validate_and_repair_report(
-            output_text, report_type, client, llm_model
+            output_text, report_type, client, llm_model, mode=_bg_mode
         )
         if validation_warnings:
             for w in validation_warnings:
@@ -15460,15 +15737,18 @@ TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
                 if w.startswith("SOFT:") or w.startswith("HARD:"):
                     _log_error_to_db("POST", f"/bench-talk/report/{report_id}", 200, f"BG Report validation: {w}")
 
+        # Score quality
+        quality = _score_report_quality(output_text, report_type, mode=_bg_mode)
         conn.execute("""
             UPDATE reports SET
                 status = 'complete', title = ?, output_text = ?,
                 llm_model = ?, llm_tokens = ?, generation_time_ms = ?,
-                generated_at = ?
+                generated_at = ?, quality_score = ?, quality_details = ?
             WHERE id = ?
-        """, (title, output_text, llm_model, tokens_used, generation_time, now_iso(), report_id))
+        """, (title, output_text, llm_model, tokens_used, generation_time, now_iso(),
+              quality["score"], json.dumps(quality), report_id))
         conn.commit()
-        logger.info("Bench Talk background report %s generated in %dms", report_id, generation_time)
+        logger.info("Bench Talk background report %s generated in %dms, quality=%.1f", report_id, generation_time, quality["score"])
 
     except Exception as e:
         logger.exception("Bench Talk background report generation failed for %s", report_id)
@@ -16207,6 +16487,185 @@ def _pt_get_scouting_list(params: dict, org_id: str, user_id: str) -> tuple[dict
         conn.close()
 
 
+def _pt_diagnose_player_struggles(params: dict, org_id: str) -> tuple[dict, dict]:
+    """Diagnose a struggling player by comparing recent form to season averages."""
+    player_name = params.get("player_name", "")
+    look_back = min(max(params.get("look_back_games", 10), 5), 20)
+
+    conn = get_db()
+    try:
+        # Find the player by fuzzy name match
+        name_parts = player_name.strip().split()
+        if len(name_parts) >= 2:
+            rows = conn.execute(
+                """SELECT id, first_name, last_name, position, current_team, current_league
+                   FROM players WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+                   AND LOWER(first_name) LIKE ? AND LOWER(last_name) LIKE ?
+                   LIMIT 5""",
+                (org_id, f"%{name_parts[0].lower()}%", f"%{name_parts[-1].lower()}%"),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, first_name, last_name, position, current_team, current_league
+                   FROM players WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+                   AND (LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ?)
+                   LIMIT 5""",
+                (org_id, f"%{player_name.lower()}%", f"%{player_name.lower()}%"),
+            ).fetchall()
+
+        if not rows:
+            return {"error": f"No player found matching '{player_name}'"}, {}
+
+        player = dict(rows[0])
+        pid = player["id"]
+        pname = f"{player['first_name']} {player['last_name']}"
+
+        # Get season stats
+        season_stats = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 3", (pid,)
+        ).fetchall()
+
+        # Get recent game log
+        game_log = conn.execute(
+            "SELECT * FROM game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT ?",
+            (pid, look_back),
+        ).fetchall()
+
+        # Get player intelligence
+        intel = conn.execute(
+            "SELECT archetype, overall_grade, offensive_grade, defensive_grade, skating_grade, hockey_iq_grade, compete_grade, strengths, development_areas FROM player_intelligence WHERE player_id = ? ORDER BY created_at DESC LIMIT 1",
+            (pid,),
+        ).fetchone()
+
+        # Get recent scout notes
+        notes = conn.execute(
+            "SELECT note_text, note_type, created_at FROM scout_notes WHERE player_id = ? AND org_id = ? ORDER BY created_at DESC LIMIT 5",
+            (pid, org_id),
+        ).fetchall()
+
+        # Build diagnostic
+        diagnostic = {
+            "player": pname,
+            "position": player["position"],
+            "team": player["current_team"],
+            "league": player["current_league"],
+        }
+
+        # Season averages
+        if season_stats:
+            s = dict(season_stats[0])
+            gp = s.get("gp", 0) or 0
+            if gp > 0:
+                diagnostic["season_averages"] = {
+                    "gp": gp, "g": s.get("g", 0), "a": s.get("a", 0), "p": s.get("p", 0),
+                    "gpg": round((s.get("g", 0) or 0) / gp, 3),
+                    "apg": round((s.get("a", 0) or 0) / gp, 3),
+                    "ppg": round((s.get("p", 0) or 0) / gp, 3),
+                    "plus_minus": s.get("plus_minus"),
+                    "pim": s.get("pim"),
+                    "shots": s.get("shots"),
+                    "shooting_pct": s.get("shooting_pct"),
+                }
+
+        # Recent form
+        if game_log:
+            recent_g = sum(g.get("goals", 0) or 0 for g in [dict(gl) for gl in game_log])
+            recent_a = sum(g.get("assists", 0) or 0 for g in [dict(gl) for gl in game_log])
+            recent_p = sum(g.get("points", 0) or 0 for g in [dict(gl) for gl in game_log])
+            recent_pm = sum(g.get("plus_minus", 0) or 0 for g in [dict(gl) for gl in game_log])
+            n_games = len(game_log)
+
+            diagnostic["recent_form"] = {
+                "games_analyzed": n_games,
+                "goals": recent_g, "assists": recent_a, "points": recent_p,
+                "gpg": round(recent_g / n_games, 3),
+                "apg": round(recent_a / n_games, 3),
+                "ppg": round(recent_p / n_games, 3),
+                "plus_minus": recent_pm,
+            }
+
+            # Streak analysis
+            goal_drought = 0
+            point_drought = 0
+            for gl in [dict(g) for g in game_log]:
+                if (gl.get("goals", 0) or 0) == 0:
+                    goal_drought += 1
+                else:
+                    break
+            for gl in [dict(g) for g in game_log]:
+                if (gl.get("points", 0) or 0) == 0:
+                    point_drought += 1
+                else:
+                    break
+
+            diagnostic["streaks"] = {
+                "current_goal_drought": goal_drought,
+                "current_point_drought": point_drought,
+            }
+
+            # Declining metrics
+            declining = []
+            stable = []
+            if "season_averages" in diagnostic:
+                sa = diagnostic["season_averages"]
+                rf = diagnostic["recent_form"]
+                for metric, label in [("gpg", "Goals per game"), ("apg", "Assists per game"), ("ppg", "Points per game")]:
+                    if sa.get(metric, 0) > 0:
+                        delta = rf[metric] - sa[metric]
+                        pct = (delta / sa[metric]) * 100 if sa[metric] > 0 else 0
+                        entry = {"metric": label, "season": sa[metric], "recent": rf[metric], "delta_pct": round(pct, 1)}
+                        if pct < -15:
+                            declining.append(entry)
+                        else:
+                            stable.append(entry)
+
+                diagnostic["declining_metrics"] = declining
+                diagnostic["stable_metrics"] = stable
+
+            # Potential causes
+            causes = []
+            if goal_drought >= 5:
+                causes.append("Extended goal drought (5+ games) — may indicate shooting slump or reduced shot volume")
+            if point_drought >= 4:
+                causes.append("Extended point drought (4+ games) — could signal deployment changes or linemate issues")
+            if declining:
+                for d in declining:
+                    if d["delta_pct"] < -30:
+                        causes.append(f"Significant decline in {d['metric']} ({d['delta_pct']}% vs season avg)")
+            if not causes:
+                causes.append("No significant statistical decline detected — struggles may be perception-based or related to unmeasured factors (effort, positioning, confidence)")
+            diagnostic["potential_causes"] = causes
+
+        else:
+            diagnostic["recent_form"] = {"error": "No game-by-game data available for trend analysis"}
+
+        # Scout note flags
+        if notes:
+            note_flags = []
+            for n in notes:
+                nd = dict(n)
+                if nd.get("note_type") in ("concern", "development"):
+                    note_flags.append({
+                        "type": nd["note_type"],
+                        "note": nd["note_text"][:200],
+                        "date": nd["created_at"][:10] if nd["created_at"] else "",
+                    })
+            diagnostic["scout_note_flags"] = note_flags
+
+        # Intelligence context
+        if intel:
+            diagnostic["intelligence"] = {
+                "archetype": intel["archetype"],
+                "overall_grade": intel["overall_grade"],
+                "strengths": intel["strengths"],
+                "development_areas": intel["development_areas"],
+            }
+
+        return diagnostic, {"player_ids": [pid]}
+    finally:
+        conn.close()
+
+
 async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str, user_id: str) -> tuple[dict, dict]:
     """Route Bench Talk tool calls to the appropriate function.
     Returns (tool_result, entity_refs) tuple."""
@@ -16237,6 +16696,8 @@ async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str
         return _pt_search_scout_notes(tool_input, org_id, user_id)
     elif tool_name == "get_scouting_list":
         return _pt_get_scouting_list(tool_input, org_id, user_id)
+    elif tool_name == "diagnose_player_struggles":
+        return _pt_diagnose_player_struggles(tool_input, org_id)
     else:
         return {"error": f"Unknown tool: {tool_name}"}, {}
 
@@ -16245,6 +16706,7 @@ async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str
 
 class BenchTalkMessageRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
+    mode: Optional[str] = None  # PXI mode override for this message
 
 class BenchTalkFeedbackRequest(BaseModel):
     message_id: str
@@ -16378,15 +16840,41 @@ async def send_bench_talk_message(
         user_first_name = user_row["first_name"] if user_row and user_row["first_name"] else "there"
         hockey_role = user_row["hockey_role"] if user_row and user_row["hockey_role"] else "scout"
 
+        # ── PXI Mode Resolution ──
+        # Priority: req.mode → conversation stored mode → user hockey_role fallback
+        conv_row = conn.execute(
+            "SELECT mode FROM bench_talk_conversations WHERE id = ?", (conversation_id,)
+        ).fetchone()
+        conv_mode = conv_row["mode"] if conv_row and conv_row["mode"] else None
+
+        # If user sent a mode override, persist it to the conversation
+        if req.mode and req.mode in VALID_MODES:
+            conn.execute(
+                "UPDATE bench_talk_conversations SET mode = ?, updated_at = ? WHERE id = ?",
+                (req.mode, now_iso(), conversation_id)
+            )
+            conn.commit()
+            resolved_mode = req.mode
+        else:
+            resolved_mode = resolve_mode(hockey_role, conv_mode, None)
+
+        # Labels for personalization (expanded for all 10 modes)
         hockey_role_labels = {
             "scout": "Scout",
             "gm": "General Manager",
             "coach": "Head Coach",
             "player": "Player",
             "parent": "Hockey Parent",
+            "analyst": "Analyst",
+            "agent": "Agent",
+            "skill_coach": "Skill Coach",
+            "mental_coach": "Mental Coach",
+            "broadcast": "Broadcaster",
+            "producer": "Producer",
         }
-        hockey_role_label = hockey_role_labels.get(hockey_role, "Scout")
-        role_instructions = BENCH_TALK_ROLE_INSTRUCTIONS.get(hockey_role, BENCH_TALK_ROLE_INSTRUCTIONS["scout"])
+        hockey_role_label = hockey_role_labels.get(resolved_mode, "Scout")
+        # Use PXI mode block instead of old role instructions
+        role_instructions = PXI_MODE_BLOCKS.get(resolved_mode, PXI_MODE_BLOCKS.get("scout", ""))
 
         # Save user message
         user_msg_id = gen_id()
@@ -16596,6 +17084,460 @@ async def submit_bench_talk_feedback(req: BenchTalkFeedbackRequest, token_data: 
         """, (feedback_id, req.message_id, user_id, org_id, req.rating, req.feedback_text, now_iso()))
         conn.commit()
         return {"success": True, "feedback_id": feedback_id}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# PXI MODE ENDPOINTS
+# ============================================================
+
+@app.get("/pxi/modes")
+async def get_pxi_modes():
+    """Return the list of available PXI modes with metadata."""
+    return PXI_MODES
+
+
+@app.get("/pxi/wiring")
+async def get_pxi_wiring():
+    """Return the mode→template wiring table for frontend auto-selection."""
+    return MODE_TEMPLATE_WIRING
+
+
+class ModeUpdateRequest(BaseModel):
+    mode: str = Field(..., pattern="^(scout|coach|analyst|gm|agent|parent|skill_coach|mental_coach|broadcast|producer)$")
+
+
+@app.put("/bench-talk/conversations/{conversation_id}/mode")
+async def update_conversation_mode(
+    conversation_id: str,
+    req: ModeUpdateRequest,
+    token_data: dict = Depends(verify_token)
+):
+    """Update the PXI mode for a Bench Talk conversation."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        conv = conn.execute(
+            "SELECT id FROM bench_talk_conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, user_id)
+        ).fetchone()
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conn.execute(
+            "UPDATE bench_talk_conversations SET mode = ?, updated_at = ? WHERE id = ?",
+            (req.mode, now_iso(), conversation_id)
+        )
+        conn.commit()
+        return {"conversation_id": conversation_id, "mode": req.mode}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# REPORT SHARE ENDPOINTS
+# ============================================================
+
+@app.post("/reports/{report_id}/share")
+async def create_report_share_link(report_id: str, token_data: dict = Depends(verify_token)):
+    """Generate a shareable link for a report. Requires auth + same org to view."""
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        report = conn.execute(
+            "SELECT id, org_id, share_token FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id)
+        ).fetchone()
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        # Reuse existing token or generate new one
+        share_token = report["share_token"] if report["share_token"] else str(uuid.uuid4())[:12]
+        if not report["share_token"]:
+            conn.execute(
+                "UPDATE reports SET share_token = ? WHERE id = ?",
+                (share_token, report_id)
+            )
+            conn.commit()
+
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        share_url = f"{frontend_url}/reports/shared/{share_token}"
+        return {"share_token": share_token, "share_url": share_url}
+    finally:
+        conn.close()
+
+
+@app.get("/reports/shared/{share_token}")
+async def get_shared_report(share_token: str, token_data: dict = Depends(verify_token)):
+    """View a shared report. Requires auth + same org as report owner."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        report = conn.execute(
+            "SELECT * FROM reports WHERE share_token = ?", (share_token,)
+        ).fetchone()
+        if not report:
+            raise HTTPException(status_code=404, detail="Shared report not found")
+        if report["org_id"] != org_id:
+            raise HTTPException(status_code=403, detail="Access denied — different organization")
+        return dict(report)
+    finally:
+        conn.close()
+
+
+@app.put("/reports/{report_id}/team-share")
+async def toggle_team_share(report_id: str, token_data: dict = Depends(verify_token)):
+    """Toggle org-wide sharing for a report."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        report = conn.execute(
+            "SELECT id, shared_with_org FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id)
+        ).fetchone()
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        new_val = 0 if report["shared_with_org"] else 1
+        conn.execute(
+            "UPDATE reports SET shared_with_org = ? WHERE id = ?",
+            (new_val, report_id)
+        )
+        conn.commit()
+        return {"report_id": report_id, "shared_with_org": bool(new_val)}
+    finally:
+        conn.close()
+
+
+@app.get("/reports/shared-with-me")
+async def get_reports_shared_with_me(token_data: dict = Depends(verify_token)):
+    """List reports shared with the user's org (excluding their own)."""
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT id, report_type, title, status, generated_at, created_at, player_id, team_name
+               FROM reports
+               WHERE org_id = ? AND shared_with_org = 1 AND (created_by != ? OR created_by IS NULL)
+               ORDER BY created_at DESC LIMIT 50""",
+            (org_id, user_id)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/reports/{report_id}/quality")
+async def get_report_quality(report_id: str, token_data: dict = Depends(verify_token)):
+    """Get quality score and breakdown for a report."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT quality_score, quality_details FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Report not found")
+        quality_details = json.loads(row["quality_details"]) if row["quality_details"] else None
+        return {
+            "report_id": report_id,
+            "quality_score": row["quality_score"],
+            "details": quality_details,
+        }
+    finally:
+        conn.close()
+
+
+# ── DOCX Export ──────────────────────────────────────────────────
+
+def _generate_report_docx(report_row: dict, player_row: dict = None) -> io.BytesIO:
+    """Generate a Word document from a report row.
+    Returns a BytesIO object containing the .docx file."""
+    doc = DocxDocument()
+
+    # ── Page margins ──
+    for section in doc.sections:
+        section.top_margin = Cm(2)
+        section.bottom_margin = Cm(2)
+        section.left_margin = Cm(2.5)
+        section.right_margin = Cm(2.5)
+
+    # ── Color constants ──
+    navy = RGBColor(0x0F, 0x2A, 0x3D)
+    teal = RGBColor(0x18, 0xB3, 0xA6)
+    orange = RGBColor(0xF3, 0x6F, 0x21)
+    dark_gray = RGBColor(0x33, 0x33, 0x33)
+
+    # ── Brand Header ──
+    brand_para = doc.add_paragraph()
+    brand_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_p = brand_para.add_run("Prospect")
+    run_p.font.size = Pt(20)
+    run_p.font.color.rgb = teal
+    run_p.bold = True
+    run_x = brand_para.add_run("X")
+    run_x.font.size = Pt(20)
+    run_x.font.color.rgb = orange
+    run_x.bold = True
+    run_sub = brand_para.add_run("  Intelligence Report")
+    run_sub.font.size = Pt(12)
+    run_sub.font.color.rgb = navy
+
+    # ── Report Title ──
+    report_type = report_row.get("report_type", "report")
+    from types import SimpleNamespace  # noqa: E402
+    label = report_type.replace("_", " ").title()
+    # Try to get a better label
+    try:
+        from pxi_prompt_core import MODE_TEMPLATE_WIRING
+    except ImportError:
+        pass
+
+    subject_name = ""
+    if player_row:
+        subject_name = f"{player_row.get('first_name', '')} {player_row.get('last_name', '')}".strip()
+    elif report_row.get("team_name"):
+        subject_name = report_row["team_name"]
+
+    title_text = f"{subject_name} — {label}" if subject_name else label
+    title_para = doc.add_heading(title_text, level=1)
+    for run in title_para.runs:
+        run.font.color.rgb = navy
+
+    # ── Meta info ──
+    gen_date = report_row.get("generated_at", report_row.get("created_at", ""))
+    if gen_date:
+        try:
+            dt = datetime.fromisoformat(gen_date.replace("Z", "+00:00"))
+            gen_date = dt.strftime("%B %d, %Y")
+        except Exception:
+            pass
+    meta_parts = []
+    if gen_date:
+        meta_parts.append(f"Generated: {gen_date}")
+    if report_row.get("overall_grade"):
+        meta_parts.append(f"Grade: {report_row['overall_grade']}")
+    quality_score = report_row.get("quality_score")
+    if quality_score is not None:
+        meta_parts.append(f"Quality Score: {quality_score:.0f}/100")
+    if meta_parts:
+        meta_para = doc.add_paragraph(" | ".join(meta_parts))
+        meta_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in meta_para.runs:
+            run.font.size = Pt(9)
+            run.font.color.rgb = dark_gray
+            run.italic = True
+
+    doc.add_paragraph("")  # spacer
+
+    # ── Parse report output into sections ──
+    output_text = report_row.get("output_text", "")
+    if not output_text:
+        doc.add_paragraph("No report content available.")
+    else:
+        # Split on ALL_CAPS section headers (same pattern as frontend)
+        section_pattern = re.compile(r'^([A-Z][A-Z0-9_]{2,}(?:\s+[A-Z0-9_]+)*)(?:\s*[:—\-]?\s*)(.*)', re.MULTILINE)
+        lines = output_text.split("\n")
+        current_heading = None
+        current_lines: list = []
+
+        def _flush_section():
+            if current_heading:
+                # Add section heading
+                heading_label = current_heading.replace("_", " ").title()
+                h = doc.add_heading(heading_label, level=2)
+                for run in h.runs:
+                    run.font.color.rgb = teal
+            body = "\n".join(current_lines).strip()
+            if not body:
+                return
+            # Process body content
+            for para_text in body.split("\n"):
+                para_text = para_text.strip()
+                if not para_text:
+                    continue
+                # Detect bullet points
+                is_bullet = para_text.startswith(("- ", "• ", "* ", "– "))
+                if is_bullet:
+                    bullet_text = para_text.lstrip("-•*– ").strip()
+                    p = doc.add_paragraph(bullet_text, style="List Bullet")
+                    for run in p.runs:
+                        run.font.size = Pt(10)
+                        run.font.color.rgb = dark_gray
+                else:
+                    p = doc.add_paragraph(para_text)
+                    for run in p.runs:
+                        run.font.size = Pt(10)
+                        run.font.color.rgb = dark_gray
+
+        for line in lines:
+            match = section_pattern.match(line.strip())
+            if match and len(match.group(1)) >= 4:
+                # Flush previous section
+                _flush_section()
+                current_heading = match.group(1)
+                current_lines = []
+                # If there's text after the header on the same line
+                rest = match.group(2).strip()
+                if rest:
+                    current_lines.append(rest)
+            else:
+                current_lines.append(line)
+
+        # Flush last section
+        _flush_section()
+
+    # ── Footer ──
+    doc.add_paragraph("")
+    footer_para = doc.add_paragraph()
+    footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_f = footer_para.add_run("Generated by ProspectX Intelligence Platform")
+    run_f.font.size = Pt(8)
+    run_f.font.color.rgb = dark_gray
+    run_f.italic = True
+
+    # ── Write to BytesIO ──
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@app.get("/reports/{report_id}/export/docx")
+async def export_report_docx(report_id: str, token_data: dict = Depends(verify_token)):
+    """Export a report as a Word DOCX document."""
+    if not _docx_available:
+        raise HTTPException(status_code=501, detail="DOCX export not available — python-docx not installed")
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        report_row = conn.execute(
+            "SELECT * FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id)
+        ).fetchone()
+        if not report_row:
+            raise HTTPException(status_code=404, detail="Report not found")
+        report = dict(report_row)
+
+        # Get player info if this is a player report
+        player_row = None
+        if report.get("player_id"):
+            p = conn.execute(
+                "SELECT first_name, last_name, position, team FROM players WHERE id = ?",
+                (report["player_id"],)
+            ).fetchone()
+            if p:
+                player_row = dict(p)
+
+        docx_buf = _generate_report_docx(report, player_row)
+
+        # Build filename
+        subject = ""
+        if player_row:
+            subject = f"{player_row.get('first_name', '')}_{player_row.get('last_name', '')}"
+        elif report.get("team_name"):
+            subject = report["team_name"].replace(" ", "_")
+        report_type = report.get("report_type", "report")
+        filename = f"ProspectX_{subject}_{report_type}.docx" if subject else f"ProspectX_{report_type}.docx"
+        # Sanitize filename
+        filename = re.sub(r'[^\w\-.]', '_', filename)
+
+        return StreamingResponse(
+            docx_buf,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    finally:
+        conn.close()
+
+
+# ── Email Share Preview ──────────────────────────────────────────
+
+@app.post("/reports/{report_id}/email-preview")
+async def email_preview(report_id: str, token_data: dict = Depends(verify_token)):
+    """Generate pre-formatted email content for sharing a report via email.
+    Auto-generates a share token if one doesn't exist."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        report_row = conn.execute(
+            "SELECT * FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id)
+        ).fetchone()
+        if not report_row:
+            raise HTTPException(status_code=404, detail="Report not found")
+        report = dict(report_row)
+
+        # Auto-generate share token if not set
+        share_token = report.get("share_token")
+        if not share_token:
+            share_token = str(uuid.uuid4())[:12]
+            conn.execute(
+                "UPDATE reports SET share_token = ? WHERE id = ?",
+                (share_token, report_id)
+            )
+            conn.commit()
+
+        # Build share URL
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        share_url = f"{frontend_url}/reports/{report_id}?token={share_token}"
+
+        # Get player info for subject line
+        subject_name = ""
+        if report.get("player_id"):
+            p = conn.execute(
+                "SELECT first_name, last_name FROM players WHERE id = ?",
+                (report["player_id"],)
+            ).fetchone()
+            if p:
+                subject_name = f"{p['first_name']} {p['last_name']}"
+        elif report.get("team_name"):
+            subject_name = report["team_name"]
+
+        report_type = report.get("report_type", "report").replace("_", " ").title()
+
+        # Build email subject
+        if subject_name:
+            email_subject = f"ProspectX Report: {subject_name} - {report_type}"
+        else:
+            email_subject = f"ProspectX Report: {report_type}"
+
+        # Build email body — concise summary
+        grade = report.get("overall_grade", "")
+        gen_date = report.get("generated_at", "")
+        if gen_date:
+            try:
+                dt = datetime.fromisoformat(gen_date.replace("Z", "+00:00"))
+                gen_date = dt.strftime("%B %d, %Y")
+            except Exception:
+                pass
+
+        body_lines = [f"I'm sharing a ProspectX Intelligence report with you."]
+        body_lines.append("")
+        if subject_name:
+            body_lines.append(f"Subject: {subject_name}")
+        body_lines.append(f"Report Type: {report_type}")
+        if grade:
+            body_lines.append(f"Overall Grade: {grade}")
+        if gen_date:
+            body_lines.append(f"Generated: {gen_date}")
+        body_lines.append("")
+        body_lines.append(f"View the full report here:")
+        body_lines.append(share_url)
+        body_lines.append("")
+        body_lines.append("---")
+        body_lines.append("Sent via ProspectX Intelligence Platform")
+
+        return {
+            "subject": email_subject,
+            "body": "\n".join(body_lines),
+            "share_url": share_url,
+            "share_token": share_token,
+        }
     finally:
         conn.close()
 

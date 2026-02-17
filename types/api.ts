@@ -428,6 +428,10 @@ export interface Report {
   llm_model: string | null;
   llm_tokens: number | null;
   created_at: string;
+  share_token?: string | null;
+  shared_with_org?: boolean;
+  quality_score?: number | null;
+  quality_details?: string | null;
 }
 
 export interface ReportTemplate {
@@ -446,6 +450,25 @@ export interface ReportGenerateRequest {
   report_type: string;
   template_id?: string;
   data_scope?: Record<string, unknown>;
+  mode?: PXIMode;
+}
+
+// PXI Mode System
+export type PXIMode =
+  | "scout" | "coach" | "analyst" | "gm" | "agent"
+  | "parent" | "skill_coach" | "mental_coach" | "broadcast" | "producer";
+
+export interface PXIModeInfo {
+  id: PXIMode;
+  name: string;
+  primary_user: string;
+  key_output: string;
+  icon: string;
+}
+
+export interface ModeTemplateWiring {
+  primary: PXIMode;
+  secondary: PXIMode;
 }
 
 export interface TeamCreateRequest {
@@ -726,6 +749,21 @@ export const SECTION_LABELS: Record<string, string> = {
   GOALTENDING: "Goaltending",
   // Drill recommendation sections
   RECOMMENDED_DRILLS: "Recommended Drills",
+  // Pre-Game Intel Brief sections
+  OPPONENT_SNAPSHOT: "Opponent Snapshot",
+  KEY_MATCHUPS: "Key Matchups",
+  GOALTENDING_REPORT: "Goaltending Report",
+  SPECIAL_TEAMS_INTEL: "Special Teams Intel",
+  GAME_KEYS: "Game Keys",
+  PRE_GAME_TALKING_POINTS: "Pre-Game Talking Points",
+  LINEUP_RECOMMENDATIONS: "Lineup Recommendations",
+  // Player Guide sections
+  READINESS_ASSESSMENT: "Readiness Assessment",
+  ACADEMIC_ATHLETIC_BALANCE: "Academic-Athletic Balance",
+  EXPOSURE_STRATEGY: "Exposure Strategy",
+  DEVELOPMENT_TIMELINE: "Development Timeline",
+  RECRUITING_REALITY_CHECK: "Recruiting Reality Check",
+  PARENT_ACTION_ITEMS: "Parent Action Items",
 };
 
 export const REPORT_TYPE_LABELS: Record<string, string> = {
@@ -756,6 +794,9 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   league_benchmarks: "League Benchmarks",
   season_projection: "Season Projection",
   free_agent_market: "Free Agent Market",
+  // Phase 2 templates
+  pre_game_intel: "Pre-Game Intel Brief",
+  player_guide_prep_college: "Prep/College Player Guide",
 };
 
 // ── Report Categories: Player vs Team ──────────────────────────
@@ -774,6 +815,7 @@ export const PLAYER_REPORT_TYPES = [
   "season_progress",
   "indices_dashboard",
   "player_projection",
+  "player_guide_prep_college",
 ] as const;
 
 export const TEAM_REPORT_TYPES = [
@@ -787,6 +829,7 @@ export const TEAM_REPORT_TYPES = [
   "league_benchmarks",
   "season_projection",
   "free_agent_market",
+  "pre_game_intel",
 ] as const;
 
 // ── Prospect Grading Scale ─────────────────────────────────────

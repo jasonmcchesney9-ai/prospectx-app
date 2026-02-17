@@ -94,8 +94,8 @@ const FAQ_SECTIONS = [
     title: "Technical",
     items: [
       {
-        q: "Is my data secure?",
-        a: "Yes. All data encrypted at rest and in transit with HTTPS/TLS. Multi-tenant architecture isolates your data from other organizations. JWT authentication, user roles and permissions, daily automated backups, and GDPR compliance. You own your data \u2014 we never sell or share it.",
+        q: "Is my data private?",
+        a: "Absolutely. Your scouting data never trains external AI models \u2014 ever. All data is encrypted at rest and in transit with HTTPS/TLS. Multi-tenant architecture means your organization\u2019s data is completely isolated \u2014 Org A cannot see Org B\u2019s reports, notes, or players. JWT authentication, user roles, daily automated backups, and GDPR compliance. We never sell or share your data. You own it \u2014 always.",
       },
       {
         q: "Can multiple users access ProspectX?",
@@ -296,6 +296,12 @@ export default function LandingPage() {
             >
               Book a Demo
             </a>
+          </div>
+
+          {/* Privacy badge */}
+          <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-white/40 font-oswald uppercase tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal/60" />
+            Privacy-First Intelligence — Your data never trains AI. Org-isolated. Encrypted.
           </div>
 
           <p className="text-xs text-white/30 mt-4">

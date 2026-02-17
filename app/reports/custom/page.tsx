@@ -98,7 +98,7 @@ function CustomReportContent() {
     async function load() {
       try {
         const [playersRes, teamsRes, optionsRes] = await Promise.all([
-          api.get<Player[]>("/players?limit=500"),
+          api.get<Player[]>("/players?limit=2000"),
           api.get<TeamReference[]>("/teams/reference"),
           api.get<CustomReportOptions>("/reports/custom-options"),
         ]);

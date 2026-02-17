@@ -8,6 +8,7 @@ import {
   Calendar,
   Search,
   X,
+  Info,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -102,6 +103,18 @@ function ChalkTalkList() {
         </Link>
       </div>
 
+      {/* Helper Note */}
+      <div className="bg-navy/5 border border-navy/10 rounded-lg px-4 py-3 mb-6 flex items-start gap-3">
+        <Info size={16} className="text-teal mt-0.5 shrink-0" />
+        <div className="text-xs text-navy/70 leading-relaxed">
+          <span className="font-semibold text-navy">Chalk Talk is your manual coaching playbook.</span>{" "}
+          Create pre-game plans, post-game reviews, practice notes, and season strategy here.
+          Everything you enter is available to{" "}
+          <span className="font-semibold text-teal">Bench Talk</span>{" "}
+          for AI-powered coaching prep and opponent analysis.
+        </div>
+      </div>
+
       {/* Session Type Filter */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
@@ -173,8 +186,9 @@ function ChalkTalkList() {
         <div className="bg-gray-50 border border-border rounded-xl p-8 text-center">
           <Swords size={32} className="mx-auto text-muted mb-3" />
           <h3 className="font-oswald font-semibold text-navy">No Chalk Talk Sessions</h3>
-          <p className="text-muted text-sm mt-1">
-            Create your first Chalk Talk session to start preparing strategies and tracking notes.
+          <p className="text-muted text-sm mt-1 max-w-md mx-auto">
+            Create your first session to build pre-game plans, post-game reviews, or practice notes.
+            Your entries feed into Bench Talk for AI-assisted coaching prep.
           </p>
           <Link
             href="/game-plans/new"

@@ -126,7 +126,7 @@ export default function TeamsPage() {
     try {
       setError("");
       const [playersRes, refRes, leaguesRes] = await Promise.all([
-        api.get<Player[]>("/players?limit=500"),
+        api.get<Player[]>("/players?limit=2000"),
         api.get<TeamReference[]>("/teams/reference"),
         api.get<League[]>("/leagues"),
       ]);

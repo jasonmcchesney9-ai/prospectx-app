@@ -208,16 +208,29 @@ export default function BenchTalkDrawer() {
   const [contextPlayers, setContextPlayers] = useState<Array<Player & { gp?: number; g?: number; a?: number; p?: number; ppg?: number }>>([]);
   const [contextReports, setContextReports] = useState<Report[]>([]);
 
+  // PXI Mode state
+  const [currentMode, setCurrentMode] = useState<string>(() => {
+    const user = getUser();
+    // Map old hockey_role to PXI mode (player → parent)
+    const role = user?.hockey_role || "scout";
+    return role === "player" ? "parent" : role;
+  });
+  const [pxiModes, setPxiModes] = useState<Array<{ id: string; name: string; primary_user: string; key_output: string; icon: string }>>([]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load conversations on mount
+  // Load conversations + modes on mount
   useEffect(() => {
     if (isOpen) {
       loadConversations();
       loadSuggestions();
+      // Fetch PXI modes (only once)
+      if (pxiModes.length === 0) {
+        api.get("/pxi/modes").then(({ data }) => setPxiModes(data)).catch(() => {});
+      }
     }
-  }, [isOpen]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Focus input when drawer opens
   useEffect(() => {
@@ -377,7 +390,7 @@ export default function BenchTalkDrawer() {
     try {
       const res = await api.post<BenchTalkMessageResponse>(
         `/bench-talk/conversations/${convId}/messages`,
-        { message: messageText }
+        { message: messageText, mode: currentMode }
       );
       setMessages((prev) => [...prev, res.data.message]);
       loadConversations();
@@ -483,6 +496,34 @@ export default function BenchTalkDrawer() {
             </button>
           </div>
         </div>
+
+        {/* ── PXI Mode Selector ── */}
+        {pxiModes.length > 0 && (
+          <div className="bg-white border-b border-border px-2 py-1.5 shrink-0 flex items-center gap-1 overflow-x-auto"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {pxiModes.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setCurrentMode(m.id);
+                  // Persist to conversation if active
+                  if (activeConvId) {
+                    api.put(`/bench-talk/conversations/${activeConvId}/mode`, { mode: m.id }).catch(() => {});
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-oswald uppercase tracking-wider whitespace-nowrap transition-colors ${
+                  currentMode === m.id
+                    ? "bg-teal text-white"
+                    : "bg-gray-100 text-muted hover:text-navy hover:bg-gray-200"
+                }`}
+                title={`${m.name} — ${m.key_output}`}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── Context / History Bar (collapsible) ── */}
         <div className="bg-white border-b border-border shrink-0">
@@ -598,14 +639,20 @@ export default function BenchTalkDrawer() {
               <p className="text-muted text-xs text-center mb-6 max-w-sm">
                 {(() => {
                   const user = getUser();
-                  const roleTaglines: Record<string, string> = {
+                  const modeTaglines: Record<string, string> = {
                     scout: "Ready to find the next gem? Let\u2019s dig into prospects, stats, and reports.",
                     gm: "Let\u2019s build something. Roster moves, trade targets, or the big picture.",
                     coach: "Game prep, line combos, or systems fit \u2014 what are we working on?",
                     player: "Let\u2019s level up your game. Stats, development, or see how you stack up.",
                     parent: "I\u2019m here to help you understand the game. Ask me anything.",
+                    analyst: "Let\u2019s dig into the numbers. Trends, benchmarks, and what the data really says.",
+                    agent: "Pathways, exposure, and positioning. Let\u2019s map out the plan.",
+                    skill_coach: "Cues, drills, and progressions. What are we working on today?",
+                    mental_coach: "Reset routines, focus, and confidence. Let\u2019s build the mental game.",
+                    broadcast: "Storylines, talk tracks, and the angles that make great broadcasts.",
+                    producer: "Rundowns, replay triggers, and graphics. Let\u2019s build the show.",
                   };
-                  return roleTaglines[user?.hockey_role || "scout"] || roleTaglines.scout;
+                  return modeTaglines[currentMode] || modeTaglines.scout;
                 })()}
               </p>
 
