@@ -6,7 +6,7 @@
 // Place markers, draw arrows, drag to reposition, export
 // ============================================================
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import RinkSvgBackground from "./RinkSvgBackground";
 import { MarkerElement, ArrowElement, PuckElement } from "./RinkElements";
 import RinkToolbar from "./RinkToolbar";
@@ -95,16 +95,22 @@ function findElement(px: number, py: number, elements: RinkElement[], threshold 
   return best;
 }
 
+// ── Imperative ref handle for parent access ──
+export interface RinkCanvasHandle {
+  getSvgString: () => string;
+  getDiagramData: () => RinkDiagramData;
+}
+
 // ── Main Component ───────────────────────────────────────────
 
-export default function RinkCanvas({
+const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCanvas({
   initialData,
   onChange,
   onSave,
   showToolbar = true,
   editable = true,
   className = "",
-}: RinkCanvasProps) {
+}, ref) {
   // ── State ──
   const [rinkType, setRinkType] = useState<RinkType>(initialData?.rinkType || "full");
   const [elements, setElements] = useState<RinkElement[]>(initialData?.elements || []);
@@ -421,6 +427,12 @@ export default function RinkCanvas({
     return { rinkType, width: dims.w, height: dims.h, elements, version: 1 };
   }, [rinkType, dims, elements]);
 
+  // ── Expose methods to parent via ref ──
+  useImperativeHandle(ref, () => ({
+    getSvgString,
+    getDiagramData,
+  }), [getSvgString, getDiagramData]);
+
   // ── Expose save handler ──
   const handleSave = useCallback(() => {
     if (onSave) {
@@ -559,4 +571,6 @@ export default function RinkCanvas({
       )}
     </div>
   );
-}
+});
+
+export default RinkCanvas;

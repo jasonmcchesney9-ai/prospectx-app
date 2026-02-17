@@ -26,23 +26,98 @@ import {
   GraduationCap,
   Shield,
   PenTool,
+  Radio,
+  Calendar,
+  UserCheck,
+  Heart,
+  Briefcase,
+  MessageSquare,
+  Eye,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
+import PXIBadge from "./PXIBadge";
 
-const NAV_ITEMS_LEFT = [
+// ── Role Group Mapping ─────────────────────────────────────────
+// Maps hockey_role to a nav group (PRO, MEDIA, FAMILY, AGENT)
+type RoleGroup = "PRO" | "MEDIA" | "FAMILY" | "AGENT";
+
+const ROLE_GROUP_MAP: Record<string, RoleGroup> = {
+  scout: "PRO",
+  coach: "PRO",
+  gm: "PRO",
+  player: "FAMILY", // Players see the family view
+  parent: "FAMILY",
+  broadcaster: "MEDIA",
+  producer: "MEDIA",
+  agent: "AGENT",
+};
+
+const ROLE_GROUP_COLORS: Record<RoleGroup, string> = {
+  PRO: "bg-teal/20 text-teal",
+  MEDIA: "bg-orange/20 text-orange",
+  FAMILY: "bg-[#3B6B8A]/20 text-[#3B6B8A]",
+  AGENT: "bg-[#475569]/20 text-[#475569]",
+};
+
+function getRoleGroup(hockeyRole?: string): RoleGroup {
+  return ROLE_GROUP_MAP[hockeyRole || "scout"] || "PRO";
+}
+
+// ── Nav Item Definitions ──────────────────────────────────────
+type NavItem = { href: string; label: string; icon: React.ElementType };
+
+// PRO nav: full access
+const PRO_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leagues", label: "Leagues", icon: Trophy },
   { href: "/teams", label: "Teams", icon: Building2 },
 ];
-
-const NAV_ITEMS_RIGHT = [
+const PRO_NAV_RIGHT: NavItem[] = [
   { href: "/players", label: "Players", icon: Users },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
 ];
 
-const COACHING_ITEMS = [
+// MEDIA nav
+const MEDIA_NAV_LEFT: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/teams", label: "Teams", icon: Building2 },
+  { href: "/players", label: "Players", icon: Users },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
+];
+const MEDIA_NAV_RIGHT: NavItem[] = [
+  { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+];
+
+// FAMILY nav
+const FAMILY_NAV_LEFT: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/my-player", label: "My Player", icon: Heart },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
+];
+const FAMILY_NAV_RIGHT: NavItem[] = [
+  { href: "/player-guide", label: "Guide", icon: BookOpen },
+  { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+];
+
+// AGENT nav
+const AGENT_NAV_LEFT: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/my-clients", label: "Clients", icon: Briefcase },
+  { href: "/players", label: "Players", icon: Users },
+];
+const AGENT_NAV_RIGHT: NavItem[] = [
+  { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+];
+
+// Coaching items (PRO only)
+const COACHING_ITEMS: NavItem[] = [
   { href: "/game-plans", label: "Chalk Talk", icon: Swords },
   { href: "/series", label: "Series Plans", icon: Trophy },
   { href: "/scouting", label: "Scouting List", icon: Target },
@@ -52,7 +127,13 @@ const COACHING_ITEMS = [
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
 
-const IMPORT_ITEMS = [
+// Broadcast items (PRO dropdown — MEDIA gets a direct link)
+const BROADCAST_ITEMS: NavItem[] = [
+  { href: "/broadcast", label: "Broadcast Hub", icon: Radio },
+];
+
+// Import items (PRO only)
+const IMPORT_ITEMS: NavItem[] = [
   { href: "/instat", label: "Import Stats (XLSX)", icon: BarChart3 },
   { href: "/players/import", label: "Import Players (CSV)", icon: UserPlus },
   { href: "/players/manage", label: "Manage Players", icon: Settings },
@@ -60,6 +141,21 @@ const IMPORT_ITEMS = [
   { href: "/my-data", label: "My Data", icon: Database },
 ];
 
+// ── Role-aware nav items function ──────────────────────────────
+function getNavItems(group: RoleGroup): { left: NavItem[]; right: NavItem[]; showCoaching: boolean; showImports: boolean; showBroadcastDropdown: boolean } {
+  switch (group) {
+    case "PRO":
+      return { left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT, showCoaching: true, showImports: true, showBroadcastDropdown: true };
+    case "MEDIA":
+      return { left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false };
+    case "FAMILY":
+      return { left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false };
+    case "AGENT":
+      return { left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false };
+  }
+}
+
+// ── NavLink Component ──────────────────────────────────────────
 function NavLink({ href, label, icon: Icon, pathname }: { href: string; label: string; icon: React.ElementType; pathname: string }) {
   const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
   return (
@@ -77,16 +173,45 @@ function NavLink({ href, label, icon: Icon, pathname }: { href: string; label: s
   );
 }
 
+// ── Role Override Mapping (admin preview → hockey_role equivalent) ───
+const ROLE_GROUP_TO_HOCKEY_ROLE: Record<RoleGroup, string> = {
+  PRO: "scout",
+  FAMILY: "parent",
+  MEDIA: "broadcaster",
+  AGENT: "agent",
+};
+
+// ── Main NavBar ────────────────────────────────────────────────
 export default function NavBar() {
   const pathname = usePathname();
   const user = getUser();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { isOpen: benchTalkOpen, toggleBenchTalk } = useBenchTalk();
+  const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
 
   if (pathname === "/login") return null;
 
+  // Effective role: admin override takes priority, otherwise real role
+  const effectiveHockeyRole = roleOverride || user?.hockey_role;
+  const roleGroup = getRoleGroup(effectiveHockeyRole);
+  const navConfig = getNavItems(roleGroup);
+  const isAdmin = user?.role === "admin";
+  const isPreviewing = !!roleOverride;
+
   return (
-    <nav className="bg-navy text-white">
+    <nav className="bg-navy text-white sticky top-0 z-50">
+      {/* Admin Preview Banner */}
+      {isPreviewing && (
+        <div className="bg-orange/90 text-white px-4 py-1 flex items-center justify-center gap-3 text-xs font-oswald uppercase tracking-wider">
+          <Eye size={12} />
+          <span>Previewing as: <strong>{roleGroup}</strong></span>
+          <button
+            onClick={() => setRoleOverride(null)}
+            className="ml-2 px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 transition-colors text-[10px] font-bold"
+          >
+            Exit Preview
+          </button>
+        </div>
+      )}
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center h-16">
           {/* ── Logo (far left) ── */}
@@ -99,13 +224,13 @@ export default function NavBar() {
             </span>
           </Link>
 
-          {/* ── Center Nav: Leagues, Teams, Players, Bench Talk, Reports, Imports ── */}
+          {/* ── Center Nav ── */}
           <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
-            {NAV_ITEMS_LEFT.map((item) => (
+            {navConfig.left.map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
 
-            {/* Bench Talk Toggle (center position) */}
+            {/* Bench Talk Toggle (center — always visible) */}
             <button
               onClick={toggleBenchTalk}
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-oswald font-bold uppercase tracking-wider transition-colors ${
@@ -114,25 +239,45 @@ export default function NavBar() {
                   : "text-orange hover:bg-orange/10"
               }`}
             >
-              <PXIIcon size={20} />
+              <PXIBadge size={18} variant="nav" showDot={true} />
               Bench Talk
             </button>
 
-            {NAV_ITEMS_RIGHT.map((item) => (
+            {navConfig.right.map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
 
-            <CoachingDropdown pathname={pathname} />
-            <ImportDropdown pathname={pathname} />
+            {/* Coaching dropdown (PRO only) */}
+            {navConfig.showCoaching && <CoachingDropdown pathname={pathname} />}
+
+            {/* Broadcast dropdown (PRO only — MEDIA gets direct link in nav) */}
+            {navConfig.showBroadcastDropdown && <BroadcastDropdown pathname={pathname} />}
+
+            {/* MEDIA: direct Broadcast link */}
+            {roleGroup === "MEDIA" && (
+              <NavLink href="/broadcast" label="Broadcast" icon={Radio} pathname={pathname} />
+            )}
+
+            {/* Imports dropdown (PRO only) */}
+            {navConfig.showImports && <ImportDropdown pathname={pathname} />}
           </div>
 
-          {/* ── User + Tier Badge + Logout (far right) ── */}
+          {/* ── User + Role Badge + Tier Badge + Logout (far right) ── */}
           <div className="hidden md:flex items-center gap-3 ml-8 shrink-0">
             {user && (
               <>
                 <span className="text-sm text-white/60">
                   {user.first_name} {user.last_name}
                 </span>
+                {/* Role Group Badge */}
+                <span
+                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase font-oswald tracking-wider ${ROLE_GROUP_COLORS[roleGroup]}`}
+                >
+                  {roleGroup}
+                </span>
+                {/* Admin Role Switcher */}
+                {isAdmin && <AdminRoleSwitcher currentGroup={roleGroup} onSwitch={(group) => setRoleOverride(ROLE_GROUP_TO_HOCKEY_ROLE[group])} onReset={() => setRoleOverride(null)} isPreviewing={isPreviewing} />}
+                {/* Subscription Tier Badge */}
                 <Link
                   href="/pricing"
                   className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal/20 text-teal uppercase font-oswald tracking-wider hover:bg-teal/30 transition-colors"
@@ -165,13 +310,21 @@ export default function NavBar() {
 
           {/* ── Mobile Toggle ── */}
           <div className="flex md:hidden items-center gap-2 ml-auto">
+            {/* Role badge (mobile) */}
+            {user && (
+              <span
+                className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase font-oswald tracking-wider ${ROLE_GROUP_COLORS[roleGroup]}`}
+              >
+                {roleGroup}
+              </span>
+            )}
             <button
               onClick={toggleBenchTalk}
               className={`p-2 rounded-lg transition-all ${
                 benchTalkOpen ? "bg-orange/20" : "hover:bg-orange/10"
               }`}
             >
-              <PXIIcon size={24} />
+              <PXIBadge size={22} variant="nav" showDot={true} />
             </button>
             <button
               className="text-white/70 hover:text-white"
@@ -183,10 +336,10 @@ export default function NavBar() {
         </div>
       </div>
 
-      {/* ── Mobile Menu ── */}
+      {/* ── Mobile Menu (role-filtered) ── */}
       {mobileOpen && (
         <div className="md:hidden border-t border-white/10 px-4 pb-4">
-          {[...NAV_ITEMS_LEFT, ...NAV_ITEMS_RIGHT].map(({ href, label, icon: Icon }) => {
+          {[...navConfig.left, ...navConfig.right].map(({ href, label, icon: Icon }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
               <Link
@@ -202,48 +355,97 @@ export default function NavBar() {
               </Link>
             );
           })}
-          <div className="border-t border-white/10 mt-1 pt-1">
-            <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-              Coaching
-            </p>
-            {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
-              const active = pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                    active ? "text-teal" : "text-white/70"
-                  }`}
-                >
-                  <Icon size={16} />
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-          <div className="border-t border-white/10 mt-1 pt-1">
-            <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-              Import & Manage
-            </p>
-            {IMPORT_ITEMS.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                    active ? "text-teal" : "text-white/70"
-                  }`}
-                >
-                  <Icon size={16} />
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
+
+          {/* MEDIA: Broadcast link in mobile */}
+          {roleGroup === "MEDIA" && (
+            <Link
+              href="/broadcast"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                pathname.startsWith("/broadcast") ? "text-teal" : "text-white/70"
+              }`}
+            >
+              <Radio size={16} />
+              Broadcast
+            </Link>
+          )}
+
+          {/* Coaching section (PRO only) */}
+          {navConfig.showCoaching && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Coaching
+              </p>
+              {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Broadcast section (PRO mobile) */}
+          {navConfig.showBroadcastDropdown && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Broadcast
+              </p>
+              {BROADCAST_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Import & Manage section (PRO only) */}
+          {navConfig.showImports && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Import & Manage
+              </p>
+              {IMPORT_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Admin (all roles if admin) */}
           {user?.role === "admin" && (
             <div className="border-t border-white/10 mt-1 pt-1">
               <Link
@@ -270,6 +472,8 @@ export default function NavBar() {
     </nav>
   );
 }
+
+// ── Dropdown Components ────────────────────────────────────────
 
 function CoachingDropdown({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);
@@ -322,6 +526,141 @@ function CoachingDropdown({ pathname }: { pathname: string }) {
               </Link>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BroadcastDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = pathname.startsWith("/broadcast");
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <Radio size={16} />
+        Broadcast
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {BROADCAST_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminRoleSwitcher({ currentGroup, onSwitch, onReset, isPreviewing }: { currentGroup: RoleGroup; onSwitch: (group: RoleGroup) => void; onReset: () => void; isPreviewing: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const groups: { group: RoleGroup; label: string; desc: string }[] = [
+    { group: "PRO", label: "PRO", desc: "Scout / Coach / GM" },
+    { group: "FAMILY", label: "FAMILY", desc: "Parent" },
+    { group: "MEDIA", label: "MEDIA", desc: "Broadcaster" },
+    { group: "AGENT", label: "AGENT", desc: "Agent" },
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-oswald uppercase tracking-wider transition-colors ${
+          isPreviewing
+            ? "bg-orange/20 text-orange"
+            : "text-white/40 hover:text-white/70 hover:bg-white/5"
+        }`}
+        title="Preview as different role"
+      >
+        <Eye size={10} />
+        Preview
+        <ChevronDown size={9} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-48 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          <div className="px-3 py-2 border-b border-white/10">
+            <p className="text-[9px] font-oswald uppercase tracking-wider text-white/30">Preview as role</p>
+          </div>
+          {groups.map(({ group, label, desc }) => (
+            <button
+              key={group}
+              onClick={() => {
+                onSwitch(group);
+                setOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
+                currentGroup === group
+                  ? "bg-white/10 text-teal"
+                  : "text-white/70 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <div>
+                <span className={`text-[9px] font-oswald font-bold uppercase tracking-wider ${ROLE_GROUP_COLORS[group]} px-1.5 py-0.5 rounded-full`}>
+                  {label}
+                </span>
+                <span className="text-[10px] text-white/40 ml-2">{desc}</span>
+              </div>
+              {currentGroup === group && <span className="text-teal text-xs">✓</span>}
+            </button>
+          ))}
+          {isPreviewing && (
+            <button
+              onClick={() => { onReset(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-xs text-orange hover:bg-white/5 border-t border-white/10 font-medium"
+            >
+              ← Back to my role
+            </button>
+          )}
         </div>
       )}
     </div>

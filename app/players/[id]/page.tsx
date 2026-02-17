@@ -50,6 +50,7 @@ import ReportCard from "@/components/ReportCard";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
+import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS } from "@/types/api";
 
@@ -547,6 +548,7 @@ export default function PlayerDetailPage() {
                     {player.commitment_status}
                   </span>
                 )}
+                <PlayerStatusBadges tags={player.tags || []} size="md" />
                 {player.shoots && <span>Shoots {player.shoots}</span>}
                 {player.current_team && <span>{player.current_team}</span>}
                 {player.current_league && <span className="text-white/50">({player.current_league})</span>}

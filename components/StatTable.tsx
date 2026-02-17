@@ -5,6 +5,18 @@ import { ChevronDown, ChevronUp, Pencil, Trash2, Check, X, Loader2 } from "lucid
 import type { PlayerStats } from "@/types/api";
 import api from "@/lib/api";
 
+const NOTE_PRESETS = [
+  "Injured",
+  "Limited Role",
+  "Suspended",
+  "Recalled",
+  "Called Up",
+  "Traded",
+  "AP (Affiliate)",
+  "Import Player",
+  "Playoff Only",
+];
+
 function formatTOI(seconds: number): string {
   if (!seconds) return "—";
   const min = Math.floor(seconds / 60);
@@ -12,7 +24,6 @@ function formatTOI(seconds: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
-/** Format per-game average TOI from total seconds / GP */
 function formatAvgTOI(totalSeconds: number, gp: number): string {
   if (!totalSeconds || !gp) return "—";
   const avg = Math.round(totalSeconds / gp);
@@ -33,6 +44,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
   const [editValues, setEditValues] = useState<Record<string, number | string>>({});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [showNotePresets, setShowNotePresets] = useState(false);
 
   if (stats.length === 0) {
     return (
@@ -42,14 +54,10 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
     );
   }
 
-  // Separate season summaries from game logs
   const seasonStats = stats.filter((s) => s.stat_type === "season");
   const gameLogs = stats.filter((s) => s.stat_type === "game");
 
-  // Sort season stats by season descending
   seasonStats.sort((a, b) => (b.season || "").localeCompare(a.season || ""));
-
-  // Sort game logs by date (from microstats) descending
   gameLogs.sort((a, b) => {
     const dateA = String(a.microstats?.date || "");
     const dateB = String(b.microstats?.date || "");
@@ -61,18 +69,22 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
     setEditingId(s.id);
     setEditValues({
       season: s.season || "",
+      team_name: s.team_name || "",
       gp: s.gp,
       g: s.g,
       a: s.a,
       p: s.p,
       plus_minus: s.plus_minus,
       pim: s.pim,
+      notes: s.notes || "",
     });
+    setShowNotePresets(false);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditValues({});
+    setShowNotePresets(false);
   };
 
   const saveEdit = async () => {
@@ -82,6 +94,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
       await api.put(`/stats/${editingId}`, editValues);
       setEditingId(null);
       setEditValues({});
+      setShowNotePresets(false);
       onStatsChange?.();
     } catch {
       // Ignore
@@ -104,12 +117,15 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
   };
 
   const editField = (field: string, value: string) => {
+    if (field === "season" || field === "team_name" || field === "notes") {
+      setEditValues(prev => ({ ...prev, [field]: value }));
+      return;
+    }
     const num = parseInt(value, 10);
     setEditValues(prev => ({
       ...prev,
-      [field]: field === "season" ? value : (isNaN(num) ? 0 : num),
+      [field]: isNaN(num) ? 0 : num,
     }));
-    // Auto-calc points when g or a changes
     if (field === "g" || field === "a") {
       const g = field === "g" ? (isNaN(num) ? 0 : num) : (editValues.g as number || 0);
       const a = field === "a" ? (isNaN(num) ? 0 : num) : (editValues.a as number || 0);
@@ -128,6 +144,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
             <thead>
               <tr className="border-b border-border text-left">
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Season</th>
+                <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Team</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">GP</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">G</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">A</th>
@@ -137,6 +154,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">TOI/GP</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">S%</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">P/GP</th>
+                <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Notes</th>
                 {editable && <th className="px-2 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center w-20">Edit</th>}
               </tr>
             </thead>
@@ -145,11 +163,22 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                 const isEditing = editingId === s.id;
                 return (
                   <tr key={s.id} className={`border-b border-border/50 ${isEditing ? "bg-teal/5" : "hover:bg-navy/[0.02]"}`}>
-                    <td className="px-3 py-2.5 font-semibold text-navy">
+                    <td className="px-3 py-2.5 font-semibold text-navy whitespace-nowrap">
                       {isEditing ? (
                         <input className="w-24 px-1.5 py-1 text-sm border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 outline-none"
                           value={editValues.season as string} onChange={e => editField("season", e.target.value)} />
                       ) : s.season || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-navy/70 text-xs whitespace-nowrap">
+                      {isEditing ? (
+                        <input className="w-28 px-1.5 py-1 text-sm border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 outline-none"
+                          placeholder="Team name"
+                          value={editValues.team_name as string} onChange={e => editField("team_name", e.target.value)} />
+                      ) : s.team_name ? (
+                        <span className="truncate max-w-[120px] inline-block" title={s.team_name}>{s.team_name}</span>
+                      ) : (
+                        <span className="text-muted/30">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-center font-medium">
                       {isEditing ? <input className={inputClass} value={editValues.gp as number} onChange={e => editField("gp", e.target.value)} /> : s.gp}
@@ -181,6 +210,48 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                     </td>
                     <td className="px-3 py-2.5 text-center font-medium text-navy">
                       {s.gp > 0 ? (s.p / s.gp).toFixed(2) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                      {isEditing ? (
+                        <div className="relative">
+                          <input
+                            className="w-28 px-1.5 py-1 text-xs border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 outline-none"
+                            placeholder="e.g. Injured"
+                            value={editValues.notes as string}
+                            onChange={e => editField("notes", e.target.value)}
+                            onFocus={() => setShowNotePresets(true)}
+                          />
+                          {showNotePresets && (
+                            <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-50 py-1 max-h-40 overflow-y-auto">
+                              {NOTE_PRESETS.map(preset => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => {
+                                    editField("notes", preset);
+                                    setShowNotePresets(false);
+                                  }}
+                                  className="w-full text-left px-2.5 py-1.5 text-xs text-navy hover:bg-teal/5 transition-colors"
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : s.notes ? (
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider ${
+                          s.notes.toLowerCase().includes("injur") ? "bg-red-100 text-red-700" :
+                          s.notes.toLowerCase().includes("suspend") ? "bg-yellow-100 text-yellow-700" :
+                          s.notes.toLowerCase().includes("limit") ? "bg-orange/10 text-orange" :
+                          s.notes.toLowerCase().includes("traded") ? "bg-purple-100 text-purple-700" :
+                          "bg-navy/5 text-navy/60"
+                        }`}>
+                          {s.notes}
+                        </span>
+                      ) : (
+                        <span className="text-muted/20">—</span>
+                      )}
                     </td>
                     {editable && (
                       <td className="px-2 py-2.5 text-center">
@@ -216,7 +287,6 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
         </div>
       )}
 
-      {/* If no season stats but we have game logs, show a note */}
       {seasonStats.length === 0 && gameLogs.length > 0 && (
         <p className="text-xs text-muted px-3 py-2">
           No season summary available. Showing game logs only.
@@ -264,20 +334,11 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                     const micro = s.microstats || ({} as Record<string, unknown>);
                     const hasPoints = s.g > 0 || s.a > 0;
                     return (
-                      <tr
-                        key={s.id}
-                        className={`border-b border-border/30 ${
-                          hasPoints ? "bg-teal/[0.03]" : "hover:bg-navy/[0.02]"
-                        }`}
-                      >
-                        <td className="px-3 py-1.5 text-muted whitespace-nowrap">
-                          {(micro.date as string) || "—"}
-                        </td>
+                      <tr key={s.id} className={`border-b border-border/30 ${hasPoints ? "bg-teal/[0.03]" : "hover:bg-navy/[0.02]"}`}>
+                        <td className="px-3 py-1.5 text-muted whitespace-nowrap">{(micro.date as string) || "—"}</td>
                         <td className="px-3 py-1.5 text-navy font-medium whitespace-nowrap">
                           {(micro.opponent as string) || "—"}
-                          {micro.score ? (
-                            <span className="text-muted/50 ml-1.5">({String(micro.score)})</span>
-                          ) : null}
+                          {micro.score ? <span className="text-muted/50 ml-1.5">({String(micro.score)})</span> : null}
                         </td>
                         <td className="px-3 py-1.5 text-center font-semibold">
                           {s.g > 0 ? <span className="text-navy">{s.g}</span> : <span className="text-muted/30">0</span>}
@@ -298,9 +359,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                         </td>
                         <td className="px-3 py-1.5 text-center text-muted">{formatTOI(s.toi_seconds)}</td>
                         <td className="px-3 py-1.5 text-center text-muted">{s.sog || "—"}</td>
-                        <td className="px-3 py-1.5 text-center text-muted">
-                          {s.shooting_pct != null ? `${s.shooting_pct}%` : "—"}
-                        </td>
+                        <td className="px-3 py-1.5 text-center text-muted">{s.shooting_pct != null ? `${s.shooting_pct}%` : "—"}</td>
                       </tr>
                     );
                   })}
@@ -311,13 +370,14 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
         </div>
       )}
 
-      {/* Fallback: if we only have stats with no type distinction, show flat table */}
+      {/* Fallback flat table */}
       {seasonStats.length === 0 && gameLogs.length === 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left">
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Season</th>
+                <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Team</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Type</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">GP</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">G</th>
@@ -327,12 +387,14 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">PIM</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">TOI</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">S%</th>
+                <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Notes</th>
               </tr>
             </thead>
             <tbody>
               {stats.map((s) => (
                 <tr key={s.id} className="border-b border-border/50 hover:bg-navy/[0.02]">
                   <td className="px-3 py-2 font-medium text-navy">{s.season || "—"}</td>
+                  <td className="px-3 py-2 text-xs text-navy/70">{s.team_name || "—"}</td>
                   <td className="px-3 py-2 text-muted capitalize">{s.stat_type}</td>
                   <td className="px-3 py-2 text-center">{s.gp}</td>
                   <td className="px-3 py-2 text-center font-semibold">{s.g}</td>
@@ -345,9 +407,8 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                   </td>
                   <td className="px-3 py-2 text-center">{s.pim}</td>
                   <td className="px-3 py-2 text-center text-muted">{formatTOI(s.toi_seconds)}</td>
-                  <td className="px-3 py-2 text-center text-muted">
-                    {s.shooting_pct != null ? `${s.shooting_pct}%` : "—"}
-                  </td>
+                  <td className="px-3 py-2 text-center text-muted">{s.shooting_pct != null ? `${s.shooting_pct}%` : "—"}</td>
+                  <td className="px-3 py-2 text-xs text-muted">{s.notes || "—"}</td>
                 </tr>
               ))}
             </tbody>

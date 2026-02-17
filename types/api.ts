@@ -112,6 +112,7 @@ export interface PlayerCardData {
   g: number;
   a: number;
   p: number;
+  tags: string[];
   metrics: {
     sniper: number;
     playmaker: number;
@@ -142,6 +143,19 @@ export const COMMITMENT_STATUS_COLORS: Record<string, { bg: string; text: string
   "Drafted":         { bg: "bg-teal/10",    text: "text-teal" },
   "Undrafted FA":    { bg: "bg-amber-100",  text: "text-amber-700" },
 };
+
+// ── Player Status Tags → Badge Config ────────────────────────
+// These tags, when present in a player's tags[] array, render as compact badges
+export const PLAYER_STATUS_TAGS: Record<string, { label: string; abbr: string; bg: string; text: string; border: string; title: string }> = {
+  rookie:     { label: "Rookie",     abbr: "R",  bg: "bg-blue-100",    text: "text-blue-700",    border: "border-blue-200",    title: "Rookie — First-year player" },
+  injured:    { label: "Injured",    abbr: "IR", bg: "bg-red-100",     text: "text-red-700",     border: "border-red-200",     title: "Injured Reserve" },
+  suspended:  { label: "Suspended",  abbr: "S",  bg: "bg-yellow-100",  text: "text-yellow-800",  border: "border-yellow-300",  title: "Suspended" },
+  affiliate:  { label: "Affiliate",  abbr: "AP", bg: "bg-purple-100",  text: "text-purple-700",  border: "border-purple-200",  title: "Affiliate Player — On loan from another team" },
+  import:     { label: "Import",     abbr: "I",  bg: "bg-orange/10",   text: "text-orange",      border: "border-orange/30",   title: "Import Player" },
+  committed:  { label: "Committed",  abbr: "C",  bg: "bg-green-100",   text: "text-green-700",   border: "border-green-200",   title: "Committed to a program" },
+};
+
+export const PLAYER_STATUS_TAG_KEYS = Object.keys(PLAYER_STATUS_TAGS);
 
 export interface Team {
   id: string;
@@ -195,6 +209,8 @@ export interface PlayerStats {
   microstats: Record<string, unknown> | null;
   extended_stats: ExtendedStats | null;
   data_source: string | null;
+  team_name: string | null;
+  notes: string | null;
   created_at: string;
 }
 

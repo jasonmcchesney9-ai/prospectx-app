@@ -6,7 +6,7 @@ import { Search, Zap, Filter, FileText, Wand2, FolderOpen, ChevronDown, ChevronR
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportCard from "@/components/ReportCard";
-import PXIIcon from "@/components/PXIIcon";
+import PXIBadge from "@/components/PXIBadge";
 import api from "@/lib/api";
 import type { Report } from "@/types/api";
 import { REPORT_TYPE_LABELS } from "@/types/api";
@@ -84,7 +84,7 @@ export default function ReportsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <PXIIcon size={32} />
+            <PXIBadge size={32} variant="dark" showDot={false} />
             <div>
               <h1 className="text-2xl font-bold text-navy">My Reports</h1>
               <p className="text-xs text-muted mt-0.5">

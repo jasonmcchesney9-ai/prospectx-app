@@ -30,6 +30,7 @@ import ReportCard from "@/components/ReportCard";
 import ExtendedStatTable from "@/components/ExtendedStatTable";
 import LineCombinations from "@/components/LineCombinations";
 import LineBuilder from "@/components/LineBuilder";
+import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination } from "@/types/api";
 
@@ -521,20 +522,23 @@ export default function TeamDetailPage() {
                           {players.map((p) => (
                             <tr key={p.id} className="border-b border-border/50 hover:bg-navy/[0.02] transition-colors">
                               <td className="px-4 py-2.5">
-                                <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors">
-                                  {hasRealImage(p.image_url) ? (
-                                    <span className="inline-flex items-center gap-2">
-                                      <img
-                                        src={assetUrl(p.image_url)}
-                                        alt=""
-                                        className="w-7 h-7 rounded-full object-cover"
-                                      />
-                                      {p.last_name}, {p.first_name}
-                                    </span>
-                                  ) : (
-                                    <>{p.last_name}, {p.first_name}</>
-                                  )}
-                                </Link>
+                                <div className="flex items-center gap-1.5">
+                                  <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors">
+                                    {hasRealImage(p.image_url) ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <img
+                                          src={assetUrl(p.image_url)}
+                                          alt=""
+                                          className="w-7 h-7 rounded-full object-cover"
+                                        />
+                                        {p.last_name}, {p.first_name}
+                                      </span>
+                                    ) : (
+                                      <>{p.last_name}, {p.first_name}</>
+                                    )}
+                                  </Link>
+                                  <PlayerStatusBadges tags={p.tags || []} size="sm" />
+                                </div>
                               </td>
                               <td className="px-4 py-2.5 text-center">
                                 <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">

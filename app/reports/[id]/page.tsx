@@ -24,6 +24,7 @@ import ReportSection from "@/components/ReportSection";
 import api from "@/lib/api";
 import type { Report, Player } from "@/types/api";
 import { REPORT_TYPE_LABELS, SECTION_LABELS, PROSPECT_GRADES } from "@/types/api";
+import HockeyRink from "@/components/HockeyRink";
 
 /** Parse report output_text by ALL_CAPS section headers */
 function parseReportSections(
@@ -524,12 +525,11 @@ export default function ReportViewerPage() {
 
         {/* Report Content */}
         {report.status === "processing" || report.status === "pending" ? (
-          <div className="bg-white rounded-xl border border-border p-12 text-center">
-            <Loader2
-              size={40}
-              className="mx-auto text-teal animate-spin mb-4"
-            />
-            <h2 className="text-lg font-bold text-navy mb-1">
+          <div className="bg-white rounded-xl border border-border p-8 sm:p-12 text-center">
+            <div className="flex justify-center mb-6">
+              <HockeyRink size="full" animate={true} />
+            </div>
+            <h2 className="text-lg font-oswald font-bold text-navy uppercase tracking-wider mb-1">
               Generating Report
             </h2>
             <p className="text-sm text-muted">

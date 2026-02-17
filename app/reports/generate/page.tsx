@@ -18,6 +18,7 @@ import type {
 import { REPORT_TYPE_LABELS, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES, DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS } from "@/types/api";
 import { getUser } from "@/lib/auth";
 import UpgradeModal from "@/components/UpgradeModal";
+import ReportLoadingView from "@/components/ReportLoadingView";
 
 type GenerationState = "idle" | "submitting" | "polling" | "complete" | "failed";
 
@@ -253,8 +254,26 @@ function GenerateReportContent() {
     ? !!selectedTeam && !!selectedType
     : !!selectedPlayer && !!selectedType;
 
+  // Build display name for loading view
+  const selectedTeamName = teams.find(t => t.name === selectedTeam)?.name || selectedTeam;
+  const subjectDisplayName = isTeamReportType
+    ? selectedTeamName
+    : selectedPlayerObj
+    ? `${selectedPlayerObj.first_name} ${selectedPlayerObj.last_name}`
+    : "";
+  const reportTypeLabel = REPORT_TYPE_LABELS[selectedType] || selectedType;
+
   return (
     <ProtectedRoute>
+      {/* Full-screen loading overlay */}
+      {isGenerating && (
+        <ReportLoadingView
+          state={genState as "submitting" | "polling"}
+          subjectName={subjectDisplayName}
+          reportType={reportTypeLabel}
+        />
+      )}
+
       <NavBar />
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
         <Link

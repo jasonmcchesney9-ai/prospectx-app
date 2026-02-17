@@ -9,6 +9,9 @@ interface BenchTalkContextType {
   closeBenchTalk: () => void;
   pendingMessage: string | null;
   clearPendingMessage: () => void;
+  // Admin role preview
+  roleOverride: string | null;
+  setRoleOverride: (role: string | null) => void;
 }
 
 const BenchTalkContext = createContext<BenchTalkContextType>({
@@ -18,6 +21,8 @@ const BenchTalkContext = createContext<BenchTalkContextType>({
   closeBenchTalk: () => {},
   pendingMessage: null,
   clearPendingMessage: () => {},
+  roleOverride: null,
+  setRoleOverride: () => {},
 });
 
 export function useBenchTalk() {
@@ -27,6 +32,7 @@ export function useBenchTalk() {
 export default function BenchTalkProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [roleOverride, setRoleOverride] = useState<string | null>(null);
 
   const toggleBenchTalk = useCallback(() => {
     setIsOpen((prev) => !prev);
@@ -49,7 +55,7 @@ export default function BenchTalkProvider({ children }: { children: React.ReactN
 
   return (
     <BenchTalkContext.Provider
-      value={{ isOpen, toggleBenchTalk, openBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage }}
+      value={{ isOpen, toggleBenchTalk, openBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, roleOverride, setRoleOverride }}
     >
       {children}
     </BenchTalkContext.Provider>

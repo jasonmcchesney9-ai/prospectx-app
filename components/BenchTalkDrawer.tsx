@@ -26,11 +26,13 @@ import {
   Users,
   History,
   Layers,
+  ChevronDown,
 } from "lucide-react";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
+import PXIBadge from "./PXIBadge";
 import type {
   BenchTalkConversation,
   BenchTalkMessage,
@@ -42,6 +44,7 @@ import type {
 } from "@/types/api";
 import { REPORT_TYPE_LABELS, TEAM_REPORT_TYPES } from "@/types/api";
 import UpgradeModal from "./UpgradeModal";
+import HockeyRink from "./HockeyRink";
 
 // ── Suggestion Icons ─────────────────────────────────────────
 const SUGGESTION_ICONS: Record<string, React.ElementType> = {
@@ -51,6 +54,105 @@ const SUGGESTION_ICONS: Record<string, React.ElementType> = {
   shield: Shield,
   file: FileText,
   brain: Brain,
+};
+
+// ── Role Group + Theme Config for Bench Talk ─────────────────
+type RoleGroup = "PRO" | "MEDIA" | "FAMILY" | "AGENT";
+
+const ROLE_GROUP_MAP: Record<string, RoleGroup> = {
+  scout: "PRO", coach: "PRO", gm: "PRO",
+  player: "FAMILY", parent: "FAMILY",
+  broadcaster: "MEDIA", producer: "MEDIA",
+  agent: "AGENT",
+};
+
+interface BenchTalkTheme {
+  accentColor: string;      // Tailwind color class for send button bg
+  accentHover: string;      // Hover variant
+  greeting: string;         // Welcome greeting text
+  question: string;         // Welcome question (uses {name} placeholder)
+  defaultMode: string;      // PXI mode to auto-select
+  modeBadgeColor: string;   // Tailwind bg for mode badge chip
+  pillBorderActive: string; // Active pill accent
+  fallbackSuggestions: Array<{ text: string; icon: string }>;
+}
+
+const BENCH_TALK_THEMES: Record<RoleGroup, BenchTalkTheme> = {
+  PRO: {
+    accentColor: "bg-teal",
+    accentHover: "hover:bg-teal/90",
+    greeting: "I'm PXI, your hockey intelligence assistant. I can scout players, build game plans, analyze stats, or help with roster decisions.",
+    question: "What player or team are you evaluating?",
+    defaultMode: "scout",
+    modeBadgeColor: "bg-teal/15 text-teal",
+    pillBorderActive: "border-teal/30",
+    fallbackSuggestions: [
+      { text: "Scout a player", icon: "search" },
+      { text: "Build a game plan", icon: "shield" },
+      { text: "Compare two players", icon: "compare" },
+      { text: "Analyze team trends", icon: "trophy" },
+      { text: "Trade analysis", icon: "brain" },
+    ],
+  },
+  FAMILY: {
+    accentColor: "bg-[#3B6B8A]",
+    accentHover: "hover:bg-[#3B6B8A]/90",
+    greeting: "Hi! I'm PXI. I help families understand player progress and what you can do to support development. No jargon, just clear answers.",
+    question: "How can I help with your player's development?",
+    defaultMode: "parent",
+    modeBadgeColor: "bg-[#3B6B8A]/15 text-[#3B6B8A]",
+    pillBorderActive: "border-[#3B6B8A]/30",
+    fallbackSuggestions: [
+      { text: "How is my player doing?", icon: "search" },
+      { text: "What should we work on?", icon: "brain" },
+      { text: "Explain his stats", icon: "trophy" },
+      { text: "Off-ice training ideas", icon: "shield" },
+      { text: "Prep school options", icon: "file" },
+    ],
+  },
+  MEDIA: {
+    accentColor: "bg-orange",
+    accentHover: "hover:bg-orange/90",
+    greeting: "PXI in Broadcast mode. I'll build storylines, spotting boards, talk tracks, and live-game context. Let's get you game-ready.",
+    question: "Which game are you prepping for?",
+    defaultMode: "broadcast",
+    modeBadgeColor: "bg-orange/15 text-orange",
+    pillBorderActive: "border-orange/30",
+    fallbackSuggestions: [
+      { text: "Tonight's storylines", icon: "file" },
+      { text: "Spotting board", icon: "search" },
+      { text: "Coach interview Qs", icon: "brain" },
+      { text: "Graphics ideas", icon: "trophy" },
+      { text: "Post-game script", icon: "shield" },
+    ],
+  },
+  AGENT: {
+    accentColor: "bg-[#475569]",
+    accentHover: "hover:bg-[#475569]/90",
+    greeting: "PXI in Agent mode. Pathway planning, exposure strategy, and honest player positioning. No hype, just realistic plans.",
+    question: "Which client are you working on?",
+    defaultMode: "agent",
+    modeBadgeColor: "bg-[#475569]/15 text-[#475569]",
+    pillBorderActive: "border-[#475569]/30",
+    fallbackSuggestions: [
+      { text: "Pathway options", icon: "search" },
+      { text: "90-day plan", icon: "brain" },
+      { text: "Agent pack", icon: "file" },
+      { text: "School recommendations", icon: "trophy" },
+      { text: "Readiness assessment", icon: "shield" },
+    ],
+  },
+};
+
+function getRoleGroup(hockeyRole?: string): RoleGroup {
+  return ROLE_GROUP_MAP[hockeyRole || "scout"] || "PRO";
+}
+
+// ── Mode Badge Labels ─────────────────────────────────────────
+const MODE_LABELS: Record<string, string> = {
+  scout: "SCOUT", coach: "COACH", gm: "GM", analyst: "ANALYST",
+  agent: "AGENT", parent: "PARENT", skill_coach: "SKILL COACH",
+  mental_coach: "MENTAL", broadcast: "BROADCAST", producer: "PRODUCER",
 };
 
 // ── Status Config for Report Cards ──────────────────────────
@@ -187,9 +289,137 @@ function CompactReportCard({ report }: { report: Report }) {
   );
 }
 
+// ── Mode Pill Bar ──────────────────────────────────────────
+const PRIMARY_MODE_IDS = ["scout", "coach", "gm", "analyst", "agent", "parent"];
+const SECONDARY_MODE_IDS = ["skill_coach", "mental_coach", "broadcast", "producer"];
+
+interface ModePillBarProps {
+  pxiModes: Array<{ id: string; name: string; primary_user: string; key_output: string; icon: string }>;
+  currentMode: string;
+  onModeChange: (modeId: string) => void;
+  roleGroup: RoleGroup;
+}
+
+function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePillBarProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    }
+    if (moreOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [moreOpen]);
+
+  // Split modes into primary (always visible) and secondary ("More" dropdown)
+  const primaryModes = PRIMARY_MODE_IDS
+    .map((id) => pxiModes.find((m) => m.id === id))
+    .filter(Boolean) as ModePillBarProps["pxiModes"];
+
+  const secondaryModes = SECONDARY_MODE_IDS
+    .map((id) => pxiModes.find((m) => m.id === id))
+    .filter(Boolean) as ModePillBarProps["pxiModes"];
+
+  // If no modes loaded yet, show placeholder
+  if (pxiModes.length === 0) {
+    return (
+      <div className="bg-white border-b border-border px-3 py-2 shrink-0">
+        <div className="flex gap-1.5 overflow-x-auto">
+          {PRIMARY_MODE_IDS.map((id) => (
+            <span key={id} className="px-3 py-1 rounded-full bg-navy/5 text-[10px] text-muted animate-pulse">
+              {MODE_LABELS[id] || id}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const theme = BENCH_TALK_THEMES[roleGroup];
+  const isSecondaryActive = SECONDARY_MODE_IDS.includes(currentMode);
+
+  return (
+    <div className="bg-white border-b border-border px-3 py-2 shrink-0">
+      <div className="flex items-center gap-1.5">
+        {/* Primary mode pills — always visible */}
+        <div className="flex gap-1 overflow-x-auto flex-1 min-w-0">
+          {primaryModes.map((mode) => {
+            const isActive = currentMode === mode.id;
+            return (
+              <button
+                key={mode.id}
+                onClick={() => { onModeChange(mode.id); setMoreOpen(false); }}
+                className={`px-3 py-1 rounded-full text-[10px] font-oswald font-bold tracking-wider whitespace-nowrap transition-all ${
+                  isActive
+                    ? "bg-teal text-white shadow-sm"
+                    : "bg-transparent text-muted border border-border hover:border-teal/30 hover:text-navy"
+                }`}
+                title={mode.name}
+              >
+                {MODE_LABELS[mode.id] || mode.name}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* "More" dropdown for secondary modes */}
+        {secondaryModes.length > 0 && (
+          <div className="relative shrink-0" ref={moreRef}>
+            <button
+              onClick={() => setMoreOpen(!moreOpen)}
+              className={`flex items-center gap-0.5 px-2.5 py-1 rounded-full text-[10px] font-oswald font-bold tracking-wider transition-all ${
+                isSecondaryActive
+                  ? "bg-teal text-white shadow-sm"
+                  : "bg-transparent text-muted border border-border hover:border-teal/30 hover:text-navy"
+              }`}
+              title="More modes"
+            >
+              {isSecondaryActive ? (MODE_LABELS[currentMode] || "MORE") : "MORE"}
+              <ChevronDown size={10} className={`transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {moreOpen && (
+              <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-50 py-1">
+                {secondaryModes.map((mode) => {
+                  const isActive = currentMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      onClick={() => { onModeChange(mode.id); setMoreOpen(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                        isActive
+                          ? "bg-teal/10 text-teal font-semibold"
+                          : "text-navy hover:bg-navy/[0.03]"
+                      }`}
+                    >
+                      <span className="font-oswald tracking-wider text-[10px] font-bold">
+                        {MODE_LABELS[mode.id] || mode.name}
+                      </span>
+                      <span className="block text-[9px] text-muted mt-0.5">{mode.primary_user}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Bench Talk Drawer ──────────────────────────────────
 export default function BenchTalkDrawer() {
-  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage } = useBenchTalk();
+  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, roleOverride } = useBenchTalk();
+
+  // Effective hockey role — respects admin preview override
+  const effectiveHockeyRole = roleOverride || getUser()?.hockey_role;
 
   const [conversations, setConversations] = useState<BenchTalkConversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -461,7 +691,7 @@ export default function BenchTalkDrawer() {
           title="Open Bench Talk"
         >
           <div className="flex flex-col items-center gap-0.5">
-            <PXIIcon size={28} className="group-hover:scale-110 transition-transform" />
+            <PXIBadge size={28} variant="dark" showDot={true} className="group-hover:scale-110 transition-transform" />
           </div>
         </button>
       )}
@@ -474,7 +704,7 @@ export default function BenchTalkDrawer() {
       >
         {/* ── Header ── */}
         <div className="bg-navy px-4 py-3 flex items-center gap-3 shrink-0">
-          <PXIIcon size={36} />
+          <PXIBadge size={36} variant="dark" showDot={true} />
           <div className="flex-1">
             <h2 className="font-oswald font-bold text-white text-sm uppercase tracking-wider">Bench Talk</h2>
             <p className="text-[10px] text-white/40">Let&apos;s talk hockey.</p>
@@ -497,33 +727,18 @@ export default function BenchTalkDrawer() {
           </div>
         </div>
 
-        {/* ── PXI Mode Selector ── */}
-        {pxiModes.length > 0 && (
-          <div className="bg-white border-b border-border px-2 py-1.5 shrink-0 flex items-center gap-1 overflow-x-auto"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {pxiModes.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  setCurrentMode(m.id);
-                  // Persist to conversation if active
-                  if (activeConvId) {
-                    api.put(`/bench-talk/conversations/${activeConvId}/mode`, { mode: m.id }).catch(() => {});
-                  }
-                }}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-oswald uppercase tracking-wider whitespace-nowrap transition-colors ${
-                  currentMode === m.id
-                    ? "bg-teal text-white"
-                    : "bg-gray-100 text-muted hover:text-navy hover:bg-gray-200"
-                }`}
-                title={`${m.name} — ${m.key_output}`}
-              >
-                {m.name}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* ── PXI Mode Pill Bar ── */}
+        <ModePillBar
+          pxiModes={pxiModes}
+          currentMode={currentMode}
+          onModeChange={(modeId) => {
+            setCurrentMode(modeId);
+            if (activeConvId) {
+              api.put(`/bench-talk/conversations/${activeConvId}/mode`, { mode: modeId }).catch(() => {});
+            }
+          }}
+          roleGroup={getRoleGroup(effectiveHockeyRole)}
+        />
 
         {/* ── Context / History Bar (collapsible) ── */}
         <div className="bg-white border-b border-border shrink-0">
@@ -624,46 +839,36 @@ export default function BenchTalkDrawer() {
         {/* ── Chat Area ── */}
         <div className="flex-1 overflow-y-auto">
           {isNewConversation ? (
-            /* Welcome Screen */
+            /* Welcome Screen — themed per role */
+            (() => {
+              const user = getUser();
+              const rg = getRoleGroup(effectiveHockeyRole);
+              const theme = BENCH_TALK_THEMES[rg];
+              const name = user?.first_name || "there";
+              const displaySuggestions = suggestions.length > 0 ? suggestions : theme.fallbackSuggestions.map((s) => ({ ...s, text: s.text }));
+              return (
             <div className="flex flex-col items-center justify-center h-full px-4">
               <div className="mb-4 drop-shadow-lg">
-                <PXIIcon size={72} />
+                <PXIBadge size={56} variant="dark" showDot={true} />
               </div>
               <h2 className="font-oswald text-lg font-bold text-navy tracking-wider uppercase mb-1">
-                {(() => {
-                  const user = getUser();
-                  const name = user?.first_name || "there";
-                  return `Hey ${name}`;
-                })()}
+                Hey {name}
               </h2>
-              <p className="text-muted text-xs text-center mb-6 max-w-sm">
-                {(() => {
-                  const user = getUser();
-                  const modeTaglines: Record<string, string> = {
-                    scout: "Ready to find the next gem? Let\u2019s dig into prospects, stats, and reports.",
-                    gm: "Let\u2019s build something. Roster moves, trade targets, or the big picture.",
-                    coach: "Game prep, line combos, or systems fit \u2014 what are we working on?",
-                    player: "Let\u2019s level up your game. Stats, development, or see how you stack up.",
-                    parent: "I\u2019m here to help you understand the game. Ask me anything.",
-                    analyst: "Let\u2019s dig into the numbers. Trends, benchmarks, and what the data really says.",
-                    agent: "Pathways, exposure, and positioning. Let\u2019s map out the plan.",
-                    skill_coach: "Cues, drills, and progressions. What are we working on today?",
-                    mental_coach: "Reset routines, focus, and confidence. Let\u2019s build the mental game.",
-                    broadcast: "Storylines, talk tracks, and the angles that make great broadcasts.",
-                    producer: "Rundowns, replay triggers, and graphics. Let\u2019s build the show.",
-                  };
-                  return modeTaglines[currentMode] || modeTaglines.scout;
-                })()}
+              <p className="text-muted text-xs text-center mb-2 max-w-sm">
+                {theme.greeting}
+              </p>
+              <p className="text-navy/70 text-xs text-center mb-6 max-w-sm font-medium italic">
+                {theme.question}
               </p>
 
-              <div className={`grid gap-1.5 w-full max-w-md ${suggestions.length > 4 ? "grid-cols-2" : "grid-cols-1 max-w-sm"}`}>
-                {suggestions.slice(0, 6).map((s, i) => {
+              <div className={`grid gap-1.5 w-full max-w-md ${displaySuggestions.length > 4 ? "grid-cols-2" : "grid-cols-1 max-w-sm"}`}>
+                {displaySuggestions.slice(0, 6).map((s, i) => {
                   const Icon = SUGGESTION_ICONS[s.icon] || Sparkles;
                   return (
                     <button
                       key={i}
                       onClick={() => sendMessage(s.text)}
-                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border bg-white hover:bg-teal/5 hover:border-teal/30 transition-all text-left group"
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border bg-white hover:bg-teal/5 hover:${theme.pillBorderActive} transition-all text-left group`}
                     >
                       <Icon size={14} className="text-teal shrink-0 group-hover:scale-110 transition-transform" />
                       <span className="text-[11px] text-navy leading-tight">{s.text}</span>
@@ -672,6 +877,8 @@ export default function BenchTalkDrawer() {
                 })}
               </div>
             </div>
+              );
+            })()
           ) : (
             /* Message List */
             <div className="p-3 space-y-3">
@@ -682,10 +889,19 @@ export default function BenchTalkDrawer() {
                 >
                   {msg.role === "assistant" && (
                     <div className="mr-1.5 mt-1 shrink-0">
-                      <PXIIcon size={24} />
+                      <PXIBadge size={32} variant="dark" showDot={false} />
                     </div>
                   )}
                   <div className={`max-w-[85%] ${msg.role === "user" ? "" : "flex-1 min-w-0"}`}>
+                    {/* Mode badge on PXI responses */}
+                    {msg.role === "assistant" && (
+                      <div className="flex items-center gap-1.5 mb-1 ml-0.5">
+                        <span className="text-[9px] font-oswald font-bold text-teal tracking-wider">PXI</span>
+                        <span className={`text-[8px] font-oswald font-bold tracking-wider px-1.5 py-0.5 rounded-full ${BENCH_TALK_THEMES[getRoleGroup(effectiveHockeyRole)].modeBadgeColor}`}>
+                          {MODE_LABELS[currentMode] || "SCOUT"}
+                        </span>
+                      </div>
+                    )}
                     <div
                       className={`rounded-xl px-3 py-2.5 ${
                         msg.role === "user"
@@ -743,12 +959,12 @@ export default function BenchTalkDrawer() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="mr-1.5 mt-1 shrink-0">
-                    <PXIIcon size={24} />
+                    <PXIBadge size={32} variant="dark" showDot={false} />
                   </div>
-                  <div className="bg-white border border-border rounded-xl px-3 py-2.5 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <Loader2 size={13} className="animate-spin text-teal" />
-                      <span className="text-xs text-muted">Bench Talk is thinking...</span>
+                  <div className="bg-white border border-border rounded-xl px-3 py-2 shadow-sm">
+                    <div className="flex flex-col items-start gap-1">
+                      <HockeyRink size="chat" />
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/70">PXI is scanning...</span>
                     </div>
                   </div>
                 </div>
@@ -783,7 +999,7 @@ export default function BenchTalkDrawer() {
             <button
               onClick={() => sendMessage()}
               disabled={loading || !input.trim()}
-              className="p-2.5 bg-teal text-white rounded-xl hover:bg-teal/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+              className={`p-2.5 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0 ${BENCH_TALK_THEMES[getRoleGroup(effectiveHockeyRole)].accentColor} ${BENCH_TALK_THEMES[getRoleGroup(effectiveHockeyRole)].accentHover}`}
               title="Send message"
             >
               <Send size={16} />

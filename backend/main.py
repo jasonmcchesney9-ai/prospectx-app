@@ -1021,6 +1021,14 @@ def init_db():
         conn.execute("ALTER TABLE player_stats ADD COLUMN data_source TEXT DEFAULT 'manual'")
         conn.commit()
         logger.info("Migration: added data_source column to player_stats")
+    if "team_name" not in ps_cols:
+        conn.execute("ALTER TABLE player_stats ADD COLUMN team_name TEXT")
+        conn.commit()
+        logger.info("Migration: added team_name column to player_stats")
+    if "notes" not in ps_cols:
+        conn.execute("ALTER TABLE player_stats ADD COLUMN notes TEXT")
+        conn.commit()
+        logger.info("Migration: added notes column to player_stats")
 
     # Add logo_url column to teams
     teams_cols = [col[1] for col in conn.execute("PRAGMA table_info(teams)").fetchall()]
@@ -4473,7 +4481,7 @@ class RegisterRequest(BaseModel):
     last_name: str
     org_name: str
     org_type: str = "team"
-    hockey_role: str = "scout"  # scout, gm, coach, player, parent
+    hockey_role: str = "scout"  # scout, gm, coach, player, parent, broadcaster, producer, agent
 
 class UserOut(BaseModel):
     id: str
@@ -4733,7 +4741,7 @@ async def register(req: RegisterRequest):
         "INSERT INTO organizations (id, name, org_type) VALUES (?, ?, ?)",
         (org_id, req.org_name, req.org_type),
     )
-    hockey_role = req.hockey_role if req.hockey_role in ("scout", "gm", "coach", "player", "parent") else "scout"
+    hockey_role = req.hockey_role if req.hockey_role in ("scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent") else "scout"
     conn.execute(
         "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (user_id, org_id, req.email.lower().strip(), password_hash, req.first_name, req.last_name, "admin", hockey_role),
@@ -4801,8 +4809,8 @@ class UpdateHockeyRoleRequest(BaseModel):
 
 @app.put("/auth/hockey-role")
 async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = Depends(verify_token)):
-    """Update the user's hockey role (scout, gm, coach, player, parent)."""
-    valid_roles = {"scout", "gm", "coach", "player", "parent"}
+    """Update the user's hockey role (scout, gm, coach, player, parent, broadcaster, producer, agent)."""
+    valid_roles = {"scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent"}
     if req.hockey_role not in valid_roles:
         raise HTTPException(status_code=400, detail=f"Invalid hockey role. Must be one of: {', '.join(valid_roles)}")
     conn = get_db()
@@ -6081,7 +6089,7 @@ async def list_player_cards(
 
     query = f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team, p.current_league,
-               p.image_url, p.archetype, p.commitment_status, p.age_group, p.birth_year, p.dob,
+               p.image_url, p.archetype, p.commitment_status, p.age_group, p.birth_year, p.dob, p.tags,
                pi.overall_grade, pi.offensive_grade, pi.defensive_grade,
                pi.skating_grade, pi.hockey_iq_grade, pi.compete_grade,
                pi.archetype AS intel_archetype, pi.archetype_confidence,
@@ -6155,6 +6163,7 @@ async def list_player_cards(
             "hockey_iq_grade": r["hockey_iq_grade"],
             "compete_grade": r["compete_grade"],
             "archetype_confidence": r["archetype_confidence"],
+            "tags": json.loads(r["tags"]) if r.get("tags") else [],
             "gp": r["stat_gp"],
             "g": r["stat_g"],
             "a": r["stat_a"],
@@ -8108,6 +8117,8 @@ class StatUpdateRequest(BaseModel):
     season: Optional[str] = None
     shooting_pct: Optional[float] = None
     toi_seconds: Optional[int] = None
+    team_name: Optional[str] = None
+    notes: Optional[str] = None
 
 
 @app.put("/stats/{stat_id}")
@@ -8127,7 +8138,7 @@ async def update_stat(stat_id: str, req: StatUpdateRequest, token_data: dict = D
 
         updates = []
         params = []
-        for field in ["gp", "g", "a", "p", "plus_minus", "pim", "season", "shooting_pct", "toi_seconds"]:
+        for field in ["gp", "g", "a", "p", "plus_minus", "pim", "season", "shooting_pct", "toi_seconds", "team_name", "notes"]:
             val = getattr(req, field, None)
             if val is not None:
                 updates.append(f"{field} = ?")
