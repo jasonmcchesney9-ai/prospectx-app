@@ -85,6 +85,7 @@ SUBSCRIPTION_TIERS = {
         "features": ["Basic player search", "League standings", "10 Bench Talk/month"],
         # Permissions
         "can_sync_data": False,
+        "can_bulk_sync": False,
         "can_upload_files": False,
         "can_access_live_stats": False,
         "can_submit_corrections": False,
@@ -103,10 +104,11 @@ SUBSCRIPTION_TIERS = {
         "monthly_bench_talks": 50,
         "monthly_practice_plans": 10,
         "max_seats": 1,
-        "description": "Essential scouting tools — reports, practice plans, and limited file uploads.",
-        "features": ["20 reports/month", "50 Bench Talk/month", "10 practice plans/month", "Player intelligence", "All report templates", "5 file uploads/month (10MB max)"],
+        "description": "Essential scouting tools — reports, practice plans, individual team sync, and file uploads.",
+        "features": ["20 reports/month", "50 Bench Talk/month", "10 practice plans/month", "Player intelligence", "All report templates", "Individual team sync", "5 file uploads/month (10MB max)"],
         # Permissions
-        "can_sync_data": False,
+        "can_sync_data": True,
+        "can_bulk_sync": False,
         "can_upload_files": True,
         "can_access_live_stats": False,
         "can_submit_corrections": True,
@@ -125,10 +127,11 @@ SUBSCRIPTION_TIERS = {
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
         "max_seats": 1,
-        "description": "Full-power scouting — unlimited everything, live stats, and data sync.",
-        "features": ["Unlimited reports", "Unlimited Bench Talk", "Unlimited practice plans", "Priority generation", "Advanced analytics", "HockeyTech data sync", "Live stats", "Unlimited uploads (50MB max)"],
+        "description": "Full-power scouting — unlimited everything, live stats, and bulk data sync.",
+        "features": ["Unlimited reports", "Unlimited Bench Talk", "Unlimited practice plans", "Priority generation", "Advanced analytics", "HockeyTech bulk sync", "Live stats", "Unlimited uploads (50MB max)"],
         # Permissions
         "can_sync_data": True,
+        "can_bulk_sync": True,
         "can_upload_files": True,
         "can_access_live_stats": True,
         "can_submit_corrections": True,
@@ -151,6 +154,7 @@ SUBSCRIPTION_TIERS = {
         "features": ["Everything in Pro", "5 user seats", "Team-wide sharing", "Org management", "100MB uploads"],
         # Permissions
         "can_sync_data": True,
+        "can_bulk_sync": True,
         "can_upload_files": True,
         "can_access_live_stats": True,
         "can_submit_corrections": True,
@@ -173,6 +177,7 @@ SUBSCRIPTION_TIERS = {
         "features": ["Everything in Team", "25 user seats", "Multi-team management", "Dedicated support", "Custom templates", "500MB uploads", "Priority sync"],
         # Permissions
         "can_sync_data": True,
+        "can_bulk_sync": True,
         "can_upload_files": True,
         "can_access_live_stats": True,
         "can_submit_corrections": True,
@@ -205,7 +210,8 @@ def _check_tier_permission(user_id: str, permission: str, conn) -> dict:
 
     if not tier_config.get(permission, False):
         perm_labels = {
-            "can_sync_data": "Data sync requires Pro tier or higher.",
+            "can_sync_data": "Individual team sync requires Novice tier or higher.",
+            "can_bulk_sync": "Bulk league sync requires Pro tier or higher.",
             "can_upload_files": "File uploads require Novice tier or higher.",
             "can_access_live_stats": "Live stats require Pro tier or higher.",
             "can_submit_corrections": "Submitting corrections requires Novice tier or higher.",
@@ -376,15 +382,33 @@ security = HTTPBearer(auto_error=False)
 # REQUEST ID MIDDLEWARE
 # ============================================================
 
+def _log_error_to_db(method: str, path: str, status_code: int, error_msg: str):
+    """Best-effort: log server errors to admin_error_log for the admin dashboard."""
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO admin_error_log (id, request_method, request_path, status_code, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (gen_id(), method, path, status_code, str(error_msg)[:500], datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # Never let error logging break the actual response
+
+
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
     request_id = str(uuid.uuid4())[:8]
     try:
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
+        # Log server errors to DB for admin dashboard
+        if response.status_code >= 500:
+            _log_error_to_db(request.method, str(request.url.path), response.status_code, "Server error")
         return response
     except Exception as exc:
         logger.exception("Middleware error on %s %s", request.method, request.url.path)
+        _log_error_to_db(request.method, str(request.url.path), 500, str(exc))
         detail = str(exc) if ENVIRONMENT == "development" else "Internal server error"
         return JSONResponse(status_code=500, content={"detail": detail})
 
@@ -395,6 +419,7 @@ async def add_request_id(request: Request, call_next):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    _log_error_to_db(request.method, str(request.url.path), 500, str(exc))
     detail = str(exc) if ENVIRONMENT == "development" else "Internal server error."
     return JSONResponse(status_code=500, content={"detail": detail})
 
@@ -1186,6 +1211,20 @@ def init_db():
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, month),
             FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    # ── Admin Error Log ──────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS admin_error_log (
+            id TEXT PRIMARY KEY,
+            request_method TEXT,
+            request_path TEXT,
+            status_code INTEGER,
+            error_message TEXT,
+            user_id TEXT,
+            org_id TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -3827,6 +3866,9 @@ class TokenResponse(BaseModel):
 class SubscriptionUpgradeRequest(BaseModel):
     tier: str
 
+class AdminTierUpdateRequest(BaseModel):
+    tier: str
+
 # --- Players ---
 class PlayerCreate(BaseModel):
     first_name: str
@@ -4248,6 +4290,184 @@ async def upgrade_subscription(req: SubscriptionUpgradeRequest, token_data: dict
         )
         conn.commit()
         return {"success": True, "tier": req.tier, "message": f"Upgraded to {SUBSCRIPTION_TIERS[req.tier]['name']}"}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# ADMIN ENDPOINTS
+# ============================================================
+
+def _require_admin(token_data: dict):
+    """Raise 403 if the user is not an admin."""
+    if token_data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+@app.get("/admin/users")
+async def admin_list_users(token_data: dict = Depends(verify_token)):
+    """List all users in the admin's organization with usage data."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.hockey_role,
+                      u.subscription_tier, u.created_at, u.subscription_started_at,
+                      u.monthly_reports_used, u.monthly_bench_talks_used
+               FROM users u WHERE u.org_id = ? ORDER BY u.created_at""",
+            (org_id,),
+        ).fetchall()
+        users = [dict(r) for r in rows]
+
+        # Enrich with current month usage data
+        now = datetime.now(timezone.utc)
+        current_month = now.strftime("%Y-%m")
+        for user in users:
+            tracking = conn.execute(
+                "SELECT reports_count, bench_talks_count, practice_plans_count, uploads_count FROM usage_tracking WHERE user_id = ? AND month = ?",
+                (user["id"], current_month),
+            ).fetchone()
+            user["usage"] = dict(tracking) if tracking else {
+                "reports_count": 0, "bench_talks_count": 0,
+                "practice_plans_count": 0, "uploads_count": 0
+            }
+        return users
+    finally:
+        conn.close()
+
+
+@app.put("/admin/users/{user_id}/tier")
+async def admin_update_user_tier(user_id: str, req: AdminTierUpdateRequest,
+                                  token_data: dict = Depends(verify_token)):
+    """Change a user's subscription tier (admin only)."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    if req.tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}. Valid tiers: {', '.join(SUBSCRIPTION_TIERS.keys())}")
+
+    conn = get_db()
+    try:
+        # Verify user belongs to same org
+        row = conn.execute("SELECT id, org_id, email FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        if row["org_id"] != org_id:
+            raise HTTPException(status_code=403, detail="Cannot modify users outside your organization")
+
+        conn.execute(
+            "UPDATE users SET subscription_tier = ?, subscription_started_at = ? WHERE id = ?",
+            (req.tier, datetime.now(timezone.utc).isoformat(), user_id),
+        )
+        conn.commit()
+        logger.info("Admin tier update: user %s (%s) → %s", row["email"], user_id, req.tier)
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": row["email"],
+            "tier": req.tier,
+            "tier_name": SUBSCRIPTION_TIERS[req.tier]["name"],
+            "message": f"Tier updated to {SUBSCRIPTION_TIERS[req.tier]['name']}"
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/admin/stats")
+async def admin_platform_stats(token_data: dict = Depends(verify_token)):
+    """Platform-wide statistics for admin dashboard."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    conn = get_db()
+    try:
+        stats = {}
+        stats["total_users"] = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE org_id = ?", (org_id,)
+        ).fetchone()[0]
+        stats["total_players"] = conn.execute(
+            "SELECT COUNT(*) FROM players WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)", (org_id,)
+        ).fetchone()[0]
+        stats["total_reports"] = conn.execute(
+            "SELECT COUNT(*) FROM reports WHERE org_id = ?", (org_id,)
+        ).fetchone()[0]
+        stats["total_teams"] = conn.execute(
+            "SELECT COUNT(*) FROM teams WHERE org_id = ?", (org_id,)
+        ).fetchone()[0]
+        stats["total_notes"] = conn.execute(
+            "SELECT COUNT(*) FROM scout_notes WHERE org_id = ?", (org_id,)
+        ).fetchone()[0]
+        stats["total_game_plans"] = conn.execute(
+            "SELECT COUNT(*) FROM game_plans WHERE org_id = ?", (org_id,)
+        ).fetchone()[0]
+        stats["total_drills"] = conn.execute(
+            "SELECT COUNT(*) FROM drills"
+        ).fetchone()[0]
+        stats["total_conversations"] = conn.execute(
+            "SELECT COUNT(*) FROM chat_conversations WHERE org_id = ?", (org_id,)
+        ).fetchone()[0]
+
+        # Reports by status
+        stats["reports_by_status"] = [
+            dict(r) for r in conn.execute(
+                "SELECT status, COUNT(*) as count FROM reports WHERE org_id = ? GROUP BY status",
+                (org_id,),
+            ).fetchall()
+        ]
+
+        # Users by tier
+        stats["users_by_tier"] = [
+            dict(r) for r in conn.execute(
+                "SELECT COALESCE(subscription_tier, 'rookie') as tier, COUNT(*) as count FROM users WHERE org_id = ? GROUP BY tier",
+                (org_id,),
+            ).fetchall()
+        ]
+
+        # Recent activity (last 7 days)
+        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        stats["recent_reports"] = conn.execute(
+            "SELECT COUNT(*) FROM reports WHERE org_id = ? AND created_at > ?", (org_id, seven_days_ago)
+        ).fetchone()[0]
+        stats["recent_notes"] = conn.execute(
+            "SELECT COUNT(*) FROM scout_notes WHERE org_id = ? AND created_at > ?", (org_id, seven_days_ago)
+        ).fetchone()[0]
+
+        return stats
+    finally:
+        conn.close()
+
+
+@app.get("/admin/errors")
+async def admin_error_log(
+    limit: int = Query(50, ge=1, le=200),
+    token_data: dict = Depends(verify_token),
+):
+    """Recent error logs for admin dashboard."""
+    _require_admin(token_data)
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM admin_error_log ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/admin/errors")
+async def admin_clear_errors(token_data: dict = Depends(verify_token)):
+    """Clear all error logs (admin only)."""
+    _require_admin(token_data)
+
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM admin_error_log")
+        conn.commit()
+        return {"success": True, "message": "Error logs cleared"}
     finally:
         conn.close()
 
@@ -13301,14 +13521,15 @@ async def ht_sync_league(league: str, season_id: Optional[int] = None,
     """Bulk sync all teams in a league. Fetches team list, then syncs each roster sequentially.
 
     Power-user feature: syncs every team in the league at once instead of one-at-a-time.
+    Requires Pro tier or higher (can_bulk_sync permission).
     """
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
 
-    # Tier permission check
+    # Tier permission check — bulk sync requires Pro+
     perm_conn = get_db()
     try:
-        _check_tier_permission(user_id, "can_sync_data", perm_conn)
+        _check_tier_permission(user_id, "can_bulk_sync", perm_conn)
     finally:
         perm_conn.close()
 

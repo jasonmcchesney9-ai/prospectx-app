@@ -1924,3 +1924,53 @@ export interface MyDataUpload {
   errors: number;
   created_at: string;
 }
+
+// ============================================================
+// Admin Dashboard
+// ============================================================
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  role: string;
+  hockey_role: string;
+  subscription_tier: string;
+  created_at: string;
+  subscription_started_at: string | null;
+  monthly_reports_used: number;
+  monthly_bench_talks_used: number;
+  usage: {
+    reports_count: number;
+    bench_talks_count: number;
+    practice_plans_count: number;
+    uploads_count: number;
+  };
+}
+
+export interface AdminStats {
+  total_users: number;
+  total_players: number;
+  total_reports: number;
+  total_teams: number;
+  total_notes: number;
+  total_game_plans: number;
+  total_drills: number;
+  total_conversations: number;
+  reports_by_status: Array<{ status: string; count: number }>;
+  users_by_tier: Array<{ tier: string; count: number }>;
+  recent_reports: number;
+  recent_notes: number;
+}
+
+export interface AdminErrorLog {
+  id: string;
+  request_method: string;
+  request_path: string;
+  status_code: number;
+  error_message: string;
+  user_id: string | null;
+  org_id: string | null;
+  created_at: string;
+}

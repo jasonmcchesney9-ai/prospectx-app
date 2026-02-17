@@ -24,6 +24,7 @@ import {
   Database,
   Target,
   GraduationCap,
+  Shield,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { useBenchTalk } from "./BenchTalkProvider";
@@ -136,6 +137,19 @@ export default function NavBar() {
                 >
                   {user.subscription_tier || "Rookie"}
                 </Link>
+                {user.role === "admin" && (
+                  <Link
+                    href="/admin"
+                    className={`flex items-center gap-1 text-sm transition-colors ${
+                      pathname.startsWith("/admin")
+                        ? "text-orange"
+                        : "text-orange/70 hover:text-orange"
+                    }`}
+                  >
+                    <Shield size={14} />
+                    Admin
+                  </Link>
+                )}
               </>
             )}
             <button
@@ -228,6 +242,20 @@ export default function NavBar() {
               );
             })}
           </div>
+          {user?.role === "admin" && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <Link
+                href="/admin"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                  pathname.startsWith("/admin") ? "text-orange" : "text-orange/70"
+                }`}
+              >
+                <Shield size={16} />
+                Admin Dashboard
+              </Link>
+            </div>
+          )}
           <button
             onClick={logout}
             className="flex items-center gap-2 px-3 py-3 text-sm text-white/50 hover:text-white w-full"
