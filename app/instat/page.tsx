@@ -306,7 +306,7 @@ function InStatUploader() {
             {/* Team Name (for team-specific files) */}
             <div ref={dropdownRef}>
               <label className="block text-sm font-semibold text-navy mb-1">
-                Team Name {needsTeam && <span className="text-red-500">*</span>}
+                Team Name {needsTeam ? <span className="text-red-500">*</span> : <span className="text-xs text-muted font-normal">(recommended)</span>}
               </label>
               <div className="relative">
                 <input

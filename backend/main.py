@@ -11696,7 +11696,7 @@ async def instat_import(
     _instat_player_ids = []
     try:
         if file_type == "league_teams":
-            r = _import_league_teams(rows, season, org_id)
+            r = _import_league_teams(rows, season, org_id, team_name_override=team_name)
             result.update(r)
         elif file_type == "league_skaters":
             r = _import_league_skaters(rows, season, org_id)
@@ -11742,17 +11742,52 @@ async def instat_import(
     return result
 
 
-def _import_league_teams(rows, season, org_id):
-    """Import league-level team stats (26 teams x 100 columns)."""
+def _find_team_column(row: dict) -> str:
+    """Find the team name from a row by checking multiple possible column names."""
+    # Check common team column names in priority order
+    team_keys = ["team", "team_name", "club", "name", "teams", "club_name", "organization"]
+    for key in team_keys:
+        val = row.get(key, "").strip()
+        if val:
+            return val
+
+    # Fallback: try the first column value if it looks like a team name (non-numeric, > 2 chars)
+    if row:
+        first_key = next(iter(row))
+        first_val = row.get(first_key, "").strip()
+        if first_val and not first_val.replace(".", "").replace("-", "").isdigit() and len(first_val) > 2:
+            return first_val
+
+    return ""
+
+
+def _import_league_teams(rows, season, org_id, team_name_override=None):
+    """Import league-level team stats (26 teams x 100 columns).
+
+    If team_name_override is provided (user selected a team on the upload form),
+    all rows are assigned to that team. Otherwise, the team name is extracted
+    from each row using common column name patterns.
+    """
     conn = get_db()
     stats_imported = 0
     errors = []
 
+    # Log column names for debugging
+    if rows:
+        logger.info("League team import columns: %s", list(rows[0].keys())[:15])
+        if team_name_override:
+            logger.info("Team name override from form: %s", team_name_override)
+
     for i, row in enumerate(rows):
         try:
-            team_name = row.get("team", "").strip()
+            # Use override if provided; otherwise try to find team name in row
+            team_name = team_name_override or _find_team_column(row)
             if not team_name:
-                errors.append(f"Row {i+1}: missing team name")
+                if i == 0:
+                    # Log the actual columns on first failure for debugging
+                    logger.warning("Cannot find team name in columns: %s | First row values: %s",
+                                   list(row.keys())[:8], {k: v for k, v in list(row.items())[:5]})
+                errors.append(f"Row {i+1}: missing team name (select a team on the upload form, or ensure file has a 'Team' column)")
                 continue
 
             # Parse all stats into extended_stats JSON
