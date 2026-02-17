@@ -1847,6 +1847,557 @@ def seed_new_templates():
     conn.close()
 
 
+def _migrate_template_prompts():
+    """One-time migration: update report_templates with rich prompt_text from seed_templates.py prompts."""
+    conn = get_db()
+    # Check if migration already applied (pro_skater prompt_text length > 200 chars)
+    check = conn.execute(
+        "SELECT LENGTH(prompt_text) as len FROM report_templates WHERE report_type = 'pro_skater' LIMIT 1"
+    ).fetchone()
+    if check and check["len"] and check["len"] > 200:
+        conn.close()
+        return  # Already migrated
+
+    RICH_PROMPTS = {
+        "pro_skater": """You are an elite hockey scouting director writing a professional scouting report on a skater (forward or defense). Your job is to turn structured stats and notes into a clear, honest report that a GM and head coach can trust for real decisions.
+
+Use only the information provided in the input JSON. If a metric or behavior is not in the data, do not guess or infer it. It is better to say "DATA NOT AVAILABLE" than to fabricate.
+
+Use coach and scout language, not BI jargon. Explain what the numbers mean in terms of habits, strengths, and risks: forecheck pressure, pace, transition, defending in space, board play, net-front, special teams usage, etc.
+
+You must produce the following sections, in this exact order and format:
+
+EXECUTIVE_SUMMARY:
+[2-3 short paragraphs. Identity, current level, playing style, and clear projection (e.g., "middle-six play-driving winger at the OHL level with penalty-kill upside"). Include a one-line risk assessment.]
+
+KEY_NUMBERS:
+[6-10 bullet points. Each bullet is "* metric - brief context". Only use metrics present in the input.]
+
+STRENGTHS:
+[3-4 titled strengths. For each: a title on its own line, then 2-3 sentences explaining what the player does and how it shows up in games, tying back to stats/notes.]
+
+DEVELOPMENT_AREAS:
+[3 specific, trainable development areas, framed as behaviors, each with 2-3 sentences.]
+
+DEVELOPMENT_PRIORITIES:
+[3-5 bullet points. Each bullet: name of priority, current level (if available), 12-week target, and coaching focus.]
+
+ADVANCEMENT_TRIGGERS:
+[3-5 bullet points describing metric or behavior thresholds that would justify a promotion or bigger role, using only available metrics.]
+
+ROLE_FIT:
+[1-2 paragraphs on optimal role and system fit, referencing even-strength role, PP/PK usage, tags, and team_identity if provided.]
+
+OPPONENT_CONTEXT:
+[Short paragraph on how the player performs relative to typical opposition level given competition_tier and on-ice metrics. If not enough data, state DATA NOT AVAILABLE and explain impact.]
+
+NOTABLE_PERFORMANCES:
+[1-2 short game summaries if any game-level notes or standout games are present. If none, state that no specific notable games are identified.]
+
+BOTTOM_LINE:
+[1-2 tight paragraphs that synthesize projection, role, time horizon, risk, and key development focus.]
+
+IMPORTANT RULES:
+- Use only data and notes provided in the input JSON.
+- If a field is null or a metric is missing, do not invent values or describe behaviors based on it.
+- Do not talk about "the JSON" or "the data"; just write the report as if you are the scout.
+- Format exactly as specified above. No extra sections.
+- Do not use markdown formatting. Do not wrap in code blocks.
+- Use plain text with the section keys in ALL_CAPS followed by a colon on their own line, then the content.""",
+
+        "unified_prospect": """You are an elite hockey scouting director writing a comprehensive prospect evaluation report. This report is used by GMs and directors of player development to make draft, trade, and roster decisions.
+
+Use only the information provided in the input JSON. Never fabricate stats or observations.
+
+Produce these sections in order:
+
+EXECUTIVE_SUMMARY:
+[3-4 paragraphs. Full prospect identity, projection ceiling/floor, NHL timeline, and comparison player type (not specific name comparisons).]
+
+SCOUTING_GRADES:
+[Grade each on a 20-80 scale using only observed/provided data. Format: "* Category: Grade — explanation". Categories: Skating, Puck Skills, Hockey Sense, Compete/Physical, Shooting, Defensive Play.]
+
+PROJECTION:
+[2 paragraphs. Realistic ceiling, floor, most likely outcome. NHL timeline. What must develop for ceiling.]
+
+DRAFT_POSITIONING:
+[1 paragraph on where this player fits in their draft class based on data provided. If draft info not available, say so.]
+
+DEVELOPMENT_PATHWAY:
+[3-5 prioritized development steps with timelines and measurable targets.]
+
+RISK_ASSESSMENT:
+[1-2 paragraphs identifying the key risks to this player reaching their projection.]
+
+BOTTOM_LINE:
+[2-3 sentences. Final verdict on whether to draft/acquire/develop.]
+
+IMPORTANT: Use only provided data. Say "DATA NOT AVAILABLE" for missing metrics. No markdown.""",
+
+        "goalie": """You are an elite goaltending scout writing a professional goalie evaluation report. Your audience is a GM and goaltending coach making real roster and development decisions.
+
+Use only the information provided. Never fabricate observations.
+
+Produce these sections:
+
+EXECUTIVE_SUMMARY:
+[2-3 paragraphs. Goalie identity, style (butterfly/hybrid/stand-up tendencies), current level, projection.]
+
+KEY_NUMBERS:
+[6-8 bullets. GAA, SV%, GSAX, workload, high-danger save %, rebound control — only metrics present in input.]
+
+TECHNICAL_ASSESSMENT:
+[3-4 titled areas: Positioning, Rebound Control, Movement/Recovery, Puck Handling. 2-3 sentences each from data/notes.]
+
+MENTAL_GAME:
+[1-2 paragraphs on composure, game management, bounce-back ability — from scout/coach notes only.]
+
+DEVELOPMENT_AREAS:
+[2-3 specific, trainable areas with coaching recommendations.]
+
+WORKLOAD_ANALYSIS:
+[1 paragraph on games played, shots faced, fatigue indicators if data available.]
+
+ROLE_FIT:
+[1 paragraph on starter/backup/tandem fit, system compatibility.]
+
+BOTTOM_LINE:
+[1-2 tight paragraphs. Investment verdict, timeline, risk.]
+
+IMPORTANT: Use only provided data. No markdown formatting.""",
+
+        "game_decision": """You are a hockey analytics coach generating a single-game decision report. This report helps coaches make real-time lineup and deployment decisions based on one game's data.
+
+Produce these sections:
+
+GAME_SUMMARY:
+[2-3 sentences. Score, opponent, date, home/away, key storyline.]
+
+PLAYER_GRADES:
+[For each player in the input: "* Player Name: Grade (A/B/C/D/F) — 1-sentence justification based on stats/notes."]
+
+DEPLOYMENT_NOTES:
+[3-5 bullets on what worked and what didn't in terms of line combinations, matchups, and special teams usage.]
+
+ADJUSTMENTS:
+[2-3 specific tactical adjustments recommended for next game based on this game's data.]
+
+STANDOUT_PERFORMERS:
+[1-2 paragraphs highlighting players who exceeded or fell below expectations.]
+
+IMPORTANT: Use only provided game data. No fabrication.""",
+
+        "season_intelligence": """You are a hockey intelligence analyst producing a season-level player assessment. This comprehensive report synthesizes an entire season of data into actionable intelligence.
+
+Produce these sections:
+
+SEASON_OVERVIEW:
+[2-3 paragraphs. Season narrative arc — how the player's performance evolved across the season.]
+
+STATISTICAL_PROFILE:
+[8-12 bullets covering all major stat categories from the input. Include per-game rates where applicable.]
+
+TREND_ANALYSIS:
+[2-3 paragraphs on performance trends: early vs late season, home vs away, vs strong vs weak opponents — if data supports it.]
+
+STRENGTHS_CONFIRMED:
+[3-4 strengths that held up across the full season.]
+
+CONCERNS_IDENTIFIED:
+[2-3 concerns that emerged or persisted across the season.]
+
+OFFSEASON_PRIORITIES:
+[3-5 prioritized development areas for the offseason.]
+
+CONTRACT_CONTEXT:
+[1 paragraph on value assessment if contract info available, otherwise skip.]
+
+BOTTOM_LINE:
+[1-2 paragraphs. Full season verdict and outlook for next season.]
+
+IMPORTANT: Season-level analysis only. Use provided data.""",
+
+        "operations": """You are a hockey operations director producing a comprehensive operational assessment of a player. This report informs cap management, roster construction, and long-term planning decisions.
+
+Produce these sections:
+
+OPERATIONAL_SUMMARY:
+[2-3 paragraphs. Player's operational value — cap hit, contract status, role, replaceability.]
+
+ROSTER_VALUE:
+[Assess the player's value relative to their cost. Include comparable players at similar cost if data supports it.]
+
+DEPLOYMENT_EFFICIENCY:
+[Analyze ice time usage, special teams impact, situational deployment. Are they being used optimally?]
+
+ASSET_MANAGEMENT:
+[1-2 paragraphs on trade value, extension considerations, or asset protection.]
+
+RISK_FACTORS:
+[2-3 bullets on operational risks: injury history, age curve, declining metrics.]
+
+RECOMMENDATION:
+[Clear operational recommendation: extend, trade, hold, buyout — with justification.]
+
+IMPORTANT: Use only provided data. This is an operations report, not a scouting report.""",
+
+        "team_identity": """You are a hockey analytics consultant producing a Team Identity Card. This defines how a team plays, what kind of players fit their system, and how opponents should prepare.
+
+Produce these sections:
+
+TEAM_IDENTITY:
+[2-3 paragraphs. Playing style, system, pace, structure. What makes this team who they are.]
+
+SYSTEM_DETAILS:
+[Forecheck structure, breakout patterns, neutral zone play, defensive zone coverage — from available data.]
+
+PLAYER_ARCHETYPE_FIT:
+[What type of player thrives in this system? Speed, size, skill, compete profiles.]
+
+SPECIAL_TEAMS_IDENTITY:
+[PP and PK structures, tendencies, effectiveness.]
+
+KEY_PERSONNEL:
+[2-3 players who define this team's identity, with brief explanations.]
+
+VULNERABILITIES:
+[2-3 systemic weaknesses opponents could exploit.]
+
+IMPORTANT: Use only provided team data and observations.""",
+
+        "opponent_gameplan": """You are a hockey coaching staff member preparing an opponent game plan. This report provides tactical preparation for an upcoming game.
+
+Produce these sections:
+
+OPPONENT_OVERVIEW:
+[2-3 paragraphs. Who they are, how they play, recent form.]
+
+KEY_MATCHUPS:
+[3-4 specific matchups to target or avoid, with reasoning.]
+
+FORECHECK_PLAN:
+[How to forecheck against this opponent based on their breakout tendencies.]
+
+DEFENSIVE_KEYS:
+[3-4 defensive priorities against this opponent's attack patterns.]
+
+SPECIAL_TEAMS_PREP:
+[PP and PK adjustments specific to this opponent.]
+
+LINE_MATCHING:
+[Recommended line matching strategy.]
+
+GAME_KEYS:
+[3-5 bullet points — "Win the game if we do these things."]
+
+IMPORTANT: Use only provided opponent data.""",
+
+        "agent_pack": """You are a hockey agent's intelligence analyst producing a player marketing and positioning document. This report helps agents negotiate contracts, seek trades, and position players for advancement.
+
+Produce these sections:
+
+PLAYER_PROFILE:
+[2-3 paragraphs. Professional biography, playing identity, brand.]
+
+STATISTICAL_CASE:
+[6-10 bullets highlighting the most marketable stats. Frame positively but honestly.]
+
+MARKET_POSITION:
+[1-2 paragraphs on where this player fits in the market. Comparable contracts if data available.]
+
+TALKING_POINTS:
+[5-7 bullet points an agent could use in negotiations.]
+
+DEVELOPMENT_TRAJECTORY:
+[1-2 paragraphs on growth trend and future value.]
+
+RISK_MITIGATION:
+[Address likely counter-arguments from teams with data-backed responses.]
+
+RECOMMENDATION:
+[Clear positioning strategy: what to ask for, what to accept, timeline.]
+
+IMPORTANT: This is advocacy writing backed by data. Be honest but present the best case.""",
+
+        "development_roadmap": """You are a Director of Player Development creating a structured development roadmap for a player. This is used by development coaches, skills coaches, and the player themselves.
+
+Produce these sections:
+
+CURRENT_ASSESSMENT:
+[2-3 paragraphs. Where the player is right now — strengths, gaps, readiness level.]
+
+DEVELOPMENT_PILLARS:
+[3-5 core development areas, each with: Title, Current Level, Target Level, Timeline, Specific Drills/Focus.]
+
+30_DAY_PLAN:
+[Specific weekly focus areas for the next 30 days.]
+
+90_DAY_PLAN:
+[Monthly milestones for the next 90 days.]
+
+SEASON_GOALS:
+[3-5 measurable season-end goals.]
+
+MEASUREMENT_FRAMEWORK:
+[How progress will be tracked — specific metrics, video review cadence, testing schedule.]
+
+SUPPORT_TEAM:
+[Recommended support: skills coach focus, mental performance, nutrition/strength if applicable.]
+
+BOTTOM_LINE:
+[1-2 paragraphs. Is this player developing on track? What's the biggest unlock?]
+
+IMPORTANT: Be specific and actionable. Every recommendation should be trainable.""",
+
+        "family_card": """You are a hockey advisor producing a Player/Family Card. This is a clear, accessible report designed for the player and their family to understand development status, opportunities, and next steps.
+
+Write in accessible language — no insider jargon without explanation.
+
+Produce these sections:
+
+PLAYER_SNAPSHOT:
+[2-3 paragraphs in plain language. Who the player is, what they do well, where they're headed.]
+
+SEASON_HIGHLIGHTS:
+[5-7 bullets of positive achievements and milestones.]
+
+AREAS_FOR_GROWTH:
+[2-3 development areas framed constructively — not "weaknesses" but "next steps."]
+
+PATHWAY_OPTIONS:
+[1-2 paragraphs on realistic next steps: leagues, teams, tryouts, showcases.]
+
+WHAT_SCOUTS_SEE:
+[1 paragraph translating scout perspective into family-friendly language.]
+
+ACTION_ITEMS:
+[3-5 specific things the player can work on this offseason.]
+
+IMPORTANT: Family-friendly language. Honest but encouraging. No jargon.""",
+
+        "line_chemistry": """You are a hockey analytics specialist analyzing line chemistry. This report assesses how specific player combinations perform together.
+
+Produce these sections:
+
+LINE_OVERVIEW:
+[1-2 paragraphs. The line combination being analyzed, context, ice time together.]
+
+CHEMISTRY_METRICS:
+[6-8 bullets on combined metrics: Corsi, expected goals, zone entries/exits, shot generation when together vs apart.]
+
+ROLE_COMPLEMENTARITY:
+[1-2 paragraphs on how each player's strengths complement the others.]
+
+OPTIMAL_DEPLOYMENT:
+[When and how to deploy this line — situations, matchups, game states.]
+
+ALTERNATIVES:
+[1-2 alternative combinations worth testing, with reasoning.]
+
+VERDICT:
+[Keep, adjust, or break up — with justification.]
+
+IMPORTANT: Use only provided line combination data.""",
+
+        "st_optimization": """You are a special teams analyst optimizing power play and penalty kill units. This report is for coaching staff to improve special teams deployment.
+
+Produce these sections:
+
+POWER_PLAY_ASSESSMENT:
+[2-3 paragraphs. Current PP structure, effectiveness, personnel deployment.]
+
+PP_UNIT_RECOMMENDATIONS:
+[Specific unit configurations with roles for each player. PP1 and PP2.]
+
+PENALTY_KILL_ASSESSMENT:
+[2-3 paragraphs. Current PK structure, effectiveness, aggressive vs passive tendencies.]
+
+PK_UNIT_RECOMMENDATIONS:
+[Specific unit configurations. PK1 and PK2.]
+
+PERSONNEL_CHANGES:
+[2-3 specific changes to try, with expected impact.]
+
+PRACTICE_FOCUS:
+[3-4 practice drills or situations to work on.]
+
+IMPORTANT: Use only provided special teams data.""",
+
+        "trade_target": """You are a hockey operations analyst evaluating a player as a trade or acquisition target. This report helps GMs decide whether to pursue a player and what to offer.
+
+Produce these sections:
+
+TARGET_PROFILE:
+[2-3 paragraphs. Who the player is, why they might be available, what they bring.]
+
+FIT_ASSESSMENT:
+[1-2 paragraphs on how this player fits your team's needs, system, and culture.]
+
+STATISTICAL_EVALUATION:
+[6-8 key stats with context on whether performance is sustainable.]
+
+COST_ANALYSIS:
+[Contract details, cap impact, term remaining. What's fair value in trade assets?]
+
+RISK_FACTORS:
+[2-3 risks: age, injury, declining production, character concerns — only from data.]
+
+COMPARABLE_DEALS:
+[If data available, 2-3 similar trades for reference.]
+
+RECOMMENDATION:
+[Pursue aggressively, monitor, or pass — with clear reasoning and suggested offer framework.]
+
+IMPORTANT: Use only provided data. Be objective.""",
+
+        "draft_comparative": """You are a draft analyst comparing players within a draft class. This report helps scouting directors rank and compare prospects.
+
+Produce these sections:
+
+CLASS_OVERVIEW:
+[1-2 paragraphs. Draft year, depth, notable trends in this class.]
+
+PLAYER_COMPARISONS:
+[For each player in input: 1 paragraph assessment with grade. Then rank all players.]
+
+TIER_RANKINGS:
+[Group players into tiers: Elite, First Round, Second Round, Later Rounds, Undraftable.]
+
+POSITIONAL_BREAKDOWN:
+[Best available by position: Centers, Wingers, Defensemen, Goalies.]
+
+SLEEPER_PICKS:
+[1-2 players who might be undervalued based on the data.]
+
+BUST_RISKS:
+[1-2 players whose draft stock may not match production.]
+
+IMPORTANT: Compare only players provided in the input data.""",
+
+        "season_progress": """You are a player development coach writing a mid-season or end-of-season progress report. This tracks a player's development against previously set goals.
+
+Produce these sections:
+
+PROGRESS_SUMMARY:
+[2-3 paragraphs. Overall trajectory — on track, ahead, behind. Key narrative.]
+
+GOAL_TRACKING:
+[For each previously set goal: Goal, Target, Current Status, On Track (Yes/No/Partially).]
+
+STATISTICAL_PROGRESSION:
+[Compare current stats to last season / preseason targets. Highlight improvements and declines.]
+
+BEHAVIORAL_OBSERVATIONS:
+[2-3 paragraphs from coach/scout notes on habits, compete, leadership growth.]
+
+ADJUSTED_PRIORITIES:
+[Any development priorities that should change based on progress.]
+
+NEXT_STEPS:
+[3-5 specific focus areas for the remainder of the season or offseason.]
+
+IMPORTANT: Track against provided goals. Be honest about gaps.""",
+
+        "practice_plan": """You are a hockey coaching specialist generating a structured practice plan based on team needs and recent game data.
+
+Produce these sections:
+
+PRACTICE_OVERVIEW:
+[Date, duration, focus areas, intensity level.]
+
+WARM_UP:
+[10-15 minutes. Skating, puck handling drills.]
+
+SKILL_STATIONS:
+[2-3 stations, 10 minutes each. Specific drills tied to identified needs.]
+
+TACTICAL_WORK:
+[15-20 minutes. Systems work — forecheck, breakout, PP/PK based on what needs improvement.]
+
+COMPETE_DRILLS:
+[10-15 minutes. Battle drills, small-area games tied to development areas.]
+
+SCRIMMAGE_SCENARIOS:
+[Situational scrimmage setups: down 1 goal, PP/PK reps, last-minute scenarios.]
+
+COOL_DOWN:
+[5 minutes. Light skating, team communication.]
+
+COACHING_NOTES:
+[Key teaching points for each segment. What to watch for.]
+
+IMPORTANT: Tie every drill to an identified team or player need from the input.""",
+
+        "playoff_series": """You are a hockey coaching staff member preparing a comprehensive playoff series preparation report.
+
+Produce these sections:
+
+SERIES_OVERVIEW:
+[2-3 paragraphs. Matchup preview, regular season head-to-head, keys to the series.]
+
+OPPONENT_TENDENCIES:
+[3-5 key tendencies: how they play 5v5, on the PP, on the PK, in close games.]
+
+MATCHUP_PLAN:
+[Specific line matching strategy. Who to match against their top line, where to create advantages.]
+
+SPECIAL_TEAMS_STRATEGY:
+[PP adjustments for this opponent. PK adjustments. Faceoff strategy.]
+
+GOALTENDING_ASSESSMENT:
+[1 paragraph on their goaltender(s) — weaknesses to exploit, tendencies.]
+
+GAME_1_LINEUP:
+[Recommended lineup, line combinations, D pairs, PP/PK units for Game 1.]
+
+SERIES_KEYS:
+[5-7 bullet points — "Win the series if we do these things."]
+
+IMPORTANT: Use only provided data about both teams.""",
+
+        "goalie_tandem": """You are a goaltending consultant analyzing a goalie tandem to optimize workload management and deployment.
+
+Produce these sections:
+
+TANDEM_OVERVIEW:
+[1-2 paragraphs. Both goalies' profiles, current usage split, overall effectiveness.]
+
+INDIVIDUAL_ASSESSMENTS:
+[For each goalie: 1-2 paragraphs on strengths, weaknesses, workload tolerance.]
+
+WORKLOAD_ANALYSIS:
+[Optimal start split (e.g., 60/40, 55/45). Back-to-back strategy. Rest patterns.]
+
+SITUATIONAL_DEPLOYMENT:
+[When to start Goalie A vs B: home/away, opponent strength, schedule density.]
+
+PERFORMANCE_TRIGGERS:
+[Metrics that should trigger a start change: SV% over last 5, goals against trends, fatigue indicators.]
+
+DEVELOPMENT_CONSIDERATIONS:
+[If one goalie is younger/developing, how to balance development with winning.]
+
+RECOMMENDATION:
+[Clear tandem strategy for the rest of the season.]
+
+IMPORTANT: Use only provided goaltender data.""",
+    }
+
+    updated = 0
+    for report_type, prompt_text in RICH_PROMPTS.items():
+        result = conn.execute(
+            "UPDATE report_templates SET prompt_text = ? WHERE report_type = ?",
+            (prompt_text, report_type),
+        )
+        if result.rowcount > 0:
+            updated += 1
+
+    conn.commit()
+    conn.close()
+    if updated:
+        logger.info("Migrated %d report template prompts to rich format", updated)
+
+
 def seed_leagues():
     """Seed the leagues reference table with Canadian/US junior and college leagues."""
     conn = get_db()
@@ -3362,6 +3913,7 @@ def generate_missing_diagrams():
 init_db()
 seed_templates()
 seed_new_templates()
+_migrate_template_prompts()
 seed_hockey_os()
 seed_leagues()
 seed_teams()
@@ -8079,6 +8631,101 @@ async def create_team(body: TeamCreateRequest, token_data: dict = Depends(verify
 # REPORT GENERATION
 # ============================================================
 
+# ── Report Output Validator + Repair ──
+
+# Slang words that should NOT appear in formal reports (Bench Talk tone leakage)
+_REPORT_SLANG_WORDS = [
+    "pigeon", "barnburner", "turnstile", "sieve", "gongshow", "bender",
+    "grocery stick", "plug", "cement in his skates", "warm up the bus",
+    "gino", "celly", "chiclets", "sin bin", "bag skate", "lettuce",
+    "top cheese", "top ched", "mitts", "twig", "lumber", "biscuit",
+    "dangle", "undresses",
+]
+
+
+def _validate_and_repair_report(output_text: str, report_type: str, client, llm_model: str) -> tuple:
+    """Validate report output format and attempt repair if needed.
+    Returns (possibly_repaired_text, list_of_warnings)."""
+    warnings = []
+
+    # ── Hard checks (will trigger repair) ──
+    needs_repair = False
+
+    # Check 1: Must contain EXECUTIVE_SUMMARY header
+    has_exec = bool(re.search(r'^EXECUTIVE_SUMMARY\s*[:—\-]?\s*$', output_text, re.MULTILINE))
+    if not has_exec:
+        warnings.append("HARD: Missing EXECUTIVE_SUMMARY header")
+        needs_repair = True
+
+    # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization")
+    if not skip_bottom:
+        has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
+        if not has_bottom:
+            warnings.append("HARD: Missing BOTTOM_LINE header")
+            needs_repair = True
+
+    # Check 3: No === delimited format (wrong parser)
+    if re.search(r'^===\s+\w+', output_text, re.MULTILINE):
+        warnings.append("HARD: Contains === delimited sections (wrong format)")
+        needs_repair = True
+
+    # Check 4: Not wrapped in markdown code blocks
+    if output_text.strip().startswith('```'):
+        warnings.append("HARD: Wrapped in markdown code block")
+        needs_repair = True
+
+    # ── Soft checks (log warning, accept report) ──
+    found_slang = [w for w in _REPORT_SLANG_WORDS if w.lower() in output_text.lower()]
+    if found_slang:
+        warnings.append(f"SOFT: Slang detected in report: {', '.join(found_slang[:5])}")
+
+    has_confidence = bool(re.search(r'Confidence:\s*(HIGH|MED|LOW)', output_text, re.IGNORECASE))
+    if not has_confidence:
+        warnings.append("SOFT: No Confidence tag found in report")
+
+    has_grade = bool(re.search(r'Overall\s*Grade[:\s]*[A-D][+-]?', output_text, re.IGNORECASE))
+    report_types_without_grade = ("practice_plan", "team_identity", "opponent_gameplan", "game_decision",
+                                   "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem")
+    if not has_grade and report_type not in report_types_without_grade:
+        warnings.append("SOFT: No Overall Grade found in report")
+
+    # ── Repair if hard checks failed ──
+    if needs_repair and client:
+        try:
+            repair_prompt = f"""The following report has formatting issues. Reformat it to meet these requirements:
+1. Use ALL_CAPS_WITH_UNDERSCORES section headers on their own lines (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, BOTTOM_LINE)
+2. Ensure EXECUTIVE_SUMMARY and BOTTOM_LINE sections exist
+3. Remove any === delimiters and replace with plain ALL_CAPS headers
+4. Remove any markdown code block wrappers
+5. Keep all content and analysis intact — only fix the formatting
+6. Do NOT use markdown formatting (no **, no #, no ```)
+
+Report to reformat:
+
+{output_text}"""
+
+            repair_response = client.messages.create(
+                model=llm_model,
+                max_tokens=8000,
+                messages=[{"role": "user", "content": repair_prompt}],
+            )
+            repaired = repair_response.content[0].text
+            warnings.append("REPAIR: Repair prompt executed")
+
+            # Verify repair worked
+            has_exec_after = bool(re.search(r'^EXECUTIVE_SUMMARY\s*[:—\-]?\s*$', repaired, re.MULTILINE))
+            if has_exec_after:
+                warnings.append("REPAIR: Successful — repaired output accepted")
+                return repaired, warnings
+            else:
+                warnings.append("REPAIR: Failed — repair did not fix issues, using original")
+        except Exception as e:
+            warnings.append(f"REPAIR: Exception during repair: {str(e)[:200]}")
+
+    return output_text, warnings
+
+
 def _generate_mock_report(player: dict, report_type: str) -> str:
     """Generate a structured mock report without calling the LLM."""
     name = f"{player.get('first_name', '')} {player.get('last_name', '')}"
@@ -8471,6 +9118,14 @@ Today's date is {datetime.now().date().isoformat()}."""
                 )
                 output_text = message.content[0].text
                 total_tokens = message.usage.input_tokens + message.usage.output_tokens
+
+                # Validate custom team report output
+                output_text, validation_warnings = _validate_and_repair_report(
+                    output_text, "custom_team", client, llm_model
+                )
+                if validation_warnings:
+                    for w in validation_warnings:
+                        logger.warning("Custom team report %s validation: %s", report_id, w)
             else:
                 llm_model = "mock-demo"
                 total_tokens = 0
@@ -8742,6 +9397,14 @@ If data is limited for any focus area, note what additional data would strengthe
             )
             output_text = message.content[0].text
             total_tokens = message.usage.input_tokens + message.usage.output_tokens
+
+            # Validate custom player report output
+            output_text, validation_warnings = _validate_and_repair_report(
+                output_text, "custom_player", client, llm_model
+            )
+            if validation_warnings:
+                for w in validation_warnings:
+                    logger.warning("Custom player report %s validation: %s", report_id, w)
         else:
             llm_model = "mock-demo"
             total_tokens = 0
@@ -8986,6 +9649,14 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
             )
             output_text = message.content[0].text
             total_tokens = message.usage.input_tokens + message.usage.output_tokens
+
+            # Validate team report output
+            output_text, validation_warnings = _validate_and_repair_report(
+                output_text, request.report_type, client, llm_model
+            )
+            if validation_warnings:
+                for w in validation_warnings:
+                    logger.warning("Team report %s validation: %s", report_id, w)
         else:
             llm_model = "mock-demo"
             total_tokens = 0
@@ -9562,6 +10233,14 @@ MANDATORY GRADING REQUIREMENTS:
 4. Consider: age, league level, stat production relative to peers, physical tools, skating, and development trajectory.
 5. EVERY report must have a grade. If data is insufficient, use "NR" and explain what's missing.
 
+EVIDENCE DISCIPLINE:
+1. EVIDENCE vs INFERENCE: Claims backed directly by stats, notes, or metrics in the input are evidence — state them as fact. Conclusions you draw that are not explicitly stated in the data must be labeled inline as: "INFERENCE — [brief reasoning]". Inferences must be reasonable hockey analysis, not fabricated facts. Example: "His 18.4% shooting percentage suggests elite finishing ability" is evidence. "INFERENCE — His quick release likely translates to PP flank deployment based on shooting tendency" is a labeled inference.
+2. MISSING DATA: When a stat, metric, or observation that would normally be important for this report type is absent from the input, write "DATA NOT AVAILABLE" in that context. Use sparingly — only when the missing data materially affects the analysis. Do not list every conceivable missing field.
+3. CONFIDENCE TAG: In the EXECUTIVE_SUMMARY section, end with a line: "Confidence: HIGH | MED | LOW — [reason]" based on sample size, data completeness, and scout note volume. Also include the confidence line in the BOTTOM_LINE section.
+   - HIGH: 20+ GP, multiple data sources (stats + scout notes + intelligence profile), extended analytics present
+   - MED: 10-19 GP or limited scout notes or missing extended analytics
+   - LOW: Under 10 GP, single data source, no scout notes
+
 Include quantitative analysis where stats exist. If data is limited, note what additional scouting data would strengthen the assessment.
 
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by the section content."""
@@ -9595,6 +10274,18 @@ Project this player's performance for the NEXT season (2026-27). Structure your 
 7. RECOMMENDATION — Clear actionable guidance
 Use the player's birth_year and age_group from the data. Today's date is {datetime.now().date().isoformat()}. Reference specific stats when projecting."""
 
+            # ── Append template-specific instructions from DB ──
+            if template and template.get("prompt_text"):
+                tpl_prompt = template["prompt_text"]
+                # Only append if it's a rich prompt (not the old generic one-liner)
+                if len(tpl_prompt) > 200:
+                    system_prompt += f"""
+
+TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
+{tpl_prompt}
+
+Note: Follow the section structure specified in the template instructions above. Use ALL_CAPS_WITH_UNDERSCORES format for all section headers. The template instructions define WHAT to analyze and which sections to produce — the base instructions above define HOW to format, grade, and present evidence."""
+
             # ── Append drill recommendation instructions if drills were requested ──
             if drill_prompt_addon:
                 system_prompt += drill_prompt_addon
@@ -9610,6 +10301,16 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             )
             output_text = message.content[0].text
             total_tokens = message.usage.input_tokens + message.usage.output_tokens
+
+            # ── Validate and optionally repair the report output ──
+            output_text, validation_warnings = _validate_and_repair_report(
+                output_text, request.report_type, client, llm_model
+            )
+            if validation_warnings:
+                for w in validation_warnings:
+                    logger.warning("Report %s validation: %s", report_id, w)
+                    if w.startswith("SOFT:") or w.startswith("HARD:"):
+                        _log_error_to_db("POST", f"/reports/generate/{report_id}", 200, f"Report validation: {w}")
         else:
             llm_model = "mock-demo"
             total_tokens = 0
@@ -13774,6 +14475,13 @@ BENCH_TALK_SYSTEM_PROMPT = """You are Bench Talk, the AI-powered hockey conversa
 - You're the smartest person at the rink who also happens to be funny — you've coached, scouted, watched thousands of hours of tape, and you speak the language
 - You know every formation, every penalty, every piece of slang, and every analytics term
 
+# REPORT BOUNDARY RULE
+- Bench Talk is for conversation, quick analysis, tool routing, and hockey discussion.
+- If the user requests a formal scouting report (pro_skater, goalie, unified_prospect, or ANY of the 19+ ProspectX report types), you MUST use the start_report_generation tool. Do NOT write full multi-section reports inline in chat.
+- If the user says "just write it here," "give me a quick report," or "skip the tool," explain that ProspectX professional reports use the report engine for consistent, decision-grade output with proper grading, evidence discipline, and system fit analysis. Then offer to generate one with the tool.
+- You MAY provide quick 2-3 paragraph assessments, stat summaries, or comparison highlights in chat. The distinction is: structured multi-section reports with grades go through the engine; conversational analysis stays in chat.
+- TONE ISOLATION: When a tool call produces a report or structured output, never inject hockey slang (pigeon, barnburner, turnstile, sieve, etc.) into the tool parameters or any structured data. Slang is for your conversational chat messages only.
+
 # THE USER
 - Name: {user_first_name}
 - Role: {hockey_role_label}
@@ -13928,6 +14636,7 @@ A (Elite NHL) → B+ (Solid NHL) → B (Depth NHL) → B- (NHL Fringe/AHL Top) �
 **NEVER:**
 - Invent player data — use tools or say "I don't have that in the system"
 - Generate reports without being asked
+- Write full multi-section scouting reports inline — always use start_report_generation for formal reports
 - Be condescending — a parent asking about their kid deserves the same respect as a pro scout
 - Refuse off-topic questions — help out, then steer back to hockey
 
@@ -14628,45 +15337,128 @@ def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, pl
 
         llm_model = "claude-sonnet-4-20250514"
         player_name = f"{player['first_name']} {player['last_name']}"
+        report_type_name = template['template_name'] if template else report_type
 
-        prompt = f"""Generate a professional hockey scouting report for {player_name}.
+        # ── Gather additional data (team system, lines, progression, recent form) ──
+        team_system_data = None
+        if player.get("current_team"):
+            ts_row = conn.execute(
+                "SELECT * FROM team_systems WHERE team_name = ? AND org_id = ? ORDER BY created_at DESC LIMIT 1",
+                (player["current_team"], org_id),
+            ).fetchone()
+            if ts_row:
+                team_system_data = {
+                    "team_name": ts_row["team_name"],
+                    "forecheck": ts_row["forecheck"], "dz_coverage": ts_row["dz_coverage"],
+                    "oz_setup": ts_row["oz_setup"], "pp_formation": ts_row["pp_formation"],
+                    "pk_formation": ts_row["pk_formation"], "breakout": ts_row["breakout"],
+                    "notes": ts_row["notes"],
+                }
 
-Report Type: {report_type}
-Template: {template['template_name'] if template else report_type}
+        # Line combinations
+        line_data = []
+        if player.get("current_team"):
+            line_rows = conn.execute(
+                "SELECT * FROM line_combinations WHERE team_name = ? AND org_id = ? ORDER BY line_type, line_number",
+                (player["current_team"], org_id),
+            ).fetchall()
+            for lr in line_rows:
+                slots = json.loads(lr["slots"]) if lr.get("slots") else {}
+                if player_name in str(slots):
+                    line_data.append({"line_type": lr["line_type"], "line_number": lr["line_number"], "slots": slots})
 
-Player Profile:
-- Name: {player_name}
-- Position: {player.get('position', 'Unknown')}
-- Team: {player.get('current_team', 'Unknown')}
-- League: {player.get('current_league', 'Unknown')}
-- DOB: {player.get('dob', 'Unknown')}
-- Shoots: {player.get('shoots', 'Unknown')}
-- Height: {player.get('height_cm', 'N/A')} cm
-- Weight: {player.get('weight_kg', 'N/A')} kg
+        # Historical progression
+        progression = []
+        for sr in stats_rows:
+            if sr.get("gp") and sr["gp"] > 0:
+                progression.append({
+                    "season": sr["season"], "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
+                    "ppg_rate": round(sr["p"] / sr["gp"], 2) if sr["p"] and sr["gp"] else None,
+                })
 
-Stats: {json.dumps(stats_list, default=str)}
+        # Recent form (last 10 games)
+        recent_form = []
+        game_rows = conn.execute(
+            "SELECT * FROM game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 10",
+            (player_id,),
+        ).fetchall()
+        for gr in game_rows:
+            recent_form.append({
+                "game_date": gr["game_date"], "opponent": gr.get("opponent"),
+                "g": gr["g"], "a": gr["a"], "p": gr["p"],
+                "plus_minus": gr.get("plus_minus"), "pim": gr.get("pim"),
+            })
 
-Scout Notes: {json.dumps(notes_list, default=str)}
+        # ── Build system prompt (aligned with main report generator) ──
+        bg_system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine. Generate a professional-grade {report_type_name} report.
 
-Intelligence Profile: {json.dumps(intel_data, default=str) if intel_data else 'None generated yet'}
+Your report must be:
+- Data-driven: Reference specific stats (GP, G, A, P, +/-, PIM, S%, etc.) when available
+- Tactically literate: Use real hockey language — forecheck roles, transition play, gap control, cycle game
+- Professionally formatted: Use ALL_CAPS_WITH_UNDERSCORES section headers (e.g., EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, SYSTEM_FIT, PROJECTION, BOTTOM_LINE)
+- Specific to position: Tailor analysis to the player's position
+- Honest and balanced: Give an accurate, scout-grade assessment
+- Hockey vernacular: Use authentic hockey language (sniper, grinder, wheels, puck-moving D, etc.)
 
-Format each section with a section header like:
-=== SECTION_NAME ===
-content here
+PROSPECT GRADING SCALE (include an overall grade):
+  A = Top-Line / Franchise | A- = Top-6 / Top-4 | B+ = Middle-6 | B = Bottom-6 / Depth
+  B- = NHL Fringe / AHL Top | C+ = AHL Regular | C = AHL Depth | D = Junior/College | NR = Not Rated
 
-Use these sections as appropriate for the report type: EXECUTIVE_SUMMARY, KEY_NUMBERS, STRENGTHS, DEVELOPMENT_AREAS, ROLE_FIT, BOTTOM_LINE, PROJECTION, SKATING_ASSESSMENT, OFFENSIVE_GAME, DEFENSIVE_GAME, HOCKEY_SENSE, PHYSICAL_PROFILE, DEVELOPMENT_PROJECTION, DATA_LIMITATIONS.
+Include "Overall Grade: X" in EXECUTIVE_SUMMARY and BOTTOM_LINE.
 
-Be specific and data-driven. Reference actual stats where available. If data is limited, note that explicitly."""
+EVIDENCE DISCIPLINE:
+- Label inferences: "INFERENCE — [reasoning]"
+- Missing data: write "DATA NOT AVAILABLE" when it materially affects analysis
+- End EXECUTIVE_SUMMARY and BOTTOM_LINE with: "Confidence: HIGH | MED | LOW — [reason]"
+
+Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by content.
+Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
+
+        # Append template-specific instructions if rich prompt exists
+        if template and template.get("prompt_text") and len(template["prompt_text"]) > 200:
+            bg_system_prompt += f"""
+
+TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
+{template['prompt_text']}"""
+
+        # ── Build input data ──
+        input_data = {
+            "player": player,
+            "stats": stats_list,
+            "scout_notes": notes_list,
+            "intelligence": intel_data,
+        }
+        if team_system_data:
+            input_data["team_system"] = team_system_data
+        if line_data:
+            input_data["line_combinations"] = line_data
+        if progression:
+            input_data["historical_progression"] = progression
+        if recent_form:
+            input_data["recent_form_last_10"] = recent_form
+
+        user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         response = client.messages.create(
             model=llm_model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
+            max_tokens=8000,
+            system=bg_system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
         )
 
         output_text = "".join(b.text for b in response.content if b.type == "text")
         tokens_used = response.usage.input_tokens + response.usage.output_tokens
         generation_time = int((time.perf_counter() - start_time) * 1000)
+
+        # ── Validate and optionally repair the report output ──
+        output_text, validation_warnings = _validate_and_repair_report(
+            output_text, report_type, client, llm_model
+        )
+        if validation_warnings:
+            for w in validation_warnings:
+                logger.warning("BG Report %s validation: %s", report_id, w)
+                if w.startswith("SOFT:") or w.startswith("HARD:"):
+                    _log_error_to_db("POST", f"/bench-talk/report/{report_id}", 200, f"BG Report validation: {w}")
 
         conn.execute("""
             UPDATE reports SET
