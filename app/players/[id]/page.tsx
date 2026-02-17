@@ -1621,7 +1621,10 @@ export default function PlayerDetailPage() {
 
                 {/* Skater Stats */}
                 <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <StatTable stats={stats} />
+                  <StatTable stats={stats} editable={true} onStatsChange={async () => {
+                    const res = await api.get<PlayerStats[]>(`/stats/player/${playerId}`);
+                    setStats(res.data);
+                  }} />
                 </div>
 
                 {stats.length === 0 && goalieStats.length === 0 && (

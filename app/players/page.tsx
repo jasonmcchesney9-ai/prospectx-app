@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Search, PlusCircle, Filter, ChevronDown, ChevronUp, X, Settings,
   LayoutGrid, List, Save, Bookmark, Download, ArrowUpDown,
-  Activity, Brain, Ruler,
+  Activity, Brain, Ruler, Pin, PinOff,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -106,6 +106,25 @@ export default function PlayersPage() {
   const [teamFilter, setTeamFilter] = useState("");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // ── Pinned players ──
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved = localStorage.getItem("prospectx_pinned_players");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const togglePin = (playerId: string) => {
+    setPinnedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      localStorage.setItem("prospectx_pinned_players", JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   // ── Demographics filters ──
   const [leagueFilter, setLeagueFilter] = useState("");
@@ -849,8 +868,27 @@ export default function PlayersPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {cardData.map((p) => (
-                  <VisualPlayerCard key={p.id} player={p} />
+                {[...cardData]
+                  .sort((a, b) => {
+                    const aPinned = pinnedIds.has(a.id) ? 0 : 1;
+                    const bPinned = pinnedIds.has(b.id) ? 0 : 1;
+                    return aPinned - bPinned;
+                  })
+                  .map((p) => (
+                  <div key={p.id} className="relative group">
+                    <button
+                      onClick={() => togglePin(p.id)}
+                      className={`absolute top-2 right-2 z-10 p-1.5 rounded-full transition-all ${
+                        pinnedIds.has(p.id)
+                          ? "bg-orange text-white shadow-md"
+                          : "bg-white/80 text-muted opacity-0 group-hover:opacity-100 hover:text-orange hover:bg-orange/10"
+                      }`}
+                      title={pinnedIds.has(p.id) ? "Unpin player" : "Pin to top"}
+                    >
+                      {pinnedIds.has(p.id) ? <PinOff size={14} /> : <Pin size={14} />}
+                    </button>
+                    <VisualPlayerCard player={p} />
+                  </div>
                 ))}
               </div>
             )}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Trash2, Check, X, Loader2 } from "lucide-react";
 import type { PlayerStats } from "@/types/api";
+import api from "@/lib/api";
 
 function formatTOI(seconds: number): string {
   if (!seconds) return "—";
@@ -20,8 +21,18 @@ function formatAvgTOI(totalSeconds: number, gp: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
-export default function StatTable({ stats }: { stats: PlayerStats[] }) {
+interface StatTableProps {
+  stats: PlayerStats[];
+  editable?: boolean;
+  onStatsChange?: () => void;
+}
+
+export default function StatTable({ stats, editable = false, onStatsChange }: StatTableProps) {
   const [showGameLogs, setShowGameLogs] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, number | string>>({});
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   if (stats.length === 0) {
     return (
@@ -46,6 +57,68 @@ export default function StatTable({ stats }: { stats: PlayerStats[] }) {
     return 0;
   });
 
+  const startEdit = (s: PlayerStats) => {
+    setEditingId(s.id);
+    setEditValues({
+      season: s.season || "",
+      gp: s.gp,
+      g: s.g,
+      a: s.a,
+      p: s.p,
+      plus_minus: s.plus_minus,
+      pim: s.pim,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValues({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      await api.put(`/stats/${editingId}`, editValues);
+      setEditingId(null);
+      setEditValues({});
+      onStatsChange?.();
+    } catch {
+      // Ignore
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (statId: string) => {
+    if (!confirm("Delete this stat row? This cannot be undone.")) return;
+    setDeleting(statId);
+    try {
+      await api.delete(`/stats/${statId}`);
+      onStatsChange?.();
+    } catch {
+      // Ignore
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const editField = (field: string, value: string) => {
+    const num = parseInt(value, 10);
+    setEditValues(prev => ({
+      ...prev,
+      [field]: field === "season" ? value : (isNaN(num) ? 0 : num),
+    }));
+    // Auto-calc points when g or a changes
+    if (field === "g" || field === "a") {
+      const g = field === "g" ? (isNaN(num) ? 0 : num) : (editValues.g as number || 0);
+      const a = field === "a" ? (isNaN(num) ? 0 : num) : (editValues.a as number || 0);
+      setEditValues(prev => ({ ...prev, p: g + a }));
+    }
+  };
+
+  const inputClass = "w-14 px-1.5 py-1 text-center text-sm border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 focus:border-teal outline-none";
+
   return (
     <div>
       {/* Season Summary Table */}
@@ -64,31 +137,80 @@ export default function StatTable({ stats }: { stats: PlayerStats[] }) {
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">TOI/GP</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">S%</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">P/GP</th>
+                {editable && <th className="px-2 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center w-20">Edit</th>}
               </tr>
             </thead>
             <tbody>
-              {seasonStats.map((s) => (
-                <tr key={s.id} className="border-b border-border/50 hover:bg-navy/[0.02]">
-                  <td className="px-3 py-2.5 font-semibold text-navy">{s.season || "—"}</td>
-                  <td className="px-3 py-2.5 text-center font-medium">{s.gp}</td>
-                  <td className="px-3 py-2.5 text-center font-semibold">{s.g}</td>
-                  <td className="px-3 py-2.5 text-center">{s.a}</td>
-                  <td className="px-3 py-2.5 text-center font-semibold text-teal">{s.p}</td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={s.plus_minus > 0 ? "text-green-600" : s.plus_minus < 0 ? "text-red-600" : ""}>
-                      {s.plus_minus > 0 ? "+" : ""}{s.plus_minus}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-center">{s.pim}</td>
-                  <td className="px-3 py-2.5 text-center text-muted">{formatAvgTOI(s.toi_seconds, s.gp)}</td>
-                  <td className="px-3 py-2.5 text-center text-muted">
-                    {s.shooting_pct != null ? `${s.shooting_pct}%` : "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-center font-medium text-navy">
-                    {s.gp > 0 ? (s.p / s.gp).toFixed(2) : "—"}
-                  </td>
-                </tr>
-              ))}
+              {seasonStats.map((s) => {
+                const isEditing = editingId === s.id;
+                return (
+                  <tr key={s.id} className={`border-b border-border/50 ${isEditing ? "bg-teal/5" : "hover:bg-navy/[0.02]"}`}>
+                    <td className="px-3 py-2.5 font-semibold text-navy">
+                      {isEditing ? (
+                        <input className="w-24 px-1.5 py-1 text-sm border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 outline-none"
+                          value={editValues.season as string} onChange={e => editField("season", e.target.value)} />
+                      ) : s.season || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-medium">
+                      {isEditing ? <input className={inputClass} value={editValues.gp as number} onChange={e => editField("gp", e.target.value)} /> : s.gp}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-semibold">
+                      {isEditing ? <input className={inputClass} value={editValues.g as number} onChange={e => editField("g", e.target.value)} /> : s.g}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {isEditing ? <input className={inputClass} value={editValues.a as number} onChange={e => editField("a", e.target.value)} /> : s.a}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-teal">
+                      {isEditing ? <input className={inputClass} value={editValues.p as number} onChange={e => editField("p", e.target.value)} /> : s.p}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {isEditing ? (
+                        <input className={inputClass} value={editValues.plus_minus as number} onChange={e => editField("plus_minus", e.target.value)} />
+                      ) : (
+                        <span className={s.plus_minus > 0 ? "text-green-600" : s.plus_minus < 0 ? "text-red-600" : ""}>
+                          {s.plus_minus > 0 ? "+" : ""}{s.plus_minus}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {isEditing ? <input className={inputClass} value={editValues.pim as number} onChange={e => editField("pim", e.target.value)} /> : s.pim}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-muted">{formatAvgTOI(s.toi_seconds, s.gp)}</td>
+                    <td className="px-3 py-2.5 text-center text-muted">
+                      {s.shooting_pct != null ? `${s.shooting_pct}%` : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-medium text-navy">
+                      {s.gp > 0 ? (s.p / s.gp).toFixed(2) : "—"}
+                    </td>
+                    {editable && (
+                      <td className="px-2 py-2.5 text-center">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 justify-center">
+                            <button onClick={saveEdit} disabled={saving}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50">
+                              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            </button>
+                            <button onClick={cancelEdit} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 justify-center">
+                            <button onClick={() => startEdit(s)}
+                              className="p-1 text-muted hover:text-teal hover:bg-teal/10 rounded transition-colors" title="Edit">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => handleDelete(s.id)} disabled={deleting === s.id}
+                              className="p-1 text-muted hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50" title="Delete">
+                              {deleting === s.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

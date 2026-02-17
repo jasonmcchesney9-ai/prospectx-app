@@ -7461,6 +7461,155 @@ def _parse_line_players(line_string: str) -> list:
     return players
 
 
+# ── Stat CRUD (edit / delete / deduplicate) ──────────────────
+
+class StatUpdateRequest(BaseModel):
+    gp: Optional[int] = None
+    g: Optional[int] = None
+    a: Optional[int] = None
+    p: Optional[int] = None
+    plus_minus: Optional[int] = None
+    pim: Optional[int] = None
+    season: Optional[str] = None
+    shooting_pct: Optional[float] = None
+    toi_seconds: Optional[int] = None
+
+
+@app.put("/stats/{stat_id}")
+async def update_stat(stat_id: str, req: StatUpdateRequest, token_data: dict = Depends(verify_token)):
+    """Update an individual stat row (owner edit)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify stat exists and belongs to a player in this org
+        row = conn.execute("""
+            SELECT ps.id, ps.player_id, p.org_id FROM player_stats ps
+            JOIN players p ON p.id = ps.player_id
+            WHERE ps.id = ? AND p.org_id = ?
+        """, (stat_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Stat not found")
+
+        updates = []
+        params = []
+        for field in ["gp", "g", "a", "p", "plus_minus", "pim", "season", "shooting_pct", "toi_seconds"]:
+            val = getattr(req, field, None)
+            if val is not None:
+                updates.append(f"{field} = ?")
+                params.append(val)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        # Auto-calculate points if g or a changed but p wasn't explicitly set
+        if req.p is None and (req.g is not None or req.a is not None):
+            current = conn.execute("SELECT g, a FROM player_stats WHERE id = ?", (stat_id,)).fetchone()
+            new_g = req.g if req.g is not None else current["g"]
+            new_a = req.a if req.a is not None else current["a"]
+            updates.append("p = ?")
+            params.append(new_g + new_a)
+
+        params.append(stat_id)
+        conn.execute(f"UPDATE player_stats SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+
+        updated = conn.execute("SELECT * FROM player_stats WHERE id = ?", (stat_id,)).fetchone()
+        return dict(updated)
+    finally:
+        conn.close()
+
+
+@app.delete("/stats/{stat_id}")
+async def delete_stat(stat_id: str, token_data: dict = Depends(verify_token)):
+    """Delete an individual stat row."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT ps.id FROM player_stats ps
+            JOIN players p ON p.id = ps.player_id
+            WHERE ps.id = ? AND p.org_id = ?
+        """, (stat_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Stat not found")
+
+        conn.execute("DELETE FROM player_stats WHERE id = ?", (stat_id,))
+        conn.commit()
+        return {"success": True, "message": "Stat deleted"}
+    finally:
+        conn.close()
+
+
+@app.post("/stats/player/{player_id}/deduplicate")
+async def deduplicate_player_stats(player_id: str, token_data: dict = Depends(verify_token)):
+    """Remove duplicate season stat rows for a player, keeping the most recent one."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify player belongs to org
+        player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        # Find duplicate seasons (same player, season, stat_type)
+        dupes = conn.execute("""
+            SELECT season, stat_type, COUNT(*) as cnt
+            FROM player_stats WHERE player_id = ? AND stat_type = 'season'
+            GROUP BY season, stat_type HAVING cnt > 1
+        """, (player_id,)).fetchall()
+
+        removed = 0
+        for d in dupes:
+            # Keep the most recent row, delete the rest
+            rows = conn.execute("""
+                SELECT id FROM player_stats
+                WHERE player_id = ? AND season = ? AND stat_type = ?
+                ORDER BY created_at DESC
+            """, (player_id, d["season"], d["stat_type"])).fetchall()
+
+            # Delete all but the first (most recent)
+            for row in rows[1:]:
+                conn.execute("DELETE FROM player_stats WHERE id = ?", (row["id"],))
+                removed += 1
+
+        conn.commit()
+        return {"success": True, "duplicates_removed": removed, "player_id": player_id}
+    finally:
+        conn.close()
+
+
+@app.post("/stats/deduplicate-all")
+async def deduplicate_all_stats(token_data: dict = Depends(verify_token)):
+    """Remove duplicate season stats for ALL players in the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        dupes = conn.execute("""
+            SELECT ps.player_id, ps.season, ps.stat_type, COUNT(*) as cnt
+            FROM player_stats ps
+            JOIN players p ON p.id = ps.player_id
+            WHERE p.org_id = ? AND ps.stat_type = 'season'
+            GROUP BY ps.player_id, ps.season, ps.stat_type HAVING cnt > 1
+        """, (org_id,)).fetchall()
+
+        removed = 0
+        for d in dupes:
+            rows = conn.execute("""
+                SELECT id FROM player_stats
+                WHERE player_id = ? AND season = ? AND stat_type = ?
+                ORDER BY created_at DESC
+            """, (d["player_id"], d["season"], d["stat_type"])).fetchall()
+
+            for row in rows[1:]:
+                conn.execute("DELETE FROM player_stats WHERE id = ?", (row["id"],))
+                removed += 1
+
+        conn.commit()
+        return {"success": True, "duplicates_removed": removed}
+    finally:
+        conn.close()
+
+
 @app.post("/stats/ingest")
 async def ingest_stats(
     file: UploadFile = File(...),
@@ -10395,16 +10544,22 @@ async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: di
                           safe_int(rd.get("pim")) or 0, now))
 
             elif action == "merge":
-                # Update existing player's stats
+                # Update existing player's stats — delete old season stats first to prevent doubling
                 existing_id = dup["existing_id"]
                 if rd.get("gp"):
+                    season_val = rd.get("season", "")
                     g = safe_int(rd.get("g")) or 0
                     a = safe_int(rd.get("a")) or 0
                     p = safe_int(rd.get("p")) or (g + a)
+                    # Remove existing season stats for this player/season to prevent duplicates
+                    conn.execute(
+                        "DELETE FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source IS NULL",
+                        (existing_id, season_val)
+                    )
                     conn.execute("""
                         INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
                         VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                    """, (gen_id(), existing_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
+                    """, (gen_id(), existing_id, season_val, safe_int(rd.get("gp")) or 0,
                           g, a, p, safe_int(rd.get("plus_minus")) or 0,
                           safe_int(rd.get("pim")) or 0, now))
                 merged += 1
