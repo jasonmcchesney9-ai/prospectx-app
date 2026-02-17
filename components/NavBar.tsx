@@ -25,6 +25,7 @@ import {
   Target,
   GraduationCap,
   Shield,
+  PenTool,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import { useBenchTalk } from "./BenchTalkProvider";
@@ -46,6 +47,7 @@ const COACHING_ITEMS = [
   { href: "/series", label: "Series Plans", icon: Trophy },
   { href: "/scouting", label: "Scouting List", icon: Target },
   { href: "/drills", label: "Drill Library", icon: BookOpen },
+  { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
