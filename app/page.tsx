@@ -110,7 +110,11 @@ function getRoleGroup(role?: string): RoleGroup {
 const HT_LEAGUE_CODES: Record<string, string> = {
   GOJHL: "gojhl", GOHL: "gojhl",
   OHL: "ohl", OJHL: "ojhl",
-  WHL: "whl", QMJHL: "qmjhl", PWHL: "pwhl",
+  WHL: "whl", QMJHL: "qmjhl", LHJMQ: "qmjhl", PWHL: "pwhl",
+  BCHL: "bchl", AJHL: "ajhl", SJHL: "sjhl", MJHL: "mjhl",
+  CCHL: "cchl", NOJHL: "nojhl", MHL: "mhl",
+  USHL: "ushl", NAHL: "nahl",
+  SPHL: "sphl", ECHL: "echl", AHL: "ahl",
 };
 
 const TEAM_LS_KEY = "prospectx_dashboard_team";
@@ -272,6 +276,13 @@ function Dashboard() {
         {/* ── PRO View (Scout / GM / Coach) ─────────────────── */}
         {roleGroup === "PRO" && (
           <>
+            {/* Live Scorebar — moved to top, under TeamContextBar */}
+            {scorebar.length > 0 && (
+              <div className="mb-4">
+                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} />
+              </div>
+            )}
+
             {/* Roster Alerts */}
             {rosterAlerts.length > 0 && (
               <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
@@ -319,7 +330,7 @@ function Dashboard() {
                 >
                   <div className="space-y-2">
                     {activeSeries.map((s) => (
-                      <Link key={s.id} href={`/series/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
+                      <Link key={s.id} href={`/series/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-teal/20 hover:bg-navy/[0.02] transition-colors group">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-navy truncate">
                             {s.team_name} <span className="text-muted font-normal">vs</span> {s.opponent_team_name}
@@ -352,7 +363,7 @@ function Dashboard() {
                 >
                   <div className="space-y-2">
                     {activeGamePlans.slice(0, 3).map((gp) => (
-                      <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
+                      <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-teal/20 hover:bg-navy/[0.02] transition-colors group">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-navy truncate">
                             {gp.team_name} <span className="text-muted font-normal">vs</span> {gp.opponent_team_name}
@@ -379,7 +390,7 @@ function Dashboard() {
                   <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all">
                     <Zap size={14} /> New Report
                   </Link>
-                  <Link href="/game-plans/new" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-border text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
+                  <Link href="/game-plans/new" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-teal/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
                     <Swords size={14} /> Chalk Talk
                   </Link>
                   <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
@@ -416,7 +427,7 @@ function Dashboard() {
                           <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
                         </Link>
                       ))}
-                      <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-border/50">
+                      <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
                         <span>Player</span>
                         <span className="flex gap-3"><span>GP</span><span>G-A—P</span><span>P/G</span></span>
                       </div>
@@ -424,33 +435,41 @@ function Dashboard() {
                   </DashboardCard>
                 )}
 
-                {/* Recent Reports */}
-                <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
-                  title="Recent Reports"
-                  viewAllHref="/reports"
-                  loading={loading}
-                  empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
-                  emptyText="No reports yet"
-                  emptyLink="/reports/generate"
-                  emptyLinkText="Generate your first report"
-                >
-                  <div className="space-y-2">
-                    {recentReports.slice(0, 3).map((r) => (
-                      <ReportCard key={r.id} report={r} compact />
-                    ))}
-                  </div>
-                </DashboardCard>
               </div>
             </div>
 
-            {/* Live Scorebar */}
-            {scorebar.length > 0 && (
-              <div className="mt-5">
-                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} />
+            {/* Reports Footer — dark panel */}
+            <div className="bg-navy rounded-xl p-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-orange" />
+                  <h3 className="font-oswald text-xs font-bold text-white uppercase tracking-wider">Recent Reports</h3>
+                </div>
+                <Link href="/reports" className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline font-medium">View all</Link>
               </div>
-            )}
+              {loading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[1,2,3].map((i) => (
+                    <div key={i} className="animate-pulse rounded-lg border border-orange/20 bg-white/[0.04] p-3">
+                      <div className="h-3 bg-white/10 rounded w-3/4 mb-2" />
+                      <div className="h-2 bg-white/10 rounded w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : recentReports.length === 0 ? (
+                <div className="text-center py-5 rounded-lg border border-dashed border-orange/20 bg-white/[0.03]">
+                  <FileText size={24} className="mx-auto text-white/20 mb-1.5" />
+                  <p className="text-white/50 text-sm">No reports yet</p>
+                  <Link href="/reports/generate" className="inline-block mt-1.5 text-xs text-teal hover:underline">Generate your first report</Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {recentReports.slice(0, 6).map((r: Report) => (
+                    <ReportCard key={r.id} report={r} compact dark />
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -720,7 +739,7 @@ function DashboardCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-5">
+    <div className="bg-white rounded-xl border border-teal/20 p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {icon}
@@ -790,7 +809,7 @@ function LiveScorebar({ scorebar, teamName }: { scorebar: HTGame[]; teamName: st
   const sorted = [...scorebar].sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime());
 
   return (
-    <div className="bg-white rounded-xl border border-border p-4">
+    <div className="bg-white rounded-xl border border-orange/25 p-4">
       <h3 className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider mb-3">League Scores</h3>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
         {sorted.slice(0, 10).map((g) => {
@@ -800,7 +819,7 @@ function LiveScorebar({ scorebar, teamName }: { scorebar: HTGame[]; teamName: st
             <div
               key={g.game_id}
               className={`shrink-0 w-40 rounded-lg border p-2.5 text-center text-xs ${
-                isOurGame ? "border-teal/30 bg-teal/[0.03]" : "border-border"
+                isOurGame ? "border-orange/35 bg-teal/[0.03]" : "border-border"
               }`}
             >
               <p className="text-[9px] text-muted/60 mb-1">
