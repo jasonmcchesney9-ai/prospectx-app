@@ -908,6 +908,7 @@ export default function PlayersPage() {
                     <th className="px-4 py-3 text-left font-oswald text-xs uppercase tracking-wider text-muted">League</th>
                     <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">Birth Year</th>
                     <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">Age Group</th>
+                    <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">Roster</th>
                     <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">Status</th>
                     <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">Shoots</th>
                   </tr>
@@ -915,11 +916,11 @@ export default function PlayersPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center text-muted">Loading...</td>
+                      <td colSpan={9} className="px-4 py-12 text-center text-muted">Loading...</td>
                     </tr>
                   ) : players.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center text-muted">
+                      <td colSpan={9} className="px-4 py-12 text-center text-muted">
                         No players found.{" "}
                         <Link href="/players/new" className="text-teal hover:underline">Add your first player</Link>
                       </td>
@@ -961,6 +962,25 @@ export default function PlayersPage() {
                                 {AGE_GROUP_LABELS[p.age_group] || p.age_group}
                               </span>
                             ) : "\u2014"}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {p.roster_status && p.roster_status !== "active" ? (
+                              <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider ${
+                                p.roster_status === "inj" ? "bg-red-50 text-red-700 border border-red-200" :
+                                p.roster_status === "susp" ? "bg-yellow-50 text-yellow-700 border border-yellow-200" :
+                                p.roster_status === "ap" ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                                p.roster_status === "scrch" ? "bg-gray-50 text-gray-600 border border-gray-200" :
+                                "bg-gray-50 text-gray-600"
+                              }`}>
+                                {p.roster_status === "inj" ? "INJ" :
+                                 p.roster_status === "susp" ? "SUSP" :
+                                 p.roster_status === "ap" ? "AP" :
+                                 p.roster_status === "scrch" ? "SCRCH" :
+                                 p.roster_status.toUpperCase()}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-green-500 font-oswald">✓</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {p.commitment_status && p.commitment_status !== "Uncommitted" && statusColors ? (

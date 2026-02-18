@@ -550,14 +550,17 @@ export default function PlayerDetailPage() {
                 )}
                 {player.roster_status && player.roster_status !== "active" && (
                   <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs uppercase tracking-wide ${
-                    player.roster_status === "ir" ? "bg-red-500/20 text-red-300" :
-                    player.roster_status === "injured" ? "bg-red-500/20 text-red-300" :
-                    player.roster_status === "day-to-day" ? "bg-yellow-500/20 text-yellow-300" :
-                    player.roster_status === "scratched" ? "bg-gray-400/20 text-gray-300" :
-                    player.roster_status === "suspended" ? "bg-purple-500/20 text-purple-300" :
+                    player.roster_status === "inj" ? "bg-red-500/20 text-red-300" :
+                    player.roster_status === "susp" ? "bg-yellow-500/20 text-yellow-300" :
+                    player.roster_status === "ap" ? "bg-blue-500/20 text-blue-300" :
+                    player.roster_status === "scrch" ? "bg-gray-400/20 text-gray-300" :
                     "bg-white/10 text-white/70"
                   }`}>
-                    {player.roster_status === "ir" ? "IR" : player.roster_status === "day-to-day" ? "DTD" : player.roster_status}
+                    {player.roster_status === "inj" ? "INJ" :
+                     player.roster_status === "susp" ? "SUSP" :
+                     player.roster_status === "ap" ? "AP" :
+                     player.roster_status === "scrch" ? "SCRCH" :
+                     player.roster_status.toUpperCase()}
                   </span>
                 )}
                 <PlayerStatusBadges tags={player.tags || []} size="md" />
@@ -994,7 +997,7 @@ export default function PlayerDetailPage() {
                       onChange={async (e) => {
                         const newStatus = e.target.value;
                         try {
-                          await api.put(`/players/${playerId}/roster-status`, { roster_status: newStatus });
+                          await api.patch(`/players/${playerId}`, { roster_status: newStatus });
                           setPlayer((prev) => prev ? { ...prev, roster_status: newStatus } : prev);
                         } catch {
                           // ignore
@@ -1002,16 +1005,21 @@ export default function PlayerDetailPage() {
                       }}
                       className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
                         (player.roster_status || "active") === "active" ? "text-green-600" :
-                        (player.roster_status || "active") === "ir" ? "text-red-600" :
-                        (player.roster_status || "active") === "injured" ? "text-red-600" :
-                        (player.roster_status || "active") === "day-to-day" ? "text-yellow-600" :
-                        (player.roster_status || "active") === "scratched" ? "text-gray-500" :
-                        (player.roster_status || "active") === "suspended" ? "text-purple-600" :
+                        (player.roster_status || "active") === "inj" ? "text-red-600" :
+                        (player.roster_status || "active") === "susp" ? "text-yellow-600" :
+                        (player.roster_status || "active") === "ap" ? "text-blue-600" :
+                        (player.roster_status || "active") === "scrch" ? "text-gray-500" :
                         "text-gray-600"
                       }`}
                     >
-                      {["active", "ir", "injured", "day-to-day", "scratched", "suspended", "recalled", "released"].map((s) => (
-                        <option key={s} value={s}>{s === "ir" ? "IR" : s === "day-to-day" ? "Day-to-Day" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                      {[
+                        { value: "active", label: "Active" },
+                        { value: "ap", label: "AP (Affiliated Player)" },
+                        { value: "inj", label: "INJ (Injured)" },
+                        { value: "susp", label: "SUSP (Suspended)" },
+                        { value: "scrch", label: "SCRCH (Healthy Scratch)" },
+                      ].map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>
                   </div>

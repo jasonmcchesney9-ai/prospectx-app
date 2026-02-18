@@ -100,6 +100,7 @@ export interface PlayerCardData {
   image_url: string | null;
   archetype: string | null;
   commitment_status: string | null;
+  roster_status: string | null;
   age_group: string | null;
   birth_year: number | null;
   overall_grade: string | null;

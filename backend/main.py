@@ -6190,7 +6190,7 @@ async def list_player_cards(
 
     query = f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team, p.current_league,
-               p.image_url, p.archetype, p.commitment_status, p.age_group, p.birth_year, p.dob, p.tags,
+               p.image_url, p.archetype, p.commitment_status, p.roster_status, p.age_group, p.birth_year, p.dob, p.tags,
                pi.overall_grade, pi.offensive_grade, pi.defensive_grade,
                pi.skating_grade, pi.hockey_iq_grade, pi.compete_grade,
                pi.archetype AS intel_archetype, pi.archetype_confidence,
@@ -6255,6 +6255,7 @@ async def list_player_cards(
             "image_url": r["image_url"],
             "archetype": r["intel_archetype"] or r["archetype"],
             "commitment_status": r["commitment_status"],
+            "roster_status": r.get("roster_status"),
             "age_group": r["age_group"],
             "birth_year": r["birth_year"],
             "overall_grade": r["overall_grade"],
@@ -6558,7 +6559,8 @@ async def patch_player(
         raise HTTPException(status_code=404, detail="Player not found")
 
     allowed = {"first_name", "last_name", "dob", "position", "shoots", "height_cm", "weight_kg",
-               "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status"}
+               "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status",
+               "roster_status"}
     sets = []
     params = []
     for field, value in updates.items():
