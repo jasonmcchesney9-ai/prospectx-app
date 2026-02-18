@@ -156,26 +156,30 @@ function Dashboard() {
 
   // ── Load team-specific data (Wave 2) ─────────────────────
   const loadTeamData = useCallback(async (team: Team) => {
-    setTeamDataLoading(true);
-    const enc = encodeURIComponent(team.name);
-    const htCode = team.league ? HT_LEAGUE_CODES[team.league.toUpperCase()] : null;
+    try {
+      setTeamDataLoading(true);
+      const enc = encodeURIComponent(team.name);
+      const htCode = team.league ? HT_LEAGUE_CODES[team.league.toUpperCase()] : null;
 
-    const teamFetches: Promise<unknown>[] = [
-      api.get<Player[]>(`/teams/${enc}/roster`),
-      api.get<ScoringLeader[]>(`/analytics/scoring-leaders?team=${enc}&limit=${roleGroup === "MEDIA" ? 10 : 5}`),
-    ];
-    if (htCode) {
-      teamFetches.push(api.get<HTGame[]>(`/hockeytech/${htCode}/scorebar?days_back=3&days_ahead=7`));
-      teamFetches.push(api.get<HTStandings[]>(`/hockeytech/${htCode}/standings`));
+      const teamFetches: Promise<unknown>[] = [
+        api.get<Player[]>(`/teams/${enc}/roster`),
+        api.get<ScoringLeader[]>(`/analytics/scoring-leaders?team=${enc}&limit=${roleGroup === "MEDIA" ? 10 : 5}`),
+      ];
+      if (htCode) {
+        teamFetches.push(api.get<HTGame[]>(`/hockeytech/${htCode}/scorebar?days_back=3&days_ahead=7`));
+        teamFetches.push(api.get<HTStandings[]>(`/hockeytech/${htCode}/standings`));
+      }
+
+      const results = await Promise.allSettled(teamFetches);
+      if (results[0].status === "fulfilled") setRoster((results[0] as PromiseFulfilledResult<{ data: Player[] }>).value.data);
+      if (results[1].status === "fulfilled") setScoringLeaders((results[1] as PromiseFulfilledResult<{ data: ScoringLeader[] }>).value.data);
+      if (htCode && results[2]?.status === "fulfilled") setScorebar((results[2] as PromiseFulfilledResult<{ data: HTGame[] }>).value.data);
+      if (htCode && results[3]?.status === "fulfilled") setStandings((results[3] as PromiseFulfilledResult<{ data: HTStandings[] }>).value.data);
+    } catch (err) {
+      console.error("Team data load error:", err);
+    } finally {
+      setTeamDataLoading(false);
     }
-
-    const results = await Promise.allSettled(teamFetches);
-    if (results[0].status === "fulfilled") setRoster((results[0] as PromiseFulfilledResult<{ data: Player[] }>).value.data);
-    if (results[1].status === "fulfilled") setScoringLeaders((results[1] as PromiseFulfilledResult<{ data: ScoringLeader[] }>).value.data);
-    if (htCode && results[2]?.status === "fulfilled") setScorebar((results[2] as PromiseFulfilledResult<{ data: HTGame[] }>).value.data);
-    if (htCode && results[3]?.status === "fulfilled") setStandings((results[3] as PromiseFulfilledResult<{ data: HTStandings[] }>).value.data);
-
-    setTeamDataLoading(false);
   }, [roleGroup]);
 
   // ── Wave 1: core data on mount ───────────────────────────
@@ -228,7 +232,11 @@ function Dashboard() {
 
       setLoading(false);
     }
-    load();
+    load().catch((err) => {
+      console.error("Dashboard load error:", err);
+      setLoading(false);
+      setError("Failed to load dashboard data. Please try refreshing.");
+    });
   }, [roleGroup, loadTeamData]);
 
   // ── Team change handler ──────────────────────────────────
