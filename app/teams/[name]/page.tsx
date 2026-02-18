@@ -39,7 +39,7 @@ import LineCombinations from "@/components/LineCombinations";
 import LineBuilder from "@/components/LineBuilder";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
-import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination, TeamGame, TeamIntelligence } from "@/types/api";
+import type { Player, RosterPlayer, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination, TeamGame, TeamIntelligence } from "@/types/api";
 
 type Tab = "roster" | "identity" | "lines" | "systems" | "reports" | "stats" | "games";
 
@@ -54,6 +54,26 @@ function posGroup(pos: string): "forwards" | "defense" | "goalies" | "other" {
   if (DEFENSE_POS.includes(p)) return "defense";
   if (GOALIE_POS.includes(p)) return "goalies";
   return "other";
+}
+
+function formatHeight(cm: number | null): string {
+  if (!cm) return "\u2014";
+  const totalInches = cm / 2.54;
+  return `${Math.floor(totalInches / 12)}-${Math.round(totalInches % 12)}`;
+}
+function formatWeight(kg: number | null): string {
+  if (!kg) return "\u2014";
+  return `${Math.round(kg * 2.205)}`;
+}
+function formatDob(dob: string | null, birthYear: number | null): string {
+  if (dob) return new Date(dob + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (birthYear) return String(birthYear);
+  return "\u2014";
+}
+function getDraftInfo(p: RosterPlayer): string {
+  if (p.commitment_status && p.commitment_status !== "Uncommitted") return p.commitment_status;
+  if (p.draft_eligible_year) return `${p.draft_eligible_year} Eligible`;
+  return "\u2014";
 }
 
 // ── Team style options ────────────────────────────────────
@@ -112,7 +132,7 @@ export default function TeamDetailPage() {
   const params = useParams();
   const teamName = decodeURIComponent(params.name as string);
 
-  const [roster, setRoster] = useState<Player[]>([]);
+  const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [teamSystem, setTeamSystem] = useState<TeamSystem | null>(null);
   const [systemsLibrary, setSystemsLibrary] = useState<SystemLibraryEntry[]>([]);
@@ -140,12 +160,15 @@ export default function TeamDetailPage() {
   const [sysSaving, setSysSaving] = useState(false);
   const [sysError, setSysError] = useState("");
   const [tagInput, setTagInput] = useState("");
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterPosFilter, setRosterPosFilter] = useState<"all" | "forwards" | "defense" | "goalies">("all");
+  const [rosterSort, setRosterSort] = useState<"name" | "pts" | "gp" | "youngest">("name");
 
   const loadData = useCallback(async () => {
     try {
       setError("");
       const [rosterRes, reportsRes, sysRes, libRes, refRes, teamStatsRes, linesRes, gamesRes] = await Promise.allSettled([
-        api.get<Player[]>(`/teams/${encodeURIComponent(teamName)}/roster`),
+        api.get<RosterPlayer[]>(`/teams/${encodeURIComponent(teamName)}/roster-stats`),
         api.get<Report[]>(`/teams/${encodeURIComponent(teamName)}/reports`),
         api.get<TeamSystem[]>("/hockey-os/team-systems"),
         api.get<SystemLibraryEntry[]>("/hockey-os/systems-library"),
@@ -343,11 +366,21 @@ export default function TeamDetailPage() {
     }
   };
 
-  // ── Roster grouping ─────────────────────────────────────
-  const forwards = roster.filter((p) => posGroup(p.position) === "forwards");
-  const defense = roster.filter((p) => posGroup(p.position) === "defense");
-  const goalies = roster.filter((p) => posGroup(p.position) === "goalies");
-  const other = roster.filter((p) => posGroup(p.position) === "other");
+  // ── Roster grouping (filtered + sorted) ─────────────────
+  const filteredRoster = roster
+    .filter(p => rosterPosFilter === "all" || posGroup(p.position) === rosterPosFilter)
+    .filter(p => !rosterSearch || `${p.first_name} ${p.last_name}`.toLowerCase().includes(rosterSearch.toLowerCase()))
+    .sort((a, b) => {
+      if (rosterSort === "pts") return (b.stats?.p ?? -1) - (a.stats?.p ?? -1);
+      if (rosterSort === "gp") return (b.stats?.gp ?? -1) - (a.stats?.gp ?? -1);
+      if (rosterSort === "youngest") return (b.dob || "").localeCompare(a.dob || "");
+      return a.last_name.localeCompare(b.last_name);
+    });
+
+  const forwards = filteredRoster.filter(p => posGroup(p.position) === "forwards");
+  const defense = filteredRoster.filter(p => posGroup(p.position) === "defense");
+  const goalies = filteredRoster.filter(p => posGroup(p.position) === "goalies");
+  const other = filteredRoster.filter(p => posGroup(p.position) === "other");
 
   // ── Loading state ───────────────────────────────────────
   if (loading) {
@@ -429,6 +462,31 @@ export default function TeamDetailPage() {
                 </p>
               </div>
             </div>
+            {/* Right side — Record + Actions */}
+            <div className="text-right flex flex-col items-end gap-2">
+              {teamGames.length > 0 && (() => {
+                const w = teamGames.filter(g => g.result === "W").length;
+                const l = teamGames.filter(g => g.result === "L").length;
+                const t = teamGames.filter(g => g.result === "T").length;
+                const pts = w * 2 + t;
+                return (
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-oswald text-2xl font-bold text-white">{w}-{l}-{t}</span>
+                    <span className="font-oswald text-sm font-bold text-teal">{pts} PTS</span>
+                  </div>
+                );
+              })()}
+              <div className="flex gap-2">
+                <Link href={`/reports/generate?team=${encodeURIComponent(teamName)}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-teal text-white hover:opacity-90 transition-opacity">
+                  <FileText size={11} /> Generate Report
+                </Link>
+                <Link href={`/game-plans/new?team=${encodeURIComponent(teamName)}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-white/[0.08] text-white/70 border border-white/10 hover:bg-white/[0.12] hover:text-white transition-colors">
+                  <Swords size={11} /> Game Plan
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -436,6 +494,60 @@ export default function TeamDetailPage() {
 
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">{error}</div>
+        )}
+
+        {/* HockeyTech Sync Bar — above tabs, visible on all tabs */}
+        {htInfo && (htInfo.linked || htInfo.has_ht_players) && (
+          <div className="mb-2 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-navy/[0.02] border border-teal/15">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Activity size={14} className="text-teal" />
+                <span className="text-[10px] font-oswald uppercase tracking-wider text-teal font-bold">League Hub</span>
+                {htInfo.hockeytech_league && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.06] text-navy/60 font-oswald uppercase">
+                    {htInfo.hockeytech_league}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSyncStats}
+                  disabled={syncingStats || !htInfo.linked}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/20 transition-colors disabled:opacity-40"
+                  title={!htInfo.linked ? "Sync roster from League Hub first to enable stats sync" : ""}
+                >
+                  <RefreshCw size={11} className={syncingStats ? "animate-spin" : ""} />
+                  {syncingStats ? "Syncing..." : "Sync Stats"}
+                </button>
+                <button
+                  onClick={handleSyncGameLogs}
+                  disabled={syncingGameLogs || !htInfo.linked}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-navy/[0.06] text-navy/70 hover:bg-navy/[0.1] border border-navy/10 transition-colors disabled:opacity-40"
+                  title={!htInfo.linked ? "Sync roster from League Hub first to enable game log sync" : ""}
+                >
+                  <RefreshCw size={11} className={syncingGameLogs ? "animate-spin" : ""} />
+                  {syncingGameLogs ? "Syncing..." : "Sync Game Logs"}
+                </button>
+              </div>
+            </div>
+            {syncResult && (
+              <p className={`mt-2 text-xs ${syncResult.startsWith("Error") ? "text-red-600" : "text-green-700"}`}>
+                {syncResult}
+              </p>
+            )}
+          </div>
+        )}
+        {htInfo && !htInfo.linked && htInfo.has_ht_players && (
+          <div className="mb-2 p-3 rounded-lg bg-teal/[0.04] border border-teal/15 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className="text-teal" />
+              <span className="text-[10px] font-oswald uppercase tracking-wider text-teal font-bold">League Hub</span>
+              <span className="text-[10px] text-muted">Team not linked — sync roster from League Hub to enable stats sync</span>
+            </div>
+            <Link href="/leagues" className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/20 transition-colors">
+              <RefreshCw size={11} /> Go to League Hub
+            </Link>
+          </div>
         )}
 
         {/* Tabs */}
@@ -465,56 +577,73 @@ export default function TeamDetailPage() {
           ))}
         </div>
 
-        {/* ── Roster Tab ─────────────────────────────────── */}
-        {activeTab === "roster" && (
-          <section>
-            {/* HockeyTech Sync Bar */}
-            {htInfo && (htInfo.linked || htInfo.has_ht_players) && (
-              <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-navy/[0.02] border border-teal/15">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <Activity size={14} className="text-teal" />
-                    <span className="text-[10px] font-oswald uppercase tracking-wider text-teal font-bold">League Hub</span>
-                    {htInfo.hockeytech_league && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.06] text-navy/60 font-oswald uppercase">
-                        {htInfo.hockeytech_league}
-                      </span>
-                    )}
+        {/* Team Identity Summary — visible on all tabs */}
+        {teamIntel && teamIntel.version > 0 && teamIntel.playing_style && teamIntel.playing_style !== "Analysis Pending" && (
+          <div className="bg-white rounded-xl border border-border overflow-hidden my-4">
+            <div className="bg-gradient-to-r from-navy/[0.03] to-teal/[0.03] px-5 py-2.5 border-b border-border/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Brain size={14} className="text-teal" />
+                <span className="font-oswald text-[10px] font-bold uppercase tracking-wider text-navy">Team Identity</span>
+                <span className="text-[8px] px-1.5 py-0.5 rounded bg-teal/10 text-teal font-oswald font-semibold">v{teamIntel.version}</span>
+              </div>
+              <button onClick={() => setActiveTab("identity")} className="text-[10px] text-teal font-oswald uppercase tracking-wider font-semibold hover:underline">
+                View Full Report →
+              </button>
+            </div>
+            <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Col 1: Style + Tags */}
+              <div>
+                <p className="font-oswald text-[9px] uppercase tracking-wider text-muted mb-1.5">Playing Style</p>
+                <span className="inline-flex px-3 py-1 rounded-lg bg-navy/[0.05] border border-navy/[0.08] text-sm font-semibold text-navy">
+                  {teamIntel.playing_style}
+                </span>
+                {teamIntel.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {teamIntel.tags.slice(0, 4).map((tag, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded-full bg-teal/[0.07] text-teal text-[9px] font-oswald font-semibold uppercase tracking-wider">{tag}</span>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleSyncStats}
-                      disabled={syncingStats || !htInfo.linked}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/20 transition-colors disabled:opacity-40"
-                      title={!htInfo.linked ? "Sync roster from League Hub first to enable stats sync" : ""}
-                    >
-                      <RefreshCw size={11} className={syncingStats ? "animate-spin" : ""} />
-                      {syncingStats ? "Syncing..." : "Sync Stats"}
-                    </button>
-                    <button
-                      onClick={handleSyncGameLogs}
-                      disabled={syncingGameLogs || !htInfo.linked}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-navy/[0.06] text-navy/70 hover:bg-navy/[0.1] border border-navy/10 transition-colors disabled:opacity-40"
-                      title={!htInfo.linked ? "Sync roster from League Hub first to enable game log sync" : ""}
-                    >
-                      <RefreshCw size={11} className={syncingGameLogs ? "animate-spin" : ""} />
-                      {syncingGameLogs ? "Syncing..." : "Sync Game Logs"}
-                    </button>
-                  </div>
-                </div>
-                {syncResult && (
-                  <p className={`mt-2 text-xs ${syncResult.startsWith("Error") ? "text-red-600" : "text-green-700"}`}>
-                    {syncResult}
-                  </p>
                 )}
-                {!htInfo.linked && htInfo.has_ht_players && (
-                  <p className="mt-1 text-[10px] text-muted/60">
-                    Sync roster from <Link href="/leagues" className="text-teal hover:underline">League Hub</Link> to enable stats and game log sync.
+              </div>
+              {/* Col 2: Summary */}
+              <div>
+                <p className="font-oswald text-[9px] uppercase tracking-wider text-muted mb-1.5">Summary</p>
+                {teamIntel.system_summary && (
+                  <p className="text-[11px] text-navy/65 leading-relaxed italic border-l-2 border-teal/30 pl-2.5 line-clamp-3">
+                    {teamIntel.system_summary}
                   </p>
                 )}
               </div>
-            )}
+              {/* Col 3: Strengths / Vulnerabilities */}
+              <div>
+                {teamIntel.strengths.length > 0 && (
+                  <>
+                    <p className="font-oswald text-[9px] uppercase tracking-wider text-muted mb-1">Strengths</p>
+                    {teamIntel.strengths.slice(0, 3).map((s, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-navy/70 py-0.5">
+                        <span className="w-1 h-1 rounded-full bg-teal mt-1.5 shrink-0" />{s}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {teamIntel.vulnerabilities.length > 0 && (
+                  <>
+                    <p className="font-oswald text-[9px] uppercase tracking-wider text-muted mb-1 mt-2">Vulnerabilities</p>
+                    {teamIntel.vulnerabilities.slice(0, 2).map((v, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-navy/70 py-0.5">
+                        <span className="w-1 h-1 rounded-full bg-orange mt-1.5 shrink-0" />{v}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
+        {/* ── Roster Tab ─────────────────────────────────── */}
+        {activeTab === "roster" && (
+          <section>
             {roster.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
                 <Users size={32} className="mx-auto text-muted/40 mb-3" />
@@ -525,95 +654,121 @@ export default function TeamDetailPage() {
               </div>
             ) : (
               <div className="space-y-6">
+                {/* Filter Bar */}
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                  <input
+                    type="text" placeholder="Search players..."
+                    value={rosterSearch} onChange={e => setRosterSearch(e.target.value)}
+                    className="flex-1 min-w-[180px] max-w-[280px] px-3 py-1.5 border border-border rounded-lg text-xs bg-white"
+                  />
+                  <div className="flex gap-1">
+                    {(["all", "forwards", "defense", "goalies"] as const).map(f => (
+                      <button key={f} onClick={() => setRosterPosFilter(f)}
+                        className={`px-3 py-1.5 rounded-md font-oswald text-[10px] uppercase tracking-wider transition-colors ${
+                          rosterPosFilter === f ? "bg-navy text-white" : "bg-white border border-border text-muted hover:text-navy"
+                        }`}
+                      >{f === "all" ? "All" : f === "forwards" ? "FWD" : f === "defense" ? "DEF" : "G"}</button>
+                    ))}
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5 text-[10px] text-muted">
+                    Sort:
+                    <select value={rosterSort} onChange={e => setRosterSort(e.target.value as typeof rosterSort)}
+                      className="font-oswald text-[10px] uppercase tracking-wider border border-border rounded px-2 py-1 bg-white text-navy cursor-pointer">
+                      <option value="name">Name A-Z</option>
+                      <option value="pts">PTS ↓</option>
+                      <option value="gp">GP ↓</option>
+                      <option value="youngest">Youngest</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Skaters (Forwards + Defense) */}
                 {[
                   { label: "Forwards", players: forwards },
                   { label: "Defense", players: defense },
-                  { label: "Goalies", players: goalies },
                   ...(other.length > 0 ? [{ label: "Other", players: other }] : []),
                 ].filter((g) => g.players.length > 0).map(({ label, players }) => (
                   <div key={label}>
                     <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
                       {label} <span className="text-navy font-bold">({players.length})</span>
                     </h3>
-                    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+                    <div className="bg-white rounded-xl border border-teal/20 overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-navy/[0.03] border-b border-teal/20">
-                            <th className="px-4 py-2.5 text-left font-oswald text-xs uppercase tracking-wider text-muted">Player</th>
-                            <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-16">POS</th>
-                            <th className="px-4 py-2.5 text-left font-oswald text-xs uppercase tracking-wider text-muted">Archetype</th>
-                            <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-16">Shoots</th>
-                            <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-24">Status</th>
-                            <th className="px-4 py-2.5 text-right font-oswald text-xs uppercase tracking-wider text-muted w-20"></th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">#</th>
+                            <th className="px-3 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Player</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">POS</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-20">DOB</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">HT</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">WT</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">SH</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">GP</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">G</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">A</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">PTS</th>
+                            <th className="px-2 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Draft</th>
+                            <th className="px-2 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Archetype</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-16">Status</th>
+                            <th className="px-2 py-2 text-right font-oswald text-[10px] uppercase tracking-wider text-muted w-14"></th>
                           </tr>
                         </thead>
                         <tbody>
                           {players.map((p) => (
                             <tr key={p.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
-                              <td className="px-4 py-2.5">
-                                <div className="flex items-center gap-1.5">
-                                  <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors">
-                                    {hasRealImage(p.image_url) ? (
-                                      <span className="inline-flex items-center gap-2">
-                                        <img
-                                          src={assetUrl(p.image_url)}
-                                          alt=""
-                                          className="w-7 h-7 rounded-full object-cover"
-                                        />
-                                        {p.last_name}, {p.first_name}
-                                      </span>
-                                    ) : (
-                                      <>{p.last_name}, {p.first_name}</>
-                                    )}
-                                  </Link>
-                                  <PlayerStatusBadges tags={p.tags || []} size="sm" />
-                                </div>
+                              <td className="px-2 py-2 text-center text-xs text-muted">{p.jersey_number || "\u2014"}</td>
+                              <td className="px-3 py-2">
+                                <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors text-xs">
+                                  {hasRealImage(p.image_url) ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <img src={assetUrl(p.image_url)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                      {p.last_name}, {p.first_name}
+                                    </span>
+                                  ) : (
+                                    <>{p.last_name}, {p.first_name}</>
+                                  )}
+                                </Link>
                               </td>
-                              <td className="px-4 py-2.5 text-center">
-                                <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
-                                  {p.position}
-                                </span>
+                              <td className="px-2 py-2 text-center">
+                                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal/10 text-teal font-oswald">{p.position}</span>
                               </td>
-                              <td className="px-4 py-2.5 text-muted text-xs">
-                                {p.archetype || "\u2014"}
-                              </td>
-                              <td className="px-4 py-2.5 text-center text-muted">
-                                {p.shoots || "\u2014"}
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{formatDob(p.dob, p.birth_year)}</td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{formatHeight(p.height_cm)}</td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{formatWeight(p.weight_kg)}</td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{p.shoots || "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs font-semibold">{p.stats?.gp ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.stats?.g ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.stats?.a ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs font-bold text-navy">{p.stats?.p ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-[10px] text-muted">{getDraftInfo(p)}</td>
+                              <td className="px-2 py-2 text-[10px] text-muted">{p.archetype || "\u2014"}</td>
+                              <td className="px-2 py-2 text-center">
                                 <select
                                   value={p.roster_status || "active"}
                                   onChange={async (e) => {
-                                    const newStatus = e.target.value;
+                                    const ns = e.target.value;
                                     try {
-                                      await api.put(`/players/${p.id}/roster-status`, { roster_status: newStatus });
-                                      setRoster((prev) => prev.map((pl) => pl.id === p.id ? { ...pl, roster_status: newStatus } : pl));
-                                    } catch {
-                                      // ignore
-                                    }
+                                      await api.patch(`/players/${p.id}`, { roster_status: ns });
+                                      setRoster((prev) => prev.map((pl) => pl.id === p.id ? { ...pl, roster_status: ns } : pl));
+                                    } catch { /* ignore */ }
                                   }}
-                                  className={`text-[10px] font-oswald font-bold bg-transparent border border-teal/20 rounded px-1.5 py-0.5 cursor-pointer ${
+                                  className={`text-[9px] font-oswald font-bold bg-transparent border rounded px-1 py-0.5 cursor-pointer ${
                                     (p.roster_status || "active") === "active" ? "text-green-600 border-green-200" :
-                                    (p.roster_status || "active") === "ir" ? "text-red-600 border-red-200 bg-red-50" :
-                                    (p.roster_status || "active") === "injured" ? "text-red-600 border-red-200 bg-red-50" :
-                                    (p.roster_status || "active") === "day-to-day" ? "text-yellow-600 border-yellow-200 bg-yellow-50" :
-                                    (p.roster_status || "active") === "scratched" ? "text-gray-500 border-gray-200 bg-gray-50" :
-                                    (p.roster_status || "active") === "suspended" ? "text-purple-600 border-purple-200 bg-purple-50" :
+                                    (p.roster_status || "active") === "ap" ? "text-blue-600 border-blue-200 bg-blue-50" :
+                                    (p.roster_status || "active") === "inj" ? "text-red-600 border-red-200 bg-red-50" :
+                                    (p.roster_status || "active") === "susp" ? "text-purple-600 border-purple-200 bg-purple-50" :
+                                    (p.roster_status || "active") === "scrch" ? "text-gray-500 border-gray-200 bg-gray-50" :
                                     "text-gray-600"
                                   }`}
                                 >
-                                  {["active", "ir", "injured", "day-to-day", "scratched", "suspended"].map((s) => (
-                                    <option key={s} value={s}>{s === "ir" ? "IR" : s === "day-to-day" ? "DTD" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                                  ))}
+                                  {[
+                                    { v: "active", l: "Active" }, { v: "ap", l: "AP" }, { v: "inj", l: "INJ" },
+                                    { v: "susp", l: "SUSP" }, { v: "scrch", l: "SCRCH" },
+                                  ].map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
                                 </select>
                               </td>
-                              <td className="px-4 py-2.5 text-right">
-                                <Link
-                                  href={`/reports/generate?player=${p.id}`}
-                                  className="text-xs text-teal hover:underline"
-                                >
-                                  Report
-                                </Link>
+                              <td className="px-2 py-2 text-right">
+                                <Link href={`/reports/generate?player=${p.id}`} className="text-[10px] text-teal hover:underline">Report</Link>
                               </td>
                             </tr>
                           ))}
@@ -622,6 +777,102 @@ export default function TeamDetailPage() {
                     </div>
                   </div>
                 ))}
+
+                {/* Goalies — separate table with goalie stats */}
+                {goalies.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
+                      Goalies <span className="text-navy font-bold">({goalies.length})</span>
+                    </h3>
+                    <div className="bg-white rounded-xl border border-teal/20 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-navy/[0.03] border-b border-teal/20">
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">#</th>
+                            <th className="px-3 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Player</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">POS</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-20">DOB</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">HT</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">WT</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">C/SH</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">GP</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">W</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">L</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-14">GAA</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-14">SV%</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">SO</th>
+                            <th className="px-2 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Draft</th>
+                            <th className="px-2 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Archetype</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-16">Status</th>
+                            <th className="px-2 py-2 text-right font-oswald text-[10px] uppercase tracking-wider text-muted w-14"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {goalies.map((p) => (
+                            <tr key={p.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
+                              <td className="px-2 py-2 text-center text-xs text-muted">{p.jersey_number || "\u2014"}</td>
+                              <td className="px-3 py-2">
+                                <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors text-xs">
+                                  {hasRealImage(p.image_url) ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <img src={assetUrl(p.image_url)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                      {p.last_name}, {p.first_name}
+                                    </span>
+                                  ) : (
+                                    <>{p.last_name}, {p.first_name}</>
+                                  )}
+                                </Link>
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal/10 text-teal font-oswald">{p.position}</span>
+                              </td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{formatDob(p.dob, p.birth_year)}</td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{formatHeight(p.height_cm)}</td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{formatWeight(p.weight_kg)}</td>
+                              <td className="px-2 py-2 text-center text-[10px] text-muted">{p.shoots || "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs font-semibold">{p.goalie_stats?.gp ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.w ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.l ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.gaa != null ? Number(p.goalie_stats.gaa).toFixed(2) : "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.sv_pct != null ? p.goalie_stats.sv_pct : "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.so ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-[10px] text-muted">{getDraftInfo(p)}</td>
+                              <td className="px-2 py-2 text-[10px] text-muted">{p.archetype || "\u2014"}</td>
+                              <td className="px-2 py-2 text-center">
+                                <select
+                                  value={p.roster_status || "active"}
+                                  onChange={async (e) => {
+                                    const ns = e.target.value;
+                                    try {
+                                      await api.patch(`/players/${p.id}`, { roster_status: ns });
+                                      setRoster((prev) => prev.map((pl) => pl.id === p.id ? { ...pl, roster_status: ns } : pl));
+                                    } catch { /* ignore */ }
+                                  }}
+                                  className={`text-[9px] font-oswald font-bold bg-transparent border rounded px-1 py-0.5 cursor-pointer ${
+                                    (p.roster_status || "active") === "active" ? "text-green-600 border-green-200" :
+                                    (p.roster_status || "active") === "ap" ? "text-blue-600 border-blue-200 bg-blue-50" :
+                                    (p.roster_status || "active") === "inj" ? "text-red-600 border-red-200 bg-red-50" :
+                                    (p.roster_status || "active") === "susp" ? "text-purple-600 border-purple-200 bg-purple-50" :
+                                    (p.roster_status || "active") === "scrch" ? "text-gray-500 border-gray-200 bg-gray-50" :
+                                    "text-gray-600"
+                                  }`}
+                                >
+                                  {[
+                                    { v: "active", l: "Active" }, { v: "ap", l: "AP" }, { v: "inj", l: "INJ" },
+                                    { v: "susp", l: "SUSP" }, { v: "scrch", l: "SCRCH" },
+                                  ].map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+                                </select>
+                              </td>
+                              <td className="px-2 py-2 text-right">
+                                <Link href={`/reports/generate?player=${p.id}`} className="text-[10px] text-teal hover:underline">Report</Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-4">
                   <Link
@@ -1242,27 +1493,6 @@ export default function TeamDetailPage() {
               </div>
             )}
 
-            {/* Line Combinations */}
-            {lineCombinations.length > 0 ? (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Layers size={16} className="text-orange" />
-                  <h2 className="text-lg font-semibold text-navy">Line Combinations</h2>
-                </div>
-                <div className="bg-white rounded-xl border border-teal/20 p-4">
-                  <LineCombinations lines={lineCombinations} />
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
-                <Layers size={28} className="mx-auto text-muted/30 mb-2" />
-                <p className="text-sm text-muted">No line combinations imported yet.</p>
-                <p className="text-xs text-muted/60 mt-1">
-                  Upload Lines XLSX files from the{" "}
-                  <Link href="/instat" className="text-teal hover:underline">Import Stats</Link> page.
-                </p>
-              </div>
-            )}
           </section>
         )}
 

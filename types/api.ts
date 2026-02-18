@@ -44,7 +44,19 @@ export interface Player {
   league_tier: string | null;
   commitment_status: string | null;
   roster_status: string;
+  jersey_number: string | null;
   created_at: string;
+}
+
+export interface RosterPlayer extends Player {
+  stats: {
+    gp: number; g: number; a: number; p: number;
+    plus_minus: number | null; pim: number | null; season: string | null;
+  } | null;
+  goalie_stats: {
+    gp: number; w: number; l: number;
+    gaa: number | null; sv_pct: string | null; so: number | null;
+  } | null;
 }
 
 export interface PlayerFilterOptions {

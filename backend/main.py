@@ -1001,6 +1001,27 @@ def init_db():
         )
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_intelligence (
+            id TEXT PRIMARY KEY,
+            team_name TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            playing_style TEXT,
+            system_summary TEXT,
+            identity TEXT,
+            strengths TEXT DEFAULT '[]',
+            vulnerabilities TEXT DEFAULT '[]',
+            key_personnel TEXT DEFAULT '[]',
+            special_teams_identity TEXT,
+            player_archetype_fit TEXT,
+            comparable_teams TEXT DEFAULT '[]',
+            tags TEXT DEFAULT '[]',
+            trigger TEXT,
+            version INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
 
     # ── Migrations for existing databases ───────────────────
@@ -1407,6 +1428,7 @@ def init_db():
         ("merged_into", "TEXT"),
         ("merged_at", "TEXT"),
         ("created_by", "TEXT"),
+        ("jersey_number", "TEXT"),
     ]:
         if col_name not in p_cols_check:
             conn.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type}")
@@ -6560,7 +6582,7 @@ async def patch_player(
 
     allowed = {"first_name", "last_name", "dob", "position", "shoots", "height_cm", "weight_kg",
                "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status",
-               "roster_status"}
+               "roster_status", "jersey_number"}
     sets = []
     params = []
     for field, value in updates.items():
@@ -8768,6 +8790,257 @@ async def get_team_hockeytech_info(team_name: str, token_data: dict = Depends(ve
         }
     finally:
         conn.close()
+
+
+@app.get("/teams/{team_name}/intelligence")
+async def get_team_intelligence(team_name: str, token_data: dict = Depends(verify_token)):
+    """Get the latest intelligence snapshot for a team."""
+    org_id = token_data["org_id"]
+    decoded_name = team_name.replace("%20", " ")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM team_intelligence WHERE LOWER(team_name) = LOWER(?) AND org_id = ? ORDER BY version DESC LIMIT 1",
+        (decoded_name, org_id)
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        return {"version": 0, "team_name": decoded_name}
+
+    d = dict(row)
+    for field in ("strengths", "vulnerabilities", "key_personnel", "comparable_teams", "tags"):
+        val = d.get(field)
+        if isinstance(val, str):
+            try:
+                d[field] = json.loads(val)
+            except Exception:
+                d[field] = []
+        elif val is None:
+            d[field] = []
+    return d
+
+
+@app.post("/teams/{team_name}/intelligence")
+async def generate_team_intelligence(team_name: str, token_data: dict = Depends(verify_token)):
+    """Generate AI-powered team identity analysis."""
+    org_id = token_data["org_id"]
+    decoded_name = team_name.replace("%20", " ")
+    conn = get_db()
+
+    # Get current version
+    current = conn.execute(
+        "SELECT version FROM team_intelligence WHERE LOWER(team_name) = LOWER(?) AND org_id = ? ORDER BY version DESC LIMIT 1",
+        (decoded_name, org_id)
+    ).fetchone()
+    new_version = (current["version"] + 1) if current else 1
+
+    # Gather team data for AI prompt
+    roster = conn.execute(
+        "SELECT * FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?)",
+        (org_id, decoded_name)
+    ).fetchall()
+
+    # Get team stats
+    stats = conn.execute(
+        """SELECT p.first_name, p.last_name, p.position, p.archetype,
+                  ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim
+           FROM players p
+           LEFT JOIN (
+               SELECT player_id, gp, g, a, p, plus_minus, pim,
+                      ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+               FROM player_stats
+           ) ps ON p.id = ps.player_id AND ps.rn = 1
+           WHERE p.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+           ORDER BY ps.p DESC NULLS LAST""",
+        (org_id, decoded_name)
+    ).fetchall()
+
+    # Get team system
+    system = conn.execute(
+        "SELECT * FROM team_systems WHERE LOWER(team_name) = LOWER(?) AND org_id = ? ORDER BY created_at DESC LIMIT 1",
+        (decoded_name, org_id)
+    ).fetchone()
+
+    # Get recent game results (table may not exist yet)
+    games = []
+    try:
+        games = conn.execute(
+            "SELECT * FROM team_games WHERE LOWER(team_name) = LOWER(?) AND org_id = ? ORDER BY game_date DESC LIMIT 10",
+            (decoded_name, org_id)
+        ).fetchall()
+    except Exception:
+        pass
+
+    # Check for AI key
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not anthropic_key:
+        # Demo mode — return placeholder
+        intel_id = str(uuid.uuid4())
+        demo = {
+            "id": intel_id, "team_name": decoded_name, "org_id": org_id,
+            "playing_style": "Analysis Pending",
+            "system_summary": f"Connect your Anthropic API key to generate AI-powered team intelligence for {decoded_name}.",
+            "identity": f"Team identity analysis requires an API key. Add ANTHROPIC_API_KEY to your backend .env file and regenerate.",
+            "strengths": json.dumps(["Add API key to unlock AI analysis"]),
+            "vulnerabilities": json.dumps(["Add API key to unlock AI analysis"]),
+            "key_personnel": json.dumps([]),
+            "comparable_teams": json.dumps([]),
+            "tags": json.dumps([]),
+            "special_teams_identity": None,
+            "player_archetype_fit": None,
+            "trigger": "manual_demo",
+            "version": new_version,
+        }
+        conn.execute("""
+            INSERT INTO team_intelligence (id, team_name, org_id, playing_style, system_summary, identity,
+                strengths, vulnerabilities, key_personnel, comparable_teams, tags,
+                special_teams_identity, player_archetype_fit, trigger, version)
+            VALUES (:id, :team_name, :org_id, :playing_style, :system_summary, :identity,
+                :strengths, :vulnerabilities, :key_personnel, :comparable_teams, :tags,
+                :special_teams_identity, :player_archetype_fit, :trigger, :version)
+        """, demo)
+        conn.commit()
+        conn.close()
+        # Return parsed version
+        for f in ("strengths", "vulnerabilities", "key_personnel", "comparable_teams", "tags"):
+            demo[f] = json.loads(demo[f])
+        return demo
+
+    # === AI-POWERED ANALYSIS ===
+    # Build context string from roster, stats, system, games
+    roster_summary = f"{len(roster)} players on roster."
+    stats_lines = []
+    for s in stats[:15]:
+        stats_lines.append(f"{s['first_name']} {s['last_name']} ({s['position']}): {s['gp'] or 0}GP {s['g'] or 0}G {s['a'] or 0}A {s['p'] or 0}PTS")
+    system_str = ""
+    if system:
+        system_str = f"Forecheck: {system['forecheck'] or 'N/A'}, DZ: {system['dz_structure'] or 'N/A'}, Breakout: {system['breakout'] or 'N/A'}, Pace: {system['pace'] or 'N/A'}"
+
+    record_str = ""
+    if games:
+        wins = sum(1 for g in games if g["result"] == "W")
+        losses = sum(1 for g in games if g["result"] == "L")
+        record_str = f"Recent 10 games: {wins}W-{losses}L"
+
+    prompt = f"""Analyze this hockey team and generate a comprehensive team identity profile.
+
+Team: {decoded_name}
+{roster_summary}
+{record_str}
+
+Top Scorers:
+{chr(10).join(stats_lines) if stats_lines else "No stats available"}
+
+System: {system_str or "Not defined"}
+
+Respond in this exact JSON format (no markdown, no backticks):
+{{
+    "playing_style": "2-4 word style descriptor (e.g., High-Pressure Forecheck, Defensive Trap, Run-and-Gun)",
+    "system_summary": "1-2 sentence summary of how this team plays",
+    "identity": "2-3 paragraph detailed identity description",
+    "strengths": ["strength 1", "strength 2", "strength 3"],
+    "vulnerabilities": ["vulnerability 1", "vulnerability 2"],
+    "key_personnel": [{{"name": "Player Name", "role": "1C / Top scorer / Shutdown D / etc"}}],
+    "special_teams_identity": "1-2 sentences on PP and PK tendencies",
+    "player_archetype_fit": "What type of player fits this team's system",
+    "comparable_teams": ["comparable team 1", "comparable team 2"],
+    "tags": ["tag1", "tag2", "tag3", "tag4"]
+}}"""
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": anthropic_key, "content-type": "application/json", "anthropic-version": "2023-06-01"},
+                json={"model": "claude-sonnet-4-20250514", "max_tokens": 2000, "messages": [{"role": "user", "content": prompt}]}
+            )
+            resp.raise_for_status()
+            ai_text = resp.json()["content"][0]["text"]
+            # Strip markdown fences if present
+            ai_text = ai_text.strip()
+            if ai_text.startswith("```"):
+                ai_text = ai_text.split("\n", 1)[1] if "\n" in ai_text else ai_text[3:]
+            if ai_text.endswith("```"):
+                ai_text = ai_text[:-3]
+            ai_data = json.loads(ai_text.strip())
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
+    intel_id = str(uuid.uuid4())
+    row_data = {
+        "id": intel_id, "team_name": decoded_name, "org_id": org_id,
+        "playing_style": ai_data.get("playing_style"),
+        "system_summary": ai_data.get("system_summary"),
+        "identity": ai_data.get("identity"),
+        "strengths": json.dumps(ai_data.get("strengths", [])),
+        "vulnerabilities": json.dumps(ai_data.get("vulnerabilities", [])),
+        "key_personnel": json.dumps(ai_data.get("key_personnel", [])),
+        "comparable_teams": json.dumps(ai_data.get("comparable_teams", [])),
+        "tags": json.dumps(ai_data.get("tags", [])),
+        "special_teams_identity": ai_data.get("special_teams_identity"),
+        "player_archetype_fit": ai_data.get("player_archetype_fit"),
+        "trigger": "manual",
+        "version": new_version,
+    }
+    conn.execute("""
+        INSERT INTO team_intelligence (id, team_name, org_id, playing_style, system_summary, identity,
+            strengths, vulnerabilities, key_personnel, comparable_teams, tags,
+            special_teams_identity, player_archetype_fit, trigger, version)
+        VALUES (:id, :team_name, :org_id, :playing_style, :system_summary, :identity,
+            :strengths, :vulnerabilities, :key_personnel, :comparable_teams, :tags,
+            :special_teams_identity, :player_archetype_fit, :trigger, :version)
+    """, row_data)
+    conn.commit()
+    conn.close()
+
+    # Parse JSON fields for return
+    for f in ("strengths", "vulnerabilities", "key_personnel", "comparable_teams", "tags"):
+        row_data[f] = json.loads(row_data[f]) if isinstance(row_data[f], str) else row_data[f]
+    return row_data
+
+
+@app.get("/teams/{team_name}/roster-stats")
+async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(verify_token)):
+    """Get team roster with latest season stats for each player."""
+    org_id = token_data["org_id"]
+    decoded_name = team_name.replace("%20", " ")
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT p.*,
+               ps.gp, ps.g, ps.a, ps.p AS pts, ps.plus_minus, ps.pim, ps.season,
+               gs.gp as g_gp, gs.wins as g_w, gs.losses as g_l, gs.gaa, gs.sv_pct, gs.so as g_so
+        FROM players p
+        LEFT JOIN (
+            SELECT player_id, gp, g, a, p, plus_minus, pim, season,
+                   ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+            FROM player_stats
+        ) ps ON p.id = ps.player_id AND ps.rn = 1
+        LEFT JOIN (
+            SELECT player_id, gp, wins, losses, gaa, sv_pct, so,
+                   ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+            FROM goalie_stats
+        ) gs ON p.id = gs.player_id AND gs.rn = 1
+        WHERE p.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+        ORDER BY p.position, p.last_name
+    """, (org_id, decoded_name)).fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        d = _player_from_row(r)
+        d["stats"] = {
+            "gp": r["gp"], "g": r["g"], "a": r["a"], "p": r["pts"],
+            "plus_minus": r["plus_minus"], "pim": r["pim"], "season": r["season"],
+        } if r["gp"] else None
+        d["goalie_stats"] = {
+            "gp": r["g_gp"], "w": r["g_w"], "l": r["g_l"],
+            "gaa": r["gaa"], "sv_pct": r["sv_pct"], "so": r["g_so"],
+        } if r["g_gp"] else None
+        result.append(d)
+    return result
 
 
 @app.get("/teams/{team_name}/reports")
