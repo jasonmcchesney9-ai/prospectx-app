@@ -26,7 +26,7 @@ export default function GoalieStatTable({ stats }: Props) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border">
+          <tr className="border-b border-teal/20">
             <th className="text-left py-2 px-2 text-xs font-oswald uppercase tracking-wider text-muted">
               Season
             </th>
@@ -62,7 +62,7 @@ export default function GoalieStatTable({ stats }: Props) {
           {stats.map((s) => {
             const ext = (s.extended_stats || {}) as Record<string, unknown>;
             return (
-              <tr key={s.id} className="border-b border-border/50 hover:bg-navy/[0.02]">
+              <tr key={s.id} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                 <td className="py-2 px-2 text-navy font-medium">
                   {s.season || "-"}
                 </td>

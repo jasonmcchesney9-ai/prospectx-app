@@ -181,8 +181,8 @@ export default function RinkBuilderPage() {
         />
 
         {/* ── Drill Details Section ─────────────────────────────── */}
-        <div className="mt-6 bg-white rounded-xl border border-border overflow-hidden">
-          <div className="bg-navy/[0.03] px-5 py-3 border-b border-border">
+        <div className="mt-6 bg-white rounded-xl border border-teal/20 overflow-hidden">
+          <div className="bg-navy/[0.03] px-5 py-3 border-b border-teal/20">
             <h3 className="text-xs font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-teal" />
               Drill Details
@@ -200,7 +200,7 @@ export default function RinkBuilderPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. 2-on-1 Rush Setup"
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
                 />
               </div>
               <div>
@@ -208,7 +208,7 @@ export default function RinkBuilderPage() {
                 <select
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
                 >
                   {Object.entries(DRILL_CATEGORIES).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
@@ -229,7 +229,7 @@ export default function RinkBuilderPage() {
                   onChange={(e) => setForm({ ...form, duration_minutes: Math.max(1, parseInt(e.target.value) || 10) })}
                   min={1}
                   max={60}
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
                 />
               </div>
               <div>
@@ -242,7 +242,7 @@ export default function RinkBuilderPage() {
                   onChange={(e) => setForm({ ...form, players_needed: Math.max(0, parseInt(e.target.value) || 0) })}
                   min={0}
                   max={30}
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
                 />
               </div>
               <div>
@@ -275,7 +275,7 @@ export default function RinkBuilderPage() {
                 onChange={(e) => setForm({ ...form, setup: e.target.value })}
                 placeholder="Describe how to set up the drill — cone placement, player positioning, puck location..."
                 rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
               />
             </div>
 
@@ -287,7 +287,7 @@ export default function RinkBuilderPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Step-by-step description of how the drill runs — flow, timing, rotations..."
                 rows={4}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
               />
             </div>
 
@@ -299,7 +299,7 @@ export default function RinkBuilderPage() {
                 onChange={(e) => setForm({ ...form, coaching_points: e.target.value })}
                 placeholder="Key teaching points — what to emphasize, common mistakes to watch for, success criteria..."
                 rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
               />
             </div>
 
@@ -312,7 +312,7 @@ export default function RinkBuilderPage() {
             )}
 
             {/* Save Button */}
-            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+            <div className="flex items-center justify-between pt-2 border-t border-teal/10">
               <p className="text-[10px] text-muted">
                 Diagram + details are saved together to the Drill Library
               </p>
@@ -336,7 +336,7 @@ export default function RinkBuilderPage() {
             { label: "Arrow", desc: "Click start, then click end point" },
             { label: "Delete", desc: "Select and press Delete, or use Eraser" },
           ].map((item) => (
-            <div key={item.label} className="bg-white rounded-lg border border-border p-3">
+            <div key={item.label} className="bg-white rounded-lg border border-teal/20 p-3">
               <h4 className="text-[10px] font-oswald uppercase tracking-wider text-teal mb-1">{item.label}</h4>
               <p className="text-[11px] text-muted leading-snug">{item.desc}</p>
             </div>

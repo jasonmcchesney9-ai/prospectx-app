@@ -217,7 +217,7 @@ function ClientDetail() {
       {/* ══════════════════════════════════════════════════════ */}
       {/* Player Profile Header                                */}
       {/* ══════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-border p-6 mb-6">
+      <div className="bg-white rounded-xl border border-teal/20 p-6 mb-6">
         <div className="flex flex-col sm:flex-row items-start gap-4">
           {/* Player info */}
           <div className="flex-1 min-w-0">
@@ -315,7 +315,7 @@ function ClientDetail() {
       {/* ══════════════════════════════════════════════════════ */}
       {/* Pathway Notes                                        */}
       {/* ══════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-border p-6 mb-6">
+      <div className="bg-white rounded-xl border border-teal/20 p-6 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider flex items-center gap-2">
             <BookOpen size={16} className="text-teal" />
@@ -340,14 +340,14 @@ function ClientDetail() {
           onBlur={handleNotesSave}
           rows={4}
           placeholder="Track pathway planning, development notes, target programs, and next steps for this client..."
-          className="w-full border border-border rounded-lg px-4 py-3 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 resize-y"
+          className="w-full border border-teal/20 rounded-lg px-4 py-3 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 resize-y"
         />
       </div>
 
       {/* ══════════════════════════════════════════════════════ */}
       {/* Reports Section                                      */}
       {/* ══════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-border p-6 mb-6">
+      <div className="bg-white rounded-xl border border-teal/20 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider flex items-center gap-2">
             <FileText size={16} className="text-orange" />
@@ -387,7 +387,7 @@ function ClientDetail() {
               <Link
                 key={report.id}
                 href={`/reports/${report.id}`}
-                className="flex items-center justify-between px-4 py-3 rounded-lg border border-border hover:border-teal/30 hover:bg-gray-50 transition-all"
+                className="flex items-center justify-between px-4 py-3 rounded-lg border border-teal/20 hover:border-teal/30 hover:bg-gray-50 transition-all"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-orange/10 flex items-center justify-center shrink-0">
@@ -443,7 +443,7 @@ function ClientDetail() {
       {/* ══════════════════════════════════════════════════════ */}
       {/* Agent Pack Generator                                 */}
       {/* ══════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-border p-6">
+      <div className="bg-white rounded-xl border border-teal/20 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider flex items-center gap-2">
             <Briefcase size={16} className="text-[#475569]" />

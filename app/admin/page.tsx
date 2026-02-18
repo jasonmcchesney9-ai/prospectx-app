@@ -136,11 +136,11 @@ function UsersTab() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-navy/5 border-b border-border">
+              <tr className="bg-navy/5 border-b border-teal/20">
                 <th className="text-left px-4 py-3 font-semibold text-navy text-xs uppercase tracking-wider">User</th>
                 <th className="text-left px-4 py-3 font-semibold text-navy text-xs uppercase tracking-wider">Role</th>
                 <th className="text-left px-4 py-3 font-semibold text-navy text-xs uppercase tracking-wider">Tier</th>
@@ -152,7 +152,7 @@ function UsersTab() {
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="border-b border-border/50 hover:bg-navy/[0.02] transition-colors">
+                <tr key={user.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
                   <td className="px-4 py-3">
                     <div>
                       <p className="font-semibold text-navy">
@@ -180,7 +180,7 @@ function UsersTab() {
                         value={user.subscription_tier || "rookie"}
                         onChange={(e) => handleTierChange(user.id, e.target.value)}
                         disabled={updating === user.id}
-                        className="text-xs border border-border rounded-lg px-2 py-1.5 bg-white text-navy focus:ring-2 focus:ring-teal/30 focus:border-teal outline-none disabled:opacity-50"
+                        className="text-xs border border-teal/20 rounded-lg px-2 py-1.5 bg-white text-navy focus:ring-2 focus:ring-teal/30 focus:border-teal outline-none disabled:opacity-50"
                       >
                         {TIER_OPTIONS.map(t => (
                           <option key={t.value} value={t.value}>{t.label}</option>
@@ -243,7 +243,7 @@ function PlatformTab() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {statCards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-border p-4 text-center">
+          <div key={label} className="bg-white rounded-xl border border-teal/20 p-4 text-center">
             <Icon size={20} className={`${color} mx-auto mb-2`} />
             <p className="text-2xl font-bold text-navy">{value}</p>
             <p className="text-[10px] text-muted uppercase tracking-wider font-semibold">{label}</p>
@@ -252,7 +252,7 @@ function PlatformTab() {
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-xl border border-border p-5">
+      <div className="bg-white rounded-xl border border-teal/20 p-5">
         <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-3">Last 7 Days</h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -268,7 +268,7 @@ function PlatformTab() {
 
       {/* Reports by Status */}
       {stats.reports_by_status.length > 0 && (
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-3">Reports by Status</h3>
           <div className="flex flex-wrap gap-3">
             {stats.reports_by_status.map(({ status, count }) => {
@@ -290,7 +290,7 @@ function PlatformTab() {
 
       {/* Users by Tier */}
       {stats.users_by_tier.length > 0 && (
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-3">Users by Tier</h3>
           <div className="flex flex-wrap gap-3">
             {stats.users_by_tier.map(({ tier, count }) => (
@@ -359,17 +359,17 @@ function ErrorsTab() {
       )}
 
       {errors.length === 0 ? (
-        <div className="bg-white rounded-xl border border-border p-8 text-center">
+        <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
           <CheckCircle2 size={32} className="text-green-500 mx-auto mb-3" />
           <p className="text-navy font-semibold">No errors recorded</p>
           <p className="text-muted text-sm mt-1">Server errors (500s) will appear here when they occur</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-border overflow-hidden">
+        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-red-50/50 border-b border-border">
+                <tr className="bg-red-50/50 border-b border-teal/20">
                   <th className="text-left px-4 py-3 font-semibold text-navy text-xs uppercase tracking-wider">Method</th>
                   <th className="text-left px-4 py-3 font-semibold text-navy text-xs uppercase tracking-wider">Path</th>
                   <th className="text-center px-4 py-3 font-semibold text-navy text-xs uppercase tracking-wider">Status</th>
@@ -379,7 +379,7 @@ function ErrorsTab() {
               </thead>
               <tbody>
                 {errors.map((err) => (
-                  <tr key={err.id} className="border-b border-border/50 hover:bg-red-50/30 transition-colors">
+                  <tr key={err.id} className="border-b border-teal/10 hover:bg-red-50/30 transition-colors">
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-navy/10 text-navy rounded text-xs font-mono font-semibold">
                         {err.request_method}

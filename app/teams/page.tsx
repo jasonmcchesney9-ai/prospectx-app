@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Shield,
   Trophy,
+  Crown,
   GraduationCap,
   Star,
   Layers,
@@ -44,6 +45,15 @@ const TIER_ORDER: {
   icon: typeof Trophy;
 }[] = [
   {
+    key: "professional",
+    label: "Professional",
+    description: "AHL, ECHL, SPHL, PWHL",
+    levels: ["professional"],
+    color: "text-red-600",
+    accentBg: "bg-red-50 border-red-100",
+    icon: Crown,
+  },
+  {
     key: "major_junior",
     label: "Major Junior",
     description: "CHL — OHL, WHL, QMJHL",
@@ -55,7 +65,7 @@ const TIER_ORDER: {
   {
     key: "junior_a",
     label: "Junior A",
-    description: "OJHL, BCHL, AJHL, CCHL, and more",
+    description: "BCHL, AJHL, SJHL, MJHL, USHL, OJHL, CCHL, NOJHL, MHL, GOJHL",
     levels: ["junior_a"],
     color: "text-teal",
     accentBg: "bg-teal/5 border-teal/15",
@@ -64,7 +74,7 @@ const TIER_ORDER: {
   {
     key: "junior_b",
     label: "Junior B",
-    description: "GOHL and regional leagues",
+    description: "KIJHL, PJHL, VIJHL, and regional leagues",
     levels: ["junior_b"],
     color: "text-navy",
     accentBg: "bg-navy/5 border-navy/10",
@@ -297,7 +307,7 @@ export default function TeamsPage() {
 
         {/* Add Team Inline Form */}
         {showAddForm && (
-          <div className="mb-6 bg-white rounded-xl border border-border overflow-hidden">
+          <div className="mb-6 bg-white rounded-xl border border-teal/20 overflow-hidden">
             <div className="bg-gradient-to-r from-navy to-navy-light px-5 py-3 flex items-center justify-between">
               <h2 className="text-sm font-oswald font-semibold text-white uppercase tracking-wider">Add New Team</h2>
               <button onClick={() => setShowAddForm(false)} className="text-white/60 hover:text-white"><X size={16} /></button>
@@ -311,7 +321,7 @@ export default function TeamsPage() {
                   value={newTeam.name}
                   onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
                   placeholder="e.g., Chatham Maroons"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                 />
               </div>
               <div>
@@ -319,7 +329,7 @@ export default function TeamsPage() {
                 <select
                   value={newTeam.league}
                   onChange={(e) => setNewTeam({ ...newTeam, league: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white"
+                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
                 >
                   <option value="">Select...</option>
                   {leagues.map((l) => (
@@ -334,7 +344,7 @@ export default function TeamsPage() {
                   value={newTeam.city}
                   onChange={(e) => setNewTeam({ ...newTeam, city: e.target.value })}
                   placeholder="e.g., Chatham"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                 />
               </div>
               <div className="flex items-end gap-2">
@@ -346,7 +356,7 @@ export default function TeamsPage() {
                     onChange={(e) => setNewTeam({ ...newTeam, abbreviation: e.target.value.toUpperCase() })}
                     placeholder="e.g., CM"
                     maxLength={4}
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                   />
                 </div>
                 <button
@@ -371,7 +381,7 @@ export default function TeamsPage() {
               placeholder="Search teams, leagues, or cities..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -379,7 +389,7 @@ export default function TeamsPage() {
             <select
               value={leagueFilter}
               onChange={(e) => setLeagueFilter(e.target.value)}
-              className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             >
               <option value="">All Leagues</option>
               {uniqueLeagues.map((l) => (
@@ -387,7 +397,7 @@ export default function TeamsPage() {
               ))}
             </select>
           </div>
-          <div className="flex rounded-lg border border-border overflow-hidden">
+          <div className="flex rounded-lg border border-teal/20 overflow-hidden">
             <button
               onClick={() => setViewMode("hierarchy")}
               className={`px-3 py-1.5 text-xs font-oswald uppercase tracking-wider transition-colors ${
@@ -419,7 +429,7 @@ export default function TeamsPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-border">
+          <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
             <Building2 size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm">
               {search || leagueFilter ? "No teams match your filters." : "No teams found."}
@@ -513,7 +523,7 @@ function TeamCard({ team }: { team: TeamSummary }) {
   return (
     <Link
       href={`/teams/${encodeURIComponent(team.name)}`}
-      className="bg-white rounded-xl border border-border p-3.5 hover:shadow-md hover:border-teal/30 transition-all group"
+      className="bg-white rounded-xl border border-teal/20 p-3.5 hover:shadow-md hover:border-teal/30 transition-all group"
     >
       <div className="flex items-center gap-3">
         {/* Team Logo / Abbreviation */}

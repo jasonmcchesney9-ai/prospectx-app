@@ -140,7 +140,7 @@ export default function PostGameScript({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted/40">
-              {data.word_count} words — {FORMAT_LABELS[data.format]?.label || data.format}
+              {data.word_count} words — {FORMAT_LABELS[data.format as ScriptFormat]?.label || data.format}
             </span>
             <div className="flex gap-1">
               <button

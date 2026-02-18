@@ -227,8 +227,8 @@ function GamePlanDetail() {
   };
 
   // ── Shared textarea classes ────────────────────────────────
-  const textareaClasses = "w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 resize-none";
-  const selectClasses = "w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 bg-white";
+  const textareaClasses = "w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 resize-none";
+  const selectClasses = "w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 bg-white";
 
   return (
     <div>
@@ -324,7 +324,7 @@ function GamePlanDetail() {
       {/* ── Sections ────────────────────────────────────────────── */}
       <div className="space-y-4">
         {/* Opponent Analysis */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
             <Target size={14} className="text-orange" />
             Opponent Analysis
@@ -344,7 +344,7 @@ function GamePlanDetail() {
         </div>
 
         {/* Our Strategy */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
             <Shield size={14} className="text-teal" />
             Our Strategy
@@ -364,7 +364,7 @@ function GamePlanDetail() {
         </div>
 
         {/* Tactical Systems */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
             <Swords size={14} className="text-teal" />
             Tactical Systems
@@ -430,7 +430,7 @@ function GamePlanDetail() {
         </div>
 
         {/* Special Teams */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
             <Zap size={14} className="text-orange" />
             Special Teams Plan
@@ -450,7 +450,7 @@ function GamePlanDetail() {
         </div>
 
         {/* Keys to Game */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
             <Swords size={14} className="text-navy" />
             Keys to the Game
@@ -470,7 +470,7 @@ function GamePlanDetail() {
         </div>
 
         {/* ── Talking Points (expandable) ───────────────────────── */}
-        <div className="bg-white rounded-xl border border-border">
+        <div className="bg-white rounded-xl border border-teal/20">
           <button
             type="button"
             onClick={() => setTalkingPointsOpen(!talkingPointsOpen)}
@@ -484,7 +484,7 @@ function GamePlanDetail() {
           </button>
 
           {talkingPointsOpen && (
-            <div className="px-5 pb-5 space-y-4 border-t border-border pt-4 print-section">
+            <div className="px-5 pb-5 space-y-4 border-t border-teal/20 pt-4 print-section">
               {/* Pre-Game */}
               <div>
                 <p className="text-xs font-oswald uppercase tracking-wider text-navy mb-1.5">Pre-Game Speech</p>
@@ -544,7 +544,7 @@ function GamePlanDetail() {
 
         {/* ── Post-Game Analysis (only for post_game session type) ── */}
         {isPostGame && (
-          <div className="bg-white rounded-xl border border-border p-5 space-y-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5 space-y-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
               <Target size={14} className="text-orange" />
               Post-Game Analysis
@@ -575,7 +575,7 @@ function GamePlanDetail() {
                       value={editData.game_score}
                       onChange={(e) => setEditData({ ...editData, game_score: e.target.value })}
                       placeholder="e.g. 4-2"
-                      className="border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 w-28"
+                      className="border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 w-28"
                     />
                   </div>
                 </>

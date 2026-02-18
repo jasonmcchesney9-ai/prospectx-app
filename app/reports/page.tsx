@@ -119,7 +119,7 @@ export default function ReportsPage() {
               placeholder="Search reports..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -127,7 +127,7 @@ export default function ReportsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             >
               <option value="">All Statuses</option>
               <option value="complete">Complete</option>
@@ -165,7 +165,7 @@ export default function ReportsPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-border">
+          <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
             <FileText size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm mb-4">
               {reports.length === 0
@@ -190,7 +190,7 @@ export default function ReportsPage() {
               const label = REPORT_TYPE_LABELS[type] || type;
 
               return (
-                <div key={type} className="bg-white rounded-xl border border-border overflow-hidden">
+                <div key={type} className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                   {/* Folder Header */}
                   <button
                     onClick={() => toggleFolder(type)}
@@ -212,7 +212,7 @@ export default function ReportsPage() {
 
                   {/* Folder Contents */}
                   {isExpanded && (
-                    <div className="border-t border-border/50 px-4 py-3">
+                    <div className="border-t border-teal/10 px-4 py-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {typeReports.map((r) => (
                           <ReportCard key={r.id} report={r} />

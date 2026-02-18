@@ -10,11 +10,42 @@ const STATUS_CONFIG = {
   failed: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50", label: "Failed" },
 } as const;
 
-export default function ReportCard({ report, compact = false }: { report: Report; compact?: boolean }) {
+export default function ReportCard({ report, compact = false, dark = false }: { report: Report; compact?: boolean; dark?: boolean }) {
   const statusInfo = STATUS_CONFIG[report.status] || STATUS_CONFIG.pending;
   const StatusIcon = statusInfo.icon;
   const isTeamReport = (TEAM_REPORT_TYPES as readonly string[]).includes(report.report_type);
   const CategoryIcon = isTeamReport ? Users : User;
+
+  if (compact && dark) {
+    return (
+      <Link
+        href={`/reports/${report.id}`}
+        className="flex items-center gap-2.5 p-2.5 rounded-lg border border-orange/20 bg-white/[0.06] hover:bg-white/[0.12] transition-colors group"
+      >
+        <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${isTeamReport ? "bg-orange/20" : "bg-white/10"}`}>
+          <CategoryIcon size={14} className={isTeamReport ? "text-orange" : "text-white/60"} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white font-medium truncate group-hover:text-teal transition-colors">
+            {report.title || "Untitled Report"}
+          </p>
+          <p className="text-[11px] text-white/40 truncate">
+            {REPORT_TYPE_LABELS[report.report_type] || report.report_type}
+            {report.generated_at && ` · ${new Date(report.generated_at).toLocaleDateString()}`}
+          </p>
+        </div>
+        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${
+          report.status === "complete" ? "bg-green-500/20 text-green-400" :
+          report.status === "processing" ? "bg-teal/20 text-teal" :
+          report.status === "failed" ? "bg-red-500/20 text-red-400" :
+          "bg-orange/20 text-orange"
+        }`}>
+          <StatusIcon size={10} className={report.status === "processing" ? "animate-spin" : ""} />
+          {statusInfo.label}
+        </span>
+      </Link>
+    );
+  }
 
   if (compact) {
     return (
@@ -45,7 +76,7 @@ export default function ReportCard({ report, compact = false }: { report: Report
   return (
     <Link
       href={`/reports/${report.id}`}
-      className="block bg-white rounded-lg border border-border p-4 hover:shadow-md transition-shadow"
+      className="block bg-white rounded-lg border border-teal/20 p-4 hover:border-teal/30 hover:shadow-md transition-all"
     >
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isTeamReport ? "bg-orange/10" : "bg-navy/5"}`}>

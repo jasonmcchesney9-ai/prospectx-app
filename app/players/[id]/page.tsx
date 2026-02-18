@@ -637,7 +637,7 @@ export default function PlayerDetailPage() {
         <div className="ice-stripe mb-6 rounded-b-full" />
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-border no-print">
+        <div className="flex gap-1 mb-6 border-b border-teal/20 no-print">
           {([
             { key: "profile" as Tab, label: "Profile", count: null },
             { key: "stats" as Tab, label: "Stats", count: stats.length },
@@ -665,7 +665,7 @@ export default function PlayerDetailPage() {
             {/* Player Info + Archetype */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Bio Card */}
-              <div className="bg-white rounded-xl border border-border p-5">
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <User size={14} className="text-teal" /> Player Info
@@ -681,7 +681,7 @@ export default function PlayerDetailPage() {
 
                 {/* Inline edit form */}
                 {editingBio && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-border space-y-2">
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-teal/20 space-y-2">
                     {/* League */}
                     <div>
                       <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
@@ -692,7 +692,7 @@ export default function PlayerDetailPage() {
                             value={editFields.current_league}
                             onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
                             placeholder="Enter league name"
-                            className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                            className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                           />
                           <button
                             type="button"
@@ -715,7 +715,7 @@ export default function PlayerDetailPage() {
                               setCustomTeam(false);
                             }
                           }}
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         >
                           <option value="">Select league...</option>
                           {editLeagues.map((lg) => (
@@ -735,7 +735,7 @@ export default function PlayerDetailPage() {
                             value={editFields.current_team}
                             onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
                             placeholder="Enter team name"
-                            className="flex-1 border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                            className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                           />
                           {!customLeague && (
                             <button
@@ -758,7 +758,7 @@ export default function PlayerDetailPage() {
                               setEditFields((f) => ({ ...f, current_team: e.target.value }));
                             }
                           }}
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         >
                           <option value="">Select team...</option>
                           {filteredEditTeams.map((t) => (
@@ -775,7 +775,7 @@ export default function PlayerDetailPage() {
                         <select
                           value={editFields.position}
                           onChange={(e) => setEditFields((f) => ({ ...f, position: e.target.value }))}
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         >
                           <option value="C">Center</option>
                           <option value="LW">Left Wing</option>
@@ -790,7 +790,7 @@ export default function PlayerDetailPage() {
                         <select
                           value={editFields.shoots}
                           onChange={(e) => setEditFields((f) => ({ ...f, shoots: e.target.value }))}
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         >
                           <option value="">—</option>
                           <option value="L">Left</option>
@@ -803,7 +803,7 @@ export default function PlayerDetailPage() {
                           type="date"
                           value={editFields.dob}
                           onChange={(e) => setEditFields((f) => ({ ...f, dob: e.target.value }))}
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         />
                       </div>
                     </div>
@@ -816,7 +816,7 @@ export default function PlayerDetailPage() {
                           value={editFields.height_cm}
                           onChange={(e) => setEditFields((f) => ({ ...f, height_cm: e.target.value }))}
                           placeholder="e.g. 183"
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         />
                       </div>
                       <div>
@@ -826,7 +826,7 @@ export default function PlayerDetailPage() {
                           value={editFields.weight_kg}
                           onChange={(e) => setEditFields((f) => ({ ...f, weight_kg: e.target.value }))}
                           placeholder="e.g. 82"
-                          className="w-full border border-border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                         />
                       </div>
                     </div>
@@ -842,10 +842,10 @@ export default function PlayerDetailPage() {
                 )}
 
                 {/* Player Photo Upload */}
-                <div className="flex items-center gap-4 mb-4 pb-4 border-b border-border/50">
+                <div className="flex items-center gap-4 mb-4 pb-4 border-b border-teal/10">
                   <div className="relative group">
                     {hasRealImage(player.image_url) ? (
-                      <div className="w-20 h-20 rounded-lg overflow-hidden border border-border bg-navy/5">
+                      <div className="w-20 h-20 rounded-lg overflow-hidden border border-teal/20 bg-navy/5">
                         <img
                           src={assetUrl(player.image_url)}
                           alt={`${player.first_name} ${player.last_name}`}
@@ -853,7 +853,7 @@ export default function PlayerDetailPage() {
                         />
                       </div>
                     ) : (
-                      <div className="w-20 h-20 rounded-lg border-2 border-dashed border-border bg-navy/[0.02] flex items-center justify-center">
+                      <div className="w-20 h-20 rounded-lg border-2 border-dashed border-teal/20 bg-navy/[0.02] flex items-center justify-center">
                         <Camera size={24} className="text-muted/30" />
                       </div>
                     )}
@@ -978,7 +978,7 @@ export default function PlayerDetailPage() {
                           // ignore
                         }
                       }}
-                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-border cursor-pointer pr-5 py-0.5 rounded ${
+                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
                         COMMITMENT_STATUS_COLORS[player.commitment_status || "Uncommitted"]?.text || "text-gray-600"
                       }`}
                     >
@@ -1000,7 +1000,7 @@ export default function PlayerDetailPage() {
                           // ignore
                         }
                       }}
-                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-border cursor-pointer pr-5 py-0.5 rounded ${
+                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
                         (player.roster_status || "active") === "active" ? "text-green-600" :
                         (player.roster_status || "active") === "ir" ? "text-red-600" :
                         (player.roster_status || "active") === "injured" ? "text-red-600" :
@@ -1022,7 +1022,7 @@ export default function PlayerDetailPage() {
                     </div>
                   )}
                   {player.tags && player.tags.length > 0 && (
-                    <div className="pt-2 border-t border-border/50">
+                    <div className="pt-2 border-t border-teal/10">
                       <span className="text-xs text-muted">Tags</span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {player.tags.map((tag) => (
@@ -1035,7 +1035,7 @@ export default function PlayerDetailPage() {
               </div>
 
               {/* Archetype Card */}
-              <div className="bg-white rounded-xl border border-border p-5">
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
                   <Activity size={14} className="text-orange" /> Player Archetype
                 </h3>
@@ -1075,7 +1075,7 @@ export default function PlayerDetailPage() {
                       value={archetypeValue}
                       onChange={(e) => setArchetypeValue(e.target.value)}
                       placeholder="e.g., Two-Way Playmaking Forward"
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
                       autoFocus
                     />
                     <p className="text-[10px] text-muted/60 mb-2">Click traits below to build a compound archetype, or type your own:</p>
@@ -1099,7 +1099,7 @@ export default function PlayerDetailPage() {
                                   setArchetypeValue((current + " " + chip).trim());
                                 }
                               }}
-                              className="px-2 py-0.5 text-[10px] rounded-full border border-border hover:border-teal/50 hover:bg-teal/5 text-navy/70 transition-colors"
+                              className="px-2 py-0.5 text-[10px] rounded-full border border-teal/20 hover:border-teal/50 hover:bg-teal/5 text-navy/70 transition-colors"
                             >
                               {chip}
                             </button>
@@ -1148,7 +1148,7 @@ export default function PlayerDetailPage() {
 
                 {/* ProspectX Metrics */}
                 {(playerMetrics || stats.length > 0) && (
-                  <div className="mt-4 pt-4 border-t border-border/50">
+                  <div className="mt-4 pt-4 border-t border-teal/10">
                     <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">
                       ProspectX Metrics
                     </h4>
@@ -1167,9 +1167,9 @@ export default function PlayerDetailPage() {
 
             {/* ── ProspectX Intelligence Panel ── */}
             {intelligence && intelligence.version > 0 && (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
+              <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-border/50 flex items-center justify-between">
+                <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-teal/10 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Brain size={16} className="text-teal" />
                     <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">ProspectX Intelligence</h3>
@@ -1301,7 +1301,7 @@ export default function PlayerDetailPage() {
                           return (
                             <span
                               key={key}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-navy/[0.04] border border-border/50 text-navy/70"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-navy/[0.04] border border-teal/10 text-navy/70"
                               title={key.replace(/_/g, ' ')}
                             >
                               {meta?.emoji && <span>{meta.emoji}</span>}
@@ -1315,7 +1315,7 @@ export default function PlayerDetailPage() {
 
                   {/* Projection */}
                   {intelligence.projection && (
-                    <div className="bg-navy/[0.02] rounded-lg p-3 border border-border/30">
+                    <div className="bg-navy/[0.02] rounded-lg p-3 border border-teal/8">
                       <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-1 flex items-center gap-1.5">
                         <TrendingUp size={11} className="text-teal" /> Projection
                       </h4>
@@ -1336,7 +1336,7 @@ export default function PlayerDetailPage() {
                   )}
 
                   {/* Intelligence History Toggle */}
-                  <div className="pt-2 border-t border-border/30">
+                  <div className="pt-2 border-t border-teal/8">
                     <button
                       onClick={loadIntelHistory}
                       className="flex items-center gap-1 text-[10px] font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
@@ -1347,7 +1347,7 @@ export default function PlayerDetailPage() {
                     {showIntelHistory && intelHistory.length > 0 && (
                       <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
                         {intelHistory.map((h) => (
-                          <div key={h.id || h.version} className="flex items-center gap-3 text-xs text-muted/70 py-1 border-b border-border/20 last:border-0">
+                          <div key={h.id || h.version} className="flex items-center gap-3 text-xs text-muted/70 py-1 border-b border-teal/5 last:border-0">
                             <span className="font-medium text-navy/50">v{h.version}</span>
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.04]">{h.trigger || "—"}</span>
                             <span>{h.archetype || "—"}</span>
@@ -1384,7 +1384,7 @@ export default function PlayerDetailPage() {
 
             {/* Team System Context */}
             {teamSystem ? (
-              <div className="bg-white rounded-xl border border-border p-5">
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <Shield size={14} className="text-navy" /> Team System — {teamSystem.team_name}
@@ -1407,7 +1407,7 @@ export default function PlayerDetailPage() {
                   ] as const).filter((f) => f.value).map(({ label, value, icon: Icon, color }) => {
                     const entry = systemsLibrary.find((e) => e.code === value);
                     return (
-                      <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                      <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-teal/10">
                         <div className="flex items-center gap-1.5 mb-1">
                           <Icon size={12} className={color} />
                           <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
@@ -1451,7 +1451,7 @@ export default function PlayerDetailPage() {
                 )}
               </div>
             ) : player.current_team ? (
-              <div className="bg-navy/[0.02] rounded-xl border border-dashed border-border p-5 text-center">
+              <div className="bg-navy/[0.02] rounded-xl border border-dashed border-teal/20 p-5 text-center">
                 <Shield size={24} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted mb-1">No system profile for <strong>{player.current_team}</strong></p>
                 <Link
@@ -1465,14 +1465,14 @@ export default function PlayerDetailPage() {
 
             {/* Player Notes Preview */}
             {player.notes && (
-              <div className="bg-white rounded-xl border border-border p-5">
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Player Notes</h3>
                 <p className="text-sm text-navy/80 whitespace-pre-wrap">{player.notes}</p>
               </div>
             )}
 
             {/* Suggest Correction */}
-            <div className="bg-white rounded-xl border border-border p-5 no-print">
+            <div className="bg-white rounded-xl border border-teal/20 p-5 no-print">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                   <AlertTriangle size={14} className="text-orange" />
@@ -1501,13 +1501,13 @@ export default function PlayerDetailPage() {
               )}
 
               {showCorrectionForm && (
-                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-border">
+                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-teal/20">
                   <div>
                     <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Field to Correct</label>
                     <select
                       value={correctionField}
                       onChange={(e) => setCorrectionField(e.target.value)}
-                      className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      className="w-full border border-teal/20 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                     >
                       <option value="">Select field...</option>
                       {CORRECTABLE_FIELDS.map((f) => (
@@ -1531,7 +1531,7 @@ export default function PlayerDetailPage() {
                       value={correctionValue}
                       onChange={(e) => setCorrectionValue(e.target.value)}
                       placeholder="Enter the correct value..."
-                      className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      className="w-full border border-teal/20 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
                     />
                   </div>
 
@@ -1542,7 +1542,7 @@ export default function PlayerDetailPage() {
                       onChange={(e) => setCorrectionReason(e.target.value)}
                       placeholder="Why is this incorrect?"
                       rows={2}
-                      className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                      className="w-full border border-teal/20 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                     />
                   </div>
 
@@ -1558,7 +1558,7 @@ export default function PlayerDetailPage() {
                               ? c === "high" ? "bg-green-100 text-green-700 border border-green-300"
                                 : c === "medium" ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
                                 : "bg-red-100 text-red-700 border border-red-300"
-                              : "bg-gray-100 text-muted border border-border hover:bg-gray-200"
+                              : "bg-gray-100 text-muted border border-teal/20 hover:bg-gray-200"
                           }`}
                         >
                           {c.charAt(0).toUpperCase() + c.slice(1)}
@@ -1679,14 +1679,14 @@ export default function PlayerDetailPage() {
                 {goalieStats.length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Goaltending</h3>
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                       <GoalieStatTable stats={goalieStats} />
                     </div>
                   </div>
                 )}
 
                 {/* Skater Stats */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                   <StatTable stats={stats} editable={true} onStatsChange={async () => {
                     const res = await api.get<PlayerStats[]>(`/stats/player/${playerId}`);
                     setStats(res.data);
@@ -1803,7 +1803,7 @@ export default function PlayerDetailPage() {
 
             {/* Note Form — Mobile Optimized */}
             {showNoteForm && (
-              <div className="bg-white rounded-xl border border-border p-4 mb-4">
+              <div className="bg-white rounded-xl border border-teal/20 p-4 mb-4">
                 <h3 className="text-sm font-semibold text-navy mb-3">
                   {editingNoteId ? "Edit Note" : "New Note"}
                 </h3>
@@ -1817,7 +1817,7 @@ export default function PlayerDetailPage() {
                       className={`px-3 py-1 text-xs rounded-full border transition-colors ${
                         noteType === key
                           ? "bg-teal text-white border-teal"
-                          : "bg-white text-muted border-border hover:border-teal/50"
+                          : "bg-white text-muted border-teal/20 hover:border-teal/50"
                       }`}
                     >
                       {label}
@@ -1831,7 +1831,7 @@ export default function PlayerDetailPage() {
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="Enter your scouting observation..."
                   rows={4}
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
                   autoFocus
                 />
 
@@ -1846,7 +1846,7 @@ export default function PlayerDetailPage() {
                         className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
                           noteTags.includes(tag)
                             ? "bg-navy text-white border-navy"
-                            : "bg-white text-muted border-border hover:border-navy/30"
+                            : "bg-white text-muted border-teal/20 hover:border-navy/30"
                         }`}
                       >
                         {NOTE_TAG_LABELS[tag] || tag}
@@ -1880,7 +1880,7 @@ export default function PlayerDetailPage() {
 
             {/* Notes List */}
             {notes.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-xl border border-border">
+              <div className="text-center py-8 bg-white rounded-xl border border-teal/20">
                 <PenLine size={24} className="mx-auto text-muted/40 mb-2" />
                 <p className="text-muted text-sm">No notes yet for this player.</p>
                 <p className="text-xs text-muted/60 mt-1">Add your first scouting observation above.</p>
@@ -1888,7 +1888,7 @@ export default function PlayerDetailPage() {
             ) : (
               <div className="space-y-3">
                 {notes.map((note) => (
-                  <div key={note.id} className="bg-white rounded-xl border border-border p-4">
+                  <div key={note.id} className="bg-white rounded-xl border border-teal/20 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         {/* Header */}
@@ -1965,7 +1965,7 @@ export default function PlayerDetailPage() {
               <span className="text-xs text-muted">{reports.length} total</span>
             </div>
             {reports.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-xl border border-border">
+              <div className="text-center py-8 bg-white rounded-xl border border-teal/20">
                 <FileText size={24} className="mx-auto text-muted/40 mb-2" />
                 <p className="text-muted text-sm">No reports yet for this player.</p>
               </div>
@@ -2161,7 +2161,7 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
           </div>
         );
       })}
-      <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border/30">
+      <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-teal/8">
         <p className="text-[9px] text-muted/50">
           Based on {indices.gp} GP {indices.season ? `(${indices.season})` : ""}
           {indices.has_extended_stats && (

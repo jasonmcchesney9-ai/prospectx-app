@@ -247,7 +247,7 @@ export default function PricingPage() {
 
           {/* FAQ / Notes */}
           <div className="max-w-3xl mx-auto pb-16 px-4">
-            <div className="bg-navy/[0.03] border border-border rounded-xl p-6">
+            <div className="bg-navy/[0.03] border border-teal/20 rounded-xl p-6">
               <h3 className="font-oswald text-lg font-bold text-navy mb-3">How It Works</h3>
               <div className="space-y-2 text-sm text-navy/70">
                 <p>• Usage limits reset on the 1st of each month.</p>

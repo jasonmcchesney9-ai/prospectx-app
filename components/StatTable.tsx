@@ -149,7 +149,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left">
+              <tr className="border-b border-teal/20 text-left">
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Season</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Team</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted text-center">GP</th>
@@ -169,7 +169,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
               {seasonStats.map((s) => {
                 const isEditing = editingId === s.id;
                 return (
-                  <tr key={s.id} className={`border-b border-border/50 ${isEditing ? "bg-teal/5" : "hover:bg-navy/[0.02]"}`}>
+                  <tr key={s.id} className={`border-b border-teal/10 ${isEditing ? "bg-teal/5" : "hover:bg-navy/[0.02]"}`}>
                     <td className="px-3 py-2.5 font-semibold text-navy whitespace-nowrap">
                       {isEditing ? (
                         <input className="w-24 px-1.5 py-1 text-sm border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 outline-none"
@@ -242,7 +242,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                             onFocus={() => setShowNotePresets(true)}
                           />
                           {showNotePresets && (
-                            <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-50 py-1 max-h-40 overflow-y-auto">
+                            <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-teal/20 rounded-lg shadow-lg z-50 py-1 max-h-40 overflow-y-auto">
                               {NOTE_PRESETS.map(preset => (
                                 <button
                                   key={preset}
@@ -318,7 +318,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
 
       {/* Game Logs — Collapsible */}
       {gameLogs.length > 0 && (
-        <div className="border-t border-border">
+        <div className="border-t border-teal/20">
           <button
             onClick={() => setShowGameLogs(!showGameLogs)}
             className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-navy/[0.02] transition-colors"
@@ -339,7 +339,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
             <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-white">
-                  <tr className="border-b border-border text-left">
+                  <tr className="border-b border-teal/20 text-left">
                     <th className="px-3 py-1.5 font-oswald text-[10px] uppercase tracking-wider text-muted">Date</th>
                     <th className="px-3 py-1.5 font-oswald text-[10px] uppercase tracking-wider text-muted">Opponent</th>
                     <th className="px-3 py-1.5 font-oswald text-[10px] uppercase tracking-wider text-muted text-center">G</th>
@@ -357,7 +357,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                     const micro = s.microstats || ({} as Record<string, unknown>);
                     const hasPoints = s.g > 0 || s.a > 0;
                     return (
-                      <tr key={s.id} className={`border-b border-border/30 ${hasPoints ? "bg-teal/[0.03]" : "hover:bg-navy/[0.02]"}`}>
+                      <tr key={s.id} className={`border-b border-teal/8 ${hasPoints ? "bg-teal/[0.03]" : "hover:bg-navy/[0.02]"}`}>
                         <td className="px-3 py-1.5 text-muted whitespace-nowrap">{(micro.date as string) || "—"}</td>
                         <td className="px-3 py-1.5 text-navy font-medium whitespace-nowrap">
                           {(micro.opponent as string) || "—"}
@@ -398,7 +398,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left">
+              <tr className="border-b border-teal/20 text-left">
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Season</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Team</th>
                 <th className="px-3 py-2 font-oswald text-xs uppercase tracking-wider text-muted">Type</th>
@@ -415,7 +415,7 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
             </thead>
             <tbody>
               {stats.map((s) => (
-                <tr key={s.id} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                <tr key={s.id} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                   <td className="px-3 py-2 font-medium text-navy">{s.season || "—"}</td>
                   <td className="px-3 py-2 text-xs text-navy/70">{s.team_name || "—"}</td>
                   <td className="px-3 py-2 text-muted capitalize">{s.stat_type}</td>

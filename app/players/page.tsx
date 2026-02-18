@@ -44,7 +44,7 @@ function FilterGroup({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-border/30 last:border-b-0">
+    <div className="border-b border-teal/8 last:border-b-0">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center justify-between w-full py-2 text-left"
@@ -89,7 +89,7 @@ function NumberInput({
         step={step}
         min={min}
         max={max}
-        className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white tabular-nums"
+        className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white tabular-nums"
       />
     </div>
   );
@@ -432,7 +432,7 @@ export default function PlayersPage() {
             {!loading && displayCount > 0 && (
               <button
                 onClick={exportCSV}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-oswald uppercase tracking-wider text-muted hover:text-navy hover:border-navy/30 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 border border-teal/20 rounded-lg text-xs font-oswald uppercase tracking-wider text-muted hover:text-navy hover:border-navy/30 transition-colors"
                 title="Export filtered results as CSV"
               >
                 <Download size={14} />
@@ -440,7 +440,7 @@ export default function PlayersPage() {
               </button>
             )}
             {/* View toggle */}
-            <div className="flex items-center bg-navy/[0.04] rounded-lg border border-border/50 p-0.5">
+            <div className="flex items-center bg-navy/[0.04] rounded-lg border border-teal/10 p-0.5">
               <button
                 onClick={() => setViewMode("cards")}
                 className={`p-1.5 rounded-md transition-colors ${
@@ -488,7 +488,7 @@ export default function PlayersPage() {
               >
                 <button
                   onClick={() => loadSavedSearch(ss)}
-                  className="px-2.5 py-1 rounded-full bg-navy/[0.05] border border-border/50 text-[11px] font-oswald uppercase tracking-wider text-navy/70 hover:bg-teal/10 hover:text-teal hover:border-teal/30 transition-colors"
+                  className="px-2.5 py-1 rounded-full bg-navy/[0.05] border border-teal/10 text-[11px] font-oswald uppercase tracking-wider text-navy/70 hover:bg-teal/10 hover:text-teal hover:border-teal/30 transition-colors"
                 >
                   {ss.name}
                 </button>
@@ -513,7 +513,7 @@ export default function PlayersPage() {
               placeholder="Search by name or team..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -521,7 +521,7 @@ export default function PlayersPage() {
             <select
               value={posFilter}
               onChange={(e) => setPosFilter(e.target.value)}
-              className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             >
               <option value="">All Positions</option>
               {POSITIONS.filter(Boolean).map((p) => (
@@ -531,7 +531,7 @@ export default function PlayersPage() {
             <select
               value={teamFilter}
               onChange={(e) => setTeamFilter(e.target.value)}
-              className="px-3 py-2 border border-border rounded-lg text-sm bg-white max-w-[200px]"
+              className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white max-w-[200px]"
             >
               <option value="">All Teams</option>
               {(filterOptions?.teams || []).map((t) => (
@@ -543,7 +543,7 @@ export default function PlayersPage() {
               className={`flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider border transition-colors ${
                 advancedFilterCount > 0
                   ? "border-teal bg-teal/10 text-teal"
-                  : "border-border text-muted hover:border-navy/30 hover:text-navy"
+                  : "border-teal/20 text-muted hover:border-navy/30 hover:text-navy"
               }`}
             >
               {showAdvancedFilters ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -559,7 +559,7 @@ export default function PlayersPage() {
 
         {/* ── Advanced Filters Panel ───────────────────── */}
         {showAdvancedFilters && (
-          <div className="bg-navy/[0.02] rounded-lg border border-border/50 p-4 mb-4">
+          <div className="bg-navy/[0.02] rounded-lg border border-teal/10 p-4 mb-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-oswald uppercase tracking-wider text-muted">Advanced Filters</span>
               <div className="flex items-center gap-3">
@@ -589,7 +589,7 @@ export default function PlayersPage() {
                   onChange={(e) => setSaveSearchName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && saveCurrentSearch()}
                   placeholder="Search name..."
-                  className="flex-1 px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                  className="flex-1 px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   autoFocus
                 />
                 <button
@@ -616,7 +616,7 @@ export default function PlayersPage() {
                   <select
                     value={leagueFilter}
                     onChange={(e) => setLeagueFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">All Leagues</option>
                     {(filterOptions?.leagues || []).map((l) => (
@@ -629,7 +629,7 @@ export default function PlayersPage() {
                   <select
                     value={birthYearFilter}
                     onChange={(e) => setBirthYearFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">All Years</option>
                     {(filterOptions?.birth_years || []).map((y) => (
@@ -642,7 +642,7 @@ export default function PlayersPage() {
                   <select
                     value={ageGroupFilter}
                     onChange={(e) => setAgeGroupFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">All Ages</option>
                     {(filterOptions?.age_groups || []).map((a) => (
@@ -655,7 +655,7 @@ export default function PlayersPage() {
                   <select
                     value={leagueTierFilter}
                     onChange={(e) => setLeagueTierFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">All Tiers</option>
                     {(filterOptions?.league_tiers || []).map((t) => (
@@ -668,7 +668,7 @@ export default function PlayersPage() {
                   <select
                     value={commitmentFilter}
                     onChange={(e) => setCommitmentFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">All Statuses</option>
                     {(filterOptions?.commitment_statuses || []).map((s) => (
@@ -687,7 +687,7 @@ export default function PlayersPage() {
                   <select
                     value={shootsFilter}
                     onChange={(e) => setShootsFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">Any</option>
                     {(filterOptions?.shoots || ["L", "R"]).map((s) => (
@@ -768,7 +768,7 @@ export default function PlayersPage() {
                       type="checkbox"
                       checked={hasStatsFilter}
                       onChange={(e) => setHasStatsFilter(e.target.checked)}
-                      className="rounded border-border text-teal focus:ring-teal"
+                      className="rounded border-teal/20 text-teal focus:ring-teal"
                     />
                     <span className="text-xs font-oswald uppercase tracking-wider text-navy/70">Has Stats Only</span>
                   </label>
@@ -784,7 +784,7 @@ export default function PlayersPage() {
                   <select
                     value={gradeFilter}
                     onChange={(e) => setGradeFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">Any Grade</option>
                     {(filterOptions?.overall_grades || GRADE_OPTIONS).map((g) => (
@@ -797,7 +797,7 @@ export default function PlayersPage() {
                   <select
                     value={archetypeFilter}
                     onChange={(e) => setArchetypeFilter(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">Any Archetype</option>
                     {(filterOptions?.archetypes || []).map((a) => (
@@ -816,7 +816,7 @@ export default function PlayersPage() {
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-border rounded-lg text-sm bg-white"
+                    className="w-full px-2.5 py-1.5 border border-teal/20 rounded-lg text-sm bg-white"
                   >
                     <option value="">Default (Name)</option>
                     {SORT_OPTIONS.map((o) => (
@@ -826,7 +826,7 @@ export default function PlayersPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1">Direction</label>
-                  <div className="flex items-center bg-navy/[0.04] rounded-lg border border-border/50 p-0.5">
+                  <div className="flex items-center bg-navy/[0.04] rounded-lg border border-teal/10 p-0.5">
                     <button
                       onClick={() => setSortDir("asc")}
                       className={`flex-1 px-2.5 py-1 rounded-md text-xs font-oswald uppercase tracking-wider transition-colors ${
@@ -860,7 +860,7 @@ export default function PlayersPage() {
             {loading ? (
               <div className="text-center py-16 text-muted text-sm">Loading player cards...</div>
             ) : cardData.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-xl border border-border">
+              <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
                 <p className="text-muted text-sm">No players found.</p>
                 <Link href="/players/new" className="text-teal hover:underline text-sm mt-2 inline-block">
                   Add your first player
@@ -897,11 +897,11 @@ export default function PlayersPage() {
 
         {/* ── Table View ────────────────────────────────────── */}
         {viewMode === "table" && (
-          <div className="bg-white rounded-xl border border-border overflow-hidden">
+          <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-navy/[0.03] border-b border-border">
+                  <tr className="bg-navy/[0.03] border-b border-teal/20">
                     <th className="px-4 py-3 text-left font-oswald text-xs uppercase tracking-wider text-muted">Player</th>
                     <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">POS</th>
                     <th className="px-4 py-3 text-left font-oswald text-xs uppercase tracking-wider text-muted">Team</th>
@@ -928,7 +928,7 @@ export default function PlayersPage() {
                     players.map((p) => {
                       const statusColors = COMMITMENT_STATUS_COLORS[p.commitment_status || ""] || null;
                       return (
-                        <tr key={p.id} className="border-b border-border/50 hover:bg-navy/[0.02] transition-colors">
+                        <tr key={p.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
                           <td className="px-4 py-3">
                             <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors">
                               {p.last_name}, {p.first_name}

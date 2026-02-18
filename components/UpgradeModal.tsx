@@ -97,7 +97,7 @@ export default function UpgradeModal({ isOpen, onClose, limitType, currentTier, 
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-lg border border-border text-navy/70 font-oswald font-bold uppercase tracking-wider text-sm hover:bg-navy/5 transition-colors"
+              className="flex-1 py-2.5 px-4 rounded-lg border border-teal/20 text-navy/70 font-oswald font-bold uppercase tracking-wider text-sm hover:bg-navy/5 transition-colors"
             >
               Maybe Later
             </button>

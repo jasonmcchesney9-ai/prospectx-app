@@ -113,7 +113,7 @@ function MyDataDashboard() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {stats.map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-border p-4">
+          <div key={s.label} className="bg-white rounded-xl border border-teal/20 p-4">
             <div className="flex items-center gap-2 mb-2">
               <s.icon size={14} className={s.color} />
               <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{s.label}</span>
@@ -143,7 +143,7 @@ function MyDataDashboard() {
       {/* Tab Content */}
       {activeTab === "overview" && summary && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3">Activity Summary</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex justify-between">
@@ -178,7 +178,7 @@ function MyDataDashboard() {
       {activeTab === "uploads" && (
         <div>
           {uploads.length === 0 ? (
-            <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+            <div className="bg-gray-50 border border-teal/20 rounded-xl p-6 text-center">
               <Upload size={32} className="mx-auto text-muted mb-3" />
               <h3 className="font-oswald font-semibold text-navy">No Uploads Yet</h3>
               <p className="text-muted text-sm mt-1">Your CSV imports will appear here.</p>
@@ -189,7 +189,7 @@ function MyDataDashboard() {
           ) : (
             <div className="space-y-2">
               {uploads.map((u) => (
-                <div key={u.id} className="bg-white rounded-xl border border-border p-4 flex items-center justify-between">
+                <div key={u.id} className="bg-white rounded-xl border border-teal/20 p-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-navy">{u.filename}</p>
                     <div className="flex items-center gap-3 text-xs text-muted mt-1">
@@ -219,7 +219,7 @@ function MyDataDashboard() {
       {activeTab === "players" && (
         <div>
           {players.length === 0 ? (
-            <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+            <div className="bg-gray-50 border border-teal/20 rounded-xl p-6 text-center">
               <Users size={32} className="mx-auto text-muted mb-3" />
               <h3 className="font-oswald font-semibold text-navy">No Players Created</h3>
               <p className="text-muted text-sm mt-1">Players you create will appear here.</p>
@@ -233,7 +233,7 @@ function MyDataDashboard() {
                 <Link
                   key={p.id}
                   href={`/players/${p.id}`}
-                  className="block bg-white rounded-xl border border-border p-4 hover:border-teal/30 hover:shadow-sm transition-all"
+                  className="block bg-white rounded-xl border border-teal/20 p-4 hover:border-teal/30 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -259,7 +259,7 @@ function MyDataDashboard() {
       {activeTab === "corrections" && (
         <div>
           {corrections.length === 0 ? (
-            <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+            <div className="bg-gray-50 border border-teal/20 rounded-xl p-6 text-center">
               <PenLine size={32} className="mx-auto text-muted mb-3" />
               <h3 className="font-oswald font-semibold text-navy">No Corrections Submitted</h3>
               <p className="text-muted text-sm mt-1">
@@ -269,7 +269,7 @@ function MyDataDashboard() {
           ) : (
             <div className="space-y-2">
               {corrections.map((c) => (
-                <div key={c.id} className="bg-white rounded-xl border border-border p-4">
+                <div key={c.id} className="bg-white rounded-xl border border-teal/20 p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2 mb-1">

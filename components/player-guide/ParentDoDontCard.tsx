@@ -71,9 +71,9 @@ export default function ParentDoDontCard() {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+    <div className="bg-white rounded-xl border border-teal/20 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-navy/[0.03] border-b border-border">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-navy/[0.03] border-b border-teal/20">
         <span className="text-[10px] font-oswald uppercase tracking-wider text-navy font-bold">
           Parent Tip of the Day
         </span>
@@ -120,7 +120,7 @@ export default function ParentDoDontCard() {
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-border bg-navy/[0.02]">
+      <div className="px-4 py-2 border-t border-teal/20 bg-navy/[0.02]">
         <p className="text-[9px] text-gray-400 text-center">
           Tip {index + 1} of {PAIRS.length} — rotates daily
         </p>

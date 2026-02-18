@@ -268,7 +268,7 @@ export default function PracticePlanDetailPage() {
 
         {/* Coaching Summary */}
         {plan.plan_data?.coaching_summary && (
-          <div className="bg-white rounded-xl border border-border p-5 mb-4">
+          <div className="bg-white rounded-xl border border-teal/20 p-5 mb-4">
             <h3 className="text-xs font-oswald uppercase tracking-wider text-teal mb-2">Practice Overview</h3>
             <p className="text-sm text-navy/80 leading-relaxed">{plan.plan_data.coaching_summary}</p>
           </div>
@@ -282,9 +282,9 @@ export default function PracticePlanDetailPage() {
               const time = runningTimes[phaseIdx];
 
               return (
-                <div key={phaseIdx} className="bg-white rounded-xl border border-border overflow-hidden">
+                <div key={phaseIdx} className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                   {/* Phase Header */}
-                  <div className={`flex items-center justify-between px-5 py-3 ${ps.bg} border-b border-border/50`}>
+                  <div className={`flex items-center justify-between px-5 py-3 ${ps.bg} border-b border-teal/10`}>
                     <div className="flex items-center gap-3">
                       <span className={`text-sm font-oswald font-bold uppercase tracking-wider ${ps.accent}`}>
                         {PRACTICE_PHASES[phase.phase] || phase.phase_label || phase.phase}
@@ -347,7 +347,7 @@ export default function PracticePlanDetailPage() {
                               <img
                                 src={assetUrl(d.drill_diagram_url)}
                                 alt={`${d.drill_name} diagram`}
-                                className="max-w-[300px] max-h-36 object-contain rounded border border-border/30 bg-white p-1"
+                                className="max-w-[300px] max-h-36 object-contain rounded border border-teal/8 bg-white p-1"
                               />
                             </div>
                           )}
@@ -399,7 +399,7 @@ export default function PracticePlanDetailPage() {
             })}
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-border p-8 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
             <ClipboardList size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm">No practice plan content available.</p>
           </div>
@@ -407,14 +407,14 @@ export default function PracticePlanDetailPage() {
 
         {/* Notes */}
         {plan.notes && (
-          <div className="mt-4 bg-white rounded-xl border border-border p-5">
+          <div className="mt-4 bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Notes</h3>
             <p className="text-sm text-navy/70 leading-relaxed">{plan.notes}</p>
           </div>
         )}
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-border">
+        <div className="mt-6 pt-4 border-t border-teal/20">
           <div className="ice-stripe rounded-full mb-4" />
           <div className="flex items-center justify-between text-xs text-muted">
             <span className="font-oswald uppercase tracking-wider">ProspectX Intelligence</span>

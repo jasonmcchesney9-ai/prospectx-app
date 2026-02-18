@@ -22,7 +22,7 @@ export default function PlayerProfiles({ data }: Props) {
       {data.map((profile, i) => {
         const isExpanded = expandedIdx === i;
         return (
-          <div key={i} className="border border-border/50 rounded-lg overflow-hidden">
+          <div key={i} className="border border-teal/10 rounded-lg overflow-hidden">
             <button
               onClick={() => setExpandedIdx(isExpanded ? null : i)}
               className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-navy/[0.02] transition-colors"

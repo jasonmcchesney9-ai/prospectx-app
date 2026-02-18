@@ -277,7 +277,7 @@ function CustomReportContent() {
         ) : (
           <div className="space-y-6">
             {/* ── Step 1: Subject Mode Toggle ── */}
-            <div className="bg-white rounded-xl border border-border p-6">
+            <div className="bg-white rounded-xl border border-teal/20 p-6">
               <div className="flex items-center gap-2 mb-4">
                 <span className="w-6 h-6 rounded-full bg-teal text-white text-xs font-bold flex items-center justify-center font-oswald">1</span>
                 <h2 className="text-sm font-oswald uppercase tracking-wider text-navy">Select Subject</h2>
@@ -317,9 +317,9 @@ function CustomReportContent() {
                       placeholder="Search players..."
                       value={playerSearch}
                       onChange={(e) => setPlayerSearch(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
                     />
-                    <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                    <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                       {filteredPlayers.length === 0 ? (
                         <div className="px-3 py-4 text-center text-muted text-sm">
                           {players.length === 0 ? "No players yet." : "No matching players."}
@@ -383,9 +383,9 @@ function CustomReportContent() {
                       placeholder="Search teams..."
                       value={teamSearch}
                       onChange={(e) => setTeamSearch(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
                     />
-                    <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                    <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                       {filteredTeams.length === 0 ? (
                         <div className="px-3 py-4 text-center text-muted text-sm">No teams found.</div>
                       ) : (
@@ -427,7 +427,7 @@ function CustomReportContent() {
             </div>
 
             {/* ── Step 2: Focus Areas ── */}
-            <div className="bg-white rounded-xl border border-border p-6">
+            <div className="bg-white rounded-xl border border-teal/20 p-6">
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-6 h-6 rounded-full bg-teal text-white text-xs font-bold flex items-center justify-center font-oswald">2</span>
                 <h2 className="text-sm font-oswald uppercase tracking-wider text-navy">Focus Areas</h2>
@@ -455,7 +455,7 @@ function CustomReportContent() {
                       className={`px-3 py-2.5 rounded-lg border text-left transition-all ${
                         isSelected
                           ? "border-teal bg-teal/10 ring-1 ring-teal/30"
-                          : "border-border bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
+                          : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ function CustomReportContent() {
             </div>
 
             {/* ── Step 3: Audience & Depth ── */}
-            <div className="bg-white rounded-xl border border-border p-6">
+            <div className="bg-white rounded-xl border border-teal/20 p-6">
               <div className="flex items-center gap-2 mb-4">
                 <span className="w-6 h-6 rounded-full bg-teal text-white text-xs font-bold flex items-center justify-center font-oswald">3</span>
                 <h2 className="text-sm font-oswald uppercase tracking-wider text-navy">Audience & Depth</h2>
@@ -513,7 +513,7 @@ function CustomReportContent() {
                         className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-all ${
                           audience === a.key
                             ? "border-teal bg-teal/10 text-teal font-medium"
-                            : "border-border text-navy hover:border-navy/30"
+                            : "border-teal/20 text-navy hover:border-navy/30"
                         }`}
                       >
                         {a.label}
@@ -536,7 +536,7 @@ function CustomReportContent() {
                         className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-all ${
                           depth === d.key
                             ? "border-orange bg-orange/10 text-orange font-medium"
-                            : "border-border text-navy hover:border-navy/30"
+                            : "border-teal/20 text-navy hover:border-navy/30"
                         }`}
                       >
                         {d.label}
@@ -555,7 +555,7 @@ function CustomReportContent() {
             </div>
 
             {/* ── Step 4: Advanced Options (Collapsible) ── */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
               <button
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className="w-full flex items-center justify-between px-6 py-4"
@@ -569,7 +569,7 @@ function CustomReportContent() {
               </button>
 
               {showAdvanced && (
-                <div className="px-6 pb-6 space-y-4 border-t border-border/50 pt-4">
+                <div className="px-6 pb-6 space-y-4 border-t border-teal/10 pt-4">
                   {/* Comparison Mode */}
                   <div>
                     <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">
@@ -582,7 +582,7 @@ function CustomReportContent() {
                         className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${
                           !comparisonMode
                             ? "border-teal bg-teal/10 text-teal font-medium"
-                            : "border-border text-muted hover:border-navy/30"
+                            : "border-teal/20 text-muted hover:border-navy/30"
                         }`}
                       >
                         None
@@ -595,7 +595,7 @@ function CustomReportContent() {
                           className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${
                             comparisonMode === cm.key
                               ? "border-teal bg-teal/10 text-teal font-medium"
-                              : "border-border text-muted hover:border-navy/30"
+                              : "border-teal/20 text-muted hover:border-navy/30"
                           }`}
                         >
                           {cm.label}
@@ -614,7 +614,7 @@ function CustomReportContent() {
                       placeholder="Leave blank for auto-generated title..."
                       value={reportTitle}
                       onChange={(e) => setReportTitle(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                       disabled={isGenerating}
                       maxLength={100}
                     />
@@ -629,7 +629,7 @@ function CustomReportContent() {
                       placeholder="Add any specific instructions, questions, or context for the report..."
                       value={customInstructions}
                       onChange={(e) => setCustomInstructions(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm resize-none"
                       rows={3}
                       disabled={isGenerating}
                       maxLength={500}
@@ -645,7 +645,7 @@ function CustomReportContent() {
             </div>
 
             {/* ── Step 5: Drill Recommendations (Optional) ── */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
               <button
                 onClick={() => setIncludeDrills(!includeDrills)}
                 className="w-full flex items-center justify-between px-6 py-4"
@@ -661,7 +661,7 @@ function CustomReportContent() {
               </button>
 
               {includeDrills && (
-                <div className="px-6 pb-6 space-y-4 border-t border-border/50 pt-4">
+                <div className="px-6 pb-6 space-y-4 border-t border-teal/10 pt-4">
                   <p className="text-xs text-muted/70 leading-relaxed">
                     Add relevant drills from the ProspectX Drill Library with rink diagrams, setup instructions, and coaching points tailored to the report subject.
                   </p>
@@ -703,7 +703,7 @@ function CustomReportContent() {
                       <select
                         value={drillAgeLevel}
                         onChange={(e) => setDrillAgeLevel(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-border rounded-lg text-xs bg-white"
+                        className="w-full px-3 py-1.5 border border-teal/20 rounded-lg text-xs bg-white"
                         disabled={isGenerating}
                       >
                         <option value="">All Ages</option>
@@ -718,7 +718,7 @@ function CustomReportContent() {
                       <select
                         value={drillIntensity}
                         onChange={(e) => setDrillIntensity(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-border rounded-lg text-xs bg-white"
+                        className="w-full px-3 py-1.5 border border-teal/20 rounded-lg text-xs bg-white"
                         disabled={isGenerating}
                       >
                         <option value="">All</option>
@@ -734,7 +734,7 @@ function CustomReportContent() {
 
             {/* ── Preview Summary ── */}
             {(selectedPlayer || selectedTeam) && focusAreas.length > 0 && (
-              <div className="bg-gradient-to-r from-navy/[0.03] to-teal/[0.03] rounded-xl border border-border/50 p-4">
+              <div className="bg-gradient-to-r from-navy/[0.03] to-teal/[0.03] rounded-xl border border-teal/10 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles size={14} className="text-teal" />
                   <span className="text-xs font-oswald uppercase tracking-wider text-navy">Report Preview</span>

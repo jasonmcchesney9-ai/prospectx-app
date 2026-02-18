@@ -408,7 +408,7 @@ function SeriesDetail() {
       </div>
 
       {/* ── Score Display ───────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-border p-5 mb-4">
+      <div className="bg-white rounded-xl border border-teal/20 p-5 mb-4">
         <div className="text-center">
           <p className="text-xs text-muted font-oswald uppercase tracking-wider mb-2">Series Score</p>
           {editingScore ? (
@@ -417,7 +417,7 @@ function SeriesDetail() {
                 type="text"
                 value={scoreValue}
                 onChange={(e) => setScoreValue(e.target.value)}
-                className="w-24 text-center border border-border rounded-lg px-2 py-1 text-2xl font-oswald font-bold text-navy focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-24 text-center border border-teal/20 rounded-lg px-2 py-1 text-2xl font-oswald font-bold text-navy focus:outline-none focus:ring-2 focus:ring-teal/30"
               />
               <button
                 onClick={() => { saveField({ current_score: scoreValue }); setEditingScore(false); }}
@@ -474,7 +474,7 @@ function SeriesDetail() {
       {(activeTab === "overview" || printMode) && (
         <div className="space-y-4">
           {/* Working Strategies */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
               <CheckCircle size={14} className="text-green-600" />
               Working Strategies
@@ -500,7 +500,7 @@ function SeriesDetail() {
                 onChange={(e) => setNewStrategy(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addStrategy()}
                 placeholder="Add a working strategy..."
-                className="flex-1 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                className="flex-1 border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
               />
               <button
                 onClick={addStrategy}
@@ -513,7 +513,7 @@ function SeriesDetail() {
           </div>
 
           {/* Needs Adjustment */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
               <AlertTriangle size={14} className="text-orange" />
               Needs Adjustment
@@ -539,7 +539,7 @@ function SeriesDetail() {
                 onChange={(e) => setNewNeedsAdj(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addNeedsAdj()}
                 placeholder="Flag something for adjustment..."
-                className="flex-1 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                className="flex-1 border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
               />
               <button
                 onClick={addNeedsAdj}
@@ -558,7 +558,7 @@ function SeriesDetail() {
       {(activeTab === "dossier" || printMode) && (
         <div className="space-y-4">
           {/* Opponent Systems */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-4">
               <Shield size={14} className="text-teal" />
               Opponent Systems
@@ -580,7 +580,7 @@ function SeriesDetail() {
                     onBlur={() => updateOpponentSystems(key, opponentSystems[key])}
                     rows={3}
                     placeholder={`Describe ${label.toLowerCase()}...`}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-xs text-navy focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                    className="w-full border border-teal/20 rounded-lg px-3 py-2 text-xs text-navy focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                   />
                 </div>
               ))}
@@ -588,7 +588,7 @@ function SeriesDetail() {
           </div>
 
           {/* Key Players Dossier */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
                 <Users size={14} className="text-orange" />
@@ -606,7 +606,7 @@ function SeriesDetail() {
             ) : (
               <div className="space-y-3">
                 {keyPlayers.map((kp, i) => (
-                  <div key={i} className="border border-border rounded-lg p-3 bg-gray-50/50">
+                  <div key={i} className="border border-teal/20 rounded-lg p-3 bg-gray-50/50">
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         type="text"
@@ -614,7 +614,7 @@ function SeriesDetail() {
                         onChange={(e) => updateKeyPlayer(i, "name", e.target.value)}
                         onBlur={saveKeyPlayers}
                         placeholder="Player name"
-                        className="flex-1 border border-border rounded px-2 py-1 text-xs font-medium text-navy focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        className="flex-1 border border-teal/20 rounded px-2 py-1 text-xs font-medium text-navy focus:outline-none focus:ring-1 focus:ring-teal/30"
                       />
                       <input
                         type="text"
@@ -622,13 +622,13 @@ function SeriesDetail() {
                         onChange={(e) => updateKeyPlayer(i, "number", e.target.value)}
                         onBlur={saveKeyPlayers}
                         placeholder="#"
-                        className="w-12 border border-border rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        className="w-12 border border-teal/20 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-teal/30"
                       />
                       <select
                         value={kp.position}
                         onChange={(e) => { updateKeyPlayer(i, "position", e.target.value); }}
                         onBlur={saveKeyPlayers}
-                        className="border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                        className="border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
                       >
                         <option value="F">F</option>
                         <option value="D">D</option>
@@ -638,7 +638,7 @@ function SeriesDetail() {
                         value={kp.threat_level}
                         onChange={(e) => { updateKeyPlayer(i, "threat_level", e.target.value); }}
                         onBlur={saveKeyPlayers}
-                        className={`border border-border rounded px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal/30 ${
+                        className={`border border-teal/20 rounded px-2 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-teal/30 ${
                           kp.threat_level === "high" ? "text-red-600"
                             : kp.threat_level === "medium" ? "text-orange"
                             : "text-gray-500"
@@ -665,7 +665,7 @@ function SeriesDetail() {
                           onBlur={saveKeyPlayers}
                           rows={2}
                           placeholder="Strengths, tendencies, habits..."
-                          className="w-full border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                         />
                       </div>
                       <div>
@@ -676,7 +676,7 @@ function SeriesDetail() {
                           onBlur={saveKeyPlayers}
                           rows={2}
                           placeholder="How to neutralize this player..."
-                          className="w-full border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                         />
                       </div>
                     </div>
@@ -687,7 +687,7 @@ function SeriesDetail() {
           </div>
 
           {/* Matchup Plan */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-4">
               <Crosshair size={14} className="text-navy" />
               Matchup Plan
@@ -708,7 +708,7 @@ function SeriesDetail() {
                     onBlur={() => updateMatchupPlan(key, matchupPlan[key])}
                     rows={3}
                     placeholder={placeholder}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-xs text-navy focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                    className="w-full border border-teal/20 rounded-lg px-3 py-2 text-xs text-navy focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                   />
                 </div>
               ))}
@@ -722,7 +722,7 @@ function SeriesDetail() {
       {(activeTab === "games" || printMode) && (
         <div className="space-y-4">
           {/* Add Game */}
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
                 <Zap size={14} className="text-teal" />
@@ -738,13 +738,13 @@ function SeriesDetail() {
             </div>
 
             {addingGameNote && (
-              <div className="no-print mb-4 p-3 bg-gray-50 rounded-lg border border-border space-y-3">
+              <div className="no-print mb-4 p-3 bg-gray-50 rounded-lg border border-teal/20 space-y-3">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-medium text-navy">Game {gameNotes.length + 1}</span>
                   <select
                     value={newGameResult}
                     onChange={(e) => setNewGameResult(e.target.value)}
-                    className="border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    className="border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
                   >
                     <option value="win">Win</option>
                     <option value="loss">Loss</option>
@@ -756,7 +756,7 @@ function SeriesDetail() {
                   onChange={(e) => setNewGameNotes(e.target.value)}
                   placeholder="Key takeaways, what worked, what didn't..."
                   rows={3}
-                  className="w-full border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                  className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                 />
                 <div>
                   <label className="block text-[10px] text-muted uppercase tracking-wider mb-1">
@@ -793,7 +793,7 @@ function SeriesDetail() {
                 {gameNotes.map((gn, i) => {
                   const momentum = momentumLog.find((m) => m.game_number === gn.game_number);
                   return (
-                    <div key={i} className="border border-border rounded-lg overflow-hidden">
+                    <div key={i} className="border border-teal/20 rounded-lg overflow-hidden">
                       <button
                         onClick={() => setExpandedGame(expandedGame === i ? null : i)}
                         className="w-full px-3 py-2.5 flex items-center justify-between hover:bg-gray-50 transition-colors"
@@ -829,7 +829,7 @@ function SeriesDetail() {
                         )}
                       </button>
                       {expandedGame === i && (
-                        <div className="px-3 py-3 border-t border-border bg-gray-50 space-y-3">
+                        <div className="px-3 py-3 border-t border-teal/20 bg-gray-50 space-y-3">
                           <p className="text-xs text-navy/80 whitespace-pre-wrap">{gn.notes}</p>
                           {momentum && (
                             <div>
@@ -862,7 +862,7 @@ function SeriesDetail() {
 
           {/* Momentum Overview */}
           {momentumLog.length > 0 && (
-            <div className="bg-white rounded-xl border border-border p-5">
+            <div className="bg-white rounded-xl border border-teal/20 p-5">
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3">
                 Momentum Trend
               </h3>
@@ -896,7 +896,7 @@ function SeriesDetail() {
       {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Adjustments</h2>}
       {(activeTab === "adjustments" || printMode) && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
                 <Crosshair size={14} className="text-orange" />
@@ -917,7 +917,7 @@ function SeriesDetail() {
             ) : (
               <div className="space-y-3">
                 {adjustments.map((adj, i) => (
-                  <div key={i} className="border border-border rounded-lg p-3 bg-gray-50/50">
+                  <div key={i} className="border border-teal/20 rounded-lg p-3 bg-gray-50/50">
                     <div className="flex items-start gap-2 mb-2">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-oswald uppercase tracking-wider shrink-0 mt-0.5 ${
                         adj.priority === "high" ? "bg-red-100 text-red-700"
@@ -938,7 +938,7 @@ function SeriesDetail() {
                               onChange={(e) => updateAdjustment(i, "trigger", e.target.value)}
                               onBlur={saveAdjustments}
                               placeholder="They start trapping in the neutral zone..."
-                              className="w-full border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
                             />
                           </div>
                           <div>
@@ -951,7 +951,7 @@ function SeriesDetail() {
                               onChange={(e) => updateAdjustment(i, "action", e.target.value)}
                               onBlur={saveAdjustments}
                               placeholder="Use stretch passes, chip and chase..."
-                              className="w-full border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
                             />
                           </div>
                         </div>
@@ -962,7 +962,7 @@ function SeriesDetail() {
                               value={adj.priority}
                               onChange={(e) => { updateAdjustment(i, "priority", e.target.value); }}
                               onBlur={saveAdjustments}
-                              className="border border-border rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="border border-teal/20 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-teal/30"
                             >
                               <option value="high">High</option>
                               <option value="medium">Medium</option>
@@ -977,7 +977,7 @@ function SeriesDetail() {
                               onChange={(e) => updateAdjustment(i, "used_in_game", e.target.value)}
                               onBlur={saveAdjustments}
                               placeholder="e.g. Game 3"
-                              className="w-20 border border-border rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="w-20 border border-teal/20 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-teal/30"
                             />
                           </div>
                         </div>

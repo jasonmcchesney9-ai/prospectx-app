@@ -215,7 +215,7 @@ function CompactPlayerCard({ player }: { player: Player & { gp?: number; g?: num
   return (
     <Link
       href={`/players/${player.id}`}
-      className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white border border-border hover:border-teal/30 hover:shadow-sm transition-all"
+      className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white border border-teal/20 hover:border-teal/30 hover:shadow-sm transition-all"
     >
       {hasRealImage(player.image_url) ? (
         <div className="w-8 h-8 rounded-full overflow-hidden bg-navy/10 shrink-0">
@@ -266,7 +266,7 @@ function CompactReportCard({ report }: { report: Report }) {
   return (
     <Link
       href={`/reports/${report.id}`}
-      className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white border border-border hover:border-teal/30 hover:shadow-sm transition-all"
+      className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white border border-teal/20 hover:border-teal/30 hover:shadow-sm transition-all"
     >
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isTeamReport ? "bg-orange/10" : "bg-navy/5"}`}>
         <FileText size={14} className={isTeamReport ? "text-orange" : "text-navy"} />
@@ -329,7 +329,7 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
   // If no modes loaded yet, show placeholder
   if (pxiModes.length === 0) {
     return (
-      <div className="bg-white border-b border-border px-3 py-2 shrink-0">
+      <div className="bg-white border-b border-teal/20 px-3 py-2 shrink-0">
         <div className="flex gap-1.5 overflow-x-auto">
           {PRIMARY_MODE_IDS.map((id) => (
             <span key={id} className="px-3 py-1 rounded-full bg-navy/5 text-[10px] text-muted animate-pulse">
@@ -345,7 +345,7 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
   const isSecondaryActive = SECONDARY_MODE_IDS.includes(currentMode);
 
   return (
-    <div className="bg-white border-b border-border px-3 py-2 shrink-0">
+    <div className="bg-white border-b border-teal/20 px-3 py-2 shrink-0">
       <div className="flex items-center gap-1.5">
         {/* Primary mode pills — always visible */}
         <div className="flex gap-1 overflow-x-auto flex-1 min-w-0">
@@ -358,7 +358,7 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
                 className={`px-3 py-1 rounded-full text-[10px] font-oswald font-bold tracking-wider whitespace-nowrap transition-all ${
                   isActive
                     ? "bg-teal text-white shadow-sm"
-                    : "bg-transparent text-muted border border-border hover:border-teal/30 hover:text-navy"
+                    : "bg-transparent text-muted border border-teal/20 hover:border-teal/30 hover:text-navy"
                 }`}
                 title={mode.name}
               >
@@ -376,7 +376,7 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
               className={`flex items-center gap-0.5 px-2.5 py-1 rounded-full text-[10px] font-oswald font-bold tracking-wider transition-all ${
                 isSecondaryActive
                   ? "bg-teal text-white shadow-sm"
-                  : "bg-transparent text-muted border border-border hover:border-teal/30 hover:text-navy"
+                  : "bg-transparent text-muted border border-teal/20 hover:border-teal/30 hover:text-navy"
               }`}
               title="More modes"
             >
@@ -385,7 +385,7 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
             </button>
 
             {moreOpen && (
-              <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-50 py-1">
+              <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-teal/20 rounded-lg shadow-lg z-50 py-1">
                 {secondaryModes.map((mode) => {
                   const isActive = currentMode === mode.id;
                   return (
@@ -698,7 +698,7 @@ export default function BenchTalkDrawer() {
 
       {/* ── Panel (full viewport height, overlays everything) ── */}
       <div
-        className={`fixed top-0 right-0 bottom-0 z-[60] w-full sm:w-[480px] bg-bg border-l border-border shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 bottom-0 z-[60] w-full sm:w-[480px] bg-bg border-l border-teal/20 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -741,7 +741,7 @@ export default function BenchTalkDrawer() {
         />
 
         {/* ── Context / History Bar (collapsible) ── */}
-        <div className="bg-white border-b border-border shrink-0">
+        <div className="bg-white border-b border-teal/20 shrink-0">
           <div className="flex">
             <button
               onClick={() => { setSidebarTab("context"); setSidebarOpen(sidebarTab === "context" ? !sidebarOpen : true); }}
@@ -779,7 +779,7 @@ export default function BenchTalkDrawer() {
 
           {/* Tab Content — only shown when expanded */}
           {sidebarOpen && (
-            <div className="max-h-[180px] overflow-y-auto border-t border-border/50">
+            <div className="max-h-[180px] overflow-y-auto border-t border-teal/10">
               {sidebarTab === "context" ? (
                 <div className="p-2 space-y-1.5">
                   {!hasContext ? (
@@ -808,7 +808,7 @@ export default function BenchTalkDrawer() {
                       <button
                         key={conv.id}
                         onClick={() => { selectConversation(conv.id); setSidebarOpen(false); }}
-                        className={`w-full text-left px-3 py-2 border-b border-border/50 hover:bg-navy/[0.02] transition-colors group ${
+                        className={`w-full text-left px-3 py-2 border-b border-teal/10 hover:bg-navy/[0.02] transition-colors group ${
                           activeConvId === conv.id ? "bg-teal/5 border-l-2 border-l-teal" : ""
                         }`}
                       >
@@ -868,7 +868,7 @@ export default function BenchTalkDrawer() {
                     <button
                       key={i}
                       onClick={() => sendMessage(s.text)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border bg-white hover:bg-teal/5 hover:${theme.pillBorderActive} transition-all text-left group`}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border border-teal/20 bg-white hover:bg-teal/5 hover:${theme.pillBorderActive} transition-all text-left group`}
                     >
                       <Icon size={14} className="text-teal shrink-0 group-hover:scale-110 transition-transform" />
                       <span className="text-[11px] text-navy leading-tight">{s.text}</span>
@@ -906,7 +906,7 @@ export default function BenchTalkDrawer() {
                       className={`rounded-xl px-3 py-2.5 ${
                         msg.role === "user"
                           ? "bg-navy text-white"
-                          : "bg-white border border-border shadow-sm"
+                          : "bg-white border border-teal/20 shadow-sm"
                       }`}
                     >
                       {msg.role === "user" ? (
@@ -961,7 +961,7 @@ export default function BenchTalkDrawer() {
                   <div className="mr-1.5 mt-1 shrink-0">
                     <PXIBadge size={32} variant="dark" showDot={false} />
                   </div>
-                  <div className="bg-white border border-border rounded-xl px-3 py-2 shadow-sm">
+                  <div className="bg-white border border-teal/20 rounded-xl px-3 py-2 shadow-sm">
                     <div className="flex flex-col items-start gap-1">
                       <HockeyRink size="chat" />
                       <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/70">PXI is scanning...</span>

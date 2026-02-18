@@ -28,9 +28,9 @@ export default function PXIQuickAsk() {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+    <div className="bg-white rounded-xl border border-teal/20 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-navy/[0.03] border-b border-border">
+      <div className="flex items-center gap-3 px-4 py-3 bg-navy/[0.03] border-b border-teal/20">
         <div className="w-8 h-8 rounded-lg bg-teal/10 flex items-center justify-center">
           <HockeyRink size="toast" />
         </div>

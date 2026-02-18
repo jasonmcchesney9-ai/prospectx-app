@@ -138,7 +138,7 @@ function CorrectionsAdmin() {
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
         </div>
       ) : corrections.length === 0 ? (
-        <div className="bg-gray-50 border border-border rounded-xl p-8 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-8 text-center">
           <CheckSquare size={32} className="mx-auto text-muted mb-3" />
           <h3 className="font-oswald font-semibold text-navy">No {statusFilter !== "all" ? statusFilter : ""} Corrections</h3>
           <p className="text-muted text-sm mt-1">
@@ -151,7 +151,7 @@ function CorrectionsAdmin() {
         <div className="space-y-3">
           <p className="text-xs text-muted mb-2">{total} correction(s) found</p>
           {corrections.map((c) => (
-            <div key={c.id} className="bg-white rounded-xl border border-border p-4">
+            <div key={c.id} className="bg-white rounded-xl border border-teal/20 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -217,7 +217,7 @@ function CorrectionsAdmin() {
                           onChange={(e) => setReviewNote(e.target.value)}
                           placeholder="Review note (optional)..."
                           rows={2}
-                          className="w-full border border-border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                          className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
                         />
                         <div className="flex gap-2">
                           <button

@@ -31,7 +31,7 @@ export default function MessagesPage() {
           ].map((item) => (
             <div
               key={item.title}
-              className="bg-white rounded-xl border border-border p-4 hover:border-teal/30 hover:shadow-sm transition-all"
+              className="bg-white rounded-xl border border-teal/20 p-4 hover:border-teal/30 hover:shadow-sm transition-all"
             >
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">

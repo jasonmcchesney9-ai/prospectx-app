@@ -39,7 +39,7 @@ export default function ProgressionChart({ data }: Props) {
 
   if (!seasons || seasons.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-border p-6 text-center">
+      <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
         <BarChart3 size={32} className="mx-auto text-muted/30 mb-2" />
         <p className="text-sm text-muted">No progression data available.</p>
         <p className="text-xs text-muted/60 mt-1">Sync stats from HockeyTech to see season-over-season trends.</p>
@@ -84,7 +84,7 @@ export default function ProgressionChart({ data }: Props) {
       </div>
 
       {/* PPG Line Chart */}
-      <div className="bg-white rounded-xl border border-border p-4">
+      <div className="bg-white rounded-xl border border-teal/20 p-4">
         <h4 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">Points Per Game by Season</h4>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
@@ -105,11 +105,11 @@ export default function ProgressionChart({ data }: Props) {
       </div>
 
       {/* Season-over-season table */}
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-navy/[0.03]">
+              <tr className="border-b border-teal/20 bg-navy/[0.03]">
                 <th className="text-left px-3 py-2 text-[10px] font-oswald uppercase tracking-wider text-muted">Season</th>
                 <th className="text-right px-3 py-2 text-[10px] font-oswald uppercase tracking-wider text-muted">GP</th>
                 <th className="text-right px-3 py-2 text-[10px] font-oswald uppercase tracking-wider text-muted">G</th>
@@ -122,7 +122,7 @@ export default function ProgressionChart({ data }: Props) {
             </thead>
             <tbody>
               {seasons.map((s, i) => (
-                <tr key={s.season || i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                <tr key={s.season || i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                   <td className="px-3 py-2 font-medium text-navy">{s.season || "—"}</td>
                   <td className="px-3 py-2 text-right">{s.gp || 0}</td>
                   <td className="px-3 py-2 text-right">{s.g || 0}</td>

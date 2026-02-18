@@ -153,7 +153,7 @@ export default function PlayerGuidePage() {
                 className={`bg-white rounded-xl border transition-all duration-300 overflow-hidden ${
                   isExpanded
                     ? `border-l-4 ${section.accent} border-gray-200 shadow-md`
-                    : "border-border hover:shadow-sm hover:border-teal/30"
+                    : "border-teal/20 hover:shadow-sm hover:border-teal/30"
                 }`}
               >
                 {/* Clickable header */}

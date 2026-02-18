@@ -348,7 +348,7 @@ function GenerateReportContent() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-border p-6 space-y-6">
+          <div className="bg-white rounded-xl border border-teal/20 p-6 space-y-6">
             {/* Subject Selection — Player OR Team based on report type */}
             {isTeamReportType ? (
               /* ── TEAM PICKER ── */
@@ -365,9 +365,9 @@ function GenerateReportContent() {
                       placeholder="Search teams..."
                       value={teamSearch}
                       onChange={(e) => setTeamSearch(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
                     />
-                    <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                    <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                       {filteredTeams.length === 0 ? (
                         <div className="px-3 py-4 text-center text-muted text-sm">No teams found.</div>
                       ) : (
@@ -421,9 +421,9 @@ function GenerateReportContent() {
                       placeholder="Search players..."
                       value={playerSearch}
                       onChange={(e) => setPlayerSearch(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
                     />
-                    <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                    <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                       {filteredPlayers.length === 0 ? (
                         <div className="px-3 py-4 text-center text-muted text-sm">
                           {players.length === 0 ? (
@@ -550,7 +550,7 @@ function GenerateReportContent() {
                           className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
                             isSelected
                               ? "border-teal bg-teal/10 ring-1 ring-teal/30"
-                              : "border-border bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
+                              : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
                           }`}
                         >
                           {recommended && (
@@ -610,7 +610,7 @@ function GenerateReportContent() {
                           className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
                             isSelected
                               ? "border-orange bg-orange/10 ring-1 ring-orange/30"
-                              : "border-border bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
+                              : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
                           }`}
                         >
                           {recommended && (
@@ -656,7 +656,7 @@ function GenerateReportContent() {
             )}
 
             {/* Drill Recommendations Option */}
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="border border-teal/20 rounded-lg overflow-hidden">
               <button
                 type="button"
                 onClick={() => {
@@ -680,7 +680,7 @@ function GenerateReportContent() {
               </button>
 
               {drillExpanded && (
-                <div className="px-4 py-4 space-y-4 border-t border-border/50">
+                <div className="px-4 py-4 space-y-4 border-t border-teal/10">
                   <p className="text-xs text-muted/70 leading-relaxed">
                     Include relevant drills from the ProspectX Drill Library with setup instructions, coaching points, and rink diagrams. The AI will recommend drills tailored to the player/team&apos;s development needs.
                   </p>
@@ -691,7 +691,7 @@ function GenerateReportContent() {
                       type="checkbox"
                       checked={includeDrills}
                       onChange={(e) => setIncludeDrills(e.target.checked)}
-                      className="w-4 h-4 rounded border-border text-teal focus:ring-teal"
+                      className="w-4 h-4 rounded border-teal/20 text-teal focus:ring-teal"
                     />
                     <span className="text-sm text-navy font-medium">Include drills with diagrams in report</span>
                   </label>
@@ -735,7 +735,7 @@ function GenerateReportContent() {
                         <select
                           value={drillAgeLevel}
                           onChange={(e) => setDrillAgeLevel(e.target.value)}
-                          className="px-3 py-1.5 border border-border rounded-lg text-xs bg-white w-full max-w-xs"
+                          className="px-3 py-1.5 border border-teal/20 rounded-lg text-xs bg-white w-full max-w-xs"
                         >
                           <option value="">All Ages</option>
                           {DRILL_AGE_LEVELS.map((a) => (
@@ -752,7 +752,7 @@ function GenerateReportContent() {
                         <select
                           value={drillIntensity}
                           onChange={(e) => setDrillIntensity(e.target.value)}
-                          className="px-3 py-1.5 border border-border rounded-lg text-xs bg-white w-full max-w-xs"
+                          className="px-3 py-1.5 border border-teal/20 rounded-lg text-xs bg-white w-full max-w-xs"
                         >
                           <option value="">All Intensities</option>
                           <option value="low">Low</option>

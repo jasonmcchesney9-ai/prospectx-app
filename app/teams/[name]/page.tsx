@@ -96,7 +96,7 @@ function SystemSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+        className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
       >
         <option value="">Select...</option>
         {options.map((opt) => (
@@ -439,7 +439,7 @@ export default function TeamDetailPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-border">
+        <div className="flex gap-1 mb-6 border-b border-teal/20">
           {([
             { key: "roster" as Tab, label: "Roster", icon: Users, count: roster.length },
             { key: "identity" as Tab, label: "Identity", icon: Brain, count: null },
@@ -516,7 +516,7 @@ export default function TeamDetailPage() {
             )}
 
             {roster.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-border">
+              <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
                 <Users size={32} className="mx-auto text-muted/40 mb-3" />
                 <p className="text-muted text-sm">No players assigned to this team.</p>
                 <Link href="/players/new" className="inline-block mt-3 text-sm text-teal hover:underline">
@@ -535,10 +535,10 @@ export default function TeamDetailPage() {
                     <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-2">
                       {label} <span className="text-navy font-bold">({players.length})</span>
                     </h3>
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-navy/[0.03] border-b border-border">
+                          <tr className="bg-navy/[0.03] border-b border-teal/20">
                             <th className="px-4 py-2.5 text-left font-oswald text-xs uppercase tracking-wider text-muted">Player</th>
                             <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-16">POS</th>
                             <th className="px-4 py-2.5 text-left font-oswald text-xs uppercase tracking-wider text-muted">Archetype</th>
@@ -549,7 +549,7 @@ export default function TeamDetailPage() {
                         </thead>
                         <tbody>
                           {players.map((p) => (
-                            <tr key={p.id} className="border-b border-border/50 hover:bg-navy/[0.02] transition-colors">
+                            <tr key={p.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
                                   <Link href={`/players/${p.id}`} className="font-semibold text-navy hover:text-teal transition-colors">
@@ -592,7 +592,7 @@ export default function TeamDetailPage() {
                                       // ignore
                                     }
                                   }}
-                                  className={`text-[10px] font-oswald font-bold bg-transparent border border-border rounded px-1.5 py-0.5 cursor-pointer ${
+                                  className={`text-[10px] font-oswald font-bold bg-transparent border border-teal/20 rounded px-1.5 py-0.5 cursor-pointer ${
                                     (p.roster_status || "active") === "active" ? "text-green-600 border-green-200" :
                                     (p.roster_status || "active") === "ir" ? "text-red-600 border-red-200 bg-red-50" :
                                     (p.roster_status || "active") === "injured" ? "text-red-600 border-red-200 bg-red-50" :
@@ -650,8 +650,8 @@ export default function TeamDetailPage() {
             {teamIntel && teamIntel.version > 0 ? (
               <>
                 {/* Header */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-border/50 flex items-center justify-between">
+                <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+                  <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-teal/10 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Brain size={16} className="text-teal" />
                       <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">Team Identity</h3>
@@ -722,7 +722,7 @@ export default function TeamDetailPage() {
                 {/* Strengths & Vulnerabilities */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {teamIntel.strengths.length > 0 && (
-                    <div className="bg-white rounded-xl border border-border p-5">
+                    <div className="bg-white rounded-xl border border-teal/20 p-5">
                       <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
                         <Star size={14} className="text-teal" /> Strengths
                       </h4>
@@ -738,7 +738,7 @@ export default function TeamDetailPage() {
                   )}
 
                   {teamIntel.vulnerabilities.length > 0 && (
-                    <div className="bg-white rounded-xl border border-border p-5">
+                    <div className="bg-white rounded-xl border border-teal/20 p-5">
                       <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
                         <AlertTriangle size={14} className="text-orange" /> Vulnerabilities
                       </h4>
@@ -756,13 +756,13 @@ export default function TeamDetailPage() {
 
                 {/* Key Personnel */}
                 {teamIntel.key_personnel.length > 0 && (
-                  <div className="bg-white rounded-xl border border-border p-5">
+                  <div className="bg-white rounded-xl border border-teal/20 p-5">
                     <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
                       <Users size={14} className="text-navy" /> Key Personnel
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {teamIntel.key_personnel.map((kp, i) => (
-                        <div key={i} className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                        <div key={i} className="p-3 rounded-lg bg-navy/[0.03] border border-teal/10">
                           <p className="text-sm font-semibold text-navy">{kp.name}</p>
                           <p className="text-xs text-muted mt-0.5">{kp.role}</p>
                         </div>
@@ -774,7 +774,7 @@ export default function TeamDetailPage() {
                 {/* Special Teams + Player Fit */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {teamIntel.special_teams_identity && (
-                    <div className="bg-white rounded-xl border border-border p-5">
+                    <div className="bg-white rounded-xl border border-teal/20 p-5">
                       <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
                         <Zap size={14} className="text-orange" /> Special Teams
                       </h4>
@@ -783,7 +783,7 @@ export default function TeamDetailPage() {
                   )}
 
                   {teamIntel.player_archetype_fit && (
-                    <div className="bg-white rounded-xl border border-border p-5">
+                    <div className="bg-white rounded-xl border border-teal/20 p-5">
                       <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
                         <Target size={14} className="text-teal" /> Ideal Player Fit
                       </h4>
@@ -794,7 +794,7 @@ export default function TeamDetailPage() {
 
                 {/* Comparable Teams */}
                 {teamIntel.comparable_teams.length > 0 && (
-                  <div className="bg-white rounded-xl border border-border p-5">
+                  <div className="bg-white rounded-xl border border-teal/20 p-5">
                     <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3">Comparable Teams</h4>
                     <div className="flex gap-2 flex-wrap">
                       {teamIntel.comparable_teams.map((ct, i) => (
@@ -868,7 +868,7 @@ export default function TeamDetailPage() {
 
             {/* ── Editing / Creating form ────────────────── */}
             {sysEditing ? (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
+              <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                 <div className="bg-gradient-to-r from-navy to-navy-light px-6 py-4 flex items-center justify-between">
                   <h2 className="text-lg font-oswald font-semibold text-white uppercase tracking-wider">
                     {teamSystem ? "Edit Team System" : "Create Team System"}
@@ -887,7 +887,7 @@ export default function TeamDetailPage() {
                       type="text"
                       value={sysForm.team_name}
                       disabled
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-navy/[0.03] text-navy/60 cursor-not-allowed"
+                      className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-navy/[0.03] text-navy/60 cursor-not-allowed"
                     />
                   </div>
 
@@ -899,11 +899,11 @@ export default function TeamDetailPage() {
                       value={sysForm.season}
                       onChange={(e) => setSysForm({ ...sysForm, season: e.target.value })}
                       placeholder="2025-26"
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
+                      className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm"
                     />
                   </div>
 
-                  <hr className="border-border/50" />
+                  <hr className="border-teal/10" />
 
                   {/* System dropdowns */}
                   <SystemSelect
@@ -943,7 +943,7 @@ export default function TeamDetailPage() {
                     options={getOptions("breakout")}
                   />
 
-                  <hr className="border-border/50" />
+                  <hr className="border-teal/10" />
 
                   {/* Team Style */}
                   <div>
@@ -954,7 +954,7 @@ export default function TeamDetailPage() {
                         <select
                           value={sysForm.pace}
                           onChange={(e) => setSysForm({ ...sysForm, pace: e.target.value })}
-                          className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                          className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
                         >
                           <option value="">Select...</option>
                           {PACE_OPTIONS.map((opt) => (
@@ -967,7 +967,7 @@ export default function TeamDetailPage() {
                         <select
                           value={sysForm.physicality}
                           onChange={(e) => setSysForm({ ...sysForm, physicality: e.target.value })}
-                          className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                          className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
                         >
                           <option value="">Select...</option>
                           {PHYSICALITY_OPTIONS.map((opt) => (
@@ -980,7 +980,7 @@ export default function TeamDetailPage() {
                         <select
                           value={sysForm.offensive_style}
                           onChange={(e) => setSysForm({ ...sysForm, offensive_style: e.target.value })}
-                          className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                          className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
                         >
                           <option value="">Select...</option>
                           {OFFENSIVE_STYLE_OPTIONS.map((opt) => (
@@ -991,7 +991,7 @@ export default function TeamDetailPage() {
                     </div>
                   </div>
 
-                  <hr className="border-border/50" />
+                  <hr className="border-teal/10" />
 
                   {/* Identity Tags */}
                   <div>
@@ -1008,12 +1008,12 @@ export default function TeamDetailPage() {
                           }
                         }}
                         placeholder="Add tag and press Enter..."
-                        className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm"
+                        className="flex-1 px-3 py-2.5 border border-teal/20 rounded-lg text-sm"
                       />
                       <button
                         type="button"
                         onClick={addTag}
-                        className="px-3 py-2.5 bg-navy/5 border border-border rounded-lg text-sm text-navy hover:bg-navy/10 transition-colors"
+                        className="px-3 py-2.5 bg-navy/5 border border-teal/20 rounded-lg text-sm text-navy hover:bg-navy/10 transition-colors"
                       >
                         Add
                       </button>
@@ -1047,7 +1047,7 @@ export default function TeamDetailPage() {
                       onChange={(e) => setSysForm({ ...sysForm, notes: e.target.value })}
                       rows={3}
                       placeholder="Additional tactical notes..."
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm resize-none"
+                      className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm resize-none"
                     />
                   </div>
 
@@ -1075,7 +1075,7 @@ export default function TeamDetailPage() {
               </div>
             ) : teamSystem ? (
               /* ── Read-only system view ────────────────── */
-              <div className="bg-white rounded-xl border border-border p-5">
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <Shield size={14} className="text-navy" /> Team Tactical Profile
@@ -1100,7 +1100,7 @@ export default function TeamDetailPage() {
                   ] as const).filter((f) => f.value).map(({ label, value, icon: Icon, color }) => {
                     const entry = systemsLibrary.find((e) => e.code === value);
                     return (
-                      <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                      <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-teal/10">
                         <div className="flex items-center gap-1.5 mb-1">
                           <Icon size={12} className={color} />
                           <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
@@ -1114,7 +1114,7 @@ export default function TeamDetailPage() {
                 {/* PP row */}
                 {teamSystem.pp_formation && (
                   <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                    <div className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                    <div className="p-3 rounded-lg bg-navy/[0.03] border border-teal/10">
                       <div className="flex items-center gap-1.5 mb-1">
                         <Target size={12} className="text-teal" />
                         <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Power Play</span>
@@ -1161,7 +1161,7 @@ export default function TeamDetailPage() {
               </div>
             ) : (
               /* ── No system yet — prompt to create ──────── */
-              <div className="bg-navy/[0.02] rounded-xl border border-dashed border-border p-8 text-center">
+              <div className="bg-navy/[0.02] rounded-xl border border-dashed border-teal/20 p-8 text-center">
                 <Shield size={32} className="mx-auto text-muted/30 mb-3" />
                 <p className="text-sm text-muted mb-1">No system profile for <strong>{teamName}</strong></p>
                 <p className="text-xs text-muted/60 mb-3">
@@ -1196,7 +1196,7 @@ export default function TeamDetailPage() {
               </div>
             </div>
             {reports.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-border">
+              <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
                 <FileText size={32} className="mx-auto text-muted/40 mb-3" />
                 <p className="text-muted text-sm">No reports yet for players on this team.</p>
                 <p className="text-xs text-muted/60 mt-1">
@@ -1232,7 +1232,7 @@ export default function TeamDetailPage() {
                 />
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-border p-6 text-center">
+              <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
                 <BarChart3 size={28} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted">No team statistics imported yet.</p>
                 <p className="text-xs text-muted/60 mt-1">
@@ -1249,12 +1249,12 @@ export default function TeamDetailPage() {
                   <Layers size={16} className="text-orange" />
                   <h2 className="text-lg font-semibold text-navy">Line Combinations</h2>
                 </div>
-                <div className="bg-white rounded-xl border border-border p-4">
+                <div className="bg-white rounded-xl border border-teal/20 p-4">
                   <LineCombinations lines={lineCombinations} />
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-border p-6 text-center">
+              <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
                 <Layers size={28} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted">No line combinations imported yet.</p>
                 <p className="text-xs text-muted/60 mt-1">
@@ -1296,7 +1296,7 @@ export default function TeamDetailPage() {
                 })()}
 
                 {/* Games table */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -1326,7 +1326,7 @@ export default function TeamDetailPage() {
                           return (
                             <tr
                               key={game.id}
-                              className={`border-t border-border/50 hover:bg-navy/[0.01] cursor-pointer transition-colors ${
+                              className={`border-t border-teal/10 hover:bg-navy/[0.01] cursor-pointer transition-colors ${
                                 isExpanded ? "bg-navy/[0.02]" : ""
                               }`}
                               onClick={() => setExpandedGameId(isExpanded ? null : game.id)}
@@ -1380,7 +1380,7 @@ export default function TeamDetailPage() {
                     const categories = Object.entries(ext).filter(([, v]) => v && typeof v === "object" && Object.keys(v).length > 0);
 
                     return (
-                      <div className="border-t border-border bg-navy/[0.02] p-4">
+                      <div className="border-t border-teal/20 bg-navy/[0.02] p-4">
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="text-sm font-oswald font-semibold text-navy uppercase tracking-wider">
                             Game Details — {game.opponent} ({game.game_date})
@@ -1394,7 +1394,7 @@ export default function TeamDetailPage() {
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                           {categories.map(([cat, vals]) => (
-                            <div key={cat} className="bg-white rounded-lg border border-border/50 p-3">
+                            <div key={cat} className="bg-white rounded-lg border border-teal/10 p-3">
                               <h4 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">
                                 {cat.replace(/_/g, " ")}
                               </h4>
@@ -1415,7 +1415,7 @@ export default function TeamDetailPage() {
                 </div>
               </>
             ) : (
-              <div className="bg-white rounded-xl border border-border p-6 text-center">
+              <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
                 <Calendar size={28} className="mx-auto text-muted/30 mb-2" />
                 <p className="text-sm text-muted">No game data imported yet.</p>
                 <p className="text-xs text-muted/60 mt-1">

@@ -145,7 +145,7 @@ function OverflowMenu({ player, onScout }: { player: PlayerCardData; onScout: ()
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 w-44 bg-white border border-border rounded-lg shadow-xl z-50 py-1"
+          className="absolute right-0 top-full mt-1 w-44 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1"
           onClick={(e) => e.preventDefault()}
         >
           <button
@@ -205,7 +205,7 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
   return (
     <Link
       href={`/players/${player.id}`}
-      className="block bg-white rounded-xl border border-border hover:shadow-lg hover:border-teal/30 transition-all group overflow-hidden"
+      className="block bg-white rounded-xl border border-teal/20 hover:shadow-lg hover:border-teal/30 transition-all group overflow-hidden"
     >
       {/* ── Header: Photo + Name + Position + Overflow ── */}
       <div className="flex items-start gap-3 p-3 pb-2">
@@ -319,7 +319,7 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
       </div>
 
       {/* ── Footer: Stats Row ─────────────────────────── */}
-      <div className="bg-navy/[0.03] border-t border-border/50 px-3 py-2">
+      <div className="bg-navy/[0.03] border-t border-teal/10 px-3 py-2">
         <div className="flex items-center justify-between text-[11px]">
           <StatCell label="GP" value={player.gp} />
           <StatCell label="G" value={player.g} />

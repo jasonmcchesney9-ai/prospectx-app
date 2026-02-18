@@ -174,7 +174,7 @@ export default function BatchImportPage() {
 
         {/* Step 1: Upload */}
         {step === "upload" && (
-          <div className="bg-white rounded-xl border border-border p-6">
+          <div className="bg-white rounded-xl border border-teal/20 p-6">
             {/* Season / Team / League fields */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <div>
@@ -184,7 +184,7 @@ export default function BatchImportPage() {
                   value={season}
                   onChange={(e) => setSeason(e.target.value)}
                   placeholder="e.g. 2025-2026"
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                 />
               </div>
 
@@ -204,11 +204,11 @@ export default function BatchImportPage() {
                     }}
                     onFocus={() => setShowTeamDropdown(true)}
                     placeholder="Search teams..."
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                    className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                   />
                   <ChevronDown size={14} className="absolute right-3 top-3 text-muted" />
                   {showTeamDropdown && filteredTeams.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-teal/20 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                       {filteredTeams.slice(0, 20).map((t) => (
                         <button
                           key={t.id}
@@ -242,7 +242,7 @@ export default function BatchImportPage() {
                   <select
                     value={leagueName}
                     onChange={(e) => setLeagueName(e.target.value)}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                    className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                   >
                     <option value="">Select league...</option>
                     {leagues.map((lg) => (
@@ -255,7 +255,7 @@ export default function BatchImportPage() {
                     value={leagueName}
                     onChange={(e) => setLeagueName(e.target.value)}
                     placeholder="e.g. GOHL"
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                    className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                   />
                 )}
                 <p className="text-xs text-muted/60 mt-1">Applied if CSV has no League column</p>
@@ -263,7 +263,7 @@ export default function BatchImportPage() {
             </div>
 
             {/* File Picker */}
-            <div className="border-t border-border pt-6">
+            <div className="border-t border-teal/20 pt-6">
               <label className="block text-sm font-semibold text-navy mb-2">Player File (CSV or XLSX)</label>
               <div className="text-center">
                 <FileSpreadsheet size={40} className="mx-auto text-teal/40 mb-3" />
@@ -293,9 +293,9 @@ export default function BatchImportPage() {
             </div>
 
             {/* Sample CSV format */}
-            <div className="mt-6 border-t border-border pt-6">
+            <div className="mt-6 border-t border-teal/20 pt-6">
               <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Example CSV Format</p>
-              <pre className="text-xs bg-navy/[0.03] p-3 rounded-lg border border-border overflow-x-auto">
+              <pre className="text-xs bg-navy/[0.03] p-3 rounded-lg border border-teal/20 overflow-x-auto">
 {`First Name,Last Name,Position,DOB,Team,League,GP,G,A,P
 Ewan,McChesney,C,2005-03-15,Chatham Maroons,GOHL,25,12,18,30
 Connor,Smith,LW,2006-01-20,Chatham Maroons,GOHL,24,8,10,18
@@ -312,15 +312,15 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
             {(teamName || leagueName || season) && (
               <div className="bg-teal/5 border border-teal/20 rounded-xl px-4 py-3 text-xs text-navy flex items-center gap-2 flex-wrap">
                 <span className="font-semibold">Defaults applied:</span>
-                {season && <span className="px-2 py-0.5 bg-white rounded border border-border">Season: {season}</span>}
-                {teamName && <span className="px-2 py-0.5 bg-white rounded border border-border">Team: {teamName}</span>}
-                {leagueName && <span className="px-2 py-0.5 bg-white rounded border border-border">League: {leagueName}</span>}
+                {season && <span className="px-2 py-0.5 bg-white rounded border border-teal/20">Season: {season}</span>}
+                {teamName && <span className="px-2 py-0.5 bg-white rounded border border-teal/20">Team: {teamName}</span>}
+                {leagueName && <span className="px-2 py-0.5 bg-white rounded border border-teal/20">League: {leagueName}</span>}
               </div>
             )}
 
             {/* Summary Cards */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white rounded-xl border border-border p-4 text-center">
+              <div className="bg-white rounded-xl border border-teal/20 p-4 text-center">
                 <Users size={20} className="mx-auto text-teal mb-1" />
                 <p className="text-2xl font-bold text-navy">{preview.total_rows}</p>
                 <p className="text-xs text-muted">Total Rows</p>
@@ -349,8 +349,8 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
 
             {/* Duplicate Review */}
             {preview.duplicates.length > 0 && (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
-                <div className="p-4 border-b border-border bg-orange/5">
+              <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+                <div className="p-4 border-b border-teal/20 bg-orange/5">
                   <h3 className="text-sm font-semibold text-navy flex items-center gap-2">
                     <AlertTriangle size={16} className="text-orange" />
                     Duplicates Need Review ({preview.duplicates.length})
@@ -385,7 +385,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                             resolutions[dup.row_index] === "skip"
                               ? "bg-gray-600 text-white border-gray-600"
-                              : "bg-white text-gray-600 border-border hover:border-gray-400"
+                              : "bg-white text-gray-600 border-teal/20 hover:border-gray-400"
                           }`}
                         >
                           <SkipForward size={12} /> Skip
@@ -395,7 +395,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                             resolutions[dup.row_index] === "merge"
                               ? "bg-teal text-white border-teal"
-                              : "bg-white text-teal border-border hover:border-teal/50"
+                              : "bg-white text-teal border-teal/20 hover:border-teal/50"
                           }`}
                         >
                           <GitMerge size={12} /> Merge Stats
@@ -405,7 +405,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                             resolutions[dup.row_index] === "create_new"
                               ? "bg-orange text-white border-orange"
-                              : "bg-white text-orange border-border hover:border-orange/50"
+                              : "bg-white text-orange border-teal/20 hover:border-orange/50"
                           }`}
                         >
                           <Plus size={12} /> Create New
@@ -418,14 +418,14 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
             )}
 
             {/* Preview Table */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border">
+            <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+              <div className="p-4 border-b border-teal/20">
                 <h3 className="text-sm font-semibold text-navy">Preview (first 10 rows)</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-navy/[0.03] border-b border-border">
+                    <tr className="bg-navy/[0.03] border-b border-teal/20">
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Name</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Pos</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Team</th>
@@ -439,7 +439,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
                   </thead>
                   <tbody>
                     {preview.preview.map((row, i) => (
-                      <tr key={i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                      <tr key={i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                         <td className="px-3 py-2 font-medium text-navy">{row.first_name} {row.last_name}</td>
                         <td className="px-3 py-2">{row.position}</td>
                         <td className="px-3 py-2">{row.current_team || "—"}</td>
@@ -478,7 +478,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
 
         {/* Step 3: Importing */}
         {step === "importing" && (
-          <div className="bg-white rounded-xl border border-border p-12 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-12 text-center">
             <Loader2 size={40} className="mx-auto text-teal animate-spin mb-4" />
             <h2 className="text-lg font-bold text-navy mb-1">Importing Players...</h2>
             <p className="text-sm text-muted">This may take a moment.</p>
@@ -487,7 +487,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
 
         {/* Step 4: Done */}
         {step === "done" && result && (
-          <div className="bg-white rounded-xl border border-border p-8 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
             <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
             <h2 className="text-xl font-bold text-navy mb-2">Import Complete!</h2>
 

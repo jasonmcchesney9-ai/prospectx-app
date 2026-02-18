@@ -216,7 +216,7 @@ function AnalyticsDashboard() {
 
       {/* Filter Bar */}
       {filterOptions && (filterOptions.leagues.length > 1 || filterOptions.teams.length > 1) && (
-        <div className="bg-white rounded-xl border border-border p-4">
+        <div className="bg-white rounded-xl border border-teal/20 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Filter size={14} className="text-muted" />
             <span className="text-xs font-oswald uppercase tracking-wider text-muted">
@@ -242,7 +242,7 @@ function AnalyticsDashboard() {
                 <select
                   value={selectedLeague}
                   onChange={(e) => setSelectedLeague(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
                 >
                   <option value="">All Leagues</option>
                   {filterOptions.leagues.map((l) => (
@@ -260,7 +260,7 @@ function AnalyticsDashboard() {
               <select
                 value={selectedTeam}
                 onChange={(e) => setSelectedTeam(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
               >
                 <option value="">All Teams</option>
                 {filteredTeamOptions.map((t) => (
@@ -279,7 +279,7 @@ function AnalyticsDashboard() {
               <select
                 value={selectedPosition}
                 onChange={(e) => setSelectedPosition(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
               >
                 <option value="">All Positions</option>
                 {filterOptions.positions.map((p) => (
@@ -291,7 +291,7 @@ function AnalyticsDashboard() {
 
           {/* Active filter chips */}
           {hasFilters && (
-            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border">
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-teal/20">
               {selectedLeague && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal/10 text-teal text-xs rounded-full">
                   {selectedLeague}
@@ -409,7 +409,7 @@ function OverviewCards({ overview }: { overview: AnalyticsOverview }) {
         <Link
           key={c.label}
           href={c.href}
-          className="bg-white rounded-xl border border-border p-5 hover:shadow-md transition-shadow group"
+          className="bg-white rounded-xl border border-teal/20 p-5 hover:shadow-md transition-shadow group"
         >
           <div className="flex items-center justify-between mb-2">
             <c.icon
@@ -508,7 +508,7 @@ function CategoryCards() {
             ))}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-border">
+          <div className="mt-4 pt-3 border-t border-teal/20">
             <Link
               href="/reports/generate"
               className="text-xs font-oswald uppercase tracking-wider text-teal hover:underline flex items-center gap-1"
@@ -648,7 +648,7 @@ function PPGDistributionChart({ data }: { data: ScoringDistribution[] }) {
               const p = payload[0]?.payload;
               if (!p) return null;
               return (
-                <div className="bg-white shadow-lg rounded-lg p-2 border border-border text-xs">
+                <div className="bg-white shadow-lg rounded-lg p-2 border border-teal/20 text-xs">
                   <p className="font-semibold text-navy">
                     {p.first_name} {p.last_name}
                   </p>
@@ -808,8 +808,8 @@ function TagFrequencyChart({ data }: { data: TagCloudData }) {
 // ── Leaderboard Table ───────────────────────────
 function LeaderboardTable({ leaders }: { leaders: ScoringLeader[] }) {
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+      <div className="px-5 py-4 border-b border-teal/20 flex items-center justify-between">
         <div>
           <h3 className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider">
             Scoring Leaderboard
@@ -862,7 +862,7 @@ function LeaderboardTable({ leaders }: { leaders: ScoringLeader[] }) {
             {leaders.map((l, i) => (
               <tr
                 key={l.id + i}
-                className={`border-t border-border hover:bg-gray-50 transition-colors ${
+                className={`border-t border-teal/20 hover:bg-gray-50 transition-colors ${
                   i < 3 ? "bg-teal/5" : ""
                 }`}
               >
@@ -942,8 +942,8 @@ function LeagueMetricsTable({ data }: { data: LeaguePlayerMetrics[] }) {
   const metricKeys = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
 
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+      <div className="px-5 py-4 border-b border-teal/20 flex items-center justify-between">
         <div>
           <h3 className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider">
             ProspectX Metrics — League View
@@ -982,7 +982,7 @@ function LeagueMetricsTable({ data }: { data: LeaguePlayerMetrics[] }) {
                 metricKeys.reduce((sum, k) => sum + (player.indices[k]?.value || 0), 0) / metricKeys.length
               );
               return (
-                <tr key={player.player_id} className="border-t border-border hover:bg-gray-50 transition-colors">
+                <tr key={player.player_id} className="border-t border-teal/20 hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-2 text-xs text-muted">{i + 1}</td>
                   <td className="px-4 py-2">
                     <Link
@@ -1055,7 +1055,7 @@ function ChartCard({
 }) {
   return (
     <div
-      className={`bg-white rounded-xl border border-border p-5 ${
+      className={`bg-white rounded-xl border border-teal/20 p-5 ${
         fullWidth ? "col-span-full" : ""
       }`}
     >

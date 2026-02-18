@@ -7,7 +7,7 @@ export default function PlayerCard({ player }: { player: Player }) {
   return (
     <Link
       href={`/players/${player.id}`}
-      className="block bg-white rounded-lg border border-border p-4 hover:shadow-md transition-shadow"
+      className="block bg-white rounded-lg border border-teal/20 p-4 hover:shadow-md transition-shadow"
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">

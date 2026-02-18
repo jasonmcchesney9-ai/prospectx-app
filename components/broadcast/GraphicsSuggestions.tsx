@@ -42,7 +42,7 @@ export default function GraphicsSuggestions({ data }: Props) {
         </thead>
         <tbody>
           {sorted.map((g, i) => (
-            <tr key={i} className={`border-t border-border/30 ${i % 2 === 0 ? "bg-white" : "bg-navy/[0.015]"}`}>
+            <tr key={i} className={`border-t border-teal/8 ${i % 2 === 0 ? "bg-white" : "bg-navy/[0.015]"}`}>
               <td className="text-center px-2 py-1.5">
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange/10 text-orange text-[10px] font-oswald font-bold">
                   {g.priority}

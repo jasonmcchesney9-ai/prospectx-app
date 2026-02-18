@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Swords, Users, Target, Zap, FileText, Crown, Trophy, ChevronRight,
   AlertTriangle, Calendar, Radio, Heart, Briefcase, MessageSquare, BookOpen,
+  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -60,7 +61,7 @@ export default function HomePage() {
 
 function CardSkeleton({ lines = 3 }: { lines?: number }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-5 animate-pulse">
+    <div className="bg-white rounded-xl border border-teal/15 p-5 animate-pulse">
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className={`h-3 bg-navy/5 rounded ${i === 0 ? "w-2/3 mb-3" : i === lines - 1 ? "w-1/2 mt-2" : "w-full mt-2"}`} />
       ))}
@@ -70,7 +71,7 @@ function CardSkeleton({ lines = 3 }: { lines?: number }) {
 
 function SectionCard({ icon, title, link, linkLabel, children }: { icon: React.ReactNode; title: string; link?: string; linkLabel?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-4">
+    <div className="bg-white rounded-xl border border-teal/20 border-l-2 border-l-teal/40 p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">{icon}<h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">{title}</h3></div>
         {link && linkLabel && <Link href={link} className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline font-medium">{linkLabel}</Link>}
@@ -86,6 +87,32 @@ function EmptyState({ icon, text, link, linkText }: { icon: React.ReactNode; tex
       <div className="mx-auto text-muted/30 mb-2 flex justify-center">{icon}</div>
       <p className="text-muted text-sm">{text}</p>
       {link && linkText && <Link href={link} className="inline-block mt-2 text-xs text-teal hover:underline">{linkText}</Link>}
+    </div>
+  );
+}
+
+function ReportsFooter({ reports, loading }: { reports: Report[]; loading: boolean }) {
+  return (
+    <div className="bg-navy rounded-xl p-4 mt-1">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2"><FileText size={14} className="text-orange" /><h3 className="font-oswald text-xs font-bold text-white uppercase tracking-wider">Recent Reports</h3></div>
+        <Link href="/reports" className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline font-medium">View all</Link>
+      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[1,2,3].map((i) => <div key={i} className="animate-pulse rounded-lg border border-white/10 bg-white/[0.06] p-3"><div className="h-3 bg-white/10 rounded w-3/4 mb-2" /><div className="h-2 bg-white/10 rounded w-1/2" /></div>)}
+        </div>
+      ) : reports.length === 0 ? (
+        <div className="text-center py-5 rounded-lg border border-dashed border-orange/20 bg-white/[0.03]">
+          <FileText size={24} className="mx-auto text-white/20 mb-1.5" />
+          <p className="text-white/50 text-sm">No reports yet</p>
+          <Link href="/reports/generate" className="inline-block mt-1.5 text-xs text-teal hover:underline">Generate your first report</Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {reports.slice(0, 6).map((r: Report) => <ReportCard key={r.id} report={r} compact dark />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -158,7 +185,7 @@ function Dashboard() {
 
   const handleTeamChange = useCallback((team: Team) => { setActiveTeam(team); localStorage.setItem(DASHBOARD_TEAM_KEY, team.id); }, []);
 
-  const alertPlayers = roster.filter((p) => p.roster_status && p.roster_status !== "active");
+  const alertPlayers = roster.filter((p) => p.roster_status === "inj" || p.roster_status === "scrch" || p.roster_status === "susp");
   const today = new Date().toISOString().slice(0, 10);
   const todaysPractice = practicePlans.find((pp) => pp.practice_date === today && (!pp.team_name || !activeTeam || matchTeam(pp.team_name, activeTeam.name)));
 
@@ -206,7 +233,7 @@ function Dashboard() {
             <p className="font-oswald text-[10px] text-muted uppercase tracking-widest mb-2 pl-0.5">Today&apos;s Focus</p>
             <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-4 flex gap-3 flex-wrap">
               {nextGamePlan && nextGame && (
-                <Link href={`/game-plans/${nextGamePlan.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
+                <Link href={`/game-plans/${nextGamePlan.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-orange/20 rounded-lg p-3.5 hover:bg-white/[0.12] hover:border-orange/30 transition-colors">
                   <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Next Game</p>
                   <p className="font-oswald text-sm font-semibold text-white">{nextGamePlan.team_name} vs {nextGamePlan.opponent_team_name}</p>
                   <p className="text-[11px] text-white/50 mt-1">{nextGamePlan.game_date ? new Date(nextGamePlan.game_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : ""}</p>
@@ -214,7 +241,7 @@ function Dashboard() {
                 </Link>
               )}
               {todaysPractice && (
-                <Link href={`/practice-plans/${todaysPractice.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
+                <Link href={`/practice-plans/${todaysPractice.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-orange/20 rounded-lg p-3.5 hover:bg-white/[0.12] hover:border-orange/30 transition-colors">
                   <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Today&apos;s Practice</p>
                   <p className="font-oswald text-sm font-semibold text-white">{todaysPractice.title}</p>
                   <p className="text-[11px] text-white/50 mt-1">{todaysPractice.duration_minutes} min{todaysPractice.focus_areas?.length > 0 && ` \u00b7 ${todaysPractice.focus_areas.join(", ")}`}</p>
@@ -222,7 +249,7 @@ function Dashboard() {
                 </Link>
               )}
               {scoutPlayersTonight.length > 0 && (
-                <Link href="/scouting" className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
+                <Link href="/scouting" className="flex-1 min-w-[200px] bg-white/[0.08] border border-orange/20 rounded-lg p-3.5 hover:bg-white/[0.12] hover:border-orange/30 transition-colors">
                   <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Scout Watch Tonight</p>
                   <p className="font-oswald text-sm font-semibold text-white">{scoutPlayersTonight.length} player{scoutPlayersTonight.length > 1 ? "s" : ""} in action</p>
                   <p className="text-[11px] text-white/50 mt-1">{scoutPlayersTonight.slice(0, 3).map((s) => `${s.first_name} ${s.last_name}`).join(" \u00b7 ")}</p>
@@ -234,14 +261,14 @@ function Dashboard() {
         )}
 
         {upcomingGames.length > 0 && activeTeam && (
-          <div className="bg-white rounded-xl border border-border p-4 mb-4">
+          <div className="bg-white rounded-xl border border-teal/20 p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2"><Calendar size={14} className="text-navy/60" /><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Upcoming Games</h3></div>
               <Link href="/schedule" className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline">Full Schedule</Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-1">
               {upcomingGames.map((g, i) => { const isH = matchTeam(g.home_team, activeTeam.name); const opp = isH ? g.away_team : g.home_team; const ds = new Date(g.game_date || g.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); const hasGP = activeGamePlans.some((gp) => matchTeam(gp.opponent_team_name, opp)); return (
-                <div key={`ug-${g.game_id}-${i}`} className="flex-1 min-w-[150px] border border-border rounded-lg p-3 text-center relative">
+                <div key={`ug-${g.game_id}-${i}`} className="flex-1 min-w-[150px] border border-teal/15 hover:border-teal/30 rounded-lg p-3 text-center relative transition-colors">
                   <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${hasGP ? "bg-green-500" : "bg-red-400"}`} title={hasGP ? "Game plan ready" : "No game plan"} />
                   <p className="font-oswald text-[10px] text-muted uppercase tracking-wider mb-1">{ds}</p>
                   <p className="font-oswald text-sm font-semibold text-navy">{isH ? "vs" : "@"} {opp}</p>
@@ -252,13 +279,8 @@ function Dashboard() {
           </div>
         )}
 
-        {roleGroup === "PRO" && <ProView activeSeries={activeSeries} activeGamePlans={activeGamePlans} scoutingList={scoutingWithGames} scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
-        {roleGroup === "MEDIA" && <MediaView scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} />}
-        {roleGroup === "FAMILY" && <FamilyView recentReports={recentReports} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
-        {roleGroup === "AGENT" && <AgentView recentReports={recentReports} scoutingList={scoutingWithGames} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
-
         {scorebar.length > 0 && activeTeam && (
-          <div className="mt-4">
+          <div className="mb-4">
             <p className="font-oswald text-[10px] text-muted uppercase tracking-widest mb-2 pl-0.5">{activeTeam.league || "League"} Scorebar</p>
             <div className="bg-navy rounded-xl p-3.5 flex gap-2.5 overflow-x-auto">
               {scorebar.slice(0, 8).map((g, i) => { const fin = (g.status || "").toLowerCase().includes("final"); const myG = matchTeam(g.home_team, activeTeam.name) || matchTeam(g.away_team, activeTeam.name); return (
@@ -275,6 +297,11 @@ function Dashboard() {
             </div>
           </div>
         )}
+
+        {roleGroup === "PRO" && <ProView activeSeries={activeSeries} activeGamePlans={activeGamePlans} scoutingList={scoutingWithGames} scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
+        {roleGroup === "MEDIA" && <MediaView scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
+        {roleGroup === "FAMILY" && <FamilyView recentReports={recentReports} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
+        {roleGroup === "AGENT" && <AgentView recentReports={recentReports} scoutingList={scoutingWithGames} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
       </main>
     </>
   );
@@ -284,121 +311,128 @@ function Dashboard() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ProView({ activeSeries, activeGamePlans, scoutingList, scoringLeaders, recentReports, lw1, lw2, onBT }: any) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      <div className="lg:col-span-3 space-y-4">
-        <SectionCard icon={<Trophy size={14} className="text-orange" />} title="Active Series" link="/series" linkLabel="View all">
-          {lw1 ? <CardSkeleton lines={2} /> : activeSeries.length === 0 ? <EmptyState icon={<Trophy size={28} />} text="No active series" link="/series/new" linkText="Start a series" /> : (
-            <div className="space-y-2">{activeSeries.map((s: SeriesPlan) => (
-              <Link key={s.id} href={`/series/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
-                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate">{s.team_name} <span className="text-muted font-normal">vs</span> {s.opponent_team_name}</p>{s.series_name && <p className="text-[10px] text-muted truncate mt-0.5">{s.series_name}</p>}</div>
-                <div className="flex items-center gap-2 shrink-0 ml-3"><span className="text-sm font-oswald font-bold text-navy">{s.current_score || "0-0"}</span><span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60">{FORMAT_LABELS[s.series_format] || s.series_format}</span><ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors" /></div>
-              </Link>
-            ))}</div>
-          )}
-        </SectionCard>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3 space-y-4">
+          <SectionCard icon={<Trophy size={14} className="text-orange" />} title="Active Series" link="/series" linkLabel="View all">
+            {lw1 ? <CardSkeleton lines={2} /> : activeSeries.length === 0 ? <EmptyState icon={<Trophy size={28} />} text="No active series" link="/series/new" linkText="Start a series" /> : (
+              <div className="space-y-2">{activeSeries.map((s: SeriesPlan) => (
+                <Link key={s.id} href={`/series/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-teal/20 hover:border-teal/30 hover:bg-navy/[0.02] transition-colors group">
+                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate">{s.team_name} <span className="text-muted font-normal">vs</span> {s.opponent_team_name}</p>{s.series_name && <p className="text-[10px] text-muted truncate mt-0.5">{s.series_name}</p>}</div>
+                  <div className="flex items-center gap-2 shrink-0 ml-3"><span className="text-sm font-oswald font-bold text-navy">{s.current_score || "0-0"}</span><span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60">{FORMAT_LABELS[s.series_format] || s.series_format}</span><ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors" /></div>
+                </Link>
+              ))}</div>
+            )}
+          </SectionCard>
 
-        <SectionCard icon={<Swords size={14} className="text-teal" />} title="Chalk Talk Sessions" link="/game-plans" linkLabel="View all">
-          {lw1 ? <div className="space-y-2"><CardSkeleton lines={2} /><CardSkeleton lines={2} /></div> : activeGamePlans.length === 0 ? <EmptyState icon={<Swords size={28} />} text="No active sessions" link="/game-plans/new" linkText="Create a session" /> : (
-            <div className="space-y-2">{activeGamePlans.slice(0, 3).map((gp: GamePlan) => (
-              <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
-                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate">{gp.team_name} <span className="text-muted font-normal">vs</span> {gp.opponent_team_name}</p>
-                <div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${SESSION_BADGE_COLORS[gp.session_type] || "bg-navy/5 text-navy/60"}`}>{SESSION_TYPE_MAP[gp.session_type] || gp.session_type}</span>{gp.game_date && <span className="text-[10px] text-muted">{new Date(gp.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}</div></div>
-                <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors shrink-0 ml-2" />
-              </Link>
-            ))}</div>
-          )}
-        </SectionCard>
+          <SectionCard icon={<Swords size={14} className="text-teal" />} title="Chalk Talk Sessions" link="/game-plans" linkLabel="View all">
+            {lw1 ? <div className="space-y-2"><CardSkeleton lines={2} /><CardSkeleton lines={2} /></div> : activeGamePlans.length === 0 ? <EmptyState icon={<Swords size={28} />} text="No active sessions" link="/game-plans/new" linkText="Create a session" /> : (
+              <div className="space-y-2">{activeGamePlans.slice(0, 3).map((gp: GamePlan) => (
+                <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-teal/20 hover:border-teal/30 hover:bg-navy/[0.02] transition-colors group">
+                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate">{gp.team_name} <span className="text-muted font-normal">vs</span> {gp.opponent_team_name}</p>
+                  <div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${SESSION_BADGE_COLORS[gp.session_type] || "bg-navy/5 text-navy/60"}`}>{SESSION_TYPE_MAP[gp.session_type] || gp.session_type}</span>{gp.game_date && <span className="text-[10px] text-muted">{new Date(gp.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}</div></div>
+                  <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors shrink-0 ml-2" />
+                </Link>
+              ))}</div>
+            )}
+          </SectionCard>
 
-        <div className="flex gap-2">
-          <Link href="/reports/generate" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-br from-navy to-navy-light text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Zap size={14} /> New Report</Link>
-          <Link href="/game-plans/new" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Swords size={14} /> Chalk Talk</Link>
-          <button onClick={onBT} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-bg border border-border text-navy font-oswald text-[11px] font-semibold uppercase tracking-wider hover:bg-navy/[0.03] transition-colors"><MessageSquare size={14} /> Bench Talk</button>
+          <div className="flex gap-2">
+            <Link href="/reports/generate" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-br from-navy to-navy-light text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Zap size={14} /> New Report</Link>
+            <Link href="/game-plans/new" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Swords size={14} /> Chalk Talk</Link>
+            <button onClick={onBT} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-bg border border-teal/20 hover:border-teal/40 text-navy font-oswald text-[11px] font-semibold uppercase tracking-wider hover:bg-navy/[0.03] transition-colors"><MessageSquare size={14} /> Bench Talk</button>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 space-y-4">
+          <SectionCard icon={<Target size={14} className="text-orange" />} title="Scouting List" link="/scouting" linkLabel="View all">
+            {lw1 ? <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="animate-pulse flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-navy/5" /><div className="flex-1"><div className="h-3 bg-navy/5 rounded w-2/3 mb-1.5" /><div className="h-2 bg-navy/5 rounded w-1/3" /></div></div>)}</div> : scoutingList.length === 0 ? <EmptyState icon={<Target size={28} />} text="No players on scouting list" link="/scouting" linkText="Add a player" /> : (
+              <div className="space-y-1">{scoutingList.map((item: ScoutingListItem & { playsTonight: boolean }) => (
+                <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors group">
+                  <div className="relative shrink-0"><div className="w-8 h-8 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">{item.position || "?"}</div><span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} /></div>
+                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate group-hover:text-teal transition-colors">{item.first_name} {item.last_name}</p><p className="text-[10px] text-muted truncate">{[item.current_team, item.current_league].filter(Boolean).join(" / ") || "No team"}</p></div>
+                  {item.playsTonight && <span className="font-oswald text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal/10 text-teal shrink-0">Tonight</span>}
+                  {item.position && <span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60 shrink-0">{item.position}</span>}
+                </Link>
+              ))}</div>
+            )}
+          </SectionCard>
+
+          <SectionCard icon={<Users size={14} className="text-teal" />} title="Team Leaders" link="/analytics" linkLabel="Analytics">
+            {lw2 ? <CardSkeleton lines={5} /> : scoringLeaders.length === 0 ? <EmptyState icon={<Users size={28} />} text="No scoring data yet" /> : (
+              <table className="w-full text-xs"><thead><tr className="border-b border-teal/20">
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1 w-5">#</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1">Player</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">GP</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">G</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">A</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P/G</th>
+              </tr></thead><tbody>{scoringLeaders.map((pl: ScoringLeader, i: number) => (
+                <tr key={pl.id} className="border-b border-teal/10 last:border-0">
+                  <td className="py-2 px-1 font-oswald font-semibold text-muted text-[11px]">{i + 1}</td>
+                  <td className="py-2 px-1"><Link href={`/players/${pl.id}`} className="font-semibold text-navy hover:text-teal transition-colors">{pl.first_name?.charAt(0)}. {pl.last_name}</Link></td>
+                  <td className="py-2 px-1 text-right font-oswald">{pl.gp}</td><td className="py-2 px-1 text-right font-oswald">{pl.g}</td>
+                  <td className="py-2 px-1 text-right font-oswald">{pl.a}</td><td className="py-2 px-1 text-right font-oswald font-bold text-navy">{pl.p}</td>
+                  <td className="py-2 px-1 text-right font-oswald">{pl.ppg?.toFixed(2)}</td>
+                </tr>
+              ))}</tbody></table>
+            )}
+          </SectionCard>
         </div>
       </div>
 
-      <div className="lg:col-span-2 space-y-4">
-        <SectionCard icon={<Target size={14} className="text-orange" />} title="Scouting List" link="/scouting" linkLabel="View all">
-          {lw1 ? <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="animate-pulse flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-navy/5" /><div className="flex-1"><div className="h-3 bg-navy/5 rounded w-2/3 mb-1.5" /><div className="h-2 bg-navy/5 rounded w-1/3" /></div></div>)}</div> : scoutingList.length === 0 ? <EmptyState icon={<Target size={28} />} text="No players on scouting list" link="/scouting" linkText="Add a player" /> : (
-            <div className="space-y-1">{scoutingList.map((item: ScoutingListItem & { playsTonight: boolean }) => (
-              <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors group">
-                <div className="relative shrink-0"><div className="w-8 h-8 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">{item.position || "?"}</div><span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} /></div>
-                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate group-hover:text-teal transition-colors">{item.first_name} {item.last_name}</p><p className="text-[10px] text-muted truncate">{[item.current_team, item.current_league].filter(Boolean).join(" / ") || "No team"}</p></div>
-                {item.playsTonight && <span className="font-oswald text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal/10 text-teal shrink-0">Tonight</span>}
-                {item.position && <span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60 shrink-0">{item.position}</span>}
-              </Link>
-            ))}</div>
-          )}
-        </SectionCard>
-
-        <SectionCard icon={<Users size={14} className="text-teal" />} title="Team Leaders" link="/analytics" linkLabel="Analytics">
-          {lw2 ? <CardSkeleton lines={5} /> : scoringLeaders.length === 0 ? <EmptyState icon={<Users size={28} />} text="No scoring data yet" /> : (
-            <table className="w-full text-xs"><thead><tr className="border-b border-border">
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1 w-5">#</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1">Player</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">GP</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">G</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">A</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P/G</th>
-            </tr></thead><tbody>{scoringLeaders.map((pl: ScoringLeader, i: number) => (
-              <tr key={pl.id} className="border-b border-border/50 last:border-0">
-                <td className="py-2 px-1 font-oswald font-semibold text-muted text-[11px]">{i + 1}</td>
-                <td className="py-2 px-1"><Link href={`/players/${pl.id}`} className="font-semibold text-navy hover:text-teal transition-colors">{pl.first_name?.charAt(0)}. {pl.last_name}</Link></td>
-                <td className="py-2 px-1 text-right font-oswald">{pl.gp}</td><td className="py-2 px-1 text-right font-oswald">{pl.g}</td>
-                <td className="py-2 px-1 text-right font-oswald">{pl.a}</td><td className="py-2 px-1 text-right font-oswald font-bold text-navy">{pl.p}</td>
-                <td className="py-2 px-1 text-right font-oswald">{pl.ppg?.toFixed(2)}</td>
-              </tr>
-            ))}</tbody></table>
-          )}
-        </SectionCard>
-
-        <SectionCard icon={<FileText size={14} className="text-navy/60" />} title="Recent Reports" link="/reports" linkLabel="View all">
-          {lw1 ? <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="animate-pulse flex items-center gap-3 p-2"><div className="w-9 h-9 rounded-lg bg-navy/5" /><div className="flex-1"><div className="h-3 bg-navy/5 rounded w-3/4 mb-1.5" /><div className="h-2 bg-navy/5 rounded w-1/2" /></div></div>)}</div> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" link="/reports/generate" linkText="Generate your first report" /> : (
-            <div className="space-y-2">{recentReports.slice(0, 3).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
-          )}
-        </SectionCard>
-      </div>
+      <ReportsFooter reports={recentReports} loading={lw1} />
     </div>
   );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function MediaView({ scoringLeaders, recentReports, lw1, lw2 }: any) {
+function MediaView({ scoringLeaders, recentReports, lw1, lw2, onBT }: any) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      <div className="lg:col-span-3 space-y-4">
-        <SectionCard icon={<Users size={14} className="text-teal" />} title="Scoring Leaders" link="/analytics" linkLabel="Full Analytics">
-          {lw2 ? <CardSkeleton lines={5} /> : scoringLeaders.length === 0 ? <EmptyState icon={<Users size={28} />} text="No scoring data" /> : (
-            <table className="w-full text-xs"><thead><tr className="border-b border-border">
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1 w-5">#</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1">Player</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">GP</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">G</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">A</th>
-              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P</th>
-            </tr></thead><tbody>{scoringLeaders.slice(0, 10).map((pl: ScoringLeader, i: number) => (
-              <tr key={pl.id} className="border-b border-border/50 last:border-0">
-                <td className="py-2 px-1 font-oswald font-semibold text-muted text-[11px]">{i + 1}</td>
-                <td className="py-2 px-1 font-semibold text-navy">{pl.first_name?.charAt(0)}. {pl.last_name}</td>
-                <td className="py-2 px-1 text-right font-oswald">{pl.gp}</td><td className="py-2 px-1 text-right font-oswald">{pl.g}</td>
-                <td className="py-2 px-1 text-right font-oswald">{pl.a}</td><td className="py-2 px-1 text-right font-oswald font-bold text-navy">{pl.p}</td>
-              </tr>
-            ))}</tbody></table>
-          )}
-        </SectionCard>
-        <Link href="/broadcast" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-          <div className="w-10 h-10 rounded-lg bg-orange/10 flex items-center justify-center group-hover:scale-110 transition-transform"><Radio size={20} className="text-orange" /></div>
-          <div><p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Broadcast Hub</p><p className="text-xs text-muted mt-0.5">Spotting boards, talk tracks, and graphics</p></div>
-          <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
-        </Link>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3 space-y-4">
+          <SectionCard icon={<Users size={14} className="text-teal" />} title="Scoring Leaders" link="/analytics" linkLabel="Full Analytics">
+            {lw2 ? <CardSkeleton lines={5} /> : scoringLeaders.length === 0 ? <EmptyState icon={<Users size={28} />} text="No scoring data" /> : (
+              <table className="w-full text-xs"><thead><tr className="border-b border-teal/20">
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1 w-5">#</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1">Player</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">GP</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">G</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">A</th>
+                <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P</th>
+              </tr></thead><tbody>{scoringLeaders.slice(0, 10).map((pl: ScoringLeader, i: number) => (
+                <tr key={pl.id} className="border-b border-teal/10 last:border-0">
+                  <td className="py-2 px-1 font-oswald font-semibold text-muted text-[11px]">{i + 1}</td>
+                  <td className="py-2 px-1 font-semibold text-navy">{pl.first_name?.charAt(0)}. {pl.last_name}</td>
+                  <td className="py-2 px-1 text-right font-oswald">{pl.gp}</td><td className="py-2 px-1 text-right font-oswald">{pl.g}</td>
+                  <td className="py-2 px-1 text-right font-oswald">{pl.a}</td><td className="py-2 px-1 text-right font-oswald font-bold text-navy">{pl.p}</td>
+                </tr>
+              ))}</tbody></table>
+            )}
+          </SectionCard>
+          <Link href="/broadcast" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-teal/20 hover:border-teal/30 hover:shadow-md transition-all group">
+            <div className="w-10 h-10 rounded-lg bg-orange/10 flex items-center justify-center group-hover:scale-110 transition-transform"><Radio size={20} className="text-orange" /></div>
+            <div><p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Broadcast Hub</p><p className="text-xs text-muted mt-0.5">Spotting boards, talk tracks, and graphics</p></div>
+            <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+          </Link>
+        </div>
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
+            <div className="flex items-center justify-between mb-3"><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+              <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors"><Crown size={10} />Pro</Link>
+            </div>
+            <BenchTalkUsage />
+          </div>
+          <div className="flex gap-2">
+            <Link href="/reports/generate" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-br from-navy to-navy-light text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Zap size={14} /> New Report</Link>
+            <button onClick={onBT} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Bench Talk</button>
+          </div>
+        </div>
       </div>
-      <div className="lg:col-span-2 space-y-4">
-        <SectionCard icon={<FileText size={14} className="text-navy/60" />} title="Recent Reports" link="/reports" linkLabel="View all">
-          {lw1 ? <CardSkeleton lines={3} /> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" /> : (
-            <div className="space-y-2">{recentReports.slice(0, 5).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
-          )}
-        </SectionCard>
-      </div>
+
+      <ReportsFooter reports={recentReports} loading={lw1} />
     </div>
   );
 }
@@ -407,38 +441,43 @@ function MediaView({ scoringLeaders, recentReports, lw1, lw2 }: any) {
 function FamilyView({ recentReports, lw1, user, onBT }: any) {
   const myPId = typeof window !== "undefined" ? localStorage.getItem("prospectx_my_player_id") : null;
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      <div className="lg:col-span-3 space-y-4">
-        <div className="bg-white rounded-xl border border-border p-5">
-          <div className="flex items-center gap-2 mb-3"><Heart size={14} className="text-[#3B6B8A]" /><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Your Player</h3></div>
-          {myPId ? (
-            <Link href={`/players/${myPId}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors">
-              <div className="w-10 h-10 rounded-full bg-[#3B6B8A]/10 flex items-center justify-center"><Heart size={18} className="text-[#3B6B8A]" /></div>
-              <div><p className="text-sm font-semibold text-navy">View Player Dashboard</p><p className="text-[10px] text-muted mt-0.5">Stats, development, and reports</p></div>
-              <ChevronRight size={14} className="text-muted/40 ml-auto" />
-            </Link>
-          ) : <EmptyState icon={<Heart size={28} />} text="No player selected" link="/my-player" linkText="Select your player" />}
-        </div>
-        <SectionCard icon={<FileText size={14} />} title="Recent Reports" link="/reports" linkLabel="View all">
-          {lw1 ? <CardSkeleton lines={3} /> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" /> : (
-            <div className="space-y-2">{recentReports.slice(0, 3).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
-          )}
-        </SectionCard>
-        <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-          <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center group-hover:scale-110 transition-transform"><BookOpen size={20} className="text-green-600" /></div>
-          <div><p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Guide</p><p className="text-xs text-muted mt-0.5">Nutrition, workouts, mental game</p></div>
-          <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
-        </Link>
-      </div>
-      <div className="lg:col-span-2 space-y-4">
-        <div className="bg-white rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-3"><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-            <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors"><Crown size={10} />{user?.subscription_tier || "Rookie"}</Link>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3 space-y-4">
+          <div className="bg-white rounded-xl border border-teal/20 border-l-2 border-l-teal/40 p-5">
+            <div className="flex items-center gap-2 mb-3"><Heart size={14} className="text-[#3B6B8A]" /><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Your Player</h3></div>
+            {myPId ? (
+              <Link href={`/players/${myPId}`} className="flex items-center gap-3 p-3 rounded-lg border border-teal/20 hover:border-teal/30 hover:bg-navy/[0.02] transition-colors">
+                <div className="w-10 h-10 rounded-full bg-[#3B6B8A]/10 flex items-center justify-center"><Heart size={18} className="text-[#3B6B8A]" /></div>
+                <div><p className="text-sm font-semibold text-navy">View Player Dashboard</p><p className="text-[10px] text-muted mt-0.5">Stats, development, and reports</p></div>
+                <ChevronRight size={14} className="text-muted/40 ml-auto" />
+              </Link>
+            ) : <EmptyState icon={<Heart size={28} />} text="No player selected" link="/my-player" linkText="Select your player" />}
           </div>
-          <BenchTalkUsage />
+          <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-teal/20 hover:border-teal/30 hover:shadow-md transition-all group">
+            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center group-hover:scale-110 transition-transform"><BookOpen size={20} className="text-green-600" /></div>
+            <div><p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Guide</p><p className="text-xs text-muted mt-0.5">Nutrition, workouts, mental game</p></div>
+            <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+          </Link>
+          <div className="flex gap-2">
+            <Link href="/reports/generate" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-br from-navy to-navy-light text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Zap size={14} /> New Report</Link>
+            <button onClick={onBT} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Bench Talk</button>
+          </div>
         </div>
-        <button onClick={onBT} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Ask Bench Talk</button>
+        <div className="lg:col-span-2 space-y-4">
+          <SectionCard icon={<Users size={14} className="text-teal" />} title="Team Roster" link="/teams" linkLabel="View Team">
+            <div className="text-center py-4"><Users size={24} className="mx-auto text-muted/30 mb-1.5" /><p className="text-muted text-sm">View your team&apos;s full roster</p><Link href="/teams" className="inline-block mt-1.5 text-xs text-teal hover:underline">Browse Teams</Link></div>
+          </SectionCard>
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
+            <div className="flex items-center justify-between mb-3"><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+              <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors"><Crown size={10} />{user?.subscription_tier || "Rookie"}</Link>
+            </div>
+            <BenchTalkUsage />
+          </div>
+        </div>
       </div>
+
+      <ReportsFooter reports={recentReports} loading={lw1} />
     </div>
   );
 }
@@ -446,39 +485,45 @@ function FamilyView({ recentReports, lw1, user, onBT }: any) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function AgentView({ recentReports, scoutingList, lw1, user, onBT }: any) {
   return (
-    <>
-      <div className="bg-gradient-to-br from-[#475569] to-[#334155] rounded-xl p-5 mb-4 text-white">
+    <div className="space-y-4">
+      <div className="bg-gradient-to-br from-[#475569] to-[#334155] rounded-xl p-5 text-white">
         <div className="flex items-center gap-3 mb-3"><div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center"><Briefcase size={20} /></div><div><h3 className="font-oswald text-sm font-bold uppercase tracking-wider">Agent Hub</h3><p className="text-xs text-white/60 mt-0.5">Client management and reports</p></div></div>
         <Link href="/my-clients" className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 transition-colors">Manage Clients <ChevronRight size={12} /></Link>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 space-y-4">
-          <SectionCard icon={<FileText size={14} />} title="Recent Reports" link="/reports" linkLabel="View all">
-            {lw1 ? <CardSkeleton lines={3} /> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" /> : (
-              <div className="space-y-2">{recentReports.slice(0, 5).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
-            )}
-          </SectionCard>
-        </div>
-        <div className="lg:col-span-2 space-y-4">
           <SectionCard icon={<Target size={14} className="text-orange" />} title="Scouting List" link="/scouting" linkLabel="View all">
-            {lw1 ? <CardSkeleton lines={3} /> : scoutingList.length === 0 ? <EmptyState icon={<Target size={28} />} text="No players" link="/scouting" linkText="Add a player" /> : (
+            {lw1 ? <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="animate-pulse flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-navy/5" /><div className="flex-1"><div className="h-3 bg-navy/5 rounded w-2/3 mb-1.5" /><div className="h-2 bg-navy/5 rounded w-1/3" /></div></div>)}</div> : scoutingList.length === 0 ? <EmptyState icon={<Target size={28} />} text="No players on scouting list" link="/scouting" linkText="Add a player" /> : (
               <div className="space-y-1">{scoutingList.slice(0, 5).map((item: ScoutingListItem) => (
-                <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors">
-                  <div className="relative shrink-0"><div className="w-7 h-7 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">{item.position || "?"}</div><span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} /></div>
-                  <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-navy truncate">{item.first_name} {item.last_name}</p><p className="text-[10px] text-muted truncate">{item.current_team || "No team"}</p></div>
+                <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors group">
+                  <div className="relative shrink-0"><div className="w-8 h-8 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">{item.position || "?"}</div><span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} /></div>
+                  <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate group-hover:text-teal transition-colors">{item.first_name} {item.last_name}</p><p className="text-[10px] text-muted truncate">{item.current_team || "No team"}</p></div>
+                  {item.position && <span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60 shrink-0">{item.position}</span>}
                 </Link>
               ))}</div>
             )}
           </SectionCard>
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="flex gap-2">
+            <Link href="/reports/generate" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-br from-navy to-navy-light text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Zap size={14} /> New Report</Link>
+            <button onClick={onBT} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Bench Talk</button>
+          </div>
+        </div>
+        <div className="lg:col-span-2 space-y-4">
+          <SectionCard icon={<Users size={14} className="text-teal" />} title="Teams" link="/teams" linkLabel="View all">
+            <div className="text-center py-4"><Users size={24} className="mx-auto text-muted/30 mb-1.5" /><p className="text-muted text-sm">Browse team rosters and stats</p><Link href="/teams" className="inline-block mt-1.5 text-xs text-teal hover:underline">Browse Teams</Link></div>
+          </SectionCard>
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <div className="flex items-center justify-between mb-3"><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
               <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors"><Crown size={10} />{user?.subscription_tier || "Rookie"}</Link>
             </div>
             <BenchTalkUsage />
           </div>
-          <button onClick={onBT} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Bench Talk</button>
         </div>
       </div>
-    </>
+
+      <ReportsFooter reports={recentReports} loading={lw1} />
+    </div>
   );
 }
+

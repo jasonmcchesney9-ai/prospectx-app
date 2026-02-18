@@ -138,9 +138,9 @@ export default function RinkToolbar({
   const rinkTypes: RinkType[] = ["full", "half", "quarter"];
 
   return (
-    <div className="flex flex-wrap items-center gap-1 px-3 py-2 bg-white border border-border rounded-xl">
+    <div className="flex flex-wrap items-center gap-1 px-3 py-2 bg-white border border-teal/20 rounded-xl">
       {/* ── Rink Type Selector ── */}
-      <div className="flex rounded-lg overflow-hidden border border-border mr-2">
+      <div className="flex rounded-lg overflow-hidden border border-teal/20 mr-2">
         {rinkTypes.map((rt) => (
           <button
             key={rt}

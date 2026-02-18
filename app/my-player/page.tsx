@@ -104,7 +104,7 @@ export default function MyPlayerPage() {
         </div>
 
         {/* Player Selector */}
-        <div className="bg-white rounded-xl border border-border p-5 mb-6">
+        <div className="bg-white rounded-xl border border-teal/20 p-5 mb-6">
           <label className="block text-[10px] font-oswald uppercase tracking-wider text-gray-500 mb-1.5">
             Select Your Player
           </label>
@@ -193,7 +193,7 @@ export default function MyPlayerPage() {
 
         {/* Quick Actions — shown when player is selected */}
         {selectedPlayer && (
-          <div className="bg-white rounded-xl border border-border p-5 mb-6">
+          <div className="bg-white rounded-xl border border-teal/20 p-5 mb-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-lg bg-navy/5 flex items-center justify-center shrink-0">
                 <Zap size={18} className="text-navy" />
@@ -270,7 +270,7 @@ export default function MyPlayerPage() {
           ].map((item) => (
             <div
               key={item.title}
-              className="bg-white rounded-xl border border-border p-4 hover:border-teal/30 hover:shadow-sm transition-all opacity-60"
+              className="bg-white rounded-xl border border-teal/20 p-4 hover:border-teal/30 hover:shadow-sm transition-all opacity-60"
             >
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">

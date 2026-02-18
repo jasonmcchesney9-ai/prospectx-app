@@ -478,7 +478,7 @@ export default function BroadcastPage() {
             <select
               value={homeTeam}
               onChange={(e) => setHomeTeam(e.target.value)}
-              className="px-2 py-1.5 border border-border rounded-lg text-xs bg-white min-w-[160px]"
+              className="px-2 py-1.5 border border-teal/20 rounded-lg text-xs bg-white min-w-[160px]"
             >
               <option value="">Select home team...</option>
               {teams.map((t) => (
@@ -494,7 +494,7 @@ export default function BroadcastPage() {
             <select
               value={awayTeam}
               onChange={(e) => setAwayTeam(e.target.value)}
-              className="px-2 py-1.5 border border-border rounded-lg text-xs bg-white min-w-[160px]"
+              className="px-2 py-1.5 border border-teal/20 rounded-lg text-xs bg-white min-w-[160px]"
             >
               <option value="">Select away team...</option>
               {teams.map((t) => (
@@ -508,7 +508,7 @@ export default function BroadcastPage() {
             type="date"
             value={gameDate}
             onChange={(e) => setGameDate(e.target.value)}
-            className="px-2 py-1.5 border border-border rounded-lg text-xs bg-white"
+            className="px-2 py-1.5 border border-teal/20 rounded-lg text-xs bg-white"
           />
         </div>
 
@@ -592,7 +592,7 @@ export default function BroadcastPage() {
 
         {/* Mobile/Tablet right column (below main content) */}
         <div className="xl:hidden mt-4">
-          <div className="bg-white rounded-xl border border-border p-4">
+          <div className="bg-white rounded-xl border border-teal/20 p-4">
             <div className="flex flex-wrap gap-1 mb-3">
               {(["profiles", "interview", "matchup", "producer", "postgame"] as RightTab[]).map((tab) => (
                 <button

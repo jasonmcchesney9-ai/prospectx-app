@@ -373,7 +373,7 @@ export default function LineBuilder({
   // ── Empty roster ──────────────────────────────────────
   if (roster.length === 0) {
     return (
-      <div className="text-center py-12 bg-white rounded-xl border border-border">
+      <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
         <Users size={32} className="mx-auto text-muted/40 mb-3" />
         <p className="text-muted text-sm">No players on this roster yet.</p>
         <p className="text-xs text-muted/60 mt-1">
@@ -390,7 +390,7 @@ export default function LineBuilder({
           ROSTER SIDEBAR — Desktop (always visible)
           ══════════════════════════════════════════════════ */}
       <div className="hidden lg:flex lg:flex-col w-[280px] shrink-0">
-        <div className="bg-white rounded-xl border border-border overflow-hidden sticky top-20">
+        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden sticky top-20">
           {/* Sidebar Header */}
           <div className="bg-gradient-to-r from-navy to-navy/80 px-4 py-2.5">
             <div className="flex items-center justify-between">
@@ -412,7 +412,7 @@ export default function LineBuilder({
                 placeholder="Search roster..."
                 value={rosterSearch}
                 onChange={(e) => setRosterSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:border-teal bg-white"
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-teal/20 rounded-lg focus:outline-none focus:border-teal bg-white"
               />
             </div>
           </div>
@@ -435,7 +435,7 @@ export default function LineBuilder({
           </div>
 
           {/* Player List */}
-          <div className="overflow-y-auto max-h-[calc(100vh-280px)] border-t border-border/50">
+          <div className="overflow-y-auto max-h-[calc(100vh-280px)] border-t border-teal/10">
             {rosterPlayers.length === 0 ? (
               <p className="px-3 py-6 text-xs text-muted text-center">No players match</p>
             ) : (
@@ -450,7 +450,7 @@ export default function LineBuilder({
                       if (!isAssigned) handleDragStart(e, p);
                     }}
                     onDragEnd={handleDragEnd}
-                    className={`flex items-center gap-2 px-3 py-2 border-b border-border/30 transition-all ${
+                    className={`flex items-center gap-2 px-3 py-2 border-b border-teal/8 transition-all ${
                       isAssigned
                         ? "opacity-40 cursor-default bg-navy/[0.02]"
                         : "cursor-grab hover:bg-teal/5 active:cursor-grabbing"
@@ -516,7 +516,7 @@ export default function LineBuilder({
         {/* Mobile toggle button */}
         <button
           onClick={() => setRosterOpen(!rosterOpen)}
-          className="w-full flex items-center justify-between px-4 py-2.5 bg-white rounded-xl border border-border mb-3 hover:bg-navy/[0.02] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-white rounded-xl border border-teal/20 mb-3 hover:bg-navy/[0.02] transition-colors"
         >
           <div className="flex items-center gap-2">
             <Users size={16} className="text-navy/50" />
@@ -536,7 +536,7 @@ export default function LineBuilder({
 
         {/* Mobile roster panel (expanded) */}
         {rosterOpen && (
-          <div className="bg-white rounded-xl border border-border overflow-hidden mb-4">
+          <div className="bg-white rounded-xl border border-teal/20 overflow-hidden mb-4">
             <div className="px-3 pt-3 pb-2">
               <div className="relative">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/50" />
@@ -545,7 +545,7 @@ export default function LineBuilder({
                   placeholder="Search roster..."
                   value={rosterSearch}
                   onChange={(e) => setRosterSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:border-teal bg-white"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-teal/20 rounded-lg focus:outline-none focus:border-teal bg-white"
                 />
               </div>
             </div>
@@ -564,7 +564,7 @@ export default function LineBuilder({
                 </button>
               ))}
             </div>
-            <div className="max-h-60 overflow-y-auto border-t border-border/50">
+            <div className="max-h-60 overflow-y-auto border-t border-teal/10">
               <p className="px-3 py-2 text-[10px] text-muted italic">
                 Tap a player, then tap an empty slot to assign. Drag-and-drop works on desktop.
               </p>
@@ -574,7 +574,7 @@ export default function LineBuilder({
                 return (
                   <div
                     key={p.id}
-                    className={`flex items-center gap-2 px-3 py-2 border-b border-border/30 ${
+                    className={`flex items-center gap-2 px-3 py-2 border-b border-teal/8 ${
                       isAssigned ? "opacity-40" : ""
                     }`}
                   >
@@ -638,7 +638,7 @@ export default function LineBuilder({
                     const isDeleting = deleting === lineKey;
 
                     return (
-                      <div key={lineKey} className="bg-white rounded-xl border border-border overflow-hidden">
+                      <div key={lineKey} className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                         <div className="bg-gradient-to-r from-navy to-navy/80 px-4 py-2 flex items-center justify-between">
                           <h4 className="text-xs font-oswald uppercase tracking-wider text-white font-bold">
                             {config.label}
@@ -688,7 +688,7 @@ export default function LineBuilder({
                                       setActivePicker(isPickerOpen ? null : { lineKey, slotIdx });
                                       setPickerSearch("");
                                     }}
-                                    className="w-full border-2 border-dashed border-border/40 rounded-lg p-2 text-center hover:border-teal/40 hover:bg-teal/5 transition-colors"
+                                    className="w-full border-2 border-dashed border-teal/10 rounded-lg p-2 text-center hover:border-teal/40 hover:bg-teal/5 transition-colors"
                                   >
                                     <div className="w-8 h-8 rounded-full bg-border/20 flex items-center justify-center mx-auto mb-1">
                                       <Plus size={14} className="text-muted/40" />
@@ -699,14 +699,14 @@ export default function LineBuilder({
 
                                 {/* Mobile picker dropdown */}
                                 {isPickerOpen && (
-                                  <div ref={pickerRef} className="absolute top-full left-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-lg z-50 max-h-64 overflow-hidden">
-                                    <div className="p-2 border-b border-border">
+                                  <div ref={pickerRef} className="absolute top-full left-0 mt-1 w-56 bg-white border border-teal/20 rounded-xl shadow-lg z-50 max-h-64 overflow-hidden">
+                                    <div className="p-2 border-b border-teal/20">
                                       <input
                                         type="text"
                                         placeholder="Search players..."
                                         value={pickerSearch}
                                         onChange={(e) => setPickerSearch(e.target.value)}
-                                        className="w-full px-2 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:border-teal"
+                                        className="w-full px-2 py-1.5 text-xs border border-teal/20 rounded-lg focus:outline-none focus:border-teal"
                                         autoFocus
                                       />
                                     </div>
@@ -792,7 +792,7 @@ export default function LineBuilder({
                   return (
                     <div
                       key={lineKey}
-                      className="bg-white rounded-xl border border-border overflow-hidden"
+                      className="bg-white rounded-xl border border-teal/20 overflow-hidden"
                     >
                       {/* Line Header */}
                       <div className="bg-gradient-to-r from-navy to-navy/80 px-4 py-2 flex items-center justify-between">
@@ -873,7 +873,7 @@ export default function LineBuilder({
                                       ? "border-orange/50 bg-orange/5"
                                       : isDragging && posValid
                                       ? "border-dashed border-teal/40 bg-teal/[0.02]"
-                                      : "border-dashed border-border/40 hover:border-teal/40 hover:bg-teal/5"
+                                      : "border-dashed border-teal/10 hover:border-teal/40 hover:bg-teal/5"
                                   }`}
                                 >
                                   <div
@@ -920,15 +920,15 @@ export default function LineBuilder({
                                 !player && (
                                   <div
                                     ref={pickerRef}
-                                    className="absolute top-full left-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-lg z-50 max-h-64 overflow-hidden"
+                                    className="absolute top-full left-0 mt-1 w-56 bg-white border border-teal/20 rounded-xl shadow-lg z-50 max-h-64 overflow-hidden"
                                   >
-                                    <div className="p-2 border-b border-border">
+                                    <div className="p-2 border-b border-teal/20">
                                       <input
                                         type="text"
                                         placeholder="Search players..."
                                         value={pickerSearch}
                                         onChange={(e) => setPickerSearch(e.target.value)}
-                                        className="w-full px-2 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:border-teal"
+                                        className="w-full px-2 py-1.5 text-xs border border-teal/20 rounded-lg focus:outline-none focus:border-teal"
                                         autoFocus
                                       />
                                     </div>

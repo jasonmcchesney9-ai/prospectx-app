@@ -73,13 +73,13 @@ export default function PracticePlansPage() {
               placeholder="Search plans..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
           >
             <option value="">All Statuses</option>
             <option value="draft">Draft</option>
@@ -94,7 +94,7 @@ export default function PracticePlansPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
           </div>
         ) : plans.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-border">
+          <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
             <ClipboardList size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm mb-4">
               {search || statusFilter ? "No plans match your filters." : "No practice plans yet."}
@@ -120,7 +120,7 @@ export default function PracticePlansPage() {
               return (
                 <div
                   key={plan.id}
-                  className="bg-white rounded-xl border border-border hover:border-teal/30 transition-colors overflow-hidden"
+                  className="bg-white rounded-xl border border-teal/20 hover:border-teal/30 transition-colors overflow-hidden"
                 >
                   {/* Plan Header */}
                   <button
@@ -177,7 +177,7 @@ export default function PracticePlansPage() {
 
                   {/* Expanded Preview */}
                   {isExpanded && (
-                    <div className="border-t border-border/50 p-4 sm:p-5 bg-navy/[0.02]">
+                    <div className="border-t border-teal/10 p-4 sm:p-5 bg-navy/[0.02]">
                       {/* Phase summary */}
                       {plan.plan_data?.phases && plan.plan_data.phases.length > 0 ? (
                         <div className="space-y-2 mb-4">

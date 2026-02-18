@@ -301,7 +301,7 @@ function DuplicateGroupCard({
   const firstPlayer = group.players[0];
 
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden">
+    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
       {/* Header — click to expand */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -329,7 +329,7 @@ function DuplicateGroupCard({
 
       {/* Expanded Detail */}
       {expanded && (
-        <div className="border-t border-border px-5 py-4">
+        <div className="border-t border-teal/20 px-5 py-4">
           {error && (
             <div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-xs">
               {error}
@@ -347,7 +347,7 @@ function DuplicateGroupCard({
                 className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
                   keepId === p.id
                     ? "border-teal bg-teal/5"
-                    : "border-border hover:border-gray-300"
+                    : "border-teal/20 hover:border-gray-300"
                 }`}
                 onClick={() => setKeepId(p.id)}
               >
@@ -532,7 +532,7 @@ function BulkOperations() {
   return (
     <div className="space-y-6">
       {/* Auto-assign Leagues */}
-      <div className="bg-white rounded-xl border border-border p-6">
+      <div className="bg-white rounded-xl border border-teal/20 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center">
             <Shield size={20} className="text-teal" />
@@ -573,7 +573,7 @@ function BulkOperations() {
       </div>
 
       {/* Transfer Players */}
-      <div className="bg-white rounded-xl border border-border p-6">
+      <div className="bg-white rounded-xl border border-teal/20 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-lg bg-orange/10 flex items-center justify-center">
             <ArrowRightLeft size={20} className="text-orange" />
@@ -603,13 +603,13 @@ function BulkOperations() {
                 searchPlayers(e.target.value);
               }}
               placeholder="Search by name..."
-              className="w-full border border-border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+              className="w-full border border-teal/20 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
             />
           </div>
 
           {/* Search Results */}
           {searchResults.length > 0 && (
-            <div className="mt-2 border border-border rounded-lg max-h-48 overflow-y-auto">
+            <div className="mt-2 border border-teal/20 rounded-lg max-h-48 overflow-y-auto">
               {searchResults.map((p) => {
                 const isSelected = selectedPlayers.includes(p.id);
                 return (
@@ -620,7 +620,7 @@ function BulkOperations() {
                         isSelected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
                       )
                     }
-                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-gray-50 border-b border-border last:border-b-0 transition-colors ${
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-gray-50 border-b border-teal/20 last:border-b-0 transition-colors ${
                       isSelected ? "bg-teal/5" : ""
                     }`}
                   >
@@ -675,7 +675,7 @@ function BulkOperations() {
               value={targetTeam}
               onChange={(e) => setTargetTeam(e.target.value)}
               placeholder="e.g. Chatham Maroons"
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+              className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
             />
           </div>
           <div>
@@ -687,7 +687,7 @@ function BulkOperations() {
               value={targetLeague}
               onChange={(e) => setTargetLeague(e.target.value)}
               placeholder="e.g. GOHL"
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+              className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
             />
           </div>
         </div>
@@ -770,7 +770,7 @@ function MergeHistory() {
       )}
 
       {merges.length === 0 ? (
-        <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-6 text-center">
           <History size={32} className="mx-auto text-muted mb-3" />
           <h3 className="font-oswald font-semibold text-navy">No Merge History</h3>
           <p className="text-muted text-sm mt-1">Merges will appear here after combining duplicate profiles.</p>
@@ -778,7 +778,7 @@ function MergeHistory() {
       ) : (
         <div className="space-y-3">
           {merges.map((m) => (
-            <div key={m.id} className="bg-white rounded-xl border border-border p-4">
+            <div key={m.id} className="bg-white rounded-xl border border-teal/20 p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -891,7 +891,7 @@ function DeletedPlayersTab() {
       )}
 
       {players.length === 0 ? (
-        <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-6 text-center">
           <Trash2 size={32} className="mx-auto text-muted mb-3" />
           <h3 className="font-oswald font-semibold text-navy">No Deleted Players</h3>
           <p className="text-muted text-sm mt-1">Deleted players can be restored within 30 days.</p>
@@ -899,7 +899,7 @@ function DeletedPlayersTab() {
       ) : (
         <div className="space-y-3">
           {players.map((p) => (
-            <div key={p.id} className="bg-white rounded-xl border border-border p-4">
+            <div key={p.id} className="bg-white rounded-xl border border-teal/20 p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">

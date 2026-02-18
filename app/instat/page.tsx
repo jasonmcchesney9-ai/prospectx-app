@@ -255,7 +255,7 @@ function InStatUploader() {
 
       {/* Upload Form */}
       {!result && (
-        <div className="bg-white rounded-xl border border-border p-6">
+        <div className="bg-white rounded-xl border border-teal/20 p-6">
           {/* File Picker */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-navy mb-2">
@@ -263,7 +263,7 @@ function InStatUploader() {
             </label>
             <div
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                file ? "border-teal bg-teal/5" : "border-border hover:border-teal/50"
+                file ? "border-teal bg-teal/5" : "border-teal/20 hover:border-teal/50"
               }`}
               onClick={() => fileRef.current?.click()}
             >
@@ -321,7 +321,7 @@ function InStatUploader() {
                 value={season}
                 onChange={(e) => setSeason(e.target.value)}
                 placeholder="e.g. 2025-2026"
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
               />
             </div>
 
@@ -341,11 +341,11 @@ function InStatUploader() {
                   }}
                   onFocus={() => setShowTeamDropdown(true)}
                   placeholder="Search teams..."
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                  className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                 />
                 <ChevronDown size={14} className="absolute right-3 top-3 text-muted" />
                 {showTeamDropdown && filteredTeams.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-teal/20 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                     {filteredTeams.map((t) => (
                       <button
                         key={t.id}
@@ -373,7 +373,7 @@ function InStatUploader() {
               <select
                 value={lineType}
                 onChange={(e) => setLineType(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
               >
                 {LINE_TYPES.map((lt) => (
                   <option key={lt.value} value={lt.value}>
@@ -412,7 +412,7 @@ function InStatUploader() {
       )}
 
       {/* Help */}
-      <div className="mt-8 bg-navy/[0.02] rounded-xl border border-border p-5">
+      <div className="mt-8 bg-navy/[0.02] rounded-xl border border-teal/20 p-5">
         <h3 className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider mb-3">
           Supported File Types
         </h3>

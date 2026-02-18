@@ -76,7 +76,7 @@ export default function LoginPage() {
                       required
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                     />
                   </div>
                   <div>
@@ -88,7 +88,7 @@ export default function LoginPage() {
                       required
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                     />
                   </div>
                 </div>
@@ -102,7 +102,7 @@ export default function LoginPage() {
                     value={orgName}
                     onChange={(e) => setOrgName(e.target.value)}
                     placeholder="e.g., Chatham Maroons"
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                   />
                 </div>
                 <div>
@@ -124,7 +124,7 @@ export default function LoginPage() {
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
                           hockeyRole === r.value
                             ? "border-teal bg-teal/10 text-teal ring-1 ring-teal/30"
-                            : "border-border text-muted hover:border-teal/40 hover:text-navy"
+                            : "border-teal/20 text-muted hover:border-teal/40 hover:text-navy"
                         }`}
                       >
                         <span>{r.icon}</span>
@@ -145,7 +145,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                 placeholder="you@team.com"
               />
             </div>
@@ -160,7 +160,7 @@ export default function LoginPage() {
                 minLength={mode === "register" ? 8 : 6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
               />
             </div>
 

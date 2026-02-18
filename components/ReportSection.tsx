@@ -94,7 +94,7 @@ function RichContent({ text, className }: { text: string; className?: string }) 
         <img
           src={resolvedUrl}
           alt={alt}
-          className="max-w-full sm:max-w-[400px] max-h-52 object-contain rounded-lg border border-border/30 bg-white p-2"
+          className="max-w-full sm:max-w-[400px] max-h-52 object-contain rounded-lg border border-teal/8 bg-white p-2"
         />
       </div>
     );
@@ -241,7 +241,7 @@ export default function ReportSection({ sectionKey, content }: Props) {
     const Icon = highlight.icon;
     return (
       <section className="mb-6">
-        <div className={`rounded-lg bg-gradient-to-r ${highlight.gradient} p-4 sm:p-5 border border-border/30`}>
+        <div className={`rounded-lg bg-gradient-to-r ${highlight.gradient} p-4 sm:p-5 border border-teal/8`}>
           <div className="flex items-center gap-2 mb-3">
             <div className={`w-1 h-5 ${highlight.accent} rounded-full`} />
             <Icon size={14} className="text-navy/60" />

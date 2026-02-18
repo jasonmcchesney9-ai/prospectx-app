@@ -2499,7 +2499,7 @@ IMPORTANT: Use only provided goaltender data.""",
 
 
 def seed_leagues():
-    """Seed the leagues reference table with Canadian/US junior and college leagues."""
+    """Seed the leagues reference table with professional, junior, and college leagues."""
     conn = get_db()
     count = conn.execute("SELECT COUNT(*) FROM leagues").fetchone()[0]
     if count > 0:
@@ -2507,20 +2507,32 @@ def seed_leagues():
         return
 
     leagues = [
-        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_b", 10),
-        ("OJHL", "Ontario Junior Hockey League", "Canada", "junior_a", 20),
-        ("OHL", "Ontario Hockey League", "Canada", "major_junior", 30),
-        ("QMJHL", "Quebec Major Junior Hockey League", "Canada", "major_junior", 31),
-        ("WHL", "Western Hockey League", "Canada", "major_junior", 32),
-        ("BCHL", "British Columbia Hockey League", "Canada", "junior_a", 40),
-        ("AJHL", "Alberta Junior Hockey League", "Canada", "junior_a", 41),
-        ("SJHL", "Saskatchewan Junior Hockey League", "Canada", "junior_a", 42),
-        ("MJHL", "Manitoba Junior Hockey League", "Canada", "junior_a", 43),
-        ("MHL", "Maritime Hockey League", "Canada", "junior_a", 44),
-        ("CCHL", "Central Canada Hockey League", "Canada", "junior_a", 45),
-        ("NOJHL", "Northern Ontario Junior Hockey League", "Canada", "junior_a", 46),
-        ("USHL", "United States Hockey League", "USA", "junior_a", 50),
-        ("NAHL", "North American Hockey League", "USA", "junior_a", 51),
+        # Professional
+        ("AHL", "American Hockey League", "USA", "professional", 1),
+        ("ECHL", "ECHL", "USA", "professional", 2),
+        ("SPHL", "Southern Professional Hockey League", "USA", "professional", 3),
+        ("PWHL", "Professional Women's Hockey League", "Canada", "professional", 4),
+        # Major Junior (CHL)
+        ("OHL", "Ontario Hockey League", "Canada", "major_junior", 10),
+        ("QMJHL", "Quebec Major Junior Hockey League", "Canada", "major_junior", 11),
+        ("WHL", "Western Hockey League", "Canada", "major_junior", 12),
+        # Junior A
+        ("BCHL", "British Columbia Hockey League", "Canada", "junior_a", 20),
+        ("AJHL", "Alberta Junior Hockey League", "Canada", "junior_a", 21),
+        ("SJHL", "Saskatchewan Junior Hockey League", "Canada", "junior_a", 22),
+        ("MJHL", "Manitoba Junior Hockey League", "Canada", "junior_a", 23),
+        ("USHL", "United States Hockey League", "USA", "junior_a", 24),
+        ("OJHL", "Ontario Junior Hockey League", "Canada", "junior_a", 25),
+        ("CCHL", "Central Canada Hockey League", "Canada", "junior_a", 26),
+        ("NOJHL", "Northern Ontario Junior Hockey League", "Canada", "junior_a", 27),
+        ("MHL", "Maritime Hockey League", "Canada", "junior_a", 28),
+        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_a", 29),
+        ("NAHL", "North American Hockey League", "USA", "junior_a", 30),
+        # Junior B
+        ("KIJHL", "Kootenay International Junior Hockey League", "Canada", "junior_b", 40),
+        ("PJHL", "Provincial Junior Hockey League", "Canada", "junior_b", 41),
+        ("VIJHL", "Vancouver Island Junior Hockey League", "Canada", "junior_b", 42),
+        # College / Other
         ("NCAA", "National Collegiate Athletic Association", "USA", "college", 60),
         ("USHS", "US High School", "USA", "high_school", 70),
         ("AAA", "AAA Minor Hockey", "Canada", "minor", 80),
@@ -2533,6 +2545,78 @@ def seed_leagues():
     conn.commit()
     conn.close()
     logger.info("Seeded %d leagues", len(leagues))
+
+
+def migrate_leagues():
+    """Upsert leagues for existing databases — adds missing leagues, fixes level/sort_order."""
+    conn = get_db()
+
+    # Handle GOJHL → GOHL rebrand (abbreviation changed)
+    old_gojhl = conn.execute("SELECT id FROM leagues WHERE abbreviation = 'GOJHL'").fetchone()
+    if old_gojhl:
+        conn.execute(
+            "UPDATE leagues SET abbreviation = 'GOHL', name = 'Greater Ontario Hockey League', level = 'junior_a', sort_order = 29 WHERE abbreviation = 'GOJHL'"
+        )
+        # Also update any teams that reference the old abbreviation
+        conn.execute("UPDATE teams SET league = 'GOHL' WHERE league = 'GOJHL'")
+        logger.info("Renamed GOJHL → GOHL in leagues and teams")
+
+    # Canonical league data (must match seed_leagues above)
+    leagues = [
+        # Professional
+        ("AHL", "American Hockey League", "USA", "professional", 1),
+        ("ECHL", "ECHL", "USA", "professional", 2),
+        ("SPHL", "Southern Professional Hockey League", "USA", "professional", 3),
+        ("PWHL", "Professional Women's Hockey League", "Canada", "professional", 4),
+        # Major Junior (CHL)
+        ("OHL", "Ontario Hockey League", "Canada", "major_junior", 10),
+        ("QMJHL", "Quebec Major Junior Hockey League", "Canada", "major_junior", 11),
+        ("WHL", "Western Hockey League", "Canada", "major_junior", 12),
+        # Junior A
+        ("BCHL", "British Columbia Hockey League", "Canada", "junior_a", 20),
+        ("AJHL", "Alberta Junior Hockey League", "Canada", "junior_a", 21),
+        ("SJHL", "Saskatchewan Junior Hockey League", "Canada", "junior_a", 22),
+        ("MJHL", "Manitoba Junior Hockey League", "Canada", "junior_a", 23),
+        ("USHL", "United States Hockey League", "USA", "junior_a", 24),
+        ("OJHL", "Ontario Junior Hockey League", "Canada", "junior_a", 25),
+        ("CCHL", "Central Canada Hockey League", "Canada", "junior_a", 26),
+        ("NOJHL", "Northern Ontario Junior Hockey League", "Canada", "junior_a", 27),
+        ("MHL", "Maritime Hockey League", "Canada", "junior_a", 28),
+        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_a", 29),
+        ("NAHL", "North American Hockey League", "USA", "junior_a", 30),
+        # Junior B
+        ("KIJHL", "Kootenay International Junior Hockey League", "Canada", "junior_b", 40),
+        ("PJHL", "Provincial Junior Hockey League", "Canada", "junior_b", 41),
+        ("VIJHL", "Vancouver Island Junior Hockey League", "Canada", "junior_b", 42),
+        # College / Other
+        ("NCAA", "National Collegiate Athletic Association", "USA", "college", 60),
+        ("USHS", "US High School", "USA", "high_school", 70),
+        ("AAA", "AAA Minor Hockey", "Canada", "minor", 80),
+    ]
+    inserted = 0
+    updated = 0
+    for abbr, name, country, level, sort in leagues:
+        existing = conn.execute(
+            "SELECT id, level, sort_order, name FROM leagues WHERE abbreviation = ?", (abbr,)
+        ).fetchone()
+        if existing:
+            # Update if level, sort_order, or name changed
+            if existing["level"] != level or existing["sort_order"] != sort or existing["name"] != name:
+                conn.execute(
+                    "UPDATE leagues SET name = ?, level = ?, sort_order = ?, country = ? WHERE abbreviation = ?",
+                    (name, level, sort, country, abbr),
+                )
+                updated += 1
+        else:
+            conn.execute(
+                "INSERT INTO leagues (id, abbreviation, name, country, level, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), abbr, name, country, level, sort),
+            )
+            inserted += 1
+    conn.commit()
+    conn.close()
+    if inserted or updated:
+        logger.info("League migration: %d inserted, %d updated", inserted, updated)
 
 
 def seed_teams():
@@ -4016,6 +4100,7 @@ seed_new_templates()
 _migrate_template_prompts()
 seed_hockey_os()
 seed_leagues()
+migrate_leagues()
 seed_teams()
 seed_drills()
 seed_drills_v2()

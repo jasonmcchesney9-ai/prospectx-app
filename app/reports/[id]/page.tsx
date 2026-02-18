@@ -525,7 +525,7 @@ export default function ReportViewerPage() {
 
         {/* Report Content */}
         {report.status === "processing" || report.status === "pending" ? (
-          <div className="bg-white rounded-xl border border-border p-8 sm:p-12 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-8 sm:p-12 text-center">
             <div className="flex justify-center mb-6">
               <HockeyRink size="full" animate={true} />
             </div>
@@ -562,10 +562,10 @@ export default function ReportViewerPage() {
             </button>
           </div>
         ) : sections.length > 0 ? (
-          <div className="bg-white rounded-xl border border-border p-6 sm:p-8">
+          <div className="bg-white rounded-xl border border-teal/20 p-6 sm:p-8">
             {/* Table of Contents */}
             {sections.length > 3 && (
-              <div className="mb-8 p-4 bg-navy/[0.02] rounded-lg border border-border/50">
+              <div className="mb-8 p-4 bg-navy/[0.02] rounded-lg border border-teal/10">
                 <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">
                   Sections
                 </h3>
@@ -597,7 +597,7 @@ export default function ReportViewerPage() {
             <GradingLegend reportType={report.report_type} />
 
             {/* Footer */}
-            <div className="mt-8 pt-6 border-t border-border">
+            <div className="mt-8 pt-6 border-t border-teal/20">
               <div className="ice-stripe rounded-full mb-4" />
               <div className="flex items-center justify-between text-xs text-muted">
                 <span className="font-oswald uppercase tracking-wider">
@@ -611,7 +611,7 @@ export default function ReportViewerPage() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-border p-8 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
             <FileText size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm">
               No report content available.
@@ -639,7 +639,7 @@ function GradingLegend({ reportType }: { reportType: string }) {
   const grades = Object.values(PROSPECT_GRADES);
 
   return (
-    <div className="mt-8 border border-border rounded-lg overflow-hidden">
+    <div className="mt-8 border border-teal/20 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-4 py-3 bg-navy/[0.03] hover:bg-navy/[0.05] transition-colors text-left"

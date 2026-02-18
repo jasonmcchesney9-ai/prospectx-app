@@ -61,7 +61,7 @@ export default function ReferenceDrawer({
       </div>
 
       {/* Content area */}
-      <div className="flex-1 bg-white border border-border rounded-xl overflow-y-auto">
+      <div className="flex-1 bg-white border border-teal/20 rounded-xl overflow-y-auto">
         <div className="p-3">
           {children}
         </div>

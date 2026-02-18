@@ -36,9 +36,30 @@ import type {
 type Tab = "standings" | "player-stats" | "schedule" | "teams";
 
 const LEAGUE_OPTIONS = [
-  { code: "gojhl", label: "GOHL", full: "Greater Ontario Hockey League" },
+  // Professional
+  { code: "ahl", label: "AHL", full: "American Hockey League" },
+  { code: "echl", label: "ECHL", full: "ECHL" },
+  { code: "sphl", label: "SPHL", full: "Southern Professional Hockey League" },
+  { code: "pwhl", label: "PWHL", full: "Professional Women's Hockey League" },
+  // Major Junior (CHL)
   { code: "ohl", label: "OHL", full: "Ontario Hockey League" },
+  { code: "whl", label: "WHL", full: "Western Hockey League" },
+  { code: "lhjmq", label: "QMJHL", full: "Quebec Major Junior Hockey League" },
+  // Junior A
+  { code: "bchl", label: "BCHL", full: "British Columbia Hockey League" },
+  { code: "ajhl", label: "AJHL", full: "Alberta Junior Hockey League" },
+  { code: "sjhl", label: "SJHL", full: "Saskatchewan Junior Hockey League" },
+  { code: "mjhl", label: "MJHL", full: "Manitoba Junior Hockey League" },
+  { code: "ushl", label: "USHL", full: "United States Hockey League" },
   { code: "ojhl", label: "OJHL", full: "Ontario Junior Hockey League" },
+  { code: "cchl", label: "CCHL", full: "Central Canada Hockey League" },
+  { code: "nojhl", label: "NOJHL", full: "Northern Ontario Junior Hockey League" },
+  { code: "mhl", label: "MHL", full: "Maritime Hockey League" },
+  { code: "gojhl", label: "GOHL", full: "Greater Ontario Hockey League" },
+  // Junior B
+  { code: "kijhl", label: "KIJHL", full: "Kootenay International Junior Hockey League" },
+  { code: "pjhl", label: "PJHL", full: "Provincial Junior Hockey League" },
+  { code: "vijhl", label: "VIJHL", full: "Vancouver Island Junior Hockey League" },
 ];
 
 export default function LeagueHubPage() {
@@ -58,7 +79,7 @@ export default function LeagueHubPage() {
   const [goalieLoading, setGoalieLoading] = useState(false);
   const [goaliesLoaded, setGoaliesLoaded] = useState(false);
 
-  const leagueInfo = LEAGUE_OPTIONS.find((l) => l.code === league)!;
+  const leagueInfo = LEAGUE_OPTIONS.find((l) => l.code === league) || LEAGUE_OPTIONS[0];
 
   useEffect(() => {
     loadData();
@@ -127,21 +148,32 @@ export default function LeagueHubPage() {
           </div>
 
           {/* League Selector */}
-          <div className="flex gap-1 bg-navy/5 rounded-lg p-1">
-            {LEAGUE_OPTIONS.map((opt) => (
-              <button
-                key={opt.code}
-                onClick={() => setLeague(opt.code)}
-                className={`px-4 py-2 text-sm font-oswald font-semibold rounded-md transition-colors ${
-                  league === opt.code
-                    ? "bg-navy text-white shadow-sm"
-                    : "text-navy/60 hover:text-navy hover:bg-white/50"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <select
+            value={league}
+            onChange={(e) => setLeague(e.target.value)}
+            className="appearance-none bg-white border border-teal/20 rounded-lg px-4 py-2.5 pr-10 text-sm font-oswald font-semibold text-navy uppercase tracking-wider cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+          >
+            <optgroup label="Professional">
+              {LEAGUE_OPTIONS.filter((_, i) => i < 4).map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Major Junior (CHL)">
+              {LEAGUE_OPTIONS.filter((_, i) => i >= 4 && i < 7).map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Junior A">
+              {LEAGUE_OPTIONS.filter((_, i) => i >= 7 && i < 17).map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Junior B">
+              {LEAGUE_OPTIONS.filter((_, i) => i >= 17).map((opt) => (
+                <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+              ))}
+            </optgroup>
+          </select>
         </div>
 
         {/* League Name Banner */}
@@ -165,7 +197,7 @@ export default function LeagueHubPage() {
         )}
 
         {/* Tab Bar */}
-        <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
+        <div className="flex gap-1 border-b border-teal/20 mb-6 overflow-x-auto">
           {tabs.map((t) => {
             const Icon = t.icon;
             return (
@@ -219,11 +251,11 @@ function StandingsTab({ standings }: { standings: HTStandings[] }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden">
+    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-navy/[0.03] border-b border-border">
+            <tr className="bg-navy/[0.03] border-b border-teal/20">
               <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">#</th>
               <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Team</th>
               <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">GP</th>
@@ -245,7 +277,7 @@ function StandingsTab({ standings }: { standings: HTStandings[] }) {
               const cleanName = team.name.replace(/^[a-z]\s*-\s*/i, "");
               const clinch = team.name.match(/^([a-z])\s*-\s*/i)?.[1] || "";
               return (
-                <tr key={team.team_id ?? i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                <tr key={team.team_id ?? i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                   <td className="px-3 py-2 text-muted text-xs">{i + 1}</td>
                   <td className="px-3 py-2 font-medium text-navy whitespace-nowrap">
                     {clinch && (
@@ -403,7 +435,7 @@ function PlayerStatsTab({
             className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ${
               quickFilter === f.key
                 ? "bg-teal text-white border-teal"
-                : "bg-white text-navy/70 border-border hover:border-teal/40 hover:text-navy"
+                : "bg-white text-navy/70 border-teal/20 hover:border-teal/40 hover:text-navy"
             }`}
           >
             {f.emoji && <span className="mr-1">{f.emoji}</span>}
@@ -423,7 +455,7 @@ function PlayerStatsTab({
               placeholder="Search players..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 bg-white"
+              className="w-full pl-9 pr-8 py-2 border border-teal/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 bg-white"
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -439,7 +471,7 @@ function PlayerStatsTab({
           <select
             value={posFilter}
             onChange={(e) => { setPosFilter(e.target.value as PosFilter); setQuickFilter("all"); }}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+            className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
           >
             <option value="all">All Players</option>
             <option value="forwards">Forwards</option>
@@ -455,7 +487,7 @@ function PlayerStatsTab({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortKey)}
-              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+              className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
             >
               <option value="points">Points</option>
               <option value="goals">Goals</option>
@@ -482,11 +514,11 @@ function PlayerStatsTab({
         ) : filteredGoalies.length === 0 ? (
           <EmptyState text="No goalie stats available" />
         ) : (
-          <div className="bg-white rounded-xl border border-border overflow-hidden">
+          <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-navy/[0.03] border-b border-border">
+                  <tr className="bg-navy/[0.03] border-b border-teal/20">
                     <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">#</th>
                     <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Goalie</th>
                     <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Team</th>
@@ -502,7 +534,7 @@ function PlayerStatsTab({
                 </thead>
                 <tbody>
                   {filteredGoalies.map((g, i) => (
-                    <tr key={g.player_id ?? i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                    <tr key={g.player_id ?? i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                       <td className="px-3 py-2 text-muted text-xs">{i + 1}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -537,11 +569,11 @@ function PlayerStatsTab({
           </div>
         )
       ) : (
-        <div className="bg-white rounded-xl border border-border overflow-hidden">
+        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-navy/[0.03] border-b border-border">
+                <tr className="bg-navy/[0.03] border-b border-teal/20">
                   <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">#</th>
                   <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Player</th>
                   <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Team</th>
@@ -560,7 +592,7 @@ function PlayerStatsTab({
                 {filteredSkaters.map((p, i) => {
                   const ppgRate = (p.gp ?? 0) > 0 ? ((p.points ?? 0) / (p.gp ?? 1)).toFixed(2) : "0.00";
                   return (
-                    <tr key={p.player_id ?? i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                    <tr key={p.player_id ?? i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                       <td className="px-3 py-2 text-muted text-xs">{i + 1}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -695,7 +727,7 @@ function ScheduleTab({ games, teams }: { games: HTGame[]; teams: HTTeam[] }) {
           <select
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
+            className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30"
           >
             <option value="">All Teams</option>
             {[...teams]
@@ -758,7 +790,7 @@ function GameCard({ game: g }: { game: HTGame }) {
   const isLive = !isFinal && g.status !== "" && g.period !== "";
 
   return (
-    <div className={`bg-white rounded-xl border ${isLive ? "border-red-400 shadow-sm" : "border-border"} p-3 flex items-center gap-4`}>
+    <div className={`bg-white rounded-xl border ${isLive ? "border-red-400 shadow-sm" : "border-teal/20"} p-3 flex items-center gap-4`}>
       {/* Away Team */}
       <div className="flex-1 text-right">
         <div className="flex items-center justify-end gap-2">
@@ -1011,19 +1043,19 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-            <div className="text-center p-2 bg-white rounded-lg border border-border/50">
+            <div className="text-center p-2 bg-white rounded-lg border border-teal/10">
               <p className="text-lg font-bold text-teal">{bulkResult.teams_synced}</p>
               <p className="text-[10px] text-muted uppercase tracking-wider">Teams Synced</p>
             </div>
-            <div className="text-center p-2 bg-white rounded-lg border border-border/50">
+            <div className="text-center p-2 bg-white rounded-lg border border-teal/10">
               <p className="text-lg font-bold text-green-600">{bulkResult.total_created}</p>
               <p className="text-[10px] text-muted uppercase tracking-wider">Players Created</p>
             </div>
-            <div className="text-center p-2 bg-white rounded-lg border border-border/50">
+            <div className="text-center p-2 bg-white rounded-lg border border-teal/10">
               <p className="text-lg font-bold text-blue-600">{bulkResult.total_updated}</p>
               <p className="text-[10px] text-muted uppercase tracking-wider">Updated</p>
             </div>
-            <div className="text-center p-2 bg-white rounded-lg border border-border/50">
+            <div className="text-center p-2 bg-white rounded-lg border border-teal/10">
               <p className="text-lg font-bold text-muted">{bulkResult.total_skipped}</p>
               <p className="text-[10px] text-muted uppercase tracking-wider">Skipped</p>
             </div>
@@ -1085,9 +1117,9 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
       )}
 
       {Object.entries(divisions).map(([div, divTeams]) => (
-        <div key={div} className="bg-white rounded-xl border border-border overflow-hidden">
+        <div key={div} className="bg-white rounded-xl border border-teal/20 overflow-hidden">
           {/* Division Header */}
-          <div className="flex items-center gap-3 px-5 py-3 bg-navy/[0.03] border-b border-border/50">
+          <div className="flex items-center gap-3 px-5 py-3 bg-navy/[0.03] border-b border-teal/10">
             <div className="w-1 h-5 rounded-full bg-teal" />
             <h3 className="text-xs font-oswald font-bold uppercase tracking-wider text-navy">{div}</h3>
             <span className="text-[10px] text-muted font-medium">

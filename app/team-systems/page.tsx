@@ -153,7 +153,7 @@ export default function TeamSystemsPage() {
 
         {/* ── Form ─────────────────────────────────────────── */}
         {showForm && (
-          <div className="mb-8 bg-white rounded-xl border border-border overflow-hidden">
+          <div className="mb-8 bg-white rounded-xl border border-teal/20 overflow-hidden">
             <div className="bg-gradient-to-r from-navy to-navy-light px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-oswald font-semibold text-white uppercase tracking-wider">
                 {editingId ? "Edit Team System" : "Team Systems Configuration"}
@@ -173,7 +173,7 @@ export default function TeamSystemsPage() {
                   value={form.team_name}
                   onChange={(e) => setForm({ ...form, team_name: e.target.value })}
                   placeholder="e.g., Chatham Maroons"
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm"
                 />
               </div>
 
@@ -185,11 +185,11 @@ export default function TeamSystemsPage() {
                   value={form.season}
                   onChange={(e) => setForm({ ...form, season: e.target.value })}
                   placeholder="2025-26"
-                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm"
+                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm"
                 />
               </div>
 
-              <hr className="border-border/50" />
+              <hr className="border-teal/10" />
 
               {/* Primary Forecheck */}
               <SystemSelect
@@ -239,7 +239,7 @@ export default function TeamSystemsPage() {
                 options={getOptions("breakout")}
               />
 
-              <hr className="border-border/50" />
+              <hr className="border-teal/10" />
 
               {/* Team Style */}
               <div>
@@ -250,7 +250,7 @@ export default function TeamSystemsPage() {
                     <select
                       value={form.pace}
                       onChange={(e) => setForm({ ...form, pace: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                      className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
                     >
                       <option value="">Select...</option>
                       {PACE_OPTIONS.map((opt) => (
@@ -263,7 +263,7 @@ export default function TeamSystemsPage() {
                     <select
                       value={form.physicality}
                       onChange={(e) => setForm({ ...form, physicality: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                      className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
                     >
                       <option value="">Select...</option>
                       {PHYSICALITY_OPTIONS.map((opt) => (
@@ -276,7 +276,7 @@ export default function TeamSystemsPage() {
                     <select
                       value={form.offensive_style}
                       onChange={(e) => setForm({ ...form, offensive_style: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+                      className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
                     >
                       <option value="">Select...</option>
                       {OFFENSIVE_STYLE_OPTIONS.map((opt) => (
@@ -308,7 +308,7 @@ export default function TeamSystemsPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
           </div>
         ) : teamSystems.length === 0 && !showForm ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-border">
+          <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
             <Shield size={40} className="mx-auto text-muted/30 mb-3" />
             <p className="text-muted text-sm mb-2">No team systems defined yet.</p>
             <p className="text-xs text-muted/60 mb-4">
@@ -358,7 +358,7 @@ function SystemSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-white"
+        className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
       >
         <option value="">Select...</option>
         {options.map((opt) => (
@@ -401,7 +401,7 @@ function TeamSystemCard({
   const tags = Array.isArray(system.identity_tags) ? system.identity_tags : [];
 
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden">
+    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
       {/* Header row */}
       <div
         className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-navy/[0.02] transition-colors"
@@ -436,7 +436,7 @@ function TeamSystemCard({
 
       {/* Expanded */}
       {expanded && (
-        <div className="px-5 pb-5 border-t border-border/50 pt-4 space-y-3">
+        <div className="px-5 pb-5 border-t border-teal/10 pt-4 space-y-3">
           {/* Systems */}
           <div className="space-y-1.5">
             {systemPairs.map(([label, code]) => (
@@ -450,7 +450,7 @@ function TeamSystemCard({
           {/* Style */}
           {stylePairs.length > 0 && (
             <>
-              <hr className="border-border/50" />
+              <hr className="border-teal/10" />
               <div className="space-y-1.5">
                 {stylePairs.map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between text-sm">

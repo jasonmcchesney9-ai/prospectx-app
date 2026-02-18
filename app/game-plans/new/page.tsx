@@ -106,7 +106,7 @@ function ChalkTalkForm() {
     }
   };
 
-  const inputClass = "w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30";
+  const inputClass = "w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30";
   const textareaClass = `${inputClass} resize-none`;
   const selectClass = `${inputClass} appearance-none bg-white`;
 
@@ -138,7 +138,7 @@ function ChalkTalkForm() {
 
       <div className="space-y-6">
         {/* Session Type Picker */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-teal/10 text-teal flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Session Type
@@ -161,7 +161,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Teams & Date */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-orange/10 text-orange flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Game Details
@@ -200,7 +200,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Tactical Systems */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-teal/10 text-teal flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Tactical Systems
@@ -267,7 +267,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Opponent Analysis */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-orange/10 text-orange flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Opponent Analysis
@@ -282,7 +282,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Our Strategy */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-teal/10 text-teal flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Our Strategy
@@ -297,7 +297,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Special Teams */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-navy/10 text-navy flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Special Teams Plan
@@ -312,7 +312,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Keys to the Game */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-orange/10 text-orange flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             Keys to the Game
@@ -327,7 +327,7 @@ function ChalkTalkForm() {
         </div>
 
         {/* Talking Points */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-teal/10 text-teal flex items-center justify-center text-xs font-bold">{nextSection()}</span>
             <MessageSquare size={14} className="text-teal" />
@@ -377,7 +377,7 @@ function ChalkTalkForm() {
 
         {/* Post-Game Review (conditional) */}
         {sessionType === "post_game" && (
-          <div className="bg-white rounded-xl border border-border p-5">
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-orange/10 text-orange flex items-center justify-center text-xs font-bold">{nextSection()}</span>
               Post-Game Review

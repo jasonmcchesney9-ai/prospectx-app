@@ -83,13 +83,13 @@ export default function DrillsPage() {
               placeholder="Search drills..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
             />
           </div>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
           >
             <option value="">All Categories</option>
             {Object.entries(DRILL_CATEGORIES).map(([k, v]) => (
@@ -99,7 +99,7 @@ export default function DrillsPage() {
           <select
             value={ageFilter}
             onChange={(e) => setAgeFilter(e.target.value)}
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
           >
             <option value="">All Ages</option>
             {DRILL_AGE_LEVELS.map((a) => (
@@ -109,7 +109,7 @@ export default function DrillsPage() {
           <select
             value={surfaceFilter}
             onChange={(e) => setSurfaceFilter(e.target.value)}
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
           >
             <option value="">All Ice</option>
             {Object.entries(ICE_SURFACES).map(([k, v]) => (
@@ -119,7 +119,7 @@ export default function DrillsPage() {
           <select
             value={intensityFilter}
             onChange={(e) => setIntensityFilter(e.target.value)}
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
           >
             <option value="">All Intensity</option>
             <option value="low">Low</option>
@@ -136,7 +136,7 @@ export default function DrillsPage() {
         {loading ? (
           <div className="text-center py-16 text-muted text-sm">Loading drills...</div>
         ) : drills.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-border">
+          <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
             <p className="text-muted text-sm">No drills found matching your filters.</p>
           </div>
         ) : (
@@ -147,7 +147,7 @@ export default function DrillsPage() {
               return (
                 <div
                   key={drill.id}
-                  className="bg-white rounded-xl border border-border hover:border-teal/30 transition-colors overflow-hidden"
+                  className="bg-white rounded-xl border border-teal/20 hover:border-teal/30 transition-colors overflow-hidden"
                 >
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : drill.id)}
@@ -186,18 +186,18 @@ export default function DrillsPage() {
 
                   {/* Expanded Detail */}
                   {isExpanded && (
-                    <div className="border-t border-border/50 p-4 bg-navy/[0.02]">
+                    <div className="border-t border-teal/10 p-4 bg-navy/[0.02]">
                       {/* Drill Diagram */}
                       {drill.diagram_url ? (
                         <div className="mb-3">
                           <img
                             src={assetUrl(drill.diagram_url)}
                             alt={`${drill.name} diagram`}
-                            className="w-full max-h-52 object-contain rounded-lg border border-border/30 bg-white p-2"
+                            className="w-full max-h-52 object-contain rounded-lg border border-teal/8 bg-white p-2"
                           />
                         </div>
                       ) : (
-                        <div className="mb-3 h-28 rounded-lg border border-dashed border-border/50 bg-navy/[0.02] flex items-center justify-center">
+                        <div className="mb-3 h-28 rounded-lg border border-dashed border-teal/10 bg-navy/[0.02] flex items-center justify-center">
                           <div className="text-center text-muted/40">
                             <svg viewBox="0 0 200 100" className="w-20 h-10 mx-auto mb-1 opacity-30">
                               <rect x="5" y="5" width="190" height="90" rx="20" fill="none" stroke="#0F2A3D" strokeWidth="2"/>

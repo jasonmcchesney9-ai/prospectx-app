@@ -481,7 +481,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       )}
 
       {/* SVG Canvas */}
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${dims.w} ${dims.h}`}

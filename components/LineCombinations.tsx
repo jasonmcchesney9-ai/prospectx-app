@@ -67,7 +67,7 @@ export default function LineCombinations({ lines, availableTypes }: Props) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border">
+            <tr className="border-b border-teal/20">
               <th className="text-left py-2 px-2 text-xs font-oswald uppercase tracking-wider text-muted">
                 Line
               </th>
@@ -121,7 +121,7 @@ export default function LineCombinations({ lines, availableTypes }: Props) {
               return (
                 <tr
                   key={line.id}
-                  className="border-b border-border/30 hover:bg-navy/[0.02]"
+                  className="border-b border-teal/8 hover:bg-navy/[0.02]"
                 >
                   <td className="py-2 px-2 text-xs text-navy max-w-xs truncate" title={playerDisplay}>
                     {label && (

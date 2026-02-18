@@ -83,7 +83,7 @@ function SeriesForm() {
 
       <div className="space-y-6">
         {/* Teams */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-teal/10 text-teal flex items-center justify-center text-xs font-bold">1</span>
             Teams
@@ -96,7 +96,7 @@ function SeriesForm() {
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 placeholder="e.g. Chatham Maroons"
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
               />
             </div>
             <div>
@@ -106,14 +106,14 @@ function SeriesForm() {
                 value={opponentName}
                 onChange={(e) => setOpponentName(e.target.value)}
                 placeholder="e.g. Leamington Flyers"
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
               />
             </div>
           </div>
         </div>
 
         {/* Series Details */}
-        <div className="bg-white rounded-xl border border-border p-5">
+        <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-orange/10 text-orange flex items-center justify-center text-xs font-bold">2</span>
             Series Details
@@ -126,7 +126,7 @@ function SeriesForm() {
                 value={seriesName}
                 onChange={(e) => setSeriesName(e.target.value)}
                 placeholder="e.g. Western Conference Semi-Final"
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
               />
               <p className="text-[10px] text-muted mt-1">
                 Optional. Defaults to &quot;Team vs Opponent&quot;
@@ -137,7 +137,7 @@ function SeriesForm() {
               <select
                 value={seriesFormat}
                 onChange={(e) => setSeriesFormat(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
               >
                 {SERIES_FORMATS.map((f) => (
                   <option key={f.value} value={f.value}>

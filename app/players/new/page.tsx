@@ -108,18 +108,18 @@ export default function NewPlayerPage() {
 
         <h1 className="text-2xl font-bold text-navy mb-6">Add Player</h1>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-border p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-teal/20 p-6 space-y-5">
           {/* Name */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">First Name *</label>
               <input required type="text" value={form.first_name} onChange={(e) => update("first_name", e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" />
             </div>
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Last Name *</label>
               <input required type="text" value={form.last_name} onChange={(e) => update("last_name", e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" />
             </div>
           </div>
 
@@ -128,7 +128,7 @@ export default function NewPlayerPage() {
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Position *</label>
               <select value={form.position} onChange={(e) => update("position", e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm">
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm">
                 {["C", "LW", "RW", "F", "LD", "RD", "D", "G"].map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
@@ -137,7 +137,7 @@ export default function NewPlayerPage() {
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Shoots</label>
               <select value={form.shoots || ""} onChange={(e) => update("shoots", e.target.value || undefined)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm">
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm">
                 <option value="">—</option>
                 <option value="L">Left</option>
                 <option value="R">Right</option>
@@ -153,7 +153,7 @@ export default function NewPlayerPage() {
                 <select
                   value={form.current_league || ""}
                   onChange={(e) => handleLeagueChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                 >
                   <option value="">Select league...</option>
                   {leagues.map((l) => (
@@ -170,7 +170,7 @@ export default function NewPlayerPage() {
                     value={form.current_league || ""}
                     onChange={(e) => update("current_league", e.target.value)}
                     placeholder="e.g., GOHL"
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                   />
                   {leagues.length > 0 && (
                     <button
@@ -190,7 +190,7 @@ export default function NewPlayerPage() {
                 <select
                   value={form.current_team || ""}
                   onChange={(e) => handleTeamChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                 >
                   <option value="">Select team...</option>
                   {filteredTeams.map((t) => (
@@ -207,7 +207,7 @@ export default function NewPlayerPage() {
                     value={form.current_team || ""}
                     onChange={(e) => update("current_team", e.target.value)}
                     placeholder="e.g., Chatham Maroons"
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
                   />
                   {refTeams.length > 0 && (
                     <button
@@ -228,17 +228,17 @@ export default function NewPlayerPage() {
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Date of Birth</label>
               <input type="date" value={form.dob || ""} onChange={(e) => update("dob", e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" />
             </div>
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Height (cm)</label>
               <input type="number" value={form.height_cm || ""} onChange={(e) => update("height_cm", e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder="183" className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+                placeholder="183" className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" />
             </div>
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Weight (kg)</label>
               <input type="number" value={form.weight_kg || ""} onChange={(e) => update("weight_kg", e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder="82" className="w-full px-3 py-2 border border-border rounded-lg text-sm" />
+                placeholder="82" className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" />
             </div>
           </div>
 
@@ -246,7 +246,7 @@ export default function NewPlayerPage() {
           <div>
             <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Notes</label>
             <textarea value={form.notes || ""} onChange={(e) => update("notes", e.target.value)}
-              rows={3} className="w-full px-3 py-2 border border-border rounded-lg text-sm" placeholder="Scout notes, observations..." />
+              rows={3} className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" placeholder="Scout notes, observations..." />
           </div>
 
           {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}

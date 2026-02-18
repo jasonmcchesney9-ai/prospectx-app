@@ -76,12 +76,12 @@ export default function BroadcastToolCard({
     <div
       className={`bg-white rounded-xl border transition-all ${
         isPinned
-          ? "border-l-4 border-l-teal border-t border-r border-b border-border shadow-sm"
-          : "border-border"
+          ? "border-l-4 border-l-teal border-t border-r border-b border-teal/20 shadow-sm"
+          : "border-teal/20"
       }`}
     >
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-teal/10">
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={onCollapse}

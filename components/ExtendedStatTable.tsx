@@ -87,7 +87,7 @@ export default function ExtendedStatTable({ stats, title, season, source }: Prop
           const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined);
 
           return (
-            <div key={cat} className="border border-border rounded-lg overflow-hidden">
+            <div key={cat} className="border border-teal/20 rounded-lg overflow-hidden">
               <button
                 onClick={() => toggle(cat)}
                 className="w-full flex items-center justify-between px-4 py-2.5 bg-navy/[0.02] hover:bg-navy/[0.04] transition-colors"

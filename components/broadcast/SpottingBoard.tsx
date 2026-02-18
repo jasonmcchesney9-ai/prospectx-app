@@ -48,11 +48,11 @@ export default function SpottingBoard({ data }: Props) {
 
         {/* Toggles */}
         <label className="flex items-center gap-1 text-[10px] text-muted cursor-pointer">
-          <input type="checkbox" checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} className="rounded border-border" />
+          <input type="checkbox" checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} className="rounded border-teal/20" />
           Advanced
         </label>
         <label className="flex items-center gap-1 text-[10px] text-muted cursor-pointer">
-          <input type="checkbox" checked={showPronunciation} onChange={(e) => setShowPronunciation(e.target.checked)} className="rounded border-border" />
+          <input type="checkbox" checked={showPronunciation} onChange={(e) => setShowPronunciation(e.target.checked)} className="rounded border-teal/20" />
           Pronunciation
         </label>
 
@@ -101,7 +101,7 @@ export default function SpottingBoard({ data }: Props) {
             {team.players.map((p, i) => (
               <tr
                 key={i}
-                className={`border-t border-border/30 ${i % 2 === 0 ? "bg-white" : "bg-navy/[0.015]"} hover:bg-teal/[0.03] transition-colors`}
+                className={`border-t border-teal/8 ${i % 2 === 0 ? "bg-white" : "bg-navy/[0.015]"} hover:bg-teal/[0.03] transition-colors`}
               >
                 <td className="px-2 py-1 font-mono text-muted/60">{p.jersey}</td>
                 <td className="px-2 py-1 font-medium text-navy whitespace-nowrap">{p.name}</td>

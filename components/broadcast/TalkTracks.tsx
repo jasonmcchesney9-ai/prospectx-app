@@ -64,7 +64,7 @@ export default function TalkTracks({ data }: Props) {
       ) : (
         <div className="space-y-3">
           {tracks.map((track, i) => (
-            <div key={i} className="border border-border/50 rounded-lg p-3 hover:border-border transition-colors">
+            <div key={i} className="border border-teal/10 rounded-lg p-3 hover:border-teal/20 transition-colors">
               <div className="flex items-start justify-between gap-2">
                 <h4 className="text-sm font-oswald font-bold text-navy leading-tight">
                   {track.headline}

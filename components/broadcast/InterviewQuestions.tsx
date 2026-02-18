@@ -67,7 +67,7 @@ export default function InterviewQuestions({ data }: Props) {
           {filtered.map((q, i) => {
             const labelColors = INTERVIEW_LABEL_COLORS[q.label] || INTERVIEW_LABEL_COLORS.SAFE;
             return (
-              <div key={i} className="flex items-start gap-2 p-2 rounded-lg border border-border/30 hover:border-border transition-colors">
+              <div key={i} className="flex items-start gap-2 p-2 rounded-lg border border-teal/8 hover:border-teal/20 transition-colors">
                 <span
                   className={`shrink-0 text-[8px] font-oswald font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${labelColors.bg} ${labelColors.text}`}
                 >

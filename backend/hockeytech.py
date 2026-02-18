@@ -1,5 +1,11 @@
 """
-HockeyTech API Client — Fetches live data from OHL, GOHL, OJHL and other HockeyTech-powered leagues.
+HockeyTech API Client — Fetches live data from 20 HockeyTech-powered hockey leagues.
+
+Supported leagues (by tier):
+  Pro:       AHL, ECHL, SPHL, PWHL
+  Major Jr:  OHL, WHL, QMJHL (LHJMQ)
+  Junior A:  BCHL, AJHL, SJHL, MJHL, USHL, OJHL, CCHL, NOJHL, MHL, GOJHL
+  Junior B:  KIJHL, PJHL, VIJHL
 
 Base URL: https://lscluster.hockeytech.com/feed/index.php
 Game Center: https://cluster.leaguestat.com/feed/index.php
@@ -19,21 +25,37 @@ from typing import Optional
 logger = logging.getLogger("hockeytech")
 
 # ── League Configuration ─────────────────────────────────────────────
+# Keys sourced from: lscluster.hockeytech.com/statview-1.4.1/js/client/{client_code}/base.r2.js
+# Grouped by tier: Major Pro → Minor Pro → Major Junior → Junior A → Junior B/Rec
+
 LEAGUES = {
+    # ── Major Professional ──────────────────────────────────────────
+    "ahl": {
+        "name": "American Hockey League",
+        "key": "ccb91f29d6744675",
+        "client_code": "ahl",
+    },
+    "echl": {
+        "name": "ECHL",
+        "key": "2c2b89ea7345cae8",
+        "client_code": "echl",
+    },
+    "sphl": {
+        "name": "Southern Professional Hockey League",
+        "key": "8fa10d218c49ec96",
+        "client_code": "sphl",
+    },
+    "pwhl": {
+        "name": "Professional Women's Hockey League",
+        "key": "446521baf8c38984",
+        "client_code": "pwhl",
+    },
+
+    # ── Major Junior (CHL) ─────────────────────────────────────────
     "ohl": {
         "name": "Ontario Hockey League",
         "key": "f1aa699db3d81487",
         "client_code": "ohl",
-    },
-    "gojhl": {
-        "name": "Greater Ontario Hockey League",
-        "key": "34b10d4d34d7b59a",
-        "client_code": "gojhl",
-    },
-    "ojhl": {
-        "name": "Ontario Junior Hockey League",
-        "key": "77a0bd73d9d363d3",
-        "client_code": "ojhl",
     },
     "whl": {
         "name": "Western Hockey League",
@@ -42,13 +64,77 @@ LEAGUES = {
     },
     "lhjmq": {
         "name": "Quebec Major Junior Hockey League",
-        "key": "f1aa699db3d81487",
+        "key": "02163f1eeecebec4",
         "client_code": "lhjmq",
     },
-    "pwhl": {
-        "name": "Professional Women's Hockey League",
-        "key": "446521baf8c38984",
-        "client_code": "pwhl",
+
+    # ── Junior A ────────────────────────────────────────────────────
+    "bchl": {
+        "name": "British Columbia Hockey League",
+        "key": "f3ed30007ad2124e",
+        "client_code": "bchl",
+    },
+    "ajhl": {
+        "name": "Alberta Junior Hockey League",
+        "key": "cbe60a1d91c44ade",
+        "client_code": "ajhl",
+    },
+    "sjhl": {
+        "name": "Saskatchewan Junior Hockey League",
+        "key": "2fb5c2e84bf3e4a8",
+        "client_code": "sjhl",
+    },
+    "mjhl": {
+        "name": "Manitoba Junior Hockey League",
+        "key": "f894c324fe5fd8f0",
+        "client_code": "mjhl",
+    },
+    "ushl": {
+        "name": "United States Hockey League",
+        "key": "e828f89b243dc43f",
+        "client_code": "ushl",
+    },
+    "ojhl": {
+        "name": "Ontario Junior Hockey League",
+        "key": "77a0bd73d9d363d3",
+        "client_code": "ojhl",
+    },
+    "cchl": {
+        "name": "Central Canada Hockey League",
+        "key": "b370f3e6c805baf3",
+        "client_code": "cchl",
+    },
+    "nojhl": {
+        "name": "Northern Ontario Junior Hockey League",
+        "key": "c1375ff55168bd71",
+        "client_code": "nojhl",
+    },
+    "mhl": {
+        "name": "Maritime Hockey League",
+        "key": "4a948e7faf5ee58d",
+        "client_code": "mhl",
+    },
+    "gojhl": {
+        "name": "Greater Ontario Hockey League",
+        "key": "34b10d4d34d7b59a",
+        "client_code": "gojhl",
+    },
+
+    # ── Junior B / Rec ──────────────────────────────────────────────
+    "kijhl": {
+        "name": "Kootenay International Junior Hockey League",
+        "key": "2589e0f644b1bb71",
+        "client_code": "kijhl",
+    },
+    "pjhl": {
+        "name": "Provincial Junior Hockey League",
+        "key": "54ad32ee30e379ad",
+        "client_code": "pjhlon",
+    },
+    "vijhl": {
+        "name": "Vancouver Island Junior Hockey League",
+        "key": "4f1a61df18906b61",
+        "client_code": "vijhl",
     },
 }
 

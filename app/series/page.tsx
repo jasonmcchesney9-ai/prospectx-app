@@ -117,7 +117,7 @@ function SeriesList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search teams..."
-            className="w-full border border-border rounded-lg pl-9 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+            className="w-full border border-teal/20 rounded-lg pl-9 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-2 top-2 text-muted hover:text-navy">
@@ -132,7 +132,7 @@ function SeriesList() {
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-gray-50 border border-border rounded-xl p-8 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-8 text-center">
           <Trophy size={32} className="mx-auto text-muted mb-3" />
           <h3 className="font-oswald font-semibold text-navy">No Series Plans</h3>
           <p className="text-muted text-sm mt-1">
@@ -152,7 +152,7 @@ function SeriesList() {
             <Link
               key={plan.id}
               href={`/series/${plan.id}`}
-              className="bg-white rounded-xl border border-border p-5 hover:shadow-md hover:border-teal/30 transition-all group"
+              className="bg-white rounded-xl border border-teal/20 p-5 hover:shadow-md hover:border-teal/30 transition-all group"
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">

@@ -81,7 +81,7 @@ export default function GameContextRail({
   return (
     <div className="sticky top-[7.5rem] h-[calc(100vh-7.5rem)] overflow-y-auto pb-4 space-y-3">
       {/* Game Header Card */}
-      <div className="bg-white rounded-xl border border-border p-3">
+      <div className="bg-white rounded-xl border border-teal/20 p-3">
         <div className="flex items-center gap-2 mb-1.5">
           <Radio size={14} className="text-orange" />
           <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Broadcast Console</span>
@@ -111,7 +111,7 @@ export default function GameContextRail({
       </div>
 
       {/* Quick Toggles */}
-      <div className="bg-white rounded-xl border border-border p-3 space-y-2.5">
+      <div className="bg-white rounded-xl border border-teal/20 p-3 space-y-2.5">
         <SegmentedGroup<BroadcastMode>
           label="Mode"
           options={[
@@ -145,13 +145,13 @@ export default function GameContextRail({
 
       {/* Roster Jump List */}
       {(homeRoster.length > 0 || awayRoster.length > 0) && (
-        <div className="bg-white rounded-xl border border-border overflow-hidden">
+        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
           {/* Home roster */}
           {homeRoster.length > 0 && (
             <div>
               <button
                 onClick={() => setHomeExpanded(!homeExpanded)}
-                className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-navy/[0.02] transition-colors border-b border-border/50"
+                className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-navy/[0.02] transition-colors border-b border-teal/10"
               >
                 <span className="text-[10px] font-oswald font-bold uppercase tracking-wider text-navy">
                   {homeTeam} ({homeRoster.length})
@@ -182,7 +182,7 @@ export default function GameContextRail({
             <div>
               <button
                 onClick={() => setAwayExpanded(!awayExpanded)}
-                className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-navy/[0.02] transition-colors border-b border-border/50"
+                className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-navy/[0.02] transition-colors border-b border-teal/10"
               >
                 <span className="text-[10px] font-oswald font-bold uppercase tracking-wider text-navy">
                   {awayTeam} ({awayRoster.length})

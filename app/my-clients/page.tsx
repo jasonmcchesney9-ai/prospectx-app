@@ -159,7 +159,7 @@ function ClientManagement() {
 
       {/* ── Stats Bar ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-3">
+        <div className="bg-white rounded-xl border border-teal/20 p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-navy/5 flex items-center justify-center shrink-0">
             <Users size={18} className="text-navy" />
           </div>
@@ -170,7 +170,7 @@ function ClientManagement() {
             </p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-3">
+        <div className="bg-white rounded-xl border border-teal/20 p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
             <TrendingUp size={18} className="text-teal" />
           </div>
@@ -181,7 +181,7 @@ function ClientManagement() {
             </p>
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-3">
+        <div className="bg-white rounded-xl border border-teal/20 p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-orange/10 flex items-center justify-center shrink-0">
             <FileText size={18} className="text-orange" />
           </div>
@@ -241,7 +241,7 @@ function ClientManagement() {
         </div>
       ) : filteredClients.length === 0 && clients.length === 0 ? (
         /* ── Empty State ─────────────────────────────────── */
-        <div className="bg-gray-50 border border-border rounded-xl p-10 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-10 text-center">
           <Briefcase size={40} className="mx-auto text-muted mb-4" />
           <h3 className="font-oswald font-semibold text-navy text-lg uppercase tracking-wider">
             No clients yet
@@ -260,7 +260,7 @@ function ClientManagement() {
         </div>
       ) : filteredClients.length === 0 ? (
         /* ── No results for filter ───────────────────────── */
-        <div className="bg-gray-50 border border-border rounded-xl p-10 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-10 text-center">
           <Users size={32} className="mx-auto text-muted mb-3" />
           <p className="text-muted text-sm">
             No clients with status &quot;{statusFilter}&quot;
@@ -312,7 +312,7 @@ function ClientCard({
   const age = player ? calcAge(player.dob) : null;
 
   return (
-    <div className="bg-white rounded-xl border border-border p-4 hover:border-teal/30 hover:shadow-sm transition-all group">
+    <div className="bg-white rounded-xl border border-teal/20 p-4 hover:border-teal/30 hover:shadow-sm transition-all group">
       {/* Top: Name + Status */}
       <div className="flex items-start justify-between mb-3">
         <div className="min-w-0">
@@ -360,7 +360,7 @@ function ClientCard({
       )}
 
       {/* Divider */}
-      <div className="border-t border-border pt-3">
+      <div className="border-t border-teal/20 pt-3">
         {/* Quick Actions */}
         <div className="flex items-center gap-1 flex-wrap">
           <button
@@ -513,7 +513,7 @@ function AddClientModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search players by name..."
-            className="w-full border border-border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+            className="w-full border border-teal/20 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
           />
         </div>
 
@@ -525,7 +525,7 @@ function AddClientModal({
         )}
 
         {/* Results */}
-        <div className="border border-border rounded-lg max-h-64 overflow-y-auto">
+        <div className="border border-teal/20 rounded-lg max-h-64 overflow-y-auto">
           {searching ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-2 border-navy border-t-teal" />
@@ -536,7 +536,7 @@ function AddClientModal({
                 key={p.id}
                 onClick={() => handleSelect(p)}
                 disabled={adding !== null}
-                className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 border-b border-border last:border-b-0 transition-colors disabled:opacity-50"
+                className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 border-b border-teal/20 last:border-b-0 transition-colors disabled:opacity-50"
               >
                 <div>
                   <span className="font-medium text-navy text-sm">

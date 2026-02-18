@@ -119,7 +119,7 @@ export default function TeamImportPage() {
 
         {/* Step 1: Upload */}
         {step === "upload" && (
-          <div className="bg-white rounded-xl border border-border p-8 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
             <FileSpreadsheet size={48} className="mx-auto text-teal/40 mb-4" />
             <h2 className="text-lg font-semibold text-navy mb-2">Upload Team Roster</h2>
             <p className="text-sm text-muted mb-6 max-w-md mx-auto">
@@ -146,7 +146,7 @@ export default function TeamImportPage() {
 
             <div className="mt-8 text-left max-w-lg mx-auto">
               <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Example CSV Format</p>
-              <pre className="text-xs bg-navy/[0.03] p-3 rounded-lg border border-border overflow-x-auto">
+              <pre className="text-xs bg-navy/[0.03] p-3 rounded-lg border border-teal/20 overflow-x-auto">
 {`First Name,Last Name,Position,DOB,Shoots,GP,G,A,P
 Ewan,McChesney,C,2005-03-15,L,25,12,18,30
 Connor,Smith,LW,2006-01-20,L,24,8,10,18
@@ -160,7 +160,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
         {step === "preview" && preview && (
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white rounded-xl border border-border p-4 text-center">
+              <div className="bg-white rounded-xl border border-teal/20 p-4 text-center">
                 <Users size={20} className="mx-auto text-teal mb-1" />
                 <p className="text-2xl font-bold text-navy">{preview.total_rows}</p>
                 <p className="text-xs text-muted">Total Rows</p>
@@ -187,8 +187,8 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
             )}
 
             {preview.duplicates.length > 0 && (
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
-                <div className="p-4 border-b border-border bg-orange/5">
+              <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+                <div className="p-4 border-b border-teal/20 bg-orange/5">
                   <h3 className="text-sm font-semibold text-navy flex items-center gap-2">
                     <AlertTriangle size={16} className="text-orange" />
                     Duplicates Need Review ({preview.duplicates.length})
@@ -212,7 +212,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                             resolutions[dup.row_index] === "skip"
                               ? "bg-gray-600 text-white border-gray-600"
-                              : "bg-white text-gray-600 border-border hover:border-gray-400"
+                              : "bg-white text-gray-600 border-teal/20 hover:border-gray-400"
                           }`}
                         >
                           <SkipForward size={12} /> Skip
@@ -222,7 +222,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                             resolutions[dup.row_index] === "merge"
                               ? "bg-teal text-white border-teal"
-                              : "bg-white text-teal border-border hover:border-teal/50"
+                              : "bg-white text-teal border-teal/20 hover:border-teal/50"
                           }`}
                         >
                           <GitMerge size={12} /> Merge Stats
@@ -232,7 +232,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                             resolutions[dup.row_index] === "create_new"
                               ? "bg-orange text-white border-orange"
-                              : "bg-white text-orange border-border hover:border-orange/50"
+                              : "bg-white text-orange border-teal/20 hover:border-orange/50"
                           }`}
                         >
                           <Plus size={12} /> Create New
@@ -245,14 +245,14 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
             )}
 
             {/* Preview Table */}
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border">
+            <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+              <div className="p-4 border-b border-teal/20">
                 <h3 className="text-sm font-semibold text-navy">Preview (first 10 rows)</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-navy/[0.03] border-b border-border">
+                    <tr className="bg-navy/[0.03] border-b border-teal/20">
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Name</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Pos</th>
                       <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-muted">Team</th>
@@ -265,7 +265,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
                   </thead>
                   <tbody>
                     {preview.preview.map((row, i) => (
-                      <tr key={i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                      <tr key={i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                         <td className="px-3 py-2 font-medium text-navy">{row.first_name} {row.last_name}</td>
                         <td className="px-3 py-2">{row.position}</td>
                         <td className="px-3 py-2">{row.current_team || teamName}</td>
@@ -302,7 +302,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
 
         {/* Step 3: Importing */}
         {step === "importing" && (
-          <div className="bg-white rounded-xl border border-border p-12 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-12 text-center">
             <Loader2 size={40} className="mx-auto text-teal animate-spin mb-4" />
             <h2 className="text-lg font-bold text-navy mb-1">Importing Players to {teamName}...</h2>
             <p className="text-sm text-muted">This may take a moment.</p>
@@ -311,7 +311,7 @@ Jake,Wilson,D,2005-11-05,R,25,2,8,10`}
 
         {/* Step 4: Done */}
         {step === "done" && result && (
-          <div className="bg-white rounded-xl border border-border p-8 text-center">
+          <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
             <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
             <h2 className="text-xl font-bold text-navy mb-2">Import Complete!</h2>
 

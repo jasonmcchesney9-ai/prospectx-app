@@ -33,7 +33,7 @@ export default function GameLogTable({ data, onPageChange, currentOffset = 0, pa
 
   if (!games || games.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-border p-6 text-center">
+      <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
         <Calendar size={32} className="mx-auto text-muted/30 mb-2" />
         <p className="text-sm text-muted">No game-by-game data available.</p>
         <p className="text-xs text-muted/60 mt-1">Sync game logs from HockeyTech to see per-game stats.</p>
@@ -78,11 +78,11 @@ export default function GameLogTable({ data, onPageChange, currentOffset = 0, pa
       </div>
 
       {/* Game log table */}
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-navy/[0.03]">
+              <tr className="border-b border-teal/20 bg-navy/[0.03]">
                 <th className="text-left px-3 py-2 text-[10px] font-oswald uppercase tracking-wider text-muted">Date</th>
                 <th className="text-left px-3 py-2 text-[10px] font-oswald uppercase tracking-wider text-muted">Opp</th>
                 <th className="text-center px-2 py-2 text-[10px] font-oswald uppercase tracking-wider text-muted">H/A</th>
@@ -100,7 +100,7 @@ export default function GameLogTable({ data, onPageChange, currentOffset = 0, pa
                 const assists = g.assists ?? 0;
                 const points = g.points ?? (goals + assists);
                 return (
-                  <tr key={g.id || i} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                  <tr key={g.id || i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
                     <td className="px-3 py-2 text-xs text-navy">{formatDate(g.game_date)}</td>
                     <td className="px-3 py-2 text-xs font-medium text-navy truncate max-w-[120px]" title={g.opponent || ""}>
                       {g.opponent || "—"}

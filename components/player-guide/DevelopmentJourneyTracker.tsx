@@ -297,9 +297,9 @@ export default function DevelopmentJourneyTracker() {
 
   /* ---------- Render ---------- */
   return (
-    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden mb-6">
+    <div className="bg-white rounded-xl border border-teal/20 shadow-sm overflow-hidden mb-6">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 bg-navy/[0.03] border-b border-border">
+      <div className="flex items-center gap-3 px-5 py-4 bg-navy/[0.03] border-b border-teal/20">
         <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
           <BarChart3 size={18} className="text-teal" />
         </div>

@@ -36,7 +36,7 @@ export default function LiveStatCards({ data }: Props) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {data.map((card, i) => (
-        <div key={i} className="bg-white border border-border rounded-xl p-4 hover:shadow-sm transition-shadow">
+        <div key={i} className="bg-white border border-teal/20 rounded-xl p-4 hover:shadow-sm transition-shadow">
           {/* Type badge */}
           <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/50">
             {TYPE_LABELS[card.card_type] || card.card_type}

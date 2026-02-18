@@ -190,7 +190,7 @@ function ScoutingList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search player names..."
-            className="w-full border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+            className="w-full border border-teal/20 rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
           />
           {search && (
             <button
@@ -223,7 +223,7 @@ function ScoutingList() {
         </div>
       ) : items.length === 0 ? (
         /* Empty state */
-        <div className="bg-gray-50 border border-border rounded-xl p-10 text-center">
+        <div className="bg-gray-50 border border-teal/20 rounded-xl p-10 text-center">
           <Target size={40} className="mx-auto text-muted mb-4" />
           <h3 className="font-oswald font-semibold text-navy text-lg">
             No players on your scouting list yet
@@ -314,7 +314,7 @@ function ScoutingCard({
   const reasonBadgeClass = TARGET_REASON_BADGE[item.target_reason] || TARGET_REASON_BADGE.watch;
 
   return (
-    <div className="bg-white rounded-xl border border-border p-4">
+    <div className="bg-white rounded-xl border border-teal/20 p-4">
       <div className="flex items-start gap-3">
         {/* Priority dot */}
         <div className="pt-1.5 shrink-0">
@@ -577,7 +577,7 @@ function AddPlayerModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search players by name..."
-            className="w-full border border-border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+            className="w-full border border-teal/20 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
           />
         </div>
 
@@ -589,7 +589,7 @@ function AddPlayerModal({
         )}
 
         {/* Results */}
-        <div className="border border-border rounded-lg max-h-64 overflow-y-auto">
+        <div className="border border-teal/20 rounded-lg max-h-64 overflow-y-auto">
           {searching ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-2 border-navy border-t-teal" />
@@ -600,7 +600,7 @@ function AddPlayerModal({
                 key={p.id}
                 onClick={() => handleSelect(p)}
                 disabled={adding !== null}
-                className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 border-b border-border last:border-b-0 transition-colors disabled:opacity-50"
+                className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 border-b border-teal/20 last:border-b-0 transition-colors disabled:opacity-50"
               >
                 <div>
                   <span className="font-medium text-navy text-sm">

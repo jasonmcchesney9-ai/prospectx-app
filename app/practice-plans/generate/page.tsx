@@ -126,7 +126,7 @@ export default function GeneratePracticePlanPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-border p-6 space-y-6">
+          <div className="bg-white rounded-xl border border-teal/20 p-6 space-y-6">
             {/* Team Picker */}
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-2">
@@ -143,9 +143,9 @@ export default function GeneratePracticePlanPage() {
                     placeholder="Search teams..."
                     value={teamSearch}
                     onChange={(e) => setTeamSearch(e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-lg text-sm mb-2"
+                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
                   />
-                  <div className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border/50">
+                  <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                     {filteredTeams.length === 0 ? (
                       <div className="px-3 py-4 text-center text-muted text-sm">No teams found.</div>
                     ) : (
@@ -205,7 +205,7 @@ export default function GeneratePracticePlanPage() {
                     className={`flex-1 py-2.5 rounded-lg border text-sm font-oswald font-semibold transition-all ${
                       duration === d
                         ? "border-teal bg-teal/10 text-teal ring-1 ring-teal/30"
-                        : "border-border bg-white text-navy/60 hover:border-navy/30"
+                        : "border-teal/20 bg-white text-navy/60 hover:border-navy/30"
                     }`}
                   >
                     {d} min
@@ -224,7 +224,7 @@ export default function GeneratePracticePlanPage() {
                 value={ageLevel}
                 onChange={(e) => setAgeLevel(e.target.value)}
                 disabled={isGenerating}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
               >
                 <option value="">Auto-detect from roster</option>
                 {DRILL_AGE_LEVELS.map((a) => (
@@ -255,7 +255,7 @@ export default function GeneratePracticePlanPage() {
                       className={`px-3 py-1.5 rounded-lg border text-xs font-oswald font-semibold uppercase tracking-wider transition-all ${
                         isSelected
                           ? "border-teal bg-teal/10 text-teal ring-1 ring-teal/30"
-                          : "border-border bg-white text-navy/50 hover:border-navy/30 hover:text-navy/70"
+                          : "border-teal/20 bg-white text-navy/50 hover:border-navy/30 hover:text-navy/70"
                       }`}
                     >
                       {PRACTICE_FOCUS_LABELS[focus] || focus}
@@ -276,7 +276,7 @@ export default function GeneratePracticePlanPage() {
                 disabled={isGenerating}
                 placeholder="E.g., 'Focus on breakout plays', 'Coming off a loss — high tempo', 'Goalie working separately for first 20 min'..."
                 rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white resize-none"
+                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white resize-none"
               />
             </div>
 
