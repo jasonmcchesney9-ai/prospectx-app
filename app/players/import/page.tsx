@@ -20,6 +20,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { ImportDuplicate, ImportPreview, ImportResult, TeamReference } from "@/types/api";
 
 type Step = "upload" | "preview" | "importing" | "done";
@@ -224,7 +225,7 @@ export default function BatchImportPage() {
                           className="w-full text-left px-3 py-2 text-sm hover:bg-navy/[0.02] flex items-center justify-between"
                         >
                           <span className="text-navy">{t.name}</span>
-                          <span className="text-xs text-muted">{t.league}</span>
+                          <span className="text-xs text-muted">{formatLeague(t.league)}</span>
                         </button>
                       ))}
                     </div>
@@ -443,7 +444,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
                         <td className="px-3 py-2 font-medium text-navy">{row.first_name} {row.last_name}</td>
                         <td className="px-3 py-2">{row.position}</td>
                         <td className="px-3 py-2">{row.current_team || "—"}</td>
-                        <td className="px-3 py-2">{row.current_league || "—"}</td>
+                        <td className="px-3 py-2">{formatLeague(row.current_league) || "—"}</td>
                         <td className="px-3 py-2">{row.dob || "—"}</td>
                         <td className="px-3 py-2 text-center">{row.gp || "—"}</td>
                         <td className="px-3 py-2 text-center">{row.g || "—"}</td>

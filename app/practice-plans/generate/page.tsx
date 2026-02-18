@@ -16,6 +16,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { TeamReference, PracticePlan, PracticePlanGenerateRequest } from "@/types/api";
 import {
   DRILL_AGE_LEVELS,
@@ -159,7 +160,7 @@ export default function GeneratePracticePlanPage() {
                           <span className="font-semibold text-navy text-sm">{t.name}</span>
                           {t.league && (
                             <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
-                              {t.league}
+                              {formatLeague(t.league)}
                             </span>
                           )}
                           {t.city && <span className="text-xs text-muted ml-auto">{t.city}</span>}

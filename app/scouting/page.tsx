@@ -16,6 +16,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { ScoutingListItem } from "@/types/api";
 import { TARGET_REASONS } from "@/types/api";
 
@@ -337,7 +338,7 @@ function ScoutingCard({
               <span className="text-xs text-muted">{item.current_team}</span>
             )}
             {item.current_league && (
-              <span className="text-[10px] text-muted/60">{item.current_league}</span>
+              <span className="text-[10px] text-muted/60">{formatLeague(item.current_league)}</span>
             )}
             {/* Target reason badge */}
             <span

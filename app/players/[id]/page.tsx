@@ -48,6 +48,7 @@ import ExtendedStatTable from "@/components/ExtendedStatTable";
 import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
@@ -566,7 +567,7 @@ export default function PlayerDetailPage() {
                 <PlayerStatusBadges tags={player.tags || []} size="md" />
                 {player.shoots && <span>Shoots {player.shoots}</span>}
                 {player.current_team && <span>{player.current_team}</span>}
-                {player.current_league && <span className="text-white/50">({player.current_league})</span>}
+                {player.current_league && <span className="text-white/50">({formatLeague(player.current_league)})</span>}
               </div>
               {(player.height_cm || player.weight_kg || player.dob) && (
                 <p className="text-xs text-white/50 mt-1">
@@ -941,7 +942,7 @@ export default function PlayerDetailPage() {
                       <span className="text-muted">Team</span>
                       <span className="font-semibold text-navy">
                         {player.current_team}
-                        {player.current_league && <span className="text-xs text-muted ml-1">({player.current_league})</span>}
+                        {player.current_league && <span className="text-xs text-muted ml-1">({formatLeague(player.current_league)})</span>}
                       </span>
                     </div>
                   )}

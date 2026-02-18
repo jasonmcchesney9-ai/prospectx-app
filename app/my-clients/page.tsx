@@ -18,6 +18,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import HockeyRink from "@/components/HockeyRink";
 import type { AgentClient, AgentClientStatus } from "@/types/api";
 import { AGENT_CLIENT_STATUS_COLORS } from "@/types/api";
@@ -349,7 +350,7 @@ function ClientCard({
 
       {/* League */}
       {player?.current_league && (
-        <p className="text-[10px] text-muted/50 mb-3">{player.current_league}</p>
+        <p className="text-[10px] text-muted/50 mb-3">{formatLeague(player.current_league)}</p>
       )}
 
       {/* Pathway notes preview */}

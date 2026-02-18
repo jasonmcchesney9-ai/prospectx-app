@@ -39,6 +39,7 @@ import LineCombinations from "@/components/LineCombinations";
 import LineBuilder from "@/components/LineBuilder";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { Player, RosterPlayer, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination, TeamGame, TeamIntelligence } from "@/types/api";
 
 type Tab = "roster" | "identity" | "lines" | "systems" | "reports" | "stats" | "games";
@@ -443,7 +444,7 @@ export default function TeamDetailPage() {
                 <div className="flex items-center gap-3 mt-1.5 text-sm text-white/70">
                   {(teamRef?.league || roster[0]?.current_league) && (
                     <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-xs">
-                      {teamRef?.league || roster[0]?.current_league}
+                      {formatLeague(teamRef?.league || roster[0]?.current_league)}
                     </span>
                   )}
                   {teamRef?.city && <span>{teamRef.city}</span>}

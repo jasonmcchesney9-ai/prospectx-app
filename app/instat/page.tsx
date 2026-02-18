@@ -18,6 +18,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { TeamReference, InStatImportResponse } from "@/types/api";
 
 const FILE_TYPE_LABELS: Record<string, { label: string; icon: typeof Users; color: string }> = {
@@ -357,7 +358,7 @@ function InStatUploader() {
                         className="w-full text-left px-3 py-2 text-sm hover:bg-navy/[0.02] flex items-center justify-between"
                       >
                         <span className="text-navy">{t.name}</span>
-                        <span className="text-xs text-muted">{t.league}</span>
+                        <span className="text-xs text-muted">{formatLeague(t.league)}</span>
                       </button>
                     ))}
                   </div>

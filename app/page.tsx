@@ -28,6 +28,7 @@ import TeamContextBar from "@/components/TeamContextBar";
 import BenchTalkUsage from "@/components/BenchTalkUsage";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import { getUser, isAuthenticated } from "@/lib/auth";
 import type { Team, Player, Report, GamePlan, SeriesPlan, ScoutingListItem, AgentClient, HTGame, HTStandings, ScoringLeader } from "@/types/api";
 import { SESSION_TYPES, AGENT_CLIENT_STATUS_COLORS } from "@/types/api";
@@ -799,7 +800,7 @@ function ScoutingListSection({ scoutingList, loading }: { scoutingList: Scouting
                 {item.first_name} {item.last_name}
               </p>
               <p className="text-[10px] text-muted truncate">
-                {[item.current_team, item.current_league].filter(Boolean).join(" / ") || "No team"}
+                {[item.current_team, formatLeague(item.current_league)].filter(Boolean).join(" / ") || "No team"}
               </p>
             </div>
           </Link>

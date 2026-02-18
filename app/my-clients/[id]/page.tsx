@@ -22,6 +22,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import HockeyRink from "@/components/HockeyRink";
 import type { AgentClient, AgentPackData, AgentClientStatus, Report } from "@/types/api";
 import { AGENT_CLIENT_STATUS_COLORS, REPORT_TYPE_LABELS } from "@/types/api";
@@ -234,7 +235,7 @@ function ClientDetail() {
                 </span>
               )}
               {player?.current_league && (
-                <span className="text-xs text-muted/60">{player.current_league}</span>
+                <span className="text-xs text-muted/60">{formatLeague(player.current_league)}</span>
               )}
               {player?.position && (
                 <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-muted font-medium">

@@ -23,6 +23,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api, { assetUrl } from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { Player, TeamReference, League } from "@/types/api";
 
 interface TeamSummary {
@@ -393,7 +394,7 @@ export default function TeamsPage() {
             >
               <option value="">All Leagues</option>
               {uniqueLeagues.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <option key={l} value={l}>{formatLeague(l)}</option>
               ))}
             </select>
           </div>
@@ -485,7 +486,7 @@ export default function TeamsPage() {
                             <div className="flex items-center gap-2 mb-3">
                               <div className={`w-1 h-4 rounded-full ${tier.color === "text-orange" ? "bg-orange" : tier.color === "text-teal" ? "bg-teal" : tier.color === "text-navy" ? "bg-navy" : "bg-gray-400"}`} />
                               <h3 className="text-xs font-oswald font-bold uppercase tracking-wider text-navy">
-                                {leagueName}
+                                {formatLeague(leagueName)}
                               </h3>
                               <span className="text-[10px] text-muted">
                                 {leagueNameMap.get(leagueName) || ""} &middot; {leagueTeams.length} teams
@@ -547,7 +548,7 @@ function TeamCard({ team }: { team: TeamSummary }) {
           <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
             {team.league && (
               <span className="px-1.5 py-0.5 rounded bg-teal/10 text-teal font-oswald font-bold text-[10px]">
-                {team.league}
+                {formatLeague(team.league)}
               </span>
             )}
             {team.city && (

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { User, MapPin } from "lucide-react";
 import type { Player } from "@/types/api";
 import { assetUrl, hasRealImage } from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 
 export default function PlayerCard({ player }: { player: Player }) {
   return (
@@ -39,7 +40,7 @@ export default function PlayerCard({ player }: { player: Player }) {
                 <span className="text-navy/40">|</span>
               )}
               {player.current_league && (
-                <span>{player.current_league}</span>
+                <span>{formatLeague(player.current_league)}</span>
               )}
             </div>
           </div>

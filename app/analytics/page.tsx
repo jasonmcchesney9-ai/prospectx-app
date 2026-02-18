@@ -20,6 +20,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type {
   AnalyticsOverview,
   AnalyticsFilterOptions,
@@ -246,7 +247,7 @@ function AnalyticsDashboard() {
                 >
                   <option value="">All Leagues</option>
                   {filterOptions.leagues.map((l) => (
-                    <option key={l} value={l}>{l}</option>
+                    <option key={l} value={l}>{formatLeague(l)}</option>
                   ))}
                 </select>
               </div>
@@ -265,7 +266,7 @@ function AnalyticsDashboard() {
                 <option value="">All Teams</option>
                 {filteredTeamOptions.map((t) => (
                   <option key={t.name} value={t.name}>
-                    {t.name}{t.league && !selectedLeague ? ` (${t.league})` : ""}
+                    {t.name}{t.league && !selectedLeague ? ` (${formatLeague(t.league)})` : ""}
                   </option>
                 ))}
               </select>

@@ -14,6 +14,7 @@ import type { PlayerCardData } from "@/types/api";
 import { GRADE_COLORS, METRIC_COLORS, COMMITMENT_STATUS_COLORS } from "@/types/api";
 import PlayerStatusBadges from "./PlayerStatusBadges";
 import { assetUrl, hasRealImage } from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import { useBenchTalk } from "./BenchTalkProvider";
 
 const RADAR_AXES = [
@@ -236,7 +237,7 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
           </div>
           <p className="text-[11px] text-muted truncate mt-0.5">
             {player.current_team}
-            {player.current_league ? ` • ${player.current_league}` : ""}
+            {player.current_league ? ` • ${formatLeague(player.current_league)}` : ""}
           </p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {player.archetype && (

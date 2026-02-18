@@ -11,6 +11,7 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import VisualPlayerCard from "@/components/VisualPlayerCard";
 import api from "@/lib/api";
+import { formatLeague } from "@/lib/leagues";
 import type { Player, PlayerFilterOptions, PlayerCardData, SavedSearch } from "@/types/api";
 import { AGE_GROUP_LABELS, LEAGUE_TIER_LABELS, COMMITMENT_STATUS_COLORS } from "@/types/api";
 
@@ -620,7 +621,7 @@ export default function PlayersPage() {
                   >
                     <option value="">All Leagues</option>
                     {(filterOptions?.leagues || []).map((l) => (
-                      <option key={l} value={l}>{l}</option>
+                      <option key={l} value={l}>{formatLeague(l)}</option>
                     ))}
                   </select>
                 </div>
@@ -945,7 +946,7 @@ export default function PlayersPage() {
                           </td>
                           <td className="px-4 py-3 text-muted">{p.current_team || "\u2014"}</td>
                           <td className="px-4 py-3 text-muted">
-                            {p.current_league || "\u2014"}
+                            {formatLeague(p.current_league) || "\u2014"}
                             {p.league_tier && p.league_tier !== "Unknown" && (
                               <span className="ml-1.5 text-[9px] text-muted/50">({p.league_tier})</span>
                             )}
