@@ -87,17 +87,24 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
     setShowNotePresets(false);
   };
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const saveEdit = async () => {
     if (!editingId) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await api.put(`/stats/${editingId}`, editValues);
       setEditingId(null);
       setEditValues({});
       setShowNotePresets(false);
       onStatsChange?.();
-    } catch {
-      // Ignore
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err
+        ? String((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || "Save failed")
+        : "Save failed — check connection";
+      setSaveError(msg);
+      console.error("Stat save error:", err);
     } finally {
       setSaving(false);
     }
@@ -167,7 +174,20 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                       {isEditing ? (
                         <input className="w-24 px-1.5 py-1 text-sm border border-teal/30 rounded bg-white focus:ring-2 focus:ring-teal/20 outline-none"
                           value={editValues.season as string} onChange={e => editField("season", e.target.value)} />
-                      ) : s.season || "—"}
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          {s.season || "—"}
+                          {s.data_source && s.data_source !== "manual" && (
+                            <span className={`inline-flex px-1 py-0.5 rounded text-[8px] font-oswald uppercase tracking-wide ${
+                              s.data_source === "hockeytech" ? "bg-blue-100 text-blue-600" :
+                              s.data_source?.startsWith("instat") ? "bg-purple-100 text-purple-600" :
+                              "bg-gray-100 text-gray-500"
+                            }`} title={`Source: ${s.data_source}`}>
+                              {s.data_source === "hockeytech" ? "HT" : s.data_source?.startsWith("instat") ? "IS" : s.data_source}
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-navy/70 text-xs whitespace-nowrap">
                       {isEditing ? (
@@ -256,14 +276,17 @@ export default function StatTable({ stats, editable = false, onStatsChange }: St
                     {editable && (
                       <td className="px-2 py-2.5 text-center">
                         {isEditing ? (
-                          <div className="flex items-center gap-1 justify-center">
-                            <button onClick={saveEdit} disabled={saving}
-                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50">
-                              {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                            </button>
-                            <button onClick={cancelEdit} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors">
-                              <X size={14} />
-                            </button>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className="flex items-center gap-1">
+                              <button onClick={saveEdit} disabled={saving}
+                                className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50">
+                                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                              </button>
+                              <button onClick={cancelEdit} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
+                            {saveError && <span className="text-[9px] text-red-500 max-w-[80px] truncate" title={saveError}>{saveError}</span>}
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 justify-center">

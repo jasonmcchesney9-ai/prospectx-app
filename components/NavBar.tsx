@@ -35,6 +35,7 @@ import {
   Eye,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
+import api from "@/lib/api";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
 import PXIBadge from "./PXIBadge";
@@ -66,13 +67,12 @@ function getRoleGroup(hockeyRole?: string): RoleGroup {
 }
 
 // ── Nav Item Definitions ──────────────────────────────────────
-type NavItem = { href: string; label: string; icon: React.ElementType };
+type NavItem = { href: string; label: string; icon: React.ElementType; badge?: number };
 
 // PRO nav: full access
 const PRO_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/teams", label: "Teams", icon: Building2 },
 ];
 const PRO_NAV_RIGHT: NavItem[] = [
   { href: "/players", label: "Players", icon: Users },
@@ -116,10 +116,16 @@ const AGENT_NAV_RIGHT: NavItem[] = [
   { href: "/messages", label: "Messages", icon: MessageSquare },
 ];
 
+// Teams dropdown items (PRO only — visible under Teams dropdown)
+const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
+  { href: "/teams", label: "All Teams", icon: Building2 },
+  { href: "/series", label: "Series Plans", icon: Trophy },
+  { href: "/team-systems", label: "Team Systems", icon: Shield },
+];
+
 // Coaching items (PRO only)
 const COACHING_ITEMS: NavItem[] = [
   { href: "/game-plans", label: "Chalk Talk", icon: Swords },
-  { href: "/series", label: "Series Plans", icon: Trophy },
   { href: "/scouting", label: "Scouting List", icon: Target },
   { href: "/drills", label: "Drill Library", icon: BookOpen },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
@@ -142,21 +148,21 @@ const IMPORT_ITEMS: NavItem[] = [
 ];
 
 // ── Role-aware nav items function ──────────────────────────────
-function getNavItems(group: RoleGroup): { left: NavItem[]; right: NavItem[]; showCoaching: boolean; showImports: boolean; showBroadcastDropdown: boolean } {
+function getNavItems(group: RoleGroup): { left: NavItem[]; right: NavItem[]; showCoaching: boolean; showImports: boolean; showBroadcastDropdown: boolean; showTeamsDropdown: boolean } {
   switch (group) {
     case "PRO":
-      return { left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT, showCoaching: true, showImports: true, showBroadcastDropdown: true };
+      return { left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT, showCoaching: true, showImports: true, showBroadcastDropdown: true, showTeamsDropdown: true };
     case "MEDIA":
-      return { left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false };
+      return { left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
     case "FAMILY":
-      return { left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false };
+      return { left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
     case "AGENT":
-      return { left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false };
+      return { left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
   }
 }
 
 // ── NavLink Component ──────────────────────────────────────────
-function NavLink({ href, label, icon: Icon, pathname }: { href: string; label: string; icon: React.ElementType; pathname: string }) {
+function NavLink({ href, label, icon: Icon, pathname, badge }: { href: string; label: string; icon: React.ElementType; pathname: string; badge?: number }) {
   const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
   return (
     <Link
@@ -169,6 +175,11 @@ function NavLink({ href, label, icon: Icon, pathname }: { href: string; label: s
     >
       <Icon size={16} />
       {label}
+      {badge != null && badge > 0 && (
+        <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-teal text-white text-[9px] font-bold leading-none">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -186,16 +197,34 @@ export default function NavBar() {
   const pathname = usePathname();
   const user = getUser();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [agentClientCount, setAgentClientCount] = useState<number>(0);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
-
-  if (pathname === "/login") return null;
 
   // Effective role: admin override takes priority, otherwise real role
   const effectiveHockeyRole = roleOverride || user?.hockey_role;
   const roleGroup = getRoleGroup(effectiveHockeyRole);
+  const isAgent = roleGroup === "AGENT";
+
+  // Fetch client count for agent badge
+  useEffect(() => {
+    if (!isAgent) return;
+    api.get("/agent/clients")
+      .then((res) => setAgentClientCount(Array.isArray(res.data) ? res.data.length : 0))
+      .catch(() => {});
+  }, [isAgent]);
+
+  if (pathname === "/login") return null;
+
   const navConfig = getNavItems(roleGroup);
   const isAdmin = user?.role === "admin";
   const isPreviewing = !!roleOverride;
+
+  // Inject badge into agent Clients nav item
+  if (isAgent && agentClientCount > 0) {
+    navConfig.left = navConfig.left.map((item) =>
+      item.href === "/my-clients" ? { ...item, badge: agentClientCount } : item
+    );
+  }
 
   return (
     <nav className="bg-navy text-white sticky top-0 z-50">
@@ -229,6 +258,9 @@ export default function NavBar() {
             {navConfig.left.map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
+
+            {/* Teams dropdown (PRO only) */}
+            {navConfig.showTeamsDropdown && <TeamsDropdown pathname={pathname} />}
 
             {/* Bench Talk Toggle (center — always visible) */}
             <button
@@ -339,7 +371,7 @@ export default function NavBar() {
       {/* ── Mobile Menu (role-filtered) ── */}
       {mobileOpen && (
         <div className="md:hidden border-t border-white/10 px-4 pb-4">
-          {[...navConfig.left, ...navConfig.right].map(({ href, label, icon: Icon }) => {
+          {[...navConfig.left, ...navConfig.right].map(({ href, label, icon: Icon, badge }) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
               <Link
@@ -352,6 +384,11 @@ export default function NavBar() {
               >
                 <Icon size={16} />
                 {label}
+                {badge != null && badge > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-teal text-white text-[9px] font-bold leading-none">
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -368,6 +405,31 @@ export default function NavBar() {
               <Radio size={16} />
               Broadcast
             </Link>
+          )}
+
+          {/* Teams section (PRO only — mobile) */}
+          {navConfig.showTeamsDropdown && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Teams
+              </p>
+              {TEAMS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
           )}
 
           {/* Coaching section (PRO only) */}
@@ -474,6 +536,63 @@ export default function NavBar() {
 }
 
 // ── Dropdown Components ────────────────────────────────────────
+
+function TeamsDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = TEAMS_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <Building2 size={16} />
+        Teams
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {TEAMS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CoachingDropdown({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);

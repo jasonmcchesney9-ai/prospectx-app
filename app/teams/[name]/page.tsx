@@ -23,6 +23,13 @@ import {
   Layers,
   RefreshCw,
   Activity,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Brain,
+  Star,
+  AlertTriangle,
+  TrendingUp,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -32,9 +39,9 @@ import LineCombinations from "@/components/LineCombinations";
 import LineBuilder from "@/components/LineBuilder";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
-import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination } from "@/types/api";
+import type { Player, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination, TeamGame, TeamIntelligence } from "@/types/api";
 
-type Tab = "roster" | "lines" | "systems" | "reports" | "stats";
+type Tab = "roster" | "identity" | "lines" | "systems" | "reports" | "stats" | "games";
 
 // ── Position grouping ─────────────────────────────────────
 const FORWARD_POS = ["C", "LW", "RW", "F"];
@@ -112,6 +119,10 @@ export default function TeamDetailPage() {
   const [teamRef, setTeamRef] = useState<TeamReference | null>(null);
   const [teamStats, setTeamStats] = useState<TeamStats | null>(null);
   const [lineCombinations, setLineCombinations] = useState<LineCombination[]>([]);
+  const [teamGames, setTeamGames] = useState<TeamGame[]>([]);
+  const [expandedGameId, setExpandedGameId] = useState<string | null>(null);
+  const [teamIntel, setTeamIntel] = useState<TeamIntelligence | null>(null);
+  const [refreshingIntel, setRefreshingIntel] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("roster");
@@ -133,7 +144,7 @@ export default function TeamDetailPage() {
   const loadData = useCallback(async () => {
     try {
       setError("");
-      const [rosterRes, reportsRes, sysRes, libRes, refRes, teamStatsRes, linesRes] = await Promise.allSettled([
+      const [rosterRes, reportsRes, sysRes, libRes, refRes, teamStatsRes, linesRes, gamesRes] = await Promise.allSettled([
         api.get<Player[]>(`/teams/${encodeURIComponent(teamName)}/roster`),
         api.get<Report[]>(`/teams/${encodeURIComponent(teamName)}/reports`),
         api.get<TeamSystem[]>("/hockey-os/team-systems"),
@@ -141,6 +152,7 @@ export default function TeamDetailPage() {
         api.get<TeamReference[]>("/teams/reference"),
         api.get<TeamStats>(`/stats/team/${encodeURIComponent(teamName)}`),
         api.get<LineCombination[]>(`/stats/team/${encodeURIComponent(teamName)}/lines`),
+        api.get<TeamGame[]>(`/teams/${encodeURIComponent(teamName)}/games`),
       ]);
 
       if (rosterRes.status === "fulfilled") setRoster(rosterRes.value.data);
@@ -148,6 +160,7 @@ export default function TeamDetailPage() {
       if (libRes.status === "fulfilled") setSystemsLibrary(libRes.value.data);
       if (teamStatsRes.status === "fulfilled" && teamStatsRes.value.data) setTeamStats(teamStatsRes.value.data);
       if (linesRes.status === "fulfilled") setLineCombinations(linesRes.value.data || []);
+      if (gamesRes.status === "fulfilled") setTeamGames(gamesRes.value.data || []);
 
       // Match team system by name
       if (sysRes.status === "fulfilled") {
@@ -171,6 +184,14 @@ export default function TeamDetailPage() {
           `/teams/${encodeURIComponent(teamName)}/hockeytech-info`
         );
         setHtInfo(htRes.data);
+      } catch { /* non-critical */ }
+
+      // Load team intelligence (non-blocking)
+      try {
+        const intelRes = await api.get<TeamIntelligence>(`/teams/${encodeURIComponent(teamName)}/intelligence`);
+        if (intelRes.data && intelRes.data.version > 0) {
+          setTeamIntel(intelRes.data);
+        }
       } catch { /* non-critical */ }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load team";
@@ -396,6 +417,11 @@ export default function TeamDetailPage() {
                   {teamSystem?.season && (
                     <span className="text-white/50">{teamSystem.season}</span>
                   )}
+                  {teamIntel?.playing_style && (
+                    <span className="px-2 py-0.5 bg-orange/20 text-orange rounded font-oswald font-bold text-xs">
+                      {teamIntel.playing_style}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-white/50 mt-1">
                   {roster.length} players &middot; {reports.length} reports
@@ -416,10 +442,12 @@ export default function TeamDetailPage() {
         <div className="flex gap-1 mb-6 border-b border-border">
           {([
             { key: "roster" as Tab, label: "Roster", icon: Users, count: roster.length },
+            { key: "identity" as Tab, label: "Identity", icon: Brain, count: null },
             { key: "lines" as Tab, label: "Lines", icon: Layers, count: null },
             { key: "systems" as Tab, label: "Systems", icon: Shield, count: null },
             { key: "reports" as Tab, label: "Reports", icon: FileText, count: reports.length },
             { key: "stats" as Tab, label: "Stats", icon: BarChart3, count: null },
+            { key: "games" as Tab, label: "Games", icon: Calendar, count: teamGames.length || null },
           ]).map(({ key, label, icon: Icon, count }) => (
             <button
               key={key}
@@ -515,6 +543,7 @@ export default function TeamDetailPage() {
                             <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-16">POS</th>
                             <th className="px-4 py-2.5 text-left font-oswald text-xs uppercase tracking-wider text-muted">Archetype</th>
                             <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-16">Shoots</th>
+                            <th className="px-4 py-2.5 text-center font-oswald text-xs uppercase tracking-wider text-muted w-24">Status</th>
                             <th className="px-4 py-2.5 text-right font-oswald text-xs uppercase tracking-wider text-muted w-20"></th>
                           </tr>
                         </thead>
@@ -551,6 +580,33 @@ export default function TeamDetailPage() {
                               <td className="px-4 py-2.5 text-center text-muted">
                                 {p.shoots || "\u2014"}
                               </td>
+                              <td className="px-4 py-2.5 text-center">
+                                <select
+                                  value={p.roster_status || "active"}
+                                  onChange={async (e) => {
+                                    const newStatus = e.target.value;
+                                    try {
+                                      await api.put(`/players/${p.id}/roster-status`, { roster_status: newStatus });
+                                      setRoster((prev) => prev.map((pl) => pl.id === p.id ? { ...pl, roster_status: newStatus } : pl));
+                                    } catch {
+                                      // ignore
+                                    }
+                                  }}
+                                  className={`text-[10px] font-oswald font-bold bg-transparent border border-border rounded px-1.5 py-0.5 cursor-pointer ${
+                                    (p.roster_status || "active") === "active" ? "text-green-600 border-green-200" :
+                                    (p.roster_status || "active") === "ir" ? "text-red-600 border-red-200 bg-red-50" :
+                                    (p.roster_status || "active") === "injured" ? "text-red-600 border-red-200 bg-red-50" :
+                                    (p.roster_status || "active") === "day-to-day" ? "text-yellow-600 border-yellow-200 bg-yellow-50" :
+                                    (p.roster_status || "active") === "scratched" ? "text-gray-500 border-gray-200 bg-gray-50" :
+                                    (p.roster_status || "active") === "suspended" ? "text-purple-600 border-purple-200 bg-purple-50" :
+                                    "text-gray-600"
+                                  }`}
+                                >
+                                  {["active", "ir", "injured", "day-to-day", "scratched", "suspended"].map((s) => (
+                                    <option key={s} value={s}>{s === "ir" ? "IR" : s === "day-to-day" ? "DTD" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                                  ))}
+                                </select>
+                              </td>
                               <td className="px-4 py-2.5 text-right">
                                 <Link
                                   href={`/reports/generate?player=${p.id}`}
@@ -583,6 +639,200 @@ export default function TeamDetailPage() {
                     Import Roster CSV
                   </Link>
                 </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ── Identity Tab ──────────────────────────────── */}
+        {activeTab === "identity" && (
+          <section className="space-y-4">
+            {teamIntel && teamIntel.version > 0 ? (
+              <>
+                {/* Header */}
+                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                  <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-border/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain size={16} className="text-teal" />
+                      <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">Team Identity</h3>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/10 text-teal font-medium">v{teamIntel.version}</span>
+                      {teamIntel.trigger && (
+                        <span className="text-[10px] text-muted/50">via {teamIntel.trigger}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {teamIntel.created_at && (
+                        <span className="text-[10px] text-muted/50">
+                          {new Date(teamIntel.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setRefreshingIntel(true);
+                          try {
+                            const { data } = await api.post<TeamIntelligence>(`/teams/${encodeURIComponent(teamName)}/intelligence`);
+                            setTeamIntel(data);
+                          } catch (err: unknown) {
+                            const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to refresh";
+                            alert(msg);
+                          } finally {
+                            setRefreshingIntel(false);
+                          }
+                        }}
+                        disabled={refreshingIntel}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-oswald uppercase tracking-wider rounded-lg border border-teal/30 text-teal hover:bg-teal/10 transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw size={10} className={refreshingIntel ? "animate-spin" : ""} />
+                        {refreshingIntel ? "Analyzing..." : "Refresh"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-5">
+                    {/* Playing Style Badge + Tags */}
+                    {teamIntel.playing_style && (
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="px-3 py-1.5 rounded-lg bg-navy/[0.06] border border-navy/10 text-sm font-semibold text-navy">
+                          {teamIntel.playing_style}
+                        </span>
+                        {teamIntel.tags.map((tag, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* System Summary */}
+                    {teamIntel.system_summary && (
+                      <p className="text-sm text-navy/70 italic border-l-2 border-teal/30 pl-3">
+                        {teamIntel.system_summary}
+                      </p>
+                    )}
+
+                    {/* Identity Description */}
+                    {teamIntel.identity && (
+                      <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-line">
+                        {teamIntel.identity}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Strengths & Vulnerabilities */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {teamIntel.strengths.length > 0 && (
+                    <div className="bg-white rounded-xl border border-border p-5">
+                      <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                        <Star size={14} className="text-teal" /> Strengths
+                      </h4>
+                      <ul className="space-y-2">
+                        {teamIntel.strengths.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-navy/80">
+                            <TrendingUp size={12} className="text-teal mt-0.5 shrink-0" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {teamIntel.vulnerabilities.length > 0 && (
+                    <div className="bg-white rounded-xl border border-border p-5">
+                      <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                        <AlertTriangle size={14} className="text-orange" /> Vulnerabilities
+                      </h4>
+                      <ul className="space-y-2">
+                        {teamIntel.vulnerabilities.map((v, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-navy/80">
+                            <AlertTriangle size={12} className="text-orange mt-0.5 shrink-0" />
+                            {v}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Key Personnel */}
+                {teamIntel.key_personnel.length > 0 && (
+                  <div className="bg-white rounded-xl border border-border p-5">
+                    <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                      <Users size={14} className="text-navy" /> Key Personnel
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {teamIntel.key_personnel.map((kp, i) => (
+                        <div key={i} className="p-3 rounded-lg bg-navy/[0.03] border border-border/50">
+                          <p className="text-sm font-semibold text-navy">{kp.name}</p>
+                          <p className="text-xs text-muted mt-0.5">{kp.role}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Special Teams + Player Fit */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {teamIntel.special_teams_identity && (
+                    <div className="bg-white rounded-xl border border-border p-5">
+                      <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                        <Zap size={14} className="text-orange" /> Special Teams
+                      </h4>
+                      <p className="text-sm text-navy/80 leading-relaxed">{teamIntel.special_teams_identity}</p>
+                    </div>
+                  )}
+
+                  {teamIntel.player_archetype_fit && (
+                    <div className="bg-white rounded-xl border border-border p-5">
+                      <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                        <Target size={14} className="text-teal" /> Ideal Player Fit
+                      </h4>
+                      <p className="text-sm text-navy/80 leading-relaxed">{teamIntel.player_archetype_fit}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Comparable Teams */}
+                {teamIntel.comparable_teams.length > 0 && (
+                  <div className="bg-white rounded-xl border border-border p-5">
+                    <h4 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3">Comparable Teams</h4>
+                    <div className="flex gap-2 flex-wrap">
+                      {teamIntel.comparable_teams.map((ct, i) => (
+                        <span key={i} className="px-3 py-1 rounded-full bg-navy/[0.05] text-sm text-navy font-medium">
+                          {ct}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Generate CTA */
+              <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-8 text-center">
+                <Brain size={36} className="mx-auto text-teal/40 mb-3" />
+                <h3 className="text-lg font-semibold text-navy mb-2">Team Identity Report</h3>
+                <p className="text-sm text-navy/70 mb-4 max-w-md mx-auto">
+                  Generate an AI-powered team identity profile analyzing playing style, strengths, vulnerabilities, and key personnel.
+                </p>
+                <button
+                  onClick={async () => {
+                    setRefreshingIntel(true);
+                    try {
+                      const { data } = await api.post<TeamIntelligence>(`/teams/${encodeURIComponent(teamName)}/intelligence`);
+                      setTeamIntel(data);
+                    } catch (err: unknown) {
+                      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to generate team identity";
+                      alert(msg);
+                    } finally {
+                      setRefreshingIntel(false);
+                    }
+                  }}
+                  disabled={refreshingIntel}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50"
+                >
+                  <Brain size={16} />
+                  {refreshingIntel ? "Analyzing Team..." : "Generate Team Identity"}
+                </button>
               </div>
             )}
           </section>
@@ -1009,6 +1259,167 @@ export default function TeamDetailPage() {
                 <p className="text-sm text-muted">No line combinations imported yet.</p>
                 <p className="text-xs text-muted/60 mt-1">
                   Upload Lines XLSX files from the{" "}
+                  <Link href="/instat" className="text-teal hover:underline">Import Stats</Link> page.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ── Games Tab ──────────────────────────────────── */}
+        {activeTab === "games" && (
+          <section className="space-y-4">
+            {teamGames.length > 0 ? (
+              <>
+                {/* Record summary */}
+                {(() => {
+                  const wins = teamGames.filter(g => g.result === "W").length;
+                  const losses = teamGames.filter(g => g.result === "L").length;
+                  const ties = teamGames.filter(g => g.result === "T").length;
+                  return (
+                    <div className="flex items-center gap-4 mb-2">
+                      <h2 className="text-lg font-semibold text-navy">Season Record</h2>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-oswald font-bold text-green-600">{wins}W</span>
+                        <span className="text-muted">-</span>
+                        <span className="font-oswald font-bold text-red-500">{losses}L</span>
+                        {ties > 0 && (
+                          <>
+                            <span className="text-muted">-</span>
+                            <span className="font-oswald font-bold text-orange">{ties}T</span>
+                          </>
+                        )}
+                        <span className="text-xs text-muted ml-2">({teamGames.length} games)</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Games table */}
+                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-navy/[0.03] text-xs text-muted uppercase tracking-wider">
+                          <th className="text-left px-3 py-2.5">Date</th>
+                          <th className="text-center px-2 py-2.5 w-10">H/A</th>
+                          <th className="text-left px-3 py-2.5">Opponent</th>
+                          <th className="text-center px-3 py-2.5">Score</th>
+                          <th className="text-center px-2 py-2.5 w-10">Result</th>
+                          <th className="text-center px-2 py-2.5">Goals</th>
+                          <th className="text-center px-2 py-2.5">Shots</th>
+                          <th className="text-center px-2 py-2.5 hidden sm:table-cell">FO%</th>
+                          <th className="text-center px-2 py-2.5 hidden md:table-cell">xG</th>
+                          <th className="text-center px-2 py-2.5 hidden md:table-cell">CORSI%</th>
+                          <th className="w-8 px-1"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teamGames.map((game) => {
+                          const ext = (game.extended_stats || {}) as Record<string, Record<string, unknown>>;
+                          const shots = ext.shots?.on_goal ?? ext.shots?.total ?? "";
+                          const foPct = ext.faceoffs?.won_pct ?? "";
+                          const xg = ext.xg?.xg ?? "";
+                          const corsi = ext.advanced?.corsi_pct ?? "";
+                          const isExpanded = expandedGameId === game.id;
+
+                          return (
+                            <tr
+                              key={game.id}
+                              className={`border-t border-border/50 hover:bg-navy/[0.01] cursor-pointer transition-colors ${
+                                isExpanded ? "bg-navy/[0.02]" : ""
+                              }`}
+                              onClick={() => setExpandedGameId(isExpanded ? null : game.id)}
+                            >
+                              <td className="px-3 py-2 text-navy whitespace-nowrap">
+                                {game.game_date ? new Date(game.game_date + "T12:00:00").toLocaleDateString("en-US", {
+                                  month: "short", day: "numeric",
+                                }) : "—"}
+                              </td>
+                              <td className="text-center px-2 py-2">
+                                <span className={`text-[10px] font-oswald font-bold px-1.5 py-0.5 rounded ${
+                                  game.home_away === "H" ? "bg-teal/10 text-teal" : "bg-navy/10 text-navy"
+                                }`}>
+                                  {game.home_away || "—"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-navy font-medium">{game.opponent || "—"}</td>
+                              <td className="text-center px-3 py-2 font-oswald font-bold text-navy">
+                                {game.team_score ?? 0}–{game.opponent_score ?? 0}
+                              </td>
+                              <td className="text-center px-2 py-2">
+                                <span className={`text-xs font-oswald font-bold px-2 py-0.5 rounded-full ${
+                                  game.result === "W" ? "bg-green-100 text-green-700" :
+                                  game.result === "L" ? "bg-red-100 text-red-600" :
+                                  game.result === "T" ? "bg-orange/10 text-orange" :
+                                  "text-muted"
+                                }`}>
+                                  {game.result || "—"}
+                                </span>
+                              </td>
+                              <td className="text-center px-2 py-2 font-mono text-xs">{game.team_score ?? "—"}</td>
+                              <td className="text-center px-2 py-2 font-mono text-xs">{shots ? String(shots) : "—"}</td>
+                              <td className="text-center px-2 py-2 font-mono text-xs hidden sm:table-cell">{foPct ? String(foPct) : "—"}</td>
+                              <td className="text-center px-2 py-2 font-mono text-xs hidden md:table-cell">{xg ? String(typeof xg === "number" ? (xg as number).toFixed(1) : xg) : "—"}</td>
+                              <td className="text-center px-2 py-2 font-mono text-xs hidden md:table-cell">{corsi ? String(corsi) : "—"}</td>
+                              <td className="px-1 py-2 text-center">
+                                {isExpanded ? <ChevronUp size={12} className="text-muted" /> : <ChevronDown size={12} className="text-muted" />}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Expanded game detail */}
+                  {expandedGameId && (() => {
+                    const game = teamGames.find(g => g.id === expandedGameId);
+                    if (!game?.extended_stats) return null;
+                    const ext = game.extended_stats as Record<string, Record<string, unknown>>;
+                    const categories = Object.entries(ext).filter(([, v]) => v && typeof v === "object" && Object.keys(v).length > 0);
+
+                    return (
+                      <div className="border-t border-border bg-navy/[0.02] p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-oswald font-semibold text-navy uppercase tracking-wider">
+                            Game Details — {game.opponent} ({game.game_date})
+                          </h3>
+                          <Link
+                            href={`/game-plans/new?opponent=${encodeURIComponent(game.opponent || "")}&date=${game.game_date || ""}`}
+                            className="text-xs text-teal hover:underline flex items-center gap-1"
+                          >
+                            <Zap size={10} /> Create Game Plan
+                          </Link>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                          {categories.map(([cat, vals]) => (
+                            <div key={cat} className="bg-white rounded-lg border border-border/50 p-3">
+                              <h4 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">
+                                {cat.replace(/_/g, " ")}
+                              </h4>
+                              <div className="space-y-0.5">
+                                {Object.entries(vals as Record<string, unknown>).slice(0, 8).map(([k, v]) => (
+                                  <div key={k} className="flex justify-between text-[11px]">
+                                    <span className="text-muted/70 truncate mr-2">{k.replace(/_/g, " ")}</span>
+                                    <span className="font-mono text-navy font-medium whitespace-nowrap">{v != null ? String(v) : "—"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-xl border border-border p-6 text-center">
+                <Calendar size={28} className="mx-auto text-muted/30 mb-2" />
+                <p className="text-sm text-muted">No game data imported yet.</p>
+                <p className="text-xs text-muted/60 mt-1">
+                  Upload a Games XLSX export from the{" "}
                   <Link href="/instat" className="text-teal hover:underline">Import Stats</Link> page.
                 </p>
               </div>

@@ -10,11 +10,37 @@ const STATUS_CONFIG = {
   failed: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50", label: "Failed" },
 } as const;
 
-export default function ReportCard({ report }: { report: Report }) {
+export default function ReportCard({ report, compact = false }: { report: Report; compact?: boolean }) {
   const statusInfo = STATUS_CONFIG[report.status] || STATUS_CONFIG.pending;
   const StatusIcon = statusInfo.icon;
   const isTeamReport = (TEAM_REPORT_TYPES as readonly string[]).includes(report.report_type);
   const CategoryIcon = isTeamReport ? Users : User;
+
+  if (compact) {
+    return (
+      <Link
+        href={`/reports/${report.id}`}
+        className="flex items-center gap-2.5 py-2 px-1 hover:bg-navy/[0.02] rounded-lg transition-colors group"
+      >
+        <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${isTeamReport ? "bg-orange/10" : "bg-navy/5"}`}>
+          <CategoryIcon size={14} className={isTeamReport ? "text-orange" : "text-navy/60"} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-navy font-medium truncate group-hover:text-teal transition-colors">
+            {report.title || "Untitled Report"}
+          </p>
+          <p className="text-[11px] text-muted truncate">
+            {REPORT_TYPE_LABELS[report.report_type] || report.report_type}
+            {report.generated_at && ` · ${new Date(report.generated_at).toLocaleDateString()}`}
+          </p>
+        </div>
+        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${statusInfo.bg} ${statusInfo.color}`}>
+          <StatusIcon size={10} className={report.status === "processing" ? "animate-spin" : ""} />
+          {statusInfo.label}
+        </span>
+      </Link>
+    );
+  }
 
   return (
     <Link

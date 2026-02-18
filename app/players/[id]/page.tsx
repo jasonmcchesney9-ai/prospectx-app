@@ -548,6 +548,18 @@ export default function PlayerDetailPage() {
                     {player.commitment_status}
                   </span>
                 )}
+                {player.roster_status && player.roster_status !== "active" && (
+                  <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs uppercase tracking-wide ${
+                    player.roster_status === "ir" ? "bg-red-500/20 text-red-300" :
+                    player.roster_status === "injured" ? "bg-red-500/20 text-red-300" :
+                    player.roster_status === "day-to-day" ? "bg-yellow-500/20 text-yellow-300" :
+                    player.roster_status === "scratched" ? "bg-gray-400/20 text-gray-300" :
+                    player.roster_status === "suspended" ? "bg-purple-500/20 text-purple-300" :
+                    "bg-white/10 text-white/70"
+                  }`}>
+                    {player.roster_status === "ir" ? "IR" : player.roster_status === "day-to-day" ? "DTD" : player.roster_status}
+                  </span>
+                )}
                 <PlayerStatusBadges tags={player.tags || []} size="md" />
                 {player.shoots && <span>Shoots {player.shoots}</span>}
                 {player.current_team && <span>{player.current_team}</span>}
@@ -568,6 +580,30 @@ export default function PlayerDetailPage() {
                   {player.height_cm && player.weight_kg && " / "}
                   {player.weight_kg && `${player.weight_kg}kg`}
                 </p>
+              )}
+              {/* Inline Grade Badges (from intelligence) */}
+              {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" && (
+                <div className="flex items-center gap-1.5 mt-2">
+                  {([
+                    { label: "OVR", grade: intelligence.overall_grade },
+                    { label: "OFF", grade: intelligence.offensive_grade },
+                    { label: "DEF", grade: intelligence.defensive_grade },
+                    { label: "SKT", grade: intelligence.skating_grade },
+                    { label: "IQ", grade: intelligence.hockey_iq_grade },
+                    { label: "CMP", grade: intelligence.compete_grade },
+                  ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => (
+                    <div key={label} className="flex items-center gap-0.5">
+                      <span
+                        className="w-7 h-7 rounded flex items-center justify-center text-white font-oswald font-bold text-[11px]"
+                        style={{ backgroundColor: GRADE_COLORS[grade!] || "#9ca3af" }}
+                        title={`${label}: ${grade}`}
+                      >
+                        {grade}
+                      </span>
+                      <span className="text-[8px] text-white/40 font-oswald uppercase">{label}</span>
+                    </div>
+                  ))}
+                </div>
               )}
               </div>
             </div>
@@ -948,6 +984,34 @@ export default function PlayerDetailPage() {
                     >
                       {COMMITMENT_STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted">Roster Status</span>
+                    <select
+                      value={player.roster_status || "active"}
+                      onChange={async (e) => {
+                        const newStatus = e.target.value;
+                        try {
+                          await api.put(`/players/${playerId}/roster-status`, { roster_status: newStatus });
+                          setPlayer((prev) => prev ? { ...prev, roster_status: newStatus } : prev);
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-border cursor-pointer pr-5 py-0.5 rounded ${
+                        (player.roster_status || "active") === "active" ? "text-green-600" :
+                        (player.roster_status || "active") === "ir" ? "text-red-600" :
+                        (player.roster_status || "active") === "injured" ? "text-red-600" :
+                        (player.roster_status || "active") === "day-to-day" ? "text-yellow-600" :
+                        (player.roster_status || "active") === "scratched" ? "text-gray-500" :
+                        (player.roster_status || "active") === "suspended" ? "text-purple-600" :
+                        "text-gray-600"
+                      }`}
+                    >
+                      {["active", "ir", "injured", "day-to-day", "scratched", "suspended", "recalled", "released"].map((s) => (
+                        <option key={s} value={s}>{s === "ir" ? "IR" : s === "day-to-day" ? "Day-to-Day" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
                       ))}
                     </select>
                   </div>

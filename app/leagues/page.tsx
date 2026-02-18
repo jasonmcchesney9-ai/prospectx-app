@@ -894,7 +894,7 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
     setSyncResult(null);
     setSyncError("");
     try {
-      const res = await api.post<SyncResult>(`/hockeytech/${league}/sync-roster/${teamId}`);
+      const res = await api.post<SyncResult>(`/hockeytech/${league}/sync-roster/${teamId}?sync_stats=true`);
       setSyncResult(res.data);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
@@ -928,7 +928,7 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
     setSyncError("");
     setSyncResult(null);
     try {
-      const res = await api.post<BulkSyncResult>(`/hockeytech/${league}/sync-league`);
+      const res = await api.post<BulkSyncResult>(`/hockeytech/${league}/sync-league?sync_stats=true`);
       setBulkResult(res.data);
       setBulkProgress("");
     } catch (err: unknown) {

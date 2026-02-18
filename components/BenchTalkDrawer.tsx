@@ -851,7 +851,7 @@ export default function BenchTalkDrawer() {
               <div className="mb-4 drop-shadow-lg">
                 <PXIBadge size={56} variant="dark" showDot={true} />
               </div>
-              <h2 className="font-oswald text-lg font-bold text-navy tracking-wider uppercase mb-1">
+              <h2 className="font-oswald text-lg font-bold text-navy tracking-wider uppercase mb-1" suppressHydrationWarning>
                 Hey {name}
               </h2>
               <p className="text-muted text-xs text-center mb-2 max-w-sm">

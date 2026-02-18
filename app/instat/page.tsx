@@ -12,6 +12,8 @@ import {
   BarChart3,
   Layers,
   ChevronDown,
+  Calendar,
+  Target,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -19,6 +21,9 @@ import api from "@/lib/api";
 import type { TeamReference, InStatImportResponse } from "@/types/api";
 
 const FILE_TYPE_LABELS: Record<string, { label: string; icon: typeof Users; color: string }> = {
+  team_games: { label: "Team Game Schedule", icon: Calendar, color: "text-orange" },
+  game_skaters: { label: "Game Box Score (Skaters)", icon: Target, color: "text-teal" },
+  game_goalies: { label: "Game Box Score (Goalies)", icon: Target, color: "text-teal" },
   league_teams: { label: "League Team Stats", icon: Shield, color: "text-orange" },
   league_skaters: { label: "League Skater Stats", icon: Users, color: "text-teal" },
   league_goalies: { label: "League Goalie Stats", icon: Shield, color: "text-teal" },
@@ -112,7 +117,8 @@ function InStatUploader() {
 
       const { data } = await api.post<InStatImportResponse>(
         `/instat/import?${params.toString()}`,
-        fd
+        fd,
+        { timeout: 300000 }  // 5 min — safety net for very large files
       );
       setResult(data);
     } catch (err: unknown) {
@@ -158,7 +164,7 @@ function InStatUploader() {
           <div className="flex items-start gap-3">
             <CheckCircle size={20} className="text-green-600 mt-0.5 shrink-0" />
             <div className="flex-1">
-              <p className="font-semibold text-green-800 text-sm flex items-center gap-2">
+              <p className="font-semibold text-green-800 text-sm flex items-center gap-2 flex-wrap">
                 Import Complete
                 {fileTypeInfo && (
                   <span className={`text-xs px-2 py-0.5 rounded bg-white border ${fileTypeInfo.color}`}>
@@ -166,15 +172,31 @@ function InStatUploader() {
                   </span>
                 )}
               </p>
+              {/* Detected metadata from filename */}
+              {(result.detected_team || result.detected_opponent) && (
+                <p className="text-xs text-green-700 mt-1">
+                  {result.detected_team}
+                  {result.detected_opponent && <span className="text-green-500"> vs {result.detected_opponent}</span>}
+                  {result.detected_date && <span className="text-green-500"> • {result.detected_date}</span>}
+                </p>
+              )}
               <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white rounded-lg p-3 border border-green-100">
                   <p className="text-2xl font-oswald font-bold text-navy">{result.total_rows}</p>
                   <p className="text-xs text-muted uppercase tracking-wider">Total Rows</p>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-green-100">
-                  <p className="text-2xl font-oswald font-bold text-teal">{result.stats_imported}</p>
-                  <p className="text-xs text-muted uppercase tracking-wider">Stats Imported</p>
-                </div>
+                {result.games_imported > 0 && (
+                  <div className="bg-white rounded-lg p-3 border border-green-100">
+                    <p className="text-2xl font-oswald font-bold text-orange">{result.games_imported}</p>
+                    <p className="text-xs text-muted uppercase tracking-wider">Games Imported</p>
+                  </div>
+                )}
+                {result.stats_imported > 0 && (
+                  <div className="bg-white rounded-lg p-3 border border-green-100">
+                    <p className="text-2xl font-oswald font-bold text-teal">{result.stats_imported}</p>
+                    <p className="text-xs text-muted uppercase tracking-wider">Stats Imported</p>
+                  </div>
+                )}
                 {result.players_created > 0 && (
                   <div className="bg-white rounded-lg p-3 border border-green-100">
                     <p className="text-2xl font-oswald font-bold text-orange">{result.players_created}</p>
@@ -273,7 +295,7 @@ function InStatUploader() {
                     Click to select or drop an .xlsx stats file
                   </p>
                   <p className="text-xs text-muted/60 mt-1">
-                    Supports: Teams, Skaters, Goalies, Lines exports
+                    Supports: Games, Skaters, Goalies, Lines — season or single-game
                   </p>
                 </div>
               )}

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Zap, Loader2, CheckCircle2, AlertCircle, Users, Building2, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, CheckCircle2, AlertCircle, Users, Building2, ClipboardList, ChevronDown, ChevronUp, Star } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -21,6 +21,58 @@ import UpgradeModal from "@/components/UpgradeModal";
 import ReportLoadingView from "@/components/ReportLoadingView";
 
 type GenerationState = "idle" | "submitting" | "polling" | "complete" | "failed";
+
+/* ---------- Audience → Template Mapping ---------- */
+type Audience = "all" | "scout" | "coach" | "gm" | "agent" | "parent";
+
+const AUDIENCES: { key: Audience; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "scout", label: "Scout" },
+  { key: "coach", label: "Coach" },
+  { key: "gm", label: "GM" },
+  { key: "agent", label: "Agent" },
+  { key: "parent", label: "Parent / Family" },
+];
+
+const AUDIENCE_TEMPLATES: Record<Exclude<Audience, "all">, string[]> = {
+  scout: ["pro_skater", "unified_prospect", "goalie", "draft_comparative", "season_intelligence"],
+  coach: ["game_decision", "opponent_gameplan", "practice_plan", "playoff_series", "line_chemistry", "st_optimization", "team_identity", "pre_game_intel"],
+  gm: ["trade_target", "goalie_tandem", "free_agent_market", "operations", "season_projection"],
+  agent: ["agent_pack", "development_roadmap", "player_guide_prep_college"],
+  parent: ["family_card", "development_roadmap", "player_guide_prep_college"],
+};
+
+// Best (recommended) template per audience
+const AUDIENCE_RECOMMENDED: Record<Exclude<Audience, "all">, string> = {
+  scout: "pro_skater",
+  coach: "game_decision",
+  gm: "trade_target",
+  agent: "agent_pack",
+  parent: "family_card",
+};
+
+// Map hockey_role → audience for auto-detection
+function roleToAudience(role: string | undefined): Audience {
+  if (!role) return "all";
+  const r = role.toLowerCase();
+  if (r.includes("scout")) return "scout";
+  if (r.includes("coach") || r.includes("trainer")) return "coach";
+  if (r.includes("gm") || r.includes("general_manager") || r.includes("management")) return "gm";
+  if (r.includes("agent") || r.includes("advisor")) return "agent";
+  if (r.includes("parent") || r.includes("player") || r.includes("family")) return "parent";
+  return "all";
+}
+
+// Check if a report type is relevant to the current audience
+function isTypeInAudience(reportType: string, audience: Audience): boolean {
+  if (audience === "all") return true;
+  return AUDIENCE_TEMPLATES[audience]?.includes(reportType) ?? false;
+}
+
+function isRecommended(reportType: string, audience: Audience): boolean {
+  if (audience === "all") return false;
+  return AUDIENCE_RECOMMENDED[audience] === reportType;
+}
 
 export default function GenerateReportPage() {
   return (
@@ -62,6 +114,12 @@ function GenerateReportContent() {
   const [statusMessage, setStatusMessage] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
+
+  // Audience filter — auto-detect from user role
+  const [audience, setAudience] = useState<Audience>(() => {
+    const user = getUser();
+    return roleToAudience(user?.hockey_role);
+  });
 
   // Drill options
   const [includeDrills, setIncludeDrills] = useState(false);
@@ -436,53 +494,95 @@ function GenerateReportContent() {
               </div>
             )}
 
-            {/* Report Type Selection — Player Reports */}
+            {/* Audience Selector — horizontal pill row */}
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="h-5 w-1 rounded-full bg-teal" />
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
-                  Player Reports
-                </h3>
-              </div>
-              <p className="text-[11px] text-muted/60 mb-3">Individual player evaluation, scouting, and development reports.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {reportTypes
-                  .filter((type) => (PLAYER_REPORT_TYPES as readonly string[]).includes(type))
-                  .map((type) => {
-                    const tmpl = templates.find((t) => t.report_type === type);
-                    const isSelected = selectedType === type;
-                    return (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setSelectedType(type)}
-                        disabled={isGenerating}
-                        className={`px-3 py-3 rounded-lg border text-left transition-all ${
-                          isSelected
-                            ? "border-teal bg-teal/10 ring-1 ring-teal/30"
-                            : "border-border bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
-                        }`}
-                      >
-                        <span className={`text-sm font-semibold block ${
-                          isSelected ? "text-teal" : "text-navy"
-                        }`}>
-                          {REPORT_TYPE_LABELS[type] || type}
-                        </span>
-                        {tmpl?.description && (
-                          <span className={`text-xs mt-1 block leading-relaxed ${
-                            isSelected ? "text-teal/70 line-clamp-3" : "text-muted/70 line-clamp-2"
-                          }`}>
-                            {tmpl.description}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+              <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">
+                Audience
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {AUDIENCES.map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    onClick={() => setAudience(a.key)}
+                    disabled={isGenerating}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                      audience === a.key
+                        ? "bg-navy text-white shadow-sm"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
               </div>
             </div>
 
+            {/* Report Type Selection — Player Reports */}
+            {reportTypes.some((type) =>
+              (PLAYER_REPORT_TYPES as readonly string[]).includes(type) &&
+              isTypeInAudience(type, audience)
+            ) && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-5 w-1 rounded-full bg-teal" />
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
+                    Player Reports
+                  </h3>
+                </div>
+                <p className="text-[11px] text-muted/60 mb-3">Individual player evaluation, scouting, and development reports.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {reportTypes
+                    .filter((type) =>
+                      (PLAYER_REPORT_TYPES as readonly string[]).includes(type) &&
+                      isTypeInAudience(type, audience)
+                    )
+                    .map((type) => {
+                      const tmpl = templates.find((t) => t.report_type === type);
+                      const isSelected = selectedType === type;
+                      const recommended = isRecommended(type, audience);
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setSelectedType(type)}
+                          disabled={isGenerating}
+                          className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
+                            isSelected
+                              ? "border-teal bg-teal/10 ring-1 ring-teal/30"
+                              : "border-border bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
+                          }`}
+                        >
+                          {recommended && (
+                            <span className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange/15 text-orange text-[9px] font-bold uppercase tracking-wider">
+                              <Star size={9} className="fill-orange" />
+                              Recommended
+                            </span>
+                          )}
+                          <span className={`text-sm font-semibold block ${
+                            isSelected ? "text-teal" : "text-navy"
+                          } ${recommended ? "pr-24" : ""}`}>
+                            {REPORT_TYPE_LABELS[type] || type}
+                          </span>
+                          {tmpl?.description && (
+                            <span className={`text-xs mt-1 block leading-relaxed ${
+                              isSelected ? "text-teal/70 line-clamp-3" : "text-muted/70 line-clamp-2"
+                            }`}>
+                              {tmpl.description}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
             {/* Report Type Selection — Team Reports */}
-            {reportTypes.some((type) => (TEAM_REPORT_TYPES as readonly string[]).includes(type)) && (
+            {reportTypes.some((type) =>
+              (TEAM_REPORT_TYPES as readonly string[]).includes(type) &&
+              isTypeInAudience(type, audience)
+            ) && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="h-5 w-1 rounded-full bg-orange" />
@@ -493,25 +593,35 @@ function GenerateReportContent() {
                 <p className="text-[11px] text-muted/60 mb-3">Team strategy, identity, game-planning, and lineup optimization reports. Select a team below.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {reportTypes
-                    .filter((type) => (TEAM_REPORT_TYPES as readonly string[]).includes(type))
+                    .filter((type) =>
+                      (TEAM_REPORT_TYPES as readonly string[]).includes(type) &&
+                      isTypeInAudience(type, audience)
+                    )
                     .map((type) => {
                       const tmpl = templates.find((t) => t.report_type === type);
                       const isSelected = selectedType === type;
+                      const recommended = isRecommended(type, audience);
                       return (
                         <button
                           key={type}
                           type="button"
                           onClick={() => setSelectedType(type)}
                           disabled={isGenerating}
-                          className={`px-3 py-3 rounded-lg border text-left transition-all ${
+                          className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
                             isSelected
                               ? "border-orange bg-orange/10 ring-1 ring-orange/30"
                               : "border-border bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
                           }`}
                         >
+                          {recommended && (
+                            <span className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange/15 text-orange text-[9px] font-bold uppercase tracking-wider">
+                              <Star size={9} className="fill-orange" />
+                              Recommended
+                            </span>
+                          )}
                           <span className={`text-sm font-semibold block ${
                             isSelected ? "text-orange" : "text-navy"
-                          }`}>
+                          } ${recommended ? "pr-24" : ""}`}>
                             {REPORT_TYPE_LABELS[type] || type}
                           </span>
                           {tmpl?.description && (
@@ -528,10 +638,19 @@ function GenerateReportContent() {
               </div>
             )}
 
+            {/* No templates for this audience */}
             {reportTypes.length === 0 && (
               <div>
                 <p className="text-sm text-muted mt-2">
                   No report templates found. Make sure the backend has templates seeded.
+                </p>
+              </div>
+            )}
+            {reportTypes.length > 0 && audience !== "all" &&
+              !reportTypes.some((type) => isTypeInAudience(type, audience)) && (
+              <div className="text-center py-6">
+                <p className="text-sm text-muted">
+                  No templates available for this audience. Try &ldquo;All&rdquo; to see every report type.
                 </p>
               </div>
             )}
