@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Swords, Users, Target, Zap, FileText, Crown, Trophy, ChevronRight,
   AlertTriangle, Calendar, Radio, Heart, Briefcase, MessageSquare, BookOpen,
-  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -61,7 +60,7 @@ export default function HomePage() {
 
 function CardSkeleton({ lines = 3 }: { lines?: number }) {
   return (
-    <div className="bg-white rounded-xl border border-teal/15 p-5 animate-pulse">
+    <div className="bg-white rounded-xl border border-border p-5 animate-pulse">
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className={`h-3 bg-navy/5 rounded ${i === 0 ? "w-2/3 mb-3" : i === lines - 1 ? "w-1/2 mt-2" : "w-full mt-2"}`} />
       ))}
@@ -71,7 +70,7 @@ function CardSkeleton({ lines = 3 }: { lines?: number }) {
 
 function SectionCard({ icon, title, link, linkLabel, children }: { icon: React.ReactNode; title: string; link?: string; linkLabel?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-teal/20 border-l-2 border-l-teal/40 p-4">
+    <div className="bg-white rounded-xl border border-border p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">{icon}<h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">{title}</h3></div>
         {link && linkLabel && <Link href={link} className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline font-medium">{linkLabel}</Link>}
@@ -185,7 +184,7 @@ function Dashboard() {
 
   const handleTeamChange = useCallback((team: Team) => { setActiveTeam(team); localStorage.setItem(DASHBOARD_TEAM_KEY, team.id); }, []);
 
-  const alertPlayers = roster.filter((p) => p.roster_status === "inj" || p.roster_status === "scrch" || p.roster_status === "susp");
+  const alertPlayers = roster.filter((p) => p.roster_status && p.roster_status !== "active");
   const today = new Date().toISOString().slice(0, 10);
   const todaysPractice = practicePlans.find((pp) => pp.practice_date === today && (!pp.team_name || !activeTeam || matchTeam(pp.team_name, activeTeam.name)));
 
@@ -233,7 +232,7 @@ function Dashboard() {
             <p className="font-oswald text-[10px] text-muted uppercase tracking-widest mb-2 pl-0.5">Today&apos;s Focus</p>
             <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-4 flex gap-3 flex-wrap">
               {nextGamePlan && nextGame && (
-                <Link href={`/game-plans/${nextGamePlan.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-orange/20 rounded-lg p-3.5 hover:bg-white/[0.12] hover:border-orange/30 transition-colors">
+                <Link href={`/game-plans/${nextGamePlan.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
                   <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Next Game</p>
                   <p className="font-oswald text-sm font-semibold text-white">{nextGamePlan.team_name} vs {nextGamePlan.opponent_team_name}</p>
                   <p className="text-[11px] text-white/50 mt-1">{nextGamePlan.game_date ? new Date(nextGamePlan.game_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : ""}</p>
@@ -241,7 +240,7 @@ function Dashboard() {
                 </Link>
               )}
               {todaysPractice && (
-                <Link href={`/practice-plans/${todaysPractice.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-orange/20 rounded-lg p-3.5 hover:bg-white/[0.12] hover:border-orange/30 transition-colors">
+                <Link href={`/practice-plans/${todaysPractice.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
                   <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Today&apos;s Practice</p>
                   <p className="font-oswald text-sm font-semibold text-white">{todaysPractice.title}</p>
                   <p className="text-[11px] text-white/50 mt-1">{todaysPractice.duration_minutes} min{todaysPractice.focus_areas?.length > 0 && ` \u00b7 ${todaysPractice.focus_areas.join(", ")}`}</p>
@@ -249,7 +248,7 @@ function Dashboard() {
                 </Link>
               )}
               {scoutPlayersTonight.length > 0 && (
-                <Link href="/scouting" className="flex-1 min-w-[200px] bg-white/[0.08] border border-orange/20 rounded-lg p-3.5 hover:bg-white/[0.12] hover:border-orange/30 transition-colors">
+                <Link href="/scouting" className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
                   <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Scout Watch Tonight</p>
                   <p className="font-oswald text-sm font-semibold text-white">{scoutPlayersTonight.length} player{scoutPlayersTonight.length > 1 ? "s" : ""} in action</p>
                   <p className="text-[11px] text-white/50 mt-1">{scoutPlayersTonight.slice(0, 3).map((s) => `${s.first_name} ${s.last_name}`).join(" \u00b7 ")}</p>
@@ -268,7 +267,7 @@ function Dashboard() {
             </div>
             <div className="flex gap-3 overflow-x-auto pb-1">
               {upcomingGames.map((g, i) => { const isH = matchTeam(g.home_team, activeTeam.name); const opp = isH ? g.away_team : g.home_team; const ds = new Date(g.game_date || g.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); const hasGP = activeGamePlans.some((gp) => matchTeam(gp.opponent_team_name, opp)); return (
-                <div key={`ug-${g.game_id}-${i}`} className="flex-1 min-w-[150px] border border-teal/15 hover:border-teal/30 rounded-lg p-3 text-center relative transition-colors">
+                <div key={`ug-${g.game_id}-${i}`} className="flex-1 min-w-[150px] border border-border rounded-lg p-3 text-center relative">
                   <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${hasGP ? "bg-green-500" : "bg-red-400"}`} title={hasGP ? "Game plan ready" : "No game plan"} />
                   <p className="font-oswald text-[10px] text-muted uppercase tracking-wider mb-1">{ds}</p>
                   <p className="font-oswald text-sm font-semibold text-navy">{isH ? "vs" : "@"} {opp}</p>
@@ -279,8 +278,13 @@ function Dashboard() {
           </div>
         )}
 
+        {roleGroup === "PRO" && <ProView activeSeries={activeSeries} activeGamePlans={activeGamePlans} scoutingList={scoutingWithGames} scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
+        {roleGroup === "MEDIA" && <MediaView scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
+        {roleGroup === "FAMILY" && <FamilyView recentReports={recentReports} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
+        {roleGroup === "AGENT" && <AgentView recentReports={recentReports} scoutingList={scoutingWithGames} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
+
         {scorebar.length > 0 && activeTeam && (
-          <div className="mb-4">
+          <div className="mt-4">
             <p className="font-oswald text-[10px] text-muted uppercase tracking-widest mb-2 pl-0.5">{activeTeam.league || "League"} Scorebar</p>
             <div className="bg-navy rounded-xl p-3.5 flex gap-2.5 overflow-x-auto">
               {scorebar.slice(0, 8).map((g, i) => { const fin = (g.status || "").toLowerCase().includes("final"); const myG = matchTeam(g.home_team, activeTeam.name) || matchTeam(g.away_team, activeTeam.name); return (
@@ -297,11 +301,6 @@ function Dashboard() {
             </div>
           </div>
         )}
-
-        {roleGroup === "PRO" && <ProView activeSeries={activeSeries} activeGamePlans={activeGamePlans} scoutingList={scoutingWithGames} scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
-        {roleGroup === "MEDIA" && <MediaView scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
-        {roleGroup === "FAMILY" && <FamilyView recentReports={recentReports} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
-        {roleGroup === "AGENT" && <AgentView recentReports={recentReports} scoutingList={scoutingWithGames} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
       </main>
     </>
   );
