@@ -5160,7 +5160,7 @@ async def admin_platform_stats(token_data: dict = Depends(verify_token)):
             "SELECT COUNT(*) FROM reports WHERE org_id = ?", (org_id,)
         ).fetchone()[0]
         stats["total_teams"] = conn.execute(
-            "SELECT COUNT(*) FROM teams WHERE org_id = ?", (org_id,)
+            "SELECT COUNT(*) FROM teams WHERE org_id IN (?, '__global__')", (org_id,)
         ).fetchone()[0]
         stats["total_notes"] = conn.execute(
             "SELECT COUNT(*) FROM scout_notes WHERE org_id = ?", (org_id,)
@@ -8722,7 +8722,7 @@ async def list_leagues():
 async def list_teams(token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
     conn = get_db()
-    rows = conn.execute("SELECT * FROM teams WHERE org_id = ? ORDER BY name", (org_id,)).fetchall()
+    rows = conn.execute("SELECT * FROM teams WHERE org_id IN (?, '__global__') ORDER BY name", (org_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
