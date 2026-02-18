@@ -1,22 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { ChevronDown, MapPin, Calendar, CheckCircle2, XCircle } from "lucide-react";
 import { assetUrl } from "@/lib/api";
 import type { Team, HTStandings, HTGame, GamePlan } from "@/types/api";
 
 // ── HT league mapping ──────────────────────────────────────
 const HT_LEAGUE_MAP: Record<string, string> = {
-  // Pro
-  AHL: "ahl", ECHL: "echl", SPHL: "sphl", PWHL: "pwhl",
-  // Major Junior
-  OHL: "ohl", WHL: "whl", QMJHL: "lhjmq", LHJMQ: "lhjmq",
-  // Junior A
-  BCHL: "bchl", AJHL: "ajhl", SJHL: "sjhl", MJHL: "mjhl",
-  USHL: "ushl", OJHL: "ojhl", CCHL: "cchl", NOJHL: "nojhl",
-  MHL: "mhl", GOJHL: "gojhl", GOHL: "gojhl",
-  // Junior B
-  KIJHL: "kijhl", PJHL: "pjhl", VIJHL: "vijhl",
+  GOJHL: "gojhl", GOHL: "gojhl", OHL: "ohl", OJHL: "ojhl",
+  WHL: "whl", QMJHL: "qmjhl", PWHL: "pwhl",
 };
 
 export function getHTLeague(league: string | null): string | null {
@@ -94,7 +85,7 @@ export default function TeamContextBar({
 }: TeamContextBarProps) {
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-teal/15 border-l-4 border-l-teal/30 p-4 mb-4 animate-pulse">
+      <div className="bg-white rounded-xl border border-border p-4 mb-4 animate-pulse">
         <div className="flex items-center gap-4">
           <div className="w-11 h-11 rounded-lg bg-navy/5" />
           <div className="flex-1">
@@ -128,7 +119,7 @@ export default function TeamContextBar({
   const logoUrl = assetUrl(activeTeam.logo_url);
 
   return (
-    <div className="bg-white rounded-xl border border-teal/20 border-l-4 border-l-teal px-4 py-3 mb-4">
+    <div className="bg-white rounded-xl border border-border px-4 py-3 mb-4">
       <div className="flex items-center gap-3 flex-wrap">
         {/* Team Logo / Abbreviation */}
         {logoUrl ? (
@@ -141,9 +132,9 @@ export default function TeamContextBar({
 
         {/* Team Name + Meta */}
         <div className="flex-1 min-w-0">
-          <Link href={`/teams/${encodeURIComponent(activeTeam.name)}`} className="text-base font-oswald font-bold text-navy uppercase tracking-wider truncate hover:text-teal transition-colors block">
+          <h2 className="text-base font-oswald font-bold text-navy uppercase tracking-wider truncate">
             {activeTeam.name}
-          </Link>
+          </h2>
           <div className="flex items-center gap-2.5 mt-0.5 flex-wrap">
             {/* League Badge */}
             {activeTeam.league && (
@@ -225,7 +216,7 @@ export default function TeamContextBar({
                 const t = teams.find((t) => t.id === e.target.value);
                 if (t) onTeamChange(t);
               }}
-              className="appearance-none bg-bg border border-teal/20 rounded-lg pl-3 pr-8 py-1.5 font-oswald text-[11px] text-navy uppercase tracking-wider cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+              className="appearance-none bg-bg border border-border rounded-lg pl-3 pr-8 py-1.5 font-oswald text-[11px] text-navy uppercase tracking-wider cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
             >
               {teams.map((t) => (
                 <option key={t.id} value={t.id}>
