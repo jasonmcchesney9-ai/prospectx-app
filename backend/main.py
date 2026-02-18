@@ -9011,7 +9011,7 @@ async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(
     rows = conn.execute("""
         SELECT p.*,
                ps.gp, ps.g, ps.a, ps.p AS pts, ps.plus_minus, ps.pim, ps.season,
-               gs.gp as g_gp, gs.wins as g_w, gs.losses as g_l, gs.gaa, gs.sv_pct, gs.so as g_so
+               gs.gp as g_gp, gs.ga as g_ga, gs.sv as g_sv, gs.gaa, gs.sv_pct
         FROM players p
         LEFT JOIN (
             SELECT player_id, gp, g, a, p, plus_minus, pim, season,
@@ -9019,7 +9019,7 @@ async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(
             FROM player_stats
         ) ps ON p.id = ps.player_id AND ps.rn = 1
         LEFT JOIN (
-            SELECT player_id, gp, wins, losses, gaa, sv_pct, so,
+            SELECT player_id, gp, ga, sv, gaa, sv_pct,
                    ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
             FROM goalie_stats
         ) gs ON p.id = gs.player_id AND gs.rn = 1
@@ -9036,8 +9036,8 @@ async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(
             "plus_minus": r["plus_minus"], "pim": r["pim"], "season": r["season"],
         } if r["gp"] else None
         d["goalie_stats"] = {
-            "gp": r["g_gp"], "w": r["g_w"], "l": r["g_l"],
-            "gaa": r["gaa"], "sv_pct": r["sv_pct"], "so": r["g_so"],
+            "gp": r["g_gp"], "ga": r["g_ga"], "sv": r["g_sv"],
+            "gaa": r["gaa"], "sv_pct": r["sv_pct"],
         } if r["g_gp"] else None
         result.append(d)
     return result

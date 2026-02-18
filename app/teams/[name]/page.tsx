@@ -796,11 +796,10 @@ export default function TeamDetailPage() {
                             <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-12">WT</th>
                             <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">C/SH</th>
                             <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">GP</th>
-                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">W</th>
-                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">L</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">GA</th>
+                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">SV</th>
                             <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-14">GAA</th>
                             <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-14">SV%</th>
-                            <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-10">SO</th>
                             <th className="px-2 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Draft</th>
                             <th className="px-2 py-2 text-left font-oswald text-[10px] uppercase tracking-wider text-muted">Archetype</th>
                             <th className="px-2 py-2 text-center font-oswald text-[10px] uppercase tracking-wider text-muted w-16">Status</th>
@@ -831,11 +830,10 @@ export default function TeamDetailPage() {
                               <td className="px-2 py-2 text-center text-[10px] text-muted">{formatWeight(p.weight_kg)}</td>
                               <td className="px-2 py-2 text-center text-[10px] text-muted">{p.shoots || "\u2014"}</td>
                               <td className="px-2 py-2 text-center text-xs font-semibold">{p.goalie_stats?.gp ?? "\u2014"}</td>
-                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.w ?? "\u2014"}</td>
-                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.l ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.ga ?? "\u2014"}</td>
+                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.sv ?? "\u2014"}</td>
                               <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.gaa != null ? Number(p.goalie_stats.gaa).toFixed(2) : "\u2014"}</td>
                               <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.sv_pct != null ? p.goalie_stats.sv_pct : "\u2014"}</td>
-                              <td className="px-2 py-2 text-center text-xs">{p.goalie_stats?.so ?? "\u2014"}</td>
                               <td className="px-2 py-2 text-[10px] text-muted">{getDraftInfo(p)}</td>
                               <td className="px-2 py-2 text-[10px] text-muted">{p.archetype || "\u2014"}</td>
                               <td className="px-2 py-2 text-center">

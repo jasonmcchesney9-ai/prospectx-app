@@ -54,8 +54,8 @@ export interface RosterPlayer extends Player {
     plus_minus: number | null; pim: number | null; season: string | null;
   } | null;
   goalie_stats: {
-    gp: number; w: number; l: number;
-    gaa: number | null; sv_pct: string | null; so: number | null;
+    gp: number; ga: number; sv: number;
+    gaa: number | null; sv_pct: string | null;
   } | null;
 }
 
