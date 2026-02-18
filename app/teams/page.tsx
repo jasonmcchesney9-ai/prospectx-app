@@ -19,6 +19,9 @@ import {
   GraduationCap,
   Star,
   Layers,
+  Download,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -33,6 +36,8 @@ interface TeamSummary {
   abbreviation: string | null;
   logo_url: string | null;
   playerCount: number;
+  hockeytech_team_id: number | null;
+  hockeytech_league: string | null;
 }
 
 // ── Tier hierarchy definitions ────────────────────────────
@@ -133,6 +138,11 @@ export default function TeamsPage() {
   const [newTeam, setNewTeam] = useState({ name: "", league: "GOHL", city: "", abbreviation: "" });
   const [saving, setSaving] = useState(false);
 
+  // Sync state
+  const [syncingTeam, setSyncingTeam] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<{ team: string; created: number; updated: number } | null>(null);
+  const [syncError, setSyncError] = useState("");
+
   const loadData = useCallback(async () => {
     try {
       setError("");
@@ -169,6 +179,8 @@ export default function TeamsPage() {
         const key = ref.name.toLowerCase();
         handledKeys.add(key);
         const countData = teamCounts.get(key);
+        // Backend SELECT * returns hockeytech fields not in TeamReference type
+        const htRef = ref as TeamReference & { hockeytech_team_id?: number; hockeytech_league?: string };
         summaries.push({
           name: ref.name,
           league: ref.league,
@@ -176,6 +188,8 @@ export default function TeamsPage() {
           abbreviation: ref.abbreviation,
           logo_url: ref.logo_url || null,
           playerCount: countData?.count || 0,
+          hockeytech_team_id: htRef.hockeytech_team_id || null,
+          hockeytech_league: htRef.hockeytech_league || null,
         });
       }
 
@@ -189,6 +203,8 @@ export default function TeamsPage() {
             abbreviation: null,
             logo_url: null,
             playerCount: data.count,
+            hockeytech_team_id: null,
+            hockeytech_league: null,
           });
         }
       }
@@ -218,6 +234,24 @@ export default function TeamsPage() {
       setError(msg);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSyncTeam = async (team: TeamSummary) => {
+    if (!team.hockeytech_team_id || !team.hockeytech_league) return;
+    setSyncingTeam(team.name);
+    setSyncResult(null);
+    setSyncError("");
+    try {
+      const res = await api.post(`/hockeytech/${team.hockeytech_league}/sync-roster/${team.hockeytech_team_id}?sync_stats=true`);
+      setSyncResult({ team: team.name, created: res.data.created || 0, updated: res.data.updated || 0 });
+      await loadData();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
+                  (err as { message?: string })?.message || "Sync failed";
+      setSyncError(msg);
+    } finally {
+      setSyncingTeam(null);
     }
   };
 
@@ -425,6 +459,23 @@ export default function TeamsPage() {
           </div>
         )}
 
+        {syncResult && (
+          <div className="mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-green-700 text-sm flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>
+              <strong>{syncResult.team}</strong> synced — {syncResult.created} created, {syncResult.updated} updated
+            </span>
+            <button onClick={() => setSyncResult(null)} className="ml-auto text-green-500 hover:text-green-700">&times;</button>
+          </div>
+        )}
+
+        {syncError && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+            Sync failed: {syncError}
+            <button onClick={() => setSyncError("")} className="ml-2 text-red-500">&times;</button>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center min-h-[30vh]">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
@@ -495,7 +546,7 @@ export default function TeamsPage() {
                           )}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                             {leagueTeams.map((team) => (
-                              <TeamCard key={team.name} team={team} />
+                              <TeamCard key={team.name} team={team} onSync={handleSyncTeam} syncing={syncingTeam === team.name} />
                             ))}
                           </div>
                         </div>
@@ -510,7 +561,7 @@ export default function TeamsPage() {
           /* ── Flat View (Original Grid) ──── */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {filtered.map((team) => (
-              <TeamCard key={team.name} team={team} />
+              <TeamCard key={team.name} team={team} onSync={handleSyncTeam} syncing={syncingTeam === team.name} />
             ))}
           </div>
         )}
@@ -520,15 +571,13 @@ export default function TeamsPage() {
 }
 
 // ── Team Card Component ───────────────────────────────────
-function TeamCard({ team }: { team: TeamSummary }) {
+function TeamCard({ team, onSync, syncing }: { team: TeamSummary; onSync: (t: TeamSummary) => void; syncing: boolean }) {
+  const canSync = !!team.hockeytech_team_id && !!team.hockeytech_league;
   return (
-    <Link
-      href={`/teams/${encodeURIComponent(team.name)}`}
-      className="bg-white rounded-xl border border-teal/20 p-3.5 hover:shadow-md hover:border-teal/30 transition-all group"
-    >
+    <div className="bg-white rounded-xl border border-teal/20 p-3.5 hover:shadow-md hover:border-teal/30 transition-all group">
       <div className="flex items-center gap-3">
         {/* Team Logo / Abbreviation */}
-        <div className="w-10 h-10 rounded-lg bg-navy/[0.04] flex items-center justify-center shrink-0 overflow-hidden">
+        <Link href={`/teams/${encodeURIComponent(team.name)}`} className="w-10 h-10 rounded-lg bg-navy/[0.04] flex items-center justify-center shrink-0 overflow-hidden">
           {team.logo_url ? (
             <img
               src={assetUrl(team.logo_url)}
@@ -540,8 +589,8 @@ function TeamCard({ team }: { team: TeamSummary }) {
           ) : (
             <Building2 size={16} className="text-navy/30" />
           )}
-        </div>
-        <div className="min-w-0 flex-1">
+        </Link>
+        <Link href={`/teams/${encodeURIComponent(team.name)}`} className="min-w-0 flex-1">
           <h3 className="font-semibold text-navy group-hover:text-teal transition-colors text-sm truncate">
             {team.name}
           </h3>
@@ -558,14 +607,29 @@ function TeamCard({ team }: { team: TeamSummary }) {
               </span>
             )}
           </div>
-        </div>
+        </Link>
         {team.playerCount > 0 && (
           <div className="flex items-center gap-1 text-[10px] text-muted shrink-0">
             <Users size={10} />
             <span className="font-oswald font-bold text-navy">{team.playerCount}</span>
           </div>
         )}
+        {canSync && (
+          <button
+            onClick={() => onSync(team)}
+            disabled={syncing}
+            className="flex items-center gap-1 px-2 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-[10px] font-semibold hover:bg-teal/20 transition-colors disabled:opacity-50 shrink-0"
+            title="Sync roster from HockeyTech"
+          >
+            {syncing ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : (
+              <Download size={11} />
+            )}
+            Sync
+          </button>
+        )}
       </div>
-    </Link>
+    </div>
   );
 }
