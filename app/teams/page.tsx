@@ -26,7 +26,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api, { assetUrl } from "@/lib/api";
-import { formatLeague, leagueAbbr } from "@/lib/leagues";
+import { formatLeague, leagueAbbr, leagueCode } from "@/lib/leagues";
 import type { Player, TeamReference, League } from "@/types/api";
 
 interface TeamSummary {
@@ -238,12 +238,34 @@ export default function TeamsPage() {
   };
 
   const handleSyncTeam = async (team: TeamSummary) => {
-    if (!team.hockeytech_team_id || !team.hockeytech_league) return;
+    let htLeague = team.hockeytech_league;
+    let htTeamId = team.hockeytech_team_id;
+
+    // If no stored HT mapping, resolve league code and look up HT team ID on-the-fly
+    if (!htLeague && team.league) {
+      htLeague = leagueCode(team.league);
+    }
+    if (!htLeague) return;
+
     setSyncingTeam(team.name);
     setSyncResult(null);
     setSyncError("");
     try {
-      const res = await api.post(`/hockeytech/${team.hockeytech_league}/sync-roster/${team.hockeytech_team_id}?sync_stats=true`);
+      if (!htTeamId) {
+        // Look up HT team ID by fetching teams list and matching by name
+        const teamsRes = await api.get(`/hockeytech/${htLeague}/teams`);
+        const htTeams = teamsRes.data as { id: number; name: string }[];
+        const match = htTeams.find(
+          (ht) => ht.name.toLowerCase() === team.name.toLowerCase()
+        );
+        if (!match) {
+          setSyncError(`Team "${team.name}" not found in HockeyTech ${htLeague.toUpperCase()} roster`);
+          setSyncingTeam(null);
+          return;
+        }
+        htTeamId = match.id;
+      }
+      const res = await api.post(`/hockeytech/${htLeague}/sync-roster/${htTeamId}?sync_stats=true`);
       setSyncResult({ team: team.name, created: res.data.created || 0, updated: res.data.updated || 0 });
       await loadData();
     } catch (err: unknown) {
@@ -572,8 +594,11 @@ export default function TeamsPage() {
 }
 
 // ── Team Card Component ───────────────────────────────────
+// HockeyTech-supported league codes (must match backend/hockeytech.py LEAGUES keys)
+const HT_LEAGUES = new Set(["ahl","echl","sphl","pwhl","ohl","whl","lhjmq","bchl","ajhl","sjhl","mjhl","ushl","ojhl","cchl","nojhl","mhl","gojhl","kijhl","pjhl","vijhl"]);
+
 function TeamCard({ team, onSync, syncing }: { team: TeamSummary; onSync: (t: TeamSummary) => void; syncing: boolean }) {
-  const canSync = !!team.hockeytech_team_id && !!team.hockeytech_league;
+  const canSync = !!(team.hockeytech_team_id && team.hockeytech_league) || (!!team.league && HT_LEAGUES.has(leagueCode(team.league)));
   return (
     <div className="bg-white rounded-xl border border-teal/20 p-3.5 hover:shadow-md hover:border-teal/30 transition-all group">
       <div className="flex items-center gap-3">
