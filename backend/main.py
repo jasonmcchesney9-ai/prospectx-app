@@ -8768,7 +8768,7 @@ async def get_team_hockeytech_info(team_name: str, token_data: dict = Depends(ve
     conn = get_db()
     try:
         team_row = conn.execute(
-            "SELECT hockeytech_team_id, hockeytech_league FROM teams WHERE LOWER(name) = LOWER(?) AND org_id = ?",
+            "SELECT hockeytech_team_id, hockeytech_league FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
             (decoded_name, org_id)
         ).fetchone()
         if team_row and team_row["hockeytech_team_id"]:
@@ -14506,7 +14506,7 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     ht_logo_url = ht_team["logo"]
                     # Check if this team exists in our DB and needs a logo
                     team_row = conn.execute(
-                        "SELECT id, logo_url FROM teams WHERE LOWER(name) = LOWER(?) AND org_id = ?",
+                        "SELECT id, logo_url FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
                         (team_name_synced, org_id)
                     ).fetchone()
                     if team_row and (not team_row["logo_url"] or team_row["logo_url"].startswith("http")):
@@ -14535,7 +14535,7 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
         # Store HockeyTech team_id and league on the teams table
         try:
             team_row_ht = conn.execute(
-                "SELECT id FROM teams WHERE LOWER(name) = LOWER(?) AND org_id = ?",
+                "SELECT id FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
                 (team_name_synced, org_id)
             ).fetchone()
             if team_row_ht:
