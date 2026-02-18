@@ -43,7 +43,7 @@ export interface Player {
   draft_eligible_year: number | null;
   league_tier: string | null;
   commitment_status: string | null;
-  roster_status: string | null;
+  roster_status: string;
   created_at: string;
 }
 
@@ -424,36 +424,11 @@ export interface StatsImportResult {
   players_created: number;
   players_updated: number;
   stats_imported: number;
-  games_imported: number;
   errors: string[];
-  detected_team?: string | null;
-  detected_opponent?: string | null;
-  detected_date?: string | null;
-  detected_type_hint?: string | null;
 }
 
 /** @deprecated Use StatsImportResult instead */
 export type InStatImportResponse = StatsImportResult;
-
-export interface TeamGame {
-  id: string;
-  league: string;
-  season: string;
-  game_date: string;
-  home_team: string;
-  away_team: string;
-  home_score: number | null;
-  away_score: number | null;
-  status: string;
-  venue: string | null;
-  data_source: string;
-  extended_stats: Record<string, unknown> | null;
-  opponent: string;
-  home_away: "H" | "A" | "";
-  team_score: number | null;
-  opponent_score: number | null;
-  result: "W" | "L" | "T" | "";
-}
 
 export interface Report {
   id: string;
@@ -1022,31 +997,6 @@ export const STAT_SIGNATURE_LABELS: Record<string, { emoji: string; label: strin
   save_pct_tier: { emoji: "\u{1F94A}", label: "Save %" },
   goals_against_tier: { emoji: "\u{1F6E1}", label: "GAA" },
 };
-
-// ── Team Intelligence ────────────────────────────────────────
-export interface TeamIntelligenceKeyPerson {
-  name: string;
-  role: string;
-}
-
-export interface TeamIntelligence {
-  id: string | null;
-  team_name: string;
-  identity: string | null;
-  playing_style: string | null;
-  system_summary: string | null;
-  strengths: string[];
-  vulnerabilities: string[];
-  key_personnel: TeamIntelligenceKeyPerson[];
-  special_teams_identity: string | null;
-  player_archetype_fit: string | null;
-  comparable_teams: string[];
-  tags: string[];
-  data_sources_used: Record<string, number | boolean>;
-  trigger: string | null;
-  version: number;
-  created_at: string | null;
-}
 
 // ── Analytics Types ──────────────────────────────────────────
 export interface AnalyticsFilterOptions {
@@ -1652,6 +1602,7 @@ export interface PracticePlan {
   } | null;
   notes: string | null;
   status: "draft" | "active" | "completed";
+  practice_date: string | null;
   drills?: PracticePlanDrill[];
   created_at: string;
   updated_at: string;
@@ -2084,287 +2035,3 @@ export interface AdminErrorLog {
   org_id: string | null;
   created_at: string;
 }
-
-// ============================================================
-// Player Guide — Focus Plan
-// ============================================================
-
-export interface FocusPlanCategory {
-  label: string;   // "SKILL" | "MENTAL" | "GAME" | "PARENT"
-  items: string[];  // 2-4 actionable items with stat references
-}
-
-export interface FocusPlan {
-  player_id: string;
-  player_name: string;
-  month_label: string;       // e.g. "FEBRUARY 2026"
-  categories: FocusPlanCategory[];
-  generated_at: string;
-}
-
-// Player Guide — Pressure & Confidence Support
-export interface PressureConfidenceResponse {
-  scenario: string;
-  player_name: string | null;
-  feeling: string;
-  dont_say: string[];
-  say_instead: string[];
-  activity: string;
-  concern_signs: string;
-  generated_at: string;
-}
-
-// ============================================================
-// Broadcast Hub
-// ============================================================
-
-export type GameState = "pre_game" | "live" | "intermission" | "post_game";
-export type BroadcastMode = "broadcast" | "producer";
-export type BroadcastDepth = "quick" | "standard" | "deep";
-export type BroadcastAudience = "casual" | "informed" | "hardcore";
-
-export type BroadcastToolName =
-  | "spotting_board"
-  | "talk_tracks"
-  | "storyline_timeline"
-  | "pxi_insights"
-  | "stat_cards"
-  | "graphics_suggestions"
-  | "player_profiles"
-  | "interview_questions"
-  | "post_game_script";
-
-// ── Storyline Timeline ───────────────────────────────────
-
-export type TimelineEntryType = "storyline" | "shift" | "milestone" | "note";
-
-export interface TimelineEntry {
-  id: string;
-  type: TimelineEntryType;
-  text: string;
-  period: string; // "Pre-Game", "1st", "2nd", "3rd", "OT"
-  timestamp: string;
-  source: "auto" | "manual";
-}
-
-export const TIMELINE_TYPE_COLORS: Record<TimelineEntryType, { bg: string; text: string; border: string; label: string }> = {
-  storyline: { bg: "bg-teal/10", text: "text-teal", border: "border-teal/30", label: "STORYLINE" },
-  shift:     { bg: "bg-orange/10", text: "text-orange", border: "border-orange/30", label: "SHIFT" },
-  milestone: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200", label: "MILESTONE" },
-  note:      { bg: "bg-gray-100", text: "text-gray-600", border: "border-gray-200", label: "NOTE" },
-};
-
-// ── Agent Client Management ──────────────────────────────
-
-export type AgentClientStatus = "active" | "committed" | "unsigned" | "inactive";
-
-export interface AgentClient {
-  id: string;
-  agent_id: string;
-  player_id: string;
-  status: AgentClientStatus;
-  pathway_notes: string | null;
-  created_at: string;
-  updated_at: string;
-  // Joined player data (from detail endpoint)
-  player?: Player;
-  intelligence?: PlayerIntelligence;
-  reports?: Report[];
-  stats?: PlayerStats[];
-}
-
-export const AGENT_CLIENT_STATUS_COLORS: Record<AgentClientStatus, { bg: string; text: string; label: string }> = {
-  active:    { bg: "bg-teal/10", text: "text-teal", label: "Active" },
-  committed: { bg: "bg-green-100", text: "text-green-700", label: "Committed" },
-  unsigned:  { bg: "bg-orange/10", text: "text-orange", label: "Unsigned" },
-  inactive:  { bg: "bg-gray-100", text: "text-gray-500", label: "Inactive" },
-};
-
-export interface AgentPackData {
-  player_summary: string;
-  strengths: string[];
-  pathway_assessment: string;
-  ninety_day_plan: string[];
-  target_programs: string[];
-  generated_at: string;
-}
-
-// ── Tool Data Shapes ─────────────────────────────────────
-
-export interface SpottingBoardPlayer {
-  jersey: string;
-  name: string;
-  position: string;
-  gp: number;
-  g: number;
-  a: number;
-  p: number;
-  key_stat: string;
-  archetype: string;
-  broadcast_note: string;
-  pronunciation?: string;
-  xg?: number | null;
-  cf_pct?: number | null;
-  zone_starts_oz_pct?: number | null;
-}
-
-export interface SpottingBoardTeam {
-  team_name: string;
-  players: SpottingBoardPlayer[];
-}
-
-export interface SpottingBoardData {
-  home: SpottingBoardTeam;
-  away: SpottingBoardTeam;
-}
-
-export interface TalkTrack {
-  headline: string;
-  twenty_sec_read: string;
-  stat_hook: string;
-  category: "team_storyline" | "matchup_storyline" | "player_storyline" | "streak_milestone";
-}
-
-export type TalkTrackCategory = TalkTrack["category"];
-
-export interface PXIInsight {
-  category: "PATTERN" | "MATCHUP" | "TREND" | "TACTICAL" | "MILESTONE";
-  insight: string;
-  stat_support: string;
-  suggested_use: string;
-}
-
-export type InsightCategory = PXIInsight["category"];
-
-export interface StatCard {
-  card_type: "player_vs_player" | "line_vs_line" | "special_teams" | "goalie" | "team_trend";
-  headline_stat: string;
-  headline_value: string;
-  support_stats: Array<{ label: string; value: string }>;
-  interpretation: string;
-  graphic_caption: string;
-}
-
-export interface GraphicSuggestion {
-  priority: number;
-  graphic_type: string;
-  trigger_moment: string;
-  caption: string;
-  data_needed: string;
-}
-
-export interface BroadcastPlayerProfile {
-  player_id?: string;
-  name: string;
-  physical: string;
-  archetype: string;
-  role: string;
-  strengths: string;
-  fun_fact: string;
-  tonight: string;
-}
-
-export interface InterviewQuestion {
-  question: string;
-  label: "SAFE" | "TACTICAL" | "PRESSURE" | "NARRATIVE";
-  context_tab: "coach_pre" | "coach_post" | "player_pre" | "player_post" | "feature";
-}
-
-export type InterviewTab = InterviewQuestion["context_tab"];
-
-export interface PostGameScriptData {
-  script: string;
-  format: "30_second" | "60_second" | "2_minute";
-  word_count: number;
-}
-
-// ── Broadcast API Request / Response ─────────────────────
-
-export interface BroadcastGenerateAllRequest {
-  home_team: string;
-  away_team: string;
-  game_date?: string;
-  mode: BroadcastMode;
-  depth: BroadcastDepth;
-  audience: BroadcastAudience;
-  game_state: GameState;
-}
-
-export interface BroadcastGenerateAllResponse {
-  spotting_board: SpottingBoardData;
-  talk_tracks: Record<TalkTrackCategory, TalkTrack[]>;
-  insights: PXIInsight[];
-  stat_cards: StatCard[];
-  graphics_suggestions: GraphicSuggestion[];
-  player_profiles: BroadcastPlayerProfile[];
-  interview_questions: InterviewQuestion[];
-  generated_at: string;
-  generation_time_ms: number;
-}
-
-export interface BroadcastGenerateToolRequest extends BroadcastGenerateAllRequest {
-  tool_name: BroadcastToolName;
-  additional_context?: Record<string, unknown>;
-}
-
-export interface BroadcastGenerateToolResponse {
-  tool_name: BroadcastToolName;
-  content: unknown;
-  generated_at: string;
-  generation_time_ms: number;
-}
-
-export interface BroadcastPostGameRequest {
-  home_team: string;
-  away_team: string;
-  home_score: number;
-  away_score: number;
-  period?: string;
-  three_stars?: string[];
-  format: "30_second" | "60_second" | "2_minute";
-  mode: BroadcastMode;
-  audience: BroadcastAudience;
-}
-
-export interface BroadcastPostGameResponse {
-  script: string;
-  format: string;
-  word_count: number;
-  generated_at: string;
-}
-
-// ── Broadcast UI Constants ───────────────────────────────
-
-export const INSIGHT_CATEGORY_COLORS: Record<InsightCategory, { bg: string; text: string; border: string }> = {
-  PATTERN:   { bg: "bg-blue-100",   text: "text-blue-700",   border: "border-blue-200" },
-  MATCHUP:   { bg: "bg-teal/10",    text: "text-teal",       border: "border-teal/30" },
-  TREND:     { bg: "bg-orange/10",  text: "text-orange",     border: "border-orange/30" },
-  TACTICAL:  { bg: "bg-red-100",    text: "text-red-700",    border: "border-red-200" },
-  MILESTONE: { bg: "bg-green-100",  text: "text-green-700",  border: "border-green-200" },
-};
-
-export const INTERVIEW_LABEL_COLORS: Record<InterviewQuestion["label"], { bg: string; text: string }> = {
-  SAFE:      { bg: "bg-green-100",  text: "text-green-700" },
-  TACTICAL:  { bg: "bg-blue-100",   text: "text-blue-700" },
-  PRESSURE:  { bg: "bg-red-100",    text: "text-red-700" },
-  NARRATIVE: { bg: "bg-orange/10",  text: "text-orange" },
-};
-
-export const GAME_STATE_LABELS: Record<GameState, string> = {
-  pre_game:     "PRE-GAME",
-  live:         "LIVE",
-  intermission: "INTERMISSION",
-  post_game:    "POST-GAME",
-};
-
-export const BROADCAST_TOOL_LABELS: Record<BroadcastToolName, string> = {
-  spotting_board:       "Spotting Board",
-  talk_tracks:          "Talk Tracks",
-  storyline_timeline:   "Storyline Timeline",
-  pxi_insights:         "PXI Insights",
-  stat_cards:           "Live Stat Cards",
-  graphics_suggestions: "Graphics Suggestions",
-  player_profiles:      "Player Profiles",
-  interview_questions:  "Interview Questions",
-  post_game_script:     "Post-Game Script",
-};

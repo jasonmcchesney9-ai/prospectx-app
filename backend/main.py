@@ -1001,28 +1001,6 @@ def init_db():
         )
     """)
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS team_intelligence (
-            id TEXT PRIMARY KEY,
-            team_name TEXT NOT NULL,
-            org_id TEXT NOT NULL,
-            identity TEXT,
-            playing_style TEXT,
-            system_summary TEXT,
-            strengths TEXT,
-            vulnerabilities TEXT,
-            key_personnel TEXT,
-            special_teams_identity TEXT,
-            player_archetype_fit TEXT,
-            comparable_teams TEXT,
-            tags TEXT DEFAULT '[]',
-            data_sources_used TEXT,
-            trigger TEXT,
-            version INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
     conn.commit()
 
     # ── Migrations for existing databases ───────────────────
@@ -1434,12 +1412,6 @@ def init_db():
             conn.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type}")
             conn.commit()
 
-    # ── Roster status column on players (active, ir, injured, scratched, suspended) ──
-    if "roster_status" not in p_cols_check:
-        conn.execute("ALTER TABLE players ADD COLUMN roster_status TEXT DEFAULT 'active'")
-        conn.commit()
-        logger.info("Migration: added roster_status column to players")
-
     # ── NEW: player_corrections table ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS player_corrections (
@@ -1631,41 +1603,20 @@ def init_db():
             conn.commit()
             logger.info("Migration: added %s column to reports", col_name)
 
-    # ── Migration: games table — add org_id, team_name, extended_stats for InStat imports ──
-    games_cols = [col[1] for col in conn.execute("PRAGMA table_info(games)").fetchall()]
-    for col_name, col_type in [
-        ("org_id", "TEXT"),
-        ("team_name", "TEXT"),
-        ("extended_stats", "TEXT"),
-    ]:
-        if col_name not in games_cols:
-            conn.execute(f"ALTER TABLE games ADD COLUMN {col_name} {col_type}")
-            conn.commit()
-            logger.info("Migration: added %s column to games", col_name)
-
-    # ── Migration: player_game_stats — add extended_stats for InStat game imports ──
-    pgs_cols = [col[1] for col in conn.execute("PRAGMA table_info(player_game_stats)").fetchall()]
-    if "extended_stats" not in pgs_cols:
-        conn.execute("ALTER TABLE player_game_stats ADD COLUMN extended_stats TEXT")
+    # ── Migration: roster_status on players ──
+    # Values: active (default), ap, inj, susp, scrch
+    p_cols_final = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    if "roster_status" not in p_cols_final:
+        conn.execute("ALTER TABLE players ADD COLUMN roster_status TEXT DEFAULT 'active'")
         conn.commit()
-        logger.info("Migration: added extended_stats column to player_game_stats")
+        logger.info("Migration: added roster_status column to players")
 
-    # ── Agent Client Management table ──
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS agent_clients (
-            id TEXT PRIMARY KEY,
-            agent_id TEXT NOT NULL,
-            player_id TEXT NOT NULL,
-            status TEXT DEFAULT 'active',
-            pathway_notes TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(agent_id, player_id)
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_clients_agent ON agent_clients(agent_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_clients_player ON agent_clients(player_id)")
-    conn.commit()
+    # ── Migration: practice_date on practice_plans ──
+    pp_cols = {r[1] for r in conn.execute("PRAGMA table_info(practice_plans)").fetchall()}
+    if "practice_date" not in pp_cols:
+        conn.execute("ALTER TABLE practice_plans ADD COLUMN practice_date TEXT")
+        conn.commit()
+        logger.info("Migration: added practice_date column to practice_plans")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -4610,6 +4561,7 @@ class PlayerResponse(BaseModel):
     draft_eligible_year: Optional[int] = None
     league_tier: Optional[str] = None
     commitment_status: Optional[str] = "Uncommitted"
+    roster_status: Optional[str] = "active"
     created_at: str
 
 # --- Reports ---
@@ -4890,329 +4842,6 @@ async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = De
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
     )
-
-
-# ============================================================
-#   AGENT CLIENT MANAGEMENT
-# ============================================================
-
-class AgentClientCreate(BaseModel):
-    player_id: str
-
-class AgentClientUpdate(BaseModel):
-    status: Optional[str] = None
-    pathway_notes: Optional[str] = None
-
-
-@app.get("/agent/clients")
-async def list_agent_clients(token_data: dict = Depends(verify_token)):
-    """List all clients for the authenticated agent."""
-    user_id = token_data["user_id"]
-    conn = get_db()
-    rows = conn.execute(
-        """SELECT ac.*, p.first_name, p.last_name, p.position, p.current_team, p.current_league, p.dob, p.image_url
-           FROM agent_clients ac
-           JOIN players p ON p.id = ac.player_id
-           WHERE ac.agent_id = ?
-           ORDER BY ac.created_at DESC""",
-        (user_id,)
-    ).fetchall()
-    conn.close()
-    clients = []
-    for r in rows:
-        clients.append({
-            "id": r["id"],
-            "agent_id": r["agent_id"],
-            "player_id": r["player_id"],
-            "status": r["status"],
-            "pathway_notes": r["pathway_notes"],
-            "created_at": r["created_at"],
-            "updated_at": r["updated_at"],
-            "player": {
-                "id": r["player_id"],
-                "first_name": r["first_name"],
-                "last_name": r["last_name"],
-                "position": r["position"],
-                "current_team": r["current_team"],
-                "current_league": r["current_league"],
-                "dob": r["dob"],
-                "image_url": r["image_url"],
-            },
-        })
-    return clients
-
-
-@app.post("/agent/clients")
-async def add_agent_client(body: AgentClientCreate, token_data: dict = Depends(verify_token)):
-    """Add a player to the agent's client roster."""
-    user_id = token_data["user_id"]
-    org_id = token_data["org_id"]
-    conn = get_db()
-    # Verify player exists
-    player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (body.player_id, org_id)).fetchone()
-    if not player:
-        conn.close()
-        raise HTTPException(404, "Player not found")
-    # Check for duplicate
-    existing = conn.execute(
-        "SELECT id FROM agent_clients WHERE agent_id = ? AND player_id = ?",
-        (user_id, body.player_id)
-    ).fetchone()
-    if existing:
-        conn.close()
-        raise HTTPException(409, "Player is already a client")
-    client_id = gen_id()
-    now = datetime.now().isoformat()
-    conn.execute(
-        "INSERT INTO agent_clients (id, agent_id, player_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
-        (client_id, user_id, body.player_id, now, now)
-    )
-    conn.commit()
-    conn.close()
-    return {"id": client_id, "player_id": body.player_id, "status": "active", "created_at": now}
-
-
-@app.put("/agent/clients/{client_id}")
-async def update_agent_client(client_id: str, body: AgentClientUpdate, token_data: dict = Depends(verify_token)):
-    """Update a client's status or pathway notes."""
-    user_id = token_data["user_id"]
-    conn = get_db()
-    client = conn.execute(
-        "SELECT id FROM agent_clients WHERE id = ? AND agent_id = ?",
-        (client_id, user_id)
-    ).fetchone()
-    if not client:
-        conn.close()
-        raise HTTPException(404, "Client not found")
-    updates = []
-    params = []
-    if body.status is not None:
-        if body.status not in ("active", "committed", "unsigned", "inactive"):
-            conn.close()
-            raise HTTPException(400, "Invalid status")
-        updates.append("status = ?")
-        params.append(body.status)
-    if body.pathway_notes is not None:
-        updates.append("pathway_notes = ?")
-        params.append(body.pathway_notes)
-    if updates:
-        updates.append("updated_at = ?")
-        params.append(datetime.now().isoformat())
-        params.append(client_id)
-        conn.execute(f"UPDATE agent_clients SET {', '.join(updates)} WHERE id = ?", params)
-        conn.commit()
-    conn.close()
-    return {"ok": True}
-
-
-@app.delete("/agent/clients/{client_id}")
-async def remove_agent_client(client_id: str, token_data: dict = Depends(verify_token)):
-    """Remove a client from the agent's roster."""
-    user_id = token_data["user_id"]
-    conn = get_db()
-    client = conn.execute(
-        "SELECT id FROM agent_clients WHERE id = ? AND agent_id = ?",
-        (client_id, user_id)
-    ).fetchone()
-    if not client:
-        conn.close()
-        raise HTTPException(404, "Client not found")
-    conn.execute("DELETE FROM agent_clients WHERE id = ?", (client_id,))
-    conn.commit()
-    conn.close()
-    return {"ok": True}
-
-
-@app.get("/agent/clients/{client_id}/detail")
-async def get_agent_client_detail(client_id: str, token_data: dict = Depends(verify_token)):
-    """Get full client detail: player + stats + intelligence + reports."""
-    user_id = token_data["user_id"]
-    org_id = token_data["org_id"]
-    conn = get_db()
-    client = conn.execute(
-        "SELECT * FROM agent_clients WHERE id = ? AND agent_id = ?",
-        (client_id, user_id)
-    ).fetchone()
-    if not client:
-        conn.close()
-        raise HTTPException(404, "Client not found")
-    player_id = client["player_id"]
-
-    # Player
-    player = conn.execute(
-        "SELECT * FROM players WHERE id = ? AND org_id = ?",
-        (player_id, org_id)
-    ).fetchone()
-
-    # Stats
-    stats = conn.execute(
-        "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 5",
-        (player_id,)
-    ).fetchall()
-
-    # Intelligence
-    intel = conn.execute(
-        "SELECT * FROM player_intelligence WHERE player_id = ? ORDER BY version DESC LIMIT 1",
-        (player_id,)
-    ).fetchone()
-
-    # Reports
-    reports = conn.execute(
-        "SELECT id, report_type, title, status, created_at FROM reports WHERE player_id = ? AND org_id = ? ORDER BY created_at DESC LIMIT 10",
-        (player_id, org_id)
-    ).fetchall()
-
-    conn.close()
-
-    result = dict(client)
-    result["player"] = dict(player) if player else None
-    result["stats"] = [dict(s) for s in stats]
-    result["intelligence"] = None
-    if intel:
-        intel_dict = dict(intel)
-        for field in ["strengths", "development_areas", "stat_signature", "grades"]:
-            if intel_dict.get(field) and isinstance(intel_dict[field], str):
-                try:
-                    intel_dict[field] = json.loads(intel_dict[field])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-        result["intelligence"] = intel_dict
-    result["reports"] = [dict(r) for r in reports]
-    return result
-
-
-@app.post("/agent/generate-pack")
-async def generate_agent_pack(body: AgentClientCreate, token_data: dict = Depends(verify_token)):
-    """Generate an Agent Pack report for a client player using PXI agent mode."""
-    user_id = token_data["user_id"]
-    org_id = token_data["org_id"]
-    conn = get_db()
-
-    # Check tier
-    _check_tier_limit(user_id, "reports", conn)
-
-    player = conn.execute(
-        "SELECT * FROM players WHERE id = ? AND org_id = ?",
-        (body.player_id, org_id)
-    ).fetchone()
-    if not player:
-        conn.close()
-        raise HTTPException(404, "Player not found")
-
-    # Gather stats
-    stats = conn.execute(
-        "SELECT * FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY season DESC LIMIT 3",
-        (body.player_id,)
-    ).fetchall()
-
-    # Gather intelligence
-    intel = conn.execute(
-        "SELECT * FROM player_intelligence WHERE player_id = ? ORDER BY version DESC LIMIT 1",
-        (body.player_id,)
-    ).fetchone()
-
-    conn.close()
-
-    player_dict = dict(player)
-    player_name = f"{player_dict['first_name']} {player_dict['last_name']}"
-    stats_list = [dict(s) for s in stats]
-
-    intel_summary = ""
-    if intel:
-        intel_dict = dict(intel)
-        for field in ["strengths", "development_areas"]:
-            if intel_dict.get(field) and isinstance(intel_dict[field], str):
-                try:
-                    intel_dict[field] = json.loads(intel_dict[field])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-        intel_summary = f"Archetype: {intel_dict.get('archetype', 'N/A')}\nStrengths: {intel_dict.get('strengths', [])}\nDevelopment: {intel_dict.get('development_areas', [])}"
-
-    # Build prompt
-    try:
-        from pxi_prompt_core import PXI_CORE_GUARDRAILS, PXI_MODE_BLOCKS
-        system_prompt = PXI_CORE_GUARDRAILS + "\n\n" + PXI_MODE_BLOCKS.get("agent", "")
-    except ImportError:
-        system_prompt = "You are PXI, a professional hockey agent intelligence assistant."
-
-    stat_text = ""
-    for s in stats_list:
-        stat_text += f"Season {s.get('season','N/A')}: GP={s.get('gp',0)} G={s.get('g',0)} A={s.get('a',0)} P={s.get('p',0)}\n"
-
-    user_prompt = f"""Generate an Agent Pack for {player_name} ({player_dict.get('position','N/A')}) — {player_dict.get('current_team','N/A')}, {player_dict.get('current_league','N/A')}.
-
-Player Data:
-- Age/DOB: {player_dict.get('dob', 'Unknown')}
-- Height/Weight: {player_dict.get('height', 'N/A')} / {player_dict.get('weight', 'N/A')}
-
-Stats:
-{stat_text if stat_text else 'No stats available.'}
-
-Intelligence:
-{intel_summary if intel_summary else 'No intelligence data available.'}
-
-Return JSON with this exact format:
-{{
-  "player_summary": "2-3 sentence summary of the player's current level and trajectory",
-  "strengths": ["strength 1", "strength 2", "strength 3", "strength 4"],
-  "pathway_assessment": "2-3 sentence assessment of realistic pathway options (junior, prep, NCAA, pro)",
-  "ninety_day_plan": ["action item 1", "action item 2", "action item 3", "action item 4"],
-  "target_programs": ["program/school/team 1", "program/school/team 2", "program/school/team 3"]
-}}"""
-
-    try:
-        client = get_anthropic_client()
-        if client:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2048,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            raw = response.content[0].text
-            # Strip markdown fences
-            cleaned = raw.strip()
-            if cleaned.startswith("```"):
-                cleaned = cleaned.split("\n", 1)[-1]
-            if cleaned.endswith("```"):
-                cleaned = cleaned.rsplit("```", 1)[0]
-            cleaned = cleaned.strip()
-            if cleaned.startswith("{"):
-                result = json.loads(cleaned)
-            else:
-                # Find JSON in response
-                start = cleaned.find("{")
-                end = cleaned.rfind("}") + 1
-                if start >= 0 and end > start:
-                    result = json.loads(cleaned[start:end])
-                else:
-                    raise ValueError("No JSON found in response")
-        else:
-            # Mock fallback
-            result = {
-                "player_summary": f"{player_name} is a developing {player_dict.get('position','player')} with {player_dict.get('current_team','their current team')}.",
-                "strengths": ["Skating ability", "Hockey IQ", "Compete level", "Character"],
-                "pathway_assessment": "Currently trending toward junior hockey pathways with potential for prep school consideration.",
-                "ninety_day_plan": ["Increase skating sessions to 3x/week", "Attend next available showcase", "Schedule academic assessment", "Connect with 3 target programs"],
-                "target_programs": ["Local Junior A programs", "Regional prep schools", "NCAA D3 programs"],
-            }
-    except Exception as e:
-        logger.error("Agent pack generation failed: %s", str(e))
-        result = {
-            "player_summary": f"{player_name} — agent pack generation encountered an error. Please try again.",
-            "strengths": [],
-            "pathway_assessment": "Unable to generate assessment.",
-            "ninety_day_plan": [],
-            "target_programs": [],
-        }
-
-    # Track usage
-    conn2 = get_db()
-    _increment_usage(user_id, "report", "agent_pack", org_id, conn2)
-    conn2.close()
-
-    result["generated_at"] = datetime.now().isoformat()
-    return result
 
 
 # ============================================================
@@ -6844,8 +6473,7 @@ async def patch_player(
         raise HTTPException(status_code=404, detail="Player not found")
 
     allowed = {"first_name", "last_name", "dob", "position", "shoots", "height_cm", "weight_kg",
-               "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status",
-               "roster_status"}
+               "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status"}
     sets = []
     params = []
     for field, value in updates.items():
@@ -6877,66 +6505,6 @@ async def patch_player(
     row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
     conn.close()
     return dict(row)
-
-
-VALID_ROSTER_STATUSES = {"active", "ir", "injured", "scratched", "suspended", "recalled", "released", "day-to-day"}
-
-
-@app.put("/players/{player_id}/roster-status")
-async def update_player_roster_status(
-    player_id: str,
-    body: dict = Body(...),
-    token_data: dict = Depends(verify_token),
-):
-    """Set a player's roster status (active, ir, injured, scratched, suspended, day-to-day)."""
-    org_id = token_data["org_id"]
-    status = (body.get("roster_status") or "active").lower().strip()
-    if status not in VALID_ROSTER_STATUSES:
-        raise HTTPException(status_code=400, detail=f"Invalid roster_status. Must be one of: {', '.join(sorted(VALID_ROSTER_STATUSES))}")
-    conn = get_db()
-    existing = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
-    if not existing:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Player not found")
-    conn.execute("UPDATE players SET roster_status = ?, updated_at = ? WHERE id = ?", (status, now_iso(), player_id))
-    conn.commit()
-    conn.close()
-    return {"player_id": player_id, "roster_status": status}
-
-
-@app.put("/teams/{team_name}/roster-status")
-async def bulk_update_roster_status(
-    team_name: str,
-    body: dict = Body(...),
-    token_data: dict = Depends(verify_token),
-):
-    """Bulk update roster status for multiple players on a team.
-    Body: {"updates": [{"player_id": "...", "roster_status": "ir"}, ...]}
-    """
-    org_id = token_data["org_id"]
-    updates = body.get("updates", [])
-    if not updates:
-        raise HTTPException(status_code=400, detail="No updates provided")
-    conn = get_db()
-    results = []
-    for u in updates:
-        pid = u.get("player_id")
-        status = (u.get("roster_status") or "active").lower().strip()
-        if status not in VALID_ROSTER_STATUSES:
-            results.append({"player_id": pid, "error": f"Invalid status: {status}"})
-            continue
-        existing = conn.execute(
-            "SELECT id FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
-            (pid, org_id)
-        ).fetchone()
-        if not existing:
-            results.append({"player_id": pid, "error": "Not found"})
-            continue
-        conn.execute("UPDATE players SET roster_status = ?, updated_at = ? WHERE id = ?", (status, now_iso(), pid))
-        results.append({"player_id": pid, "roster_status": status, "ok": True})
-    conn.commit()
-    conn.close()
-    return {"team": team_name, "updated": sum(1 for r in results if r.get("ok")), "results": results}
 
 
 @app.put("/players/{player_id}", response_model=PlayerResponse)
@@ -7122,14 +6690,6 @@ async def get_player_stats(player_id: str, token_data: dict = Depends(verify_tok
                 d["microstats"] = json.loads(d["microstats"])
             except Exception:
                 d["microstats"] = None
-        # Ensure integer stat fields are rounded (not truncated) if they contain floats
-        # This handles instat_league rows that may have per-game averages
-        for int_field in ("gp", "g", "a", "p", "plus_minus", "pim", "toi_seconds", "pp_toi_seconds", "pk_toi_seconds", "shots", "sog"):
-            val = d.get(int_field)
-            if isinstance(val, float):
-                d[int_field] = round(val)
-            elif val is None:
-                d[int_field] = 0
         results.append(StatsResponse(**d))
     return results
 
@@ -8327,46 +7887,30 @@ HOCKEY TERMINOLOGY:
 
 
 def _parse_file_to_rows(content: bytes, fname: str) -> list[dict]:
-    """Parse a CSV or Excel file into a list of normalized dicts.
-    For Excel files with multiple sheets, reads ALL sheets and merges rows.
-    Each row gets a '_sheet_team' field extracted from the sheet name
-    (e.g. 'Chatham Maroons - Box score' → 'Chatham Maroons')."""
+    """Parse a CSV or Excel file into a list of normalized dicts."""
     is_excel = any(fname.endswith(ext) for ext in (".xlsx", ".xls", ".xlsm"))
 
     if is_excel:
         try:
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-            all_rows: list[dict] = []
-            sheets_read = 0
-
-            for ws in wb.worksheets:
-                rows_iter = ws.iter_rows(values_only=True)
-                raw_headers = next(rows_iter, None)
-                if not raw_headers:
-                    continue  # Skip empty sheets
-                headers = [str(h).strip().lower().replace(" ", "_").replace("-", "_") if h else f"col_{i}" for i, h in enumerate(raw_headers)]
-                # Extract team name from sheet name (InStat pattern: "Team Name - Report Type")
-                sheet_team = ""
-                if ws.title and " - " in ws.title:
-                    sheet_team = ws.title.split(" - ")[0].strip()
-                for row_vals in rows_iter:
-                    row_dict = {}
-                    for j, val in enumerate(row_vals):
-                        if j < len(headers):
-                            row_dict[headers[j]] = str(val).strip() if val is not None else ""
-                    if any(v for v in row_dict.values()):
-                        if sheet_team:
-                            row_dict["_sheet_team"] = sheet_team
-                        all_rows.append(row_dict)
-                sheets_read += 1
-
-            wb.close()
-            if sheets_read == 0:
-                raise HTTPException(status_code=400, detail="Excel file has no sheets with data")
-            if not all_rows:
+            ws = wb.active
+            if not ws:
+                raise HTTPException(status_code=400, detail="Excel file has no active sheet")
+            rows_iter = ws.iter_rows(values_only=True)
+            raw_headers = next(rows_iter, None)
+            if not raw_headers:
                 raise HTTPException(status_code=400, detail="Excel file is empty")
-            logger.info("Parsed %d rows from %d sheet(s) in %s", len(all_rows), sheets_read, fname)
+            headers = [str(h).strip().lower().replace(" ", "_").replace("-", "_") if h else f"col_{i}" for i, h in enumerate(raw_headers)]
+            all_rows = []
+            for row_vals in rows_iter:
+                row_dict = {}
+                for j, val in enumerate(row_vals):
+                    if j < len(headers):
+                        row_dict[headers[j]] = str(val).strip() if val is not None else ""
+                if any(v for v in row_dict.values()):
+                    all_rows.append(row_dict)
+            wb.close()
             return all_rows
         except HTTPException:
             raise
@@ -8406,14 +7950,6 @@ def _detect_instat_game_log(headers: list[str]) -> bool:
     return len(instat_markers.intersection(set(headers))) >= 3
 
 
-def _detect_instat_career(headers: list[str]) -> bool:
-    """Detect InStat career summary format (e.g. 'Career - Player Name.xlsx').
-    These files have a 'career' column and per-game stats that should NOT be treated
-    as individual season rows."""
-    header_set = {h.lower() for h in headers}
-    return "career" in header_set and any(h in header_set for h in ["goals", "assists", "points"])
-
-
 def _detect_instat_team_stats(headers: list[str]) -> bool:
     """Detect InStat team skater stats format (e.g. 'Skaters - Team Name.xlsx')."""
     # Team stats files have a 'player' or '#' column plus standard stat headers
@@ -8442,384 +7978,6 @@ def _to_float(val, default=None):
         return float(cleaned) if cleaned else default
     except (ValueError, TypeError):
         return default
-
-
-# ============================================================
-# PLAYER GUIDE — MONTHLY FOCUS PLAN GENERATION
-# ============================================================
-
-
-class FocusPlanRequest(BaseModel):
-    player_id: str
-
-class PressureConfidenceRequest(BaseModel):
-    scenario: str
-    player_id: Optional[str] = None
-
-
-@app.post("/player-guide/focus-plan")
-async def generate_focus_plan(body: FocusPlanRequest, token_data: dict = Depends(verify_token)):
-    """Generate a personalised monthly focus plan using Skill Coach + Parent PXI modes.
-    References the player's actual stats, intelligence, and recent form."""
-    org_id = token_data["org_id"]
-    user_id = token_data["user_id"]
-    conn = get_db()
-
-    # ── Tier limit ──
-    _check_tier_limit(user_id, "reports", conn)
-
-    # ── 1. Player ──
-    player = conn.execute(
-        "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
-        (body.player_id, org_id),
-    ).fetchone()
-    if not player:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Player not found")
-    player = dict(player)
-    player_name = f"{player.get('first_name', '')} {player.get('last_name', '')}".strip()
-
-    # ── 2. Season stats (last 3 seasons) ──
-    stats_rows = conn.execute(
-        "SELECT * FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY created_at DESC LIMIT 3",
-        (body.player_id,),
-    ).fetchall()
-    stats_summary = [dict(r) for r in stats_rows]
-
-    # Compute PPG for each season row
-    for s in stats_summary:
-        gp = s.get("gp") or s.get("games_played") or 0
-        pts = s.get("p") or s.get("points") or 0
-        s["ppg"] = round(pts / gp, 2) if gp > 0 else 0
-
-    # ── 3. Intelligence ──
-    intel_row = conn.execute(
-        "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
-        (body.player_id, org_id),
-    ).fetchone()
-    intel = dict(intel_row) if intel_row else None
-    if intel:
-        for field in ("strengths", "development_areas", "comparable_players", "tags"):
-            val = intel.get(field)
-            if isinstance(val, str):
-                try:
-                    intel[field] = json.loads(val)
-                except Exception:
-                    intel[field] = []
-            elif val is None:
-                intel[field] = []
-
-    # ── 4. Recent form (last 5 games) ──
-    recent_rows = conn.execute(
-        "SELECT * FROM player_game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 5",
-        (body.player_id,),
-    ).fetchall()
-    recent_form = [dict(r) for r in recent_rows]
-
-    # Compute recent PPG trend
-    recent_gp = len(recent_form)
-    recent_pts = sum((r.get("g", 0) or 0) + (r.get("a", 0) or 0) for r in recent_form)
-    recent_ppg = round(recent_pts / recent_gp, 2) if recent_gp > 0 else None
-    season_ppg = stats_summary[0].get("ppg", 0) if stats_summary else 0
-    ppg_trend = None
-    if recent_ppg is not None and season_ppg:
-        if recent_ppg > season_ppg * 1.15:
-            ppg_trend = f"TRENDING UP — recent {recent_ppg} vs season {season_ppg}"
-        elif recent_ppg < season_ppg * 0.85:
-            ppg_trend = f"TRENDING DOWN — recent {recent_ppg} vs season {season_ppg}"
-        else:
-            ppg_trend = f"STEADY — recent {recent_ppg} vs season {season_ppg}"
-
-    # ── 5. Latest family_card or development_roadmap report ──
-    latest_report_row = conn.execute(
-        "SELECT output_text, report_type, title FROM reports WHERE player_id = ? AND org_id = ? "
-        "AND report_type IN ('family_card', 'development_roadmap') AND status = 'complete' "
-        "ORDER BY created_at DESC LIMIT 1",
-        (body.player_id, org_id),
-    ).fetchone()
-    report_context = ""
-    if latest_report_row:
-        text = latest_report_row["output_text"] or ""
-        report_context = f"\nLATEST REPORT ({latest_report_row['report_type']}):\n{text[:2000]}"
-
-    conn.close()
-
-    # ── 6. Build system prompt ──
-    now = datetime.now(timezone.utc)
-    month_label = now.strftime("%B %Y").upper()
-
-    system_prompt = f"""{PXI_CORE_GUARDRAILS}
-
-{PXI_MODE_BLOCKS.get('skill_coach', '')}
-
-{PXI_MODE_BLOCKS.get('parent', '')}
-
-You are generating a MONTHLY FOCUS PLAN for a hockey parent.
-Combine the Skill Coach's technical eye with the Parent mode's supportive, plain-language approach.
-
-CRITICAL — PERSONALISATION RULES:
-- You MUST reference the player's ACTUAL stats in every item where data exists.
-  Examples: "PPG trending up from 0.32 to 0.46 over last 10 games", "3 minors in last 5 games"
-- Cite specific development areas and strengths from the intelligence data.
-- Include stat trends when available (recent form vs season average).
-- If a previous report is provided, reference its findings.
-- If data is insufficient for a specific item, mark it as [GENERAL GUIDANCE] and provide age-appropriate advice.
-- NEVER invent stats or events. Only use data from the context provided.
-
-RESPONSE FORMAT — return ONLY valid JSON (no markdown, no extra text):
-{{
-  "categories": [
-    {{
-      "label": "SKILL",
-      "items": ["2-3 specific skill items referencing actual stats and development areas"]
-    }},
-    {{
-      "label": "MENTAL",
-      "items": ["2-3 practical mental performance items tied to recent game situations"]
-    }},
-    {{
-      "label": "GAME",
-      "items": ["1-2 in-game cues the player can remember on the bench"]
-    }},
-    {{
-      "label": "PARENT",
-      "items": ["2-3 items for parents — reference stat improvements to celebrate, plus support advice"]
-    }}
-  ]
-}}
-"""
-
-    user_prompt = f"""Generate a monthly focus plan for {month_label} for:
-
-PLAYER: {player_name}
-Position: {player.get('position', 'N/A')}
-Team: {player.get('current_team', 'N/A')}
-League: {player.get('current_league', 'N/A')}
-Age Group: {player.get('age_group', 'N/A')}
-Archetype: {player.get('archetype', 'N/A')}
-
-INTELLIGENCE DATA:
-{json.dumps(intel, indent=2, default=str) if intel else 'No intelligence data available — provide general age-appropriate guidance.'}
-
-SEASON STATS (most recent seasons):
-{json.dumps(stats_summary, indent=2, default=str) if stats_summary else 'No season stats available.'}
-
-RECENT FORM (last {recent_gp} games):
-{json.dumps(recent_form, indent=2, default=str) if recent_form else 'No recent game data.'}
-
-PPG TREND: {ppg_trend or 'Insufficient data for trend.'}
-{report_context}"""
-
-    # ── 7. Call Claude (or mock) ──
-    plan_data = None
-    client = get_anthropic_client()
-    if client:
-        try:
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2048,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            response_text = message.content[0].text.strip()
-            # Strip markdown fences
-            if response_text.startswith("```"):
-                lines = response_text.split("```")
-                inner = lines[1] if len(lines) > 1 else lines[0]
-                if inner.startswith("json"):
-                    inner = inner[4:]
-                response_text = inner.strip()
-            plan_data = json.loads(response_text)
-        except Exception as e:
-            logger.error("Focus plan generation error: %s", e)
-
-    # Mock fallback
-    if not plan_data:
-        plan_data = {
-            "categories": [
-                {"label": "SKILL", "items": [
-                    f"Edge work drills 2x/week — focus on crossovers and tight turns" + (f" (current season: {stats_summary[0].get('gp', '?')} GP)" if stats_summary else ""),
-                    "Puck protection along boards — use body positioning to shield the puck",
-                    "Backhand accuracy — 50 backhand shots per practice session",
-                ]},
-                {"label": "MENTAL", "items": [
-                    "Pre-game visualization — 5 minutes of imagining successful plays before warmup",
-                    "Bounce-back routine — deep breath, tap stick on ice, refocus after mistakes",
-                ]},
-                {"label": "GAME", "items": [
-                    "Talk more on ice — call for puck, communicate with linemates",
-                    "First three shifts — play simple, win your battles, set the tone",
-                ]},
-                {"label": "PARENT", "items": [
-                    "Ask 'what did you learn today?' instead of 'how many points did you get?'",
-                    "20-minute decompression rule — no hockey talk in the car right after games",
-                    "Celebrate effort and improvement, not just results",
-                ]},
-            ]
-        }
-
-    # ── 8. Track usage ──
-    track_conn = get_db()
-    _increment_usage(user_id, "report", "focus_plan", org_id, track_conn)
-    track_conn.close()
-
-    return {
-        "player_id": body.player_id,
-        "player_name": player_name,
-        "month_label": month_label,
-        "categories": plan_data.get("categories", []),
-        "generated_at": now.isoformat(),
-    }
-
-
-# ── Pressure & Confidence Support Tool ──────────────────────
-PRESSURE_SCENARIOS = [
-    "After a bad game",
-    "During a scoring slump",
-    "After being benched",
-    "Before a big game / showcase",
-    "After a playoff loss",
-    "When they want to quit",
-    "After making a mistake that cost a game",
-    "Dealing with a tough coach",
-]
-
-@app.post("/player-guide/pressure-confidence")
-async def pressure_confidence_tool(body: PressureConfidenceRequest, token_data: dict = Depends(verify_token)):
-    """Generate pressure & confidence support guidance using Mental Coach + Parent PXI modes.
-    Returns structured advice for a specific scenario a parent/player is facing."""
-    org_id = token_data["org_id"]
-    user_id = token_data["user_id"]
-
-    # Tier check
-    conn = get_db()
-    try:
-        _check_tier_limit(user_id, "reports", conn)
-    finally:
-        conn.close()
-
-    scenario = body.scenario.strip()
-    if not scenario:
-        raise HTTPException(status_code=400, detail="Scenario is required.")
-
-    # Optionally fetch player context
-    player_context = ""
-    player_name = ""
-    if body.player_id:
-        conn = get_db()
-        try:
-            player = conn.execute(
-                "SELECT * FROM players WHERE id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
-                (body.player_id,),
-            ).fetchone()
-            if player:
-                player = dict(player)
-                player_name = f"{player.get('first_name', '')} {player.get('last_name', '')}".strip()
-                player_context = f"""
-PLAYER CONTEXT:
-Name: {player_name}
-Position: {player.get('position', 'N/A')}
-Team: {player.get('current_team', 'N/A')}
-Age Group: {player.get('age_group', 'N/A')}
-"""
-        finally:
-            conn.close()
-
-    # Build system prompt with Mental Coach + Parent modes
-    mental_block = PXI_MODE_BLOCKS.get("mental_coach", PXI_MODE_BLOCKS.get("parent", ""))
-    parent_block = PXI_MODE_BLOCKS.get("parent", "")
-
-    system_prompt = f"""{PXI_CORE_GUARDRAILS}
-
-{mental_block}
-
-{parent_block}
-
-You are generating a PRESSURE & CONFIDENCE SUPPORT response for a hockey parent.
-Combine the Mental Coach's sport psychology expertise with the Parent mode's empathetic, practical approach.
-
-The parent has selected this scenario: "{scenario}"
-
-Your response must be structured as JSON with EXACTLY these 5 sections:
-{{
-  "feeling": "1-2 sentences describing what the player is likely feeling. Normalize the emotion.",
-  "dont_say": ["2-3 things the parent should AVOID saying — be specific and realistic"],
-  "say_instead": ["2-3 better alternatives — warm, constructive, age-appropriate"],
-  "activity": "A specific activity or approach to try (e.g., 20-minute rule, journaling, visualization). Include brief instructions.",
-  "concern_signs": "When to be genuinely concerned — specific behavioral signs that suggest professional help. Always normalize seeking help as a strength."
-}}
-
-RULES:
-- Be warm, empathetic, and practical — this is a worried parent.
-- Use conversational language, not clinical terms.
-- If player context is provided, personalise to their situation (age, position, level).
-- NEVER blame the player, coach, or parent.
-- Always frame seeking professional help (sports psychologist) as a positive, proactive step.
-- Return ONLY valid JSON (no markdown fences, no extra text).
-"""
-
-    user_prompt = f"""Generate pressure & confidence support for this scenario:
-
-SCENARIO: {scenario}
-{player_context}
-
-Provide empathetic, practical guidance a hockey parent can use right now."""
-
-    # Call Claude (or mock)
-    result = None
-    client = get_anthropic_client()
-    if client:
-        try:
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1500,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            response_text = message.content[0].text.strip()
-            if response_text.startswith("```"):
-                lines = response_text.split("```")
-                inner = lines[1] if len(lines) > 1 else lines[0]
-                if inner.startswith("json"):
-                    inner = inner[4:]
-                response_text = inner.strip()
-            result = json.loads(response_text)
-        except Exception as e:
-            logger.error("Pressure/confidence generation error: %s", e)
-
-    # Mock fallback
-    if not result:
-        result = {
-            "feeling": "Frustrated, embarrassed, angry at themselves. This is completely normal — every player at every level has felt this way. The fact that they care shows how much hockey means to them.",
-            "dont_say": [
-                "\"You played terrible tonight\"",
-                "\"Why didn't you shoot?\"",
-                "\"You need to try harder\"",
-            ],
-            "say_instead": [
-                "\"Tough game. Anything you're proud of tonight?\"",
-                "\"Want to grab food?\" (sometimes silence is best)",
-                "\"Every player has those games. What do you want to work on?\"",
-            ],
-            "activity": "20-Minute Rule — no hockey talk for 20 minutes after the game. Let them decompress. They know how they played. After 20 minutes, if THEY want to talk about it, listen. If not, let it go until tomorrow.",
-            "concern_signs": "If bad moods persist more than a week, they stop wanting to go to practice, or they show signs of anxiety before games — consider connecting with a sports psychologist. This is a strength move, not a weakness. The best players in the world work on their mental game.",
-        }
-
-    # Track usage
-    track_conn = get_db()
-    _increment_usage(user_id, "report", "pressure_confidence", org_id, track_conn)
-    track_conn.close()
-
-    return {
-        "scenario": scenario,
-        "player_name": player_name or None,
-        "feeling": result.get("feeling", ""),
-        "dont_say": result.get("dont_say", []),
-        "say_instead": result.get("say_instead", []),
-        "activity": result.get("activity", ""),
-        "concern_signs": result.get("concern_signs", ""),
-        "generated_at": datetime.now().isoformat(),
-    }
 
 
 # ============================================================
@@ -8914,10 +8072,6 @@ def _detect_instat_file_type(headers: list) -> str:
     """Auto-detect InStat XLSX file type from headers."""
     h_set = set(h.lower().replace(" ", "_") for h in headers if h)
 
-    # Games schedule file: has date + opponent + score columns (team game-by-game results)
-    if "date" in h_set and "opponent" in h_set and "score" in h_set:
-        return "team_games"
-
     # Lines files: have "line" column
     if "line" in h_set:
         return "lines"
@@ -8926,14 +8080,10 @@ def _detect_instat_file_type(headers: list) -> str:
     goalie_markers = {"saves,_%", "saves", "goals_against", "shootout_saves", "shootouts_allowed"}
     has_goalie = len(goalie_markers & h_set) >= 2
     has_assists = "assists" in h_set or "first_assist" in h_set
-    has_gp = "games_played" in h_set
 
     if has_goalie and not has_assists:
         has_team_col = "team" in h_set
-        if has_team_col:
-            return "league_goalies"
-        # Team-specific: distinguish single-game vs season by "Games played" column
-        return "team_goalies" if has_gp else "game_goalies"
+        return "league_goalies" if has_team_col else "team_goalies"
 
     # Skater files: have player + scoring stats
     has_player = "player" in h_set
@@ -8941,10 +8091,7 @@ def _detect_instat_file_type(headers: list) -> str:
 
     if has_player and has_scoring:
         has_team_col = "team" in h_set
-        if has_team_col:
-            return "league_skaters"
-        # Team-specific: distinguish single-game vs season by "Games played" column
-        return "team_skaters" if has_gp else "game_skaters"
+        return "league_skaters" if has_team_col else "team_skaters"
 
     # Team stats: has "team" as first col and no "player" col
     if "team" in h_set and not has_player and has_scoring:
@@ -8955,80 +8102,6 @@ def _detect_instat_file_type(headers: list) -> str:
         return "league_teams"
 
     return "unknown"
-
-
-def _parse_instat_filename(filename: str) -> dict:
-    """Parse InStat filename to extract team, opponent, date, and type hint.
-
-    Patterns:
-      'Skaters - Chatham Maroons-Listowel Cyclones, 17-Feb-2026.xlsx'  → game
-      'Skaters - Chatham Maroons, 17-Feb-2026.xlsx'                     → season
-      'Games - Chatham Maroons, 17-Feb-2026.xlsx'                       → schedule
-      'Lines - Chatham Maroons-Listowel Cyclones, 17-Feb-2026 (3).xlsx' → game (lines variant)
-    """
-    import re
-    result = {"team": None, "opponent": None, "date": None, "type_hint": None}
-    if not filename:
-        return result
-
-    # Strip extension and variant suffix like " (3)"
-    base = re.sub(r'\.\w+$', '', filename)
-    base = re.sub(r'\s*\(\d+\)\s*$', '', base)
-
-    # Split on " - " to separate file type prefix from the rest
-    parts = base.split(" - ", 1)
-    if len(parts) < 2:
-        return result
-
-    prefix = parts[0].strip().lower()
-    body = parts[1].strip()
-
-    # Determine if it's a games/schedule file
-    if prefix == "games":
-        result["type_hint"] = "schedule"
-    elif prefix in ("skaters", "goalies", "lines"):
-        pass  # determined below
-
-    # Try to extract date from end: ", 17-Feb-2026" or ", DD-Mon-YYYY"
-    date_match = re.search(r',\s*(\d{1,2}-\w+-\d{4})\s*$', body)
-    if date_match:
-        date_str = date_match.group(1)
-        body = body[:date_match.start()].strip()
-        try:
-            from datetime import datetime as dt_parse
-            parsed = dt_parse.strptime(date_str, "%d-%b-%Y")
-            result["date"] = parsed.strftime("%Y-%m-%d")
-        except ValueError:
-            result["date"] = date_str
-
-    # Check for opponent: "Team A-Team B" (hyphen between two team names)
-    # But be careful: team names can contain hyphens (e.g., "St. Thomas Stars")
-    # InStat uses the pattern: "Chatham Maroons-Listowel Cyclones"
-    # Heuristic: split on "-" and check if both parts look like team names (>= 2 words)
-    if "-" in body:
-        # Try splitting from the right on each hyphen
-        best_split = None
-        for i, ch in enumerate(body):
-            if ch == "-" and i > 3 and i < len(body) - 3:
-                left = body[:i].strip()
-                right = body[i+1:].strip()
-                # Both sides should have at least 2 words (team name pattern)
-                if len(left.split()) >= 2 and len(right.split()) >= 2:
-                    best_split = (left, right)
-                    break  # Use first valid split
-
-        if best_split:
-            result["team"] = best_split[0]
-            result["opponent"] = best_split[1]
-            result["type_hint"] = result["type_hint"] or "game"
-        else:
-            result["team"] = body
-            result["type_hint"] = result["type_hint"] or "season"
-    else:
-        result["team"] = body
-        result["type_hint"] = result["type_hint"] or "season"
-
-    return result
 
 
 def _parse_line_players(line_string: str) -> list:
@@ -9280,15 +8353,6 @@ async def ingest_stats(
             game_date = row.get("date", "")
             game_id = f"{game_date}_{opponent.replace(' ', '_')}" if game_date else None
 
-            # Skip if this exact game already exists (prevents re-upload duplicates)
-            if game_id:
-                existing_game = conn.execute(
-                    "SELECT id FROM player_stats WHERE player_id = ? AND game_id = ? AND stat_type = 'game'",
-                    (player_id, game_id)
-                ).fetchone()
-                if existing_game:
-                    continue  # Already imported this game
-
             shots = _to_int(row.get("shots"))
             sog = _to_int(row.get("shots_on_goal"))
             pp_shots = _to_int(row.get("power_play_shots"))
@@ -9391,59 +8455,6 @@ async def ingest_stats(
             "inserted": inserted + (1 if default_season and inserted > 0 else 0),
             "format": "instat_game_log",
             "errors": errors[:10],
-        }
-
-    # ── InStat Career Format ─────────────────────────────────────
-    # Career summary with per-game stats that are NOT individual season entries.
-    # These files have a "career" column and should be treated as metadata, not stat rows.
-    # e.g. "Career - Ewan McChesney.xlsx" with columns: career, goals, assists, points, +/-, etc.
-    if _detect_instat_career(headers):
-        if not player_id:
-            conn.close()
-            raise HTTPException(
-                status_code=400,
-                detail="Career file detected — please upload this from the player's profile page."
-            )
-        player = conn.execute("SELECT id, first_name, last_name FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
-        if not player:
-            conn.close()
-            raise HTTPException(status_code=404, detail="Player not found")
-
-        # Career files contain per-game breakdowns — aggregate them into extended career stats
-        # but do NOT create individual season rows (those have no season name and GP=0)
-        total_g = sum(_to_int(r.get("goals")) for r in all_rows)
-        total_a = sum(_to_int(r.get("assists")) for r in all_rows)
-        total_p = sum(_to_int(r.get("points")) for r in all_rows)
-        total_fo = sum(_to_int(r.get("faceoffs")) for r in all_rows)
-        total_fo_won = sum(_to_int(r.get("faceoffs_won")) for r in all_rows)
-
-        logger.info(
-            "InStat career file for %s %s — %d rows. Aggregate: %dG %dA %dP. "
-            "Skipping individual row import (these are per-game career breakdowns, not seasons).",
-            player["first_name"], player["last_name"], len(all_rows), total_g, total_a, total_p
-        )
-
-        # Store career summary as extended_stats on the player's latest season row
-        career_summary = {
-            "career_games_in_file": len(all_rows),
-            "career_total_g": total_g,
-            "career_total_a": total_a,
-            "career_total_p": total_p,
-            "career_faceoffs": total_fo,
-            "career_faceoffs_won": total_fo_won,
-            "career_fo_pct": round(total_fo_won / total_fo * 100, 1) if total_fo > 0 else None,
-        }
-
-        # Trigger intelligence generation (career data is useful context)
-        asyncio.create_task(_generate_player_intelligence(player_id, org_id, trigger="import"))
-
-        conn.close()
-        return {
-            "detail": f"Career file processed: {len(all_rows)} game entries. Career totals: {total_g}G {total_a}A {total_p}P. (No stat rows created — career data used for intelligence only.)",
-            "inserted": 0,
-            "format": "instat_career",
-            "career_summary": career_summary,
-            "errors": [],
         }
 
     # ── InStat Team Stats Format ──────────────────────────────────
@@ -9602,7 +8613,7 @@ async def list_leagues():
 async def list_teams(token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
     conn = get_db()
-    rows = conn.execute("SELECT * FROM teams WHERE (org_id = '__global__' OR org_id = ?) ORDER BY name", (org_id,)).fetchall()
+    rows = conn.execute("SELECT * FROM teams WHERE org_id = ? ORDER BY name", (org_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -9701,81 +8712,6 @@ async def get_team_reports(team_name: str, token_data: dict = Depends(verify_tok
                 except Exception:
                     pass
         results.append(d)
-    return results
-
-
-@app.get("/teams/{team_name}/games")
-async def get_team_games(
-    team_name: str,
-    season: Optional[str] = Query(None),
-    token_data: dict = Depends(verify_token),
-):
-    """Get team's game schedule/results from the games table."""
-    org_id = token_data["org_id"]
-    decoded_name = team_name.replace("%20", " ")
-    conn = get_db()
-
-    query = """
-        SELECT id, league, season, game_date, home_team, away_team,
-               home_score, away_score, status, venue, data_source, extended_stats,
-               org_id, team_name
-        FROM games
-        WHERE (
-            org_id = ? AND LOWER(team_name) = LOWER(?)
-        ) OR (
-            LOWER(home_team) = LOWER(?) OR LOWER(away_team) = LOWER(?)
-        )
-    """
-    params = [org_id, decoded_name, decoded_name, decoded_name]
-
-    if season:
-        query += " AND season = ?"
-        params.append(season)
-
-    query += " ORDER BY game_date DESC"
-
-    rows = conn.execute(query, params).fetchall()
-    conn.close()
-
-    results = []
-    seen_dates = set()  # Dedup games from multiple sources
-    for r in rows:
-        d = dict(r)
-        dedup_key = f"{d['game_date']}_{(d.get('home_team') or '').lower()}_{(d.get('away_team') or '').lower()}"
-        if dedup_key in seen_dates:
-            continue
-        seen_dates.add(dedup_key)
-
-        # Parse extended_stats JSON
-        if d.get("extended_stats") and isinstance(d["extended_stats"], str):
-            try:
-                d["extended_stats"] = json.loads(d["extended_stats"])
-            except Exception:
-                pass
-
-        # Compute team-perspective fields
-        is_home = decoded_name.lower() in (d.get("home_team") or "").lower()
-        team_score = d["home_score"] if is_home else d["away_score"]
-        opp_score = d["away_score"] if is_home else d["home_score"]
-        opponent = d["away_team"] if is_home else d["home_team"]
-
-        result_str = ""
-        if team_score is not None and opp_score is not None:
-            if team_score > opp_score:
-                result_str = "W"
-            elif team_score < opp_score:
-                result_str = "L"
-            else:
-                result_str = "T"
-
-        d["opponent"] = opponent
-        d["home_away"] = "H" if is_home else "A"
-        d["team_score"] = team_score
-        d["opponent_score"] = opp_score
-        d["result"] = result_str
-
-        results.append(d)
-
     return results
 
 
@@ -11972,350 +10908,6 @@ async def refresh_player_intelligence(player_id: str, token_data: dict = Depends
 
 
 # ============================================================
-# TEAM INTELLIGENCE
-# ============================================================
-
-def _parse_team_intel_row(d: dict) -> dict:
-    """Parse JSON string fields in a team_intelligence row."""
-    for field in ("strengths", "vulnerabilities", "key_personnel", "comparable_teams", "tags"):
-        val = d.get(field)
-        if isinstance(val, str):
-            try:
-                d[field] = json.loads(val)
-            except Exception:
-                d[field] = []
-        elif val is None:
-            d[field] = []
-    if isinstance(d.get("data_sources_used"), str):
-        try:
-            d["data_sources_used"] = json.loads(d["data_sources_used"])
-        except Exception:
-            d["data_sources_used"] = {}
-    return d
-
-
-async def _generate_team_intelligence(team_name: str, org_id: str, trigger: str = "auto") -> Optional[dict]:
-    """Generate an AI-powered team identity profile, similar to player intelligence."""
-    conn = get_db()
-    try:
-        # 1. Verify team exists
-        team_row = conn.execute("SELECT * FROM teams WHERE org_id = ? AND LOWER(name) = LOWER(?)", (org_id, team_name)).fetchone()
-        if not team_row:
-            return None
-        team = dict(team_row)
-
-        # 2. Get roster
-        roster_rows = conn.execute(
-            """SELECT first_name, last_name, position, shoots, archetype,
-                      COALESCE(roster_status, 'active') as roster_status
-               FROM players
-               WHERE org_id = ? AND LOWER(current_team) = LOWER(?)
-               AND (is_deleted = 0 OR is_deleted IS NULL)
-               ORDER BY position, last_name""",
-            (org_id, team_name)
-        ).fetchall()
-        roster = [dict(r) for r in roster_rows]
-
-        # 3. Get team stats
-        team_stats_rows = conn.execute(
-            """SELECT ps.season, ps.gp, ps.g, ps.a, ps.p, ps.pim, ps.plus_minus,
-                      p.first_name, p.last_name, p.position
-               FROM player_stats ps
-               JOIN players p ON p.id = ps.player_id
-               WHERE p.org_id = ? AND LOWER(p.current_team) = LOWER(?)
-               AND ps.stat_type = 'season'
-               AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
-               ORDER BY ps.p DESC
-               LIMIT 30""",
-            (org_id, team_name)
-        ).fetchall()
-        team_stats = [dict(r) for r in team_stats_rows]
-
-        # 4. Get team system
-        system_row = conn.execute(
-            "SELECT * FROM team_systems WHERE org_id = ? AND LOWER(team_name) = LOWER(?) ORDER BY created_at DESC LIMIT 1",
-            (org_id, team_name)
-        ).fetchone()
-        system = dict(system_row) if system_row else {}
-
-        # 5. Get line combinations
-        line_rows = conn.execute(
-            """SELECT line_type, line_label, player_names, toi_seconds, goals_for, goals_against
-               FROM line_combinations
-               WHERE org_id = ? AND LOWER(team_name) = LOWER(?)
-               ORDER BY line_type, line_order""",
-            (org_id, team_name)
-        ).fetchall()
-        lines = [dict(r) for r in line_rows]
-
-        # 6. Get team record (wins/losses from games)
-        wins, losses, otl = 0, 0, 0
-        try:
-            games_rows = conn.execute(
-                """SELECT home_team, away_team, home_score, away_score, status
-                   FROM team_games
-                   WHERE org_id = ? AND (LOWER(home_team) = LOWER(?) OR LOWER(away_team) = LOWER(?))
-                   AND status = 'Final'""",
-                (org_id, team_name, team_name)
-            ).fetchall()
-        except Exception:
-            games_rows = []
-        for g in games_rows:
-            gd = dict(g)
-            is_home = gd["home_team"].lower() == team_name.lower()
-            our_score = gd["home_score"] if is_home else gd["away_score"]
-            opp_score = gd["away_score"] if is_home else gd["home_score"]
-            if our_score is not None and opp_score is not None:
-                if our_score > opp_score:
-                    wins += 1
-                else:
-                    losses += 1
-
-        # 7. Previous team intelligence
-        prev_intel = conn.execute(
-            "SELECT * FROM team_intelligence WHERE LOWER(team_name) = LOWER(?) AND org_id = ? ORDER BY version DESC LIMIT 1",
-            (team_name, org_id)
-        ).fetchone()
-        prev_version = dict(prev_intel)["version"] if prev_intel else 0
-
-        # Build context for LLM
-        roster_section = "ROSTER:\n"
-        active_count = {"F": 0, "D": 0, "G": 0}
-        for p in roster:
-            pos = (p.get("position") or "F").upper()
-            status = p.get("roster_status", "active")
-            if status == "active":
-                cat = "G" if pos == "G" else ("D" if pos in ("D", "LD", "RD") else "F")
-                active_count[cat] = active_count.get(cat, 0) + 1
-            name = f"{p.get('first_name', '')} {p.get('last_name', '')}"
-            arch = p.get("archetype", "")
-            roster_section += f"- {name} ({pos}) [{status}]{' — ' + arch if arch else ''}\n"
-        roster_section += f"\nActive: {active_count.get('F',0)}F, {active_count.get('D',0)}D, {active_count.get('G',0)}G"
-
-        stats_section = ""
-        if team_stats:
-            stats_section = "\n\nTOP SCORERS:\n"
-            for s in team_stats[:10]:
-                stats_section += f"- {s.get('first_name','')} {s.get('last_name','')} ({s.get('position','')}) — {s.get('gp',0)}GP {s.get('g',0)}G-{s.get('a',0)}A—{s.get('p',0)}P\n"
-
-        system_section = ""
-        if system:
-            system_section = "\n\nTEAM SYSTEM:\n"
-            for key in ("forecheck", "dz_structure", "oz_setup", "breakout", "pp_formation", "pk_formation", "pace", "physicality", "offensive_style"):
-                val = system.get(key)
-                if val:
-                    system_section += f"- {key.replace('_', ' ').title()}: {val}\n"
-            if system.get("notes"):
-                system_section += f"Notes: {system['notes'][:300]}\n"
-            if system.get("identity_tags"):
-                system_section += f"Identity Tags: {system['identity_tags']}\n"
-
-        lines_section = ""
-        if lines:
-            lines_section = "\n\nLINE COMBINATIONS:\n"
-            for ln in lines:
-                lines_section += f"- {ln.get('line_type', '')}: {ln.get('player_names', '')} (TOI: {ln.get('toi_seconds', 0)}s, GF: {ln.get('goals_for', 0)}, GA: {ln.get('goals_against', 0)})\n"
-
-        record_section = f"\n\nRECORD: {wins}W-{losses}L" if (wins + losses) > 0 else ""
-
-        full_context = f"TEAM: {team_name}\nLeague: {team.get('league', 'Unknown')}\n{roster_section}{stats_section}{system_section}{lines_section}{record_section}"
-
-        # Call Claude for team intelligence
-        client = get_anthropic_client()
-        if not client:
-            # Mock fallback — store basic data
-            intel_id = str(uuid.uuid4())
-            now = datetime.now().isoformat()
-            conn.execute("""
-                INSERT INTO team_intelligence (id, team_name, org_id, identity, trigger, version, data_sources_used, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (intel_id, team_name, org_id, "Team identity analysis requires AI (no API key configured)", trigger, prev_version + 1,
-                  json.dumps({"roster": len(roster), "stats": len(team_stats)}), now))
-            conn.commit()
-            return {"id": intel_id, "team_name": team_name, "identity": "Team identity analysis requires AI (no API key configured)", "version": prev_version + 1}
-
-        system_prompt = """You are ProspectX Intelligence — an elite hockey operations AI producing structured team identity profiles.
-
-Given a team's roster, stats, tactical system, and line combinations, produce a JSON object with the team's identity analysis.
-
-RULES:
-- Return ONLY valid JSON — no markdown, no explanation, no code fences
-- identity: 2-3 paragraph comprehensive team identity description (playing style, pace, system philosophy)
-- playing_style: Short descriptor (e.g., "High-Tempo Transition Game", "Defensive Grind", "Skilled Puck Possession")
-- system_summary: 1-2 sentences on how their tactical system works together
-- strengths: 3-5 specific team strengths with evidence from the data
-- vulnerabilities: 2-4 systemic weaknesses or gaps
-- key_personnel: 3-5 players who define the team's identity, with role descriptions
-- special_teams_identity: PP and PK assessment based on available data
-- player_archetype_fit: What player profiles would thrive on this team (for trade/acquisition targets)
-- comparable_teams: 1-2 NHL/pro teams with similar playing styles
-- tags: from [physical, fast, skilled, defensive, offensive, balanced, gritty, disciplined, aggressive, transition, possession, structured, creative]
-
-JSON SCHEMA:
-{
-  "identity": string,
-  "playing_style": string,
-  "system_summary": string,
-  "strengths": [string],
-  "vulnerabilities": [string],
-  "key_personnel": [{"name": string, "role": string}],
-  "special_teams_identity": string,
-  "player_archetype_fit": string,
-  "comparable_teams": [string],
-  "tags": [string]
-}"""
-
-        try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2000,
-                system=system_prompt,
-                messages=[{"role": "user", "content": f"Generate a team identity profile:\n\n{full_context}"}]
-            )
-
-            raw_text = response.content[0].text.strip()
-            if raw_text.startswith("```"):
-                raw_text = re.sub(r"^```(?:json)?\s*\n?", "", raw_text)
-                raw_text = re.sub(r"\n?```\s*$", "", raw_text)
-
-            intel_data = json.loads(raw_text)
-        except json.JSONDecodeError as e:
-            logger.error("Team intelligence JSON parse error for %s: %s", team_name, str(e))
-            intel_data = {}
-        except Exception as e:
-            logger.error("Team intelligence LLM call failed for %s: %s", team_name, str(e))
-            intel_data = {}
-
-        # Store
-        intel_id = str(uuid.uuid4())
-        new_version = prev_version + 1
-        now = datetime.now().isoformat()
-        data_sources = {
-            "roster": len(roster),
-            "stats": len(team_stats),
-            "lines": len(lines),
-            "games": wins + losses,
-            "has_system": bool(system),
-        }
-
-        # key_personnel needs JSON serialization
-        key_personnel = intel_data.get("key_personnel", [])
-        comparable_teams = intel_data.get("comparable_teams", [])
-        valid_team_tags = {"physical", "fast", "skilled", "defensive", "offensive", "balanced", "gritty",
-                           "disciplined", "aggressive", "transition", "possession", "structured", "creative"}
-        tags = [t for t in intel_data.get("tags", []) if t in valid_team_tags]
-
-        conn.execute("""
-            INSERT INTO team_intelligence
-            (id, team_name, org_id, identity, playing_style, system_summary, strengths, vulnerabilities,
-             key_personnel, special_teams_identity, player_archetype_fit, comparable_teams, tags,
-             data_sources_used, trigger, version, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (intel_id, team_name, org_id,
-              intel_data.get("identity", ""), intel_data.get("playing_style", ""),
-              intel_data.get("system_summary", ""),
-              json.dumps(intel_data.get("strengths", [])), json.dumps(intel_data.get("vulnerabilities", [])),
-              json.dumps(key_personnel), intel_data.get("special_teams_identity", ""),
-              intel_data.get("player_archetype_fit", ""),
-              json.dumps(comparable_teams), json.dumps(tags),
-              json.dumps(data_sources), trigger, new_version, now))
-        conn.commit()
-
-        logger.info("Team intelligence v%d generated for %s (trigger=%s)", new_version, team_name, trigger)
-
-        result = {
-            "id": intel_id, "team_name": team_name, "org_id": org_id,
-            "identity": intel_data.get("identity", ""),
-            "playing_style": intel_data.get("playing_style", ""),
-            "system_summary": intel_data.get("system_summary", ""),
-            "strengths": intel_data.get("strengths", []),
-            "vulnerabilities": intel_data.get("vulnerabilities", []),
-            "key_personnel": key_personnel,
-            "special_teams_identity": intel_data.get("special_teams_identity", ""),
-            "player_archetype_fit": intel_data.get("player_archetype_fit", ""),
-            "comparable_teams": comparable_teams,
-            "tags": tags,
-            "data_sources_used": data_sources,
-            "trigger": trigger,
-            "version": new_version,
-            "created_at": now,
-        }
-        return result
-    except Exception as e:
-        logger.error("Team intelligence generation failed for %s: %s", team_name, str(e))
-        return None
-    finally:
-        conn.close()
-
-
-@app.get("/teams/{team_name}/intelligence")
-async def get_team_intelligence(team_name: str, token_data: dict = Depends(verify_token)):
-    """Get the latest team intelligence snapshot. Auto-generates if none exists and team has roster data."""
-    org_id = token_data["org_id"]
-    conn = get_db()
-
-    # Verify team exists
-    team = conn.execute("SELECT name FROM teams WHERE org_id = ? AND LOWER(name) = LOWER(?)", (org_id, team_name)).fetchone()
-    if not team:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Team not found")
-
-    # Get latest intelligence
-    row = conn.execute(
-        "SELECT * FROM team_intelligence WHERE LOWER(team_name) = LOWER(?) AND org_id = ? ORDER BY version DESC LIMIT 1",
-        (team_name, org_id)
-    ).fetchone()
-    conn.close()
-
-    if row:
-        return _parse_team_intel_row(dict(row))
-
-    # No intelligence — check if team has roster data to generate from
-    conn2 = get_db()
-    has_roster = conn2.execute(
-        "SELECT COUNT(*) FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) AND (is_deleted = 0 OR is_deleted IS NULL)",
-        (org_id, team_name)
-    ).fetchone()[0] > 0
-    conn2.close()
-
-    if has_roster:
-        result = await _generate_team_intelligence(team_name, org_id, trigger="auto")
-        if result:
-            return result
-
-    # No roster data — return empty
-    return {
-        "id": None, "team_name": team_name,
-        "identity": None, "playing_style": None, "system_summary": None,
-        "strengths": [], "vulnerabilities": [], "key_personnel": [],
-        "special_teams_identity": None, "player_archetype_fit": None,
-        "comparable_teams": [], "tags": [],
-        "data_sources_used": {}, "trigger": None, "version": 0, "created_at": None,
-    }
-
-
-@app.post("/teams/{team_name}/intelligence")
-async def refresh_team_intelligence(team_name: str, token_data: dict = Depends(verify_token)):
-    """Manually trigger a team intelligence refresh."""
-    org_id = token_data["org_id"]
-    user_id = token_data["user_id"]
-    conn = get_db()
-
-    team = conn.execute("SELECT name FROM teams WHERE org_id = ? AND LOWER(name) = LOWER(?)", (org_id, team_name)).fetchone()
-    if not team:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Team not found")
-    conn.close()
-
-    _check_tier_limit(user_id, "reports", get_db())
-
-    result = await _generate_team_intelligence(team_name, org_id, trigger="manual")
-    if result:
-        return result
-    raise HTTPException(status_code=500, detail="Team intelligence generation failed — check server logs")
-
-
-# ============================================================
 # SCOUT NOTES ENDPOINTS
 # ============================================================
 
@@ -12681,101 +11273,6 @@ def _fuzzy_name_match(name1: str, name2: str) -> float:
     # Count matching characters
     matches = sum(1 for ca, cb in zip(a, b) if ca == cb)
     return matches / longer
-
-
-def _build_player_index(existing_list: list[dict]) -> dict:
-    """Build a last-name → [player] index for fast first-pass lookup.
-    Returns dict keyed by lowercase last name with lists of player dicts."""
-    index: dict[str, list[dict]] = {}
-    for ep in existing_list:
-        ln = ep.get("last_name", "").lower().strip()
-        if ln:
-            index.setdefault(ln, []).append(ep)
-        # Also index by first 3 chars of last name for fuzzy tolerance
-        if len(ln) >= 3:
-            prefix = ln[:3]
-            key = f"~{prefix}"
-            index.setdefault(key, []).append(ep)
-    return index
-
-
-def _find_best_player_match(
-    csv_name: str,
-    csv_last: str,
-    csv_dob: str,
-    team: str,
-    existing_list: list[dict],
-    player_index: dict,
-) -> tuple:
-    """Fast player matching with last-name indexing and early exit.
-    Returns (best_match_dict, best_score) or (None, 0.0).
-    Uses a two-pass approach:
-      Pass 1: Check players with matching/similar last names (fast, covers 95%+ of matches)
-      Pass 2: Only if Pass 1 fails, do a full scan (rare — handles name swaps, typos)
-    """
-    best_score = 0.0
-    best_match = None
-
-    # Build candidate set from index (O(1) lookup instead of full scan)
-    candidates = set()
-    # Exact last name match
-    for ep in player_index.get(csv_last, []):
-        candidates.add(ep["id"])
-    # Prefix match (first 3 chars) for minor typos
-    if len(csv_last) >= 3:
-        for ep in player_index.get(f"~{csv_last[:3]}", []):
-            candidates.add(ep["id"])
-
-    # Pass 1: Check indexed candidates only
-    for ep in existing_list:
-        if ep["id"] not in candidates:
-            continue
-
-        existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
-        existing_last = ep["last_name"].lower().strip()
-        existing_dob = ep.get("dob", "") or ""
-
-        score = _fuzzy_name_match(csv_name, existing_name)
-
-        # DOB match is a very strong signal
-        if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
-            if csv_dob == existing_dob:
-                if csv_last == existing_last:
-                    score = max(score, 0.98)
-                else:
-                    score += 0.15
-
-        # Team match bonus
-        if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
-            score += 0.1
-
-        if score > best_score and score >= 0.85:
-            best_score = score
-            best_match = ep
-            # Early exit on near-perfect match
-            if best_score >= 0.98:
-                return (best_match, best_score)
-
-    # If Pass 1 found a good match, return it
-    if best_match and best_score >= 0.85:
-        return (best_match, best_score)
-
-    # Pass 2: Full scan only if Pass 1 found nothing (handles edge cases)
-    if not best_match:
-        for ep in existing_list:
-            if ep["id"] in candidates:
-                continue  # Already checked
-            existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
-            score = _fuzzy_name_match(csv_name, existing_name)
-            if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
-                score += 0.1
-            if score > best_score and score >= 0.85:
-                best_score = score
-                best_match = ep
-                if best_score >= 0.98:
-                    return (best_match, best_score)
-
-    return (best_match, best_score)
 
 
 @app.post("/import/preview")
@@ -13147,14 +11644,11 @@ async def instat_import(
     season: Optional[str] = Query(None),
     team_name: Optional[str] = Query(None),
     line_type: Optional[str] = Query(None),
-    game_date: Optional[str] = Query(None),
-    opponent: Optional[str] = Query(None),
     token_data: dict = Depends(verify_token),
 ):
     """
     Unified InStat XLSX import — auto-detects file type (league teams, league skaters,
-    league goalies, team skaters, team goalies, lines, team games, game skaters, game goalies)
-    and routes to appropriate handler.
+    league goalies, team skaters, team goalies, lines) and routes to appropriate handler.
     """
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
@@ -13198,23 +11692,13 @@ async def instat_import(
     headers = list(rows[0].keys())
     file_type = _detect_instat_file_type(headers)
 
-    # ── Parse filename for auto-detection of team, opponent, date ──
-    fn_meta = _parse_instat_filename(file.filename or "")
-    if not team_name and fn_meta.get("team"):
-        team_name = fn_meta["team"]
-    if not opponent and fn_meta.get("opponent"):
-        opponent = fn_meta["opponent"]
-    if not game_date and fn_meta.get("date"):
-        game_date = fn_meta["date"]
-
     # Auto-detect season from current date if not provided
     if not season:
         now = datetime.now()
         year = now.year
         season = f"{year-1}-{year}" if now.month < 9 else f"{year}-{year+1}"
 
-    logger.info("InStat import: file_type=%s, rows=%d, season=%s, team=%s, opponent=%s, game_date=%s",
-                file_type, len(rows), season, team_name, opponent, game_date)
+    logger.info("InStat import: file_type=%s, rows=%d, season=%s, team=%s", file_type, len(rows), season, team_name)
 
     result = {
         "file_type": file_type,
@@ -13222,102 +11706,12 @@ async def instat_import(
         "players_created": 0,
         "players_updated": 0,
         "stats_imported": 0,
-        "games_imported": 0,
         "errors": [],
-        "detected_team": fn_meta.get("team"),
-        "detected_opponent": fn_meta.get("opponent"),
-        "detected_date": fn_meta.get("date"),
-        "detected_type_hint": fn_meta.get("type_hint"),
     }
-
-    # ── Multi-team support: split rows by _sheet_team when present ──
-    sheet_teams = set(r.get("_sheet_team", "") for r in rows if r.get("_sheet_team"))
-    has_multi_team = len(sheet_teams) >= 2
-
-    def _split_rows_by_team(all_rows: list[dict]) -> dict[str, list[dict]]:
-        """Group rows by _sheet_team tag. Returns {team_name: [rows]}."""
-        by_team: dict[str, list[dict]] = {}
-        for r in all_rows:
-            t = r.get("_sheet_team", "")
-            if t:
-                by_team.setdefault(t, []).append(r)
-            else:
-                by_team.setdefault("_untagged", []).append(r)
-        return by_team
 
     _instat_player_ids = []
     try:
-        if file_type == "team_games":
-            if not team_name:
-                raise HTTPException(status_code=400, detail="team_name required for games import (select a team on the upload form)")
-            r = _import_team_games(rows, season, team_name, org_id)
-            result.update(r)
-
-        elif file_type == "game_skaters":
-            if has_multi_team:
-                # Process BOTH teams from sheet-tagged rows
-                teams_data = _split_rows_by_team(rows)
-                total_created, total_updated, total_imported = 0, 0, 0
-                all_errors = []
-                teams_processed = []
-                for sheet_team, team_rows in teams_data.items():
-                    if sheet_team == "_untagged":
-                        continue
-                    # Determine opponent for this team
-                    other_teams = [t for t in teams_data if t != sheet_team and t != "_untagged"]
-                    opp = other_teams[0] if other_teams else opponent
-                    r = _import_game_skaters(team_rows, season, sheet_team, org_id, game_date, opp)
-                    _instat_player_ids.extend(r.pop("player_ids", []))
-                    total_created += r.get("players_created", 0)
-                    total_updated += r.get("players_updated", 0)
-                    total_imported += r.get("stats_imported", 0)
-                    all_errors.extend(r.get("errors", []))
-                    teams_processed.append(sheet_team)
-                result["players_created"] = total_created
-                result["players_updated"] = total_updated
-                result["stats_imported"] = total_imported
-                result["errors"] = all_errors
-                result["teams_processed"] = teams_processed
-                logger.info("Multi-team game skaters import: %s", teams_processed)
-            else:
-                if not team_name:
-                    raise HTTPException(status_code=400, detail="team_name required for game imports")
-                r = _import_game_skaters(rows, season, team_name, org_id, game_date, opponent)
-                _instat_player_ids = r.pop("player_ids", [])
-                result.update(r)
-
-        elif file_type == "game_goalies":
-            if has_multi_team:
-                teams_data = _split_rows_by_team(rows)
-                total_created, total_updated, total_imported = 0, 0, 0
-                all_errors = []
-                teams_processed = []
-                for sheet_team, team_rows in teams_data.items():
-                    if sheet_team == "_untagged":
-                        continue
-                    other_teams = [t for t in teams_data if t != sheet_team and t != "_untagged"]
-                    opp = other_teams[0] if other_teams else opponent
-                    r = _import_game_goalies(team_rows, season, sheet_team, org_id, game_date, opp)
-                    _instat_player_ids.extend(r.pop("player_ids", []))
-                    total_created += r.get("players_created", 0)
-                    total_updated += r.get("players_updated", 0)
-                    total_imported += r.get("stats_imported", 0)
-                    all_errors.extend(r.get("errors", []))
-                    teams_processed.append(sheet_team)
-                result["players_created"] = total_created
-                result["players_updated"] = total_updated
-                result["stats_imported"] = total_imported
-                result["errors"] = all_errors
-                result["teams_processed"] = teams_processed
-                logger.info("Multi-team game goalies import: %s", teams_processed)
-            else:
-                if not team_name:
-                    raise HTTPException(status_code=400, detail="team_name required for game imports")
-                r = _import_game_goalies(rows, season, team_name, org_id, game_date, opponent)
-                _instat_player_ids = r.pop("player_ids", [])
-                result.update(r)
-
-        elif file_type == "league_teams":
+        if file_type == "league_teams":
             r = _import_league_teams(rows, season, org_id, team_name_override=team_name)
             result.update(r)
         elif file_type == "league_skaters":
@@ -13340,31 +11734,12 @@ async def instat_import(
             r = _import_team_goalies(rows, season, team_name, org_id)
             _instat_player_ids = r.pop("player_ids", [])
             result.update(r)
-
         elif file_type == "lines":
-            if has_multi_team:
-                teams_data = _split_rows_by_team(rows)
-                total_imported = 0
-                all_errors = []
-                teams_processed = []
-                lt = line_type or "full"
-                for sheet_team, team_rows in teams_data.items():
-                    if sheet_team == "_untagged":
-                        continue
-                    r = _import_lines(team_rows, season, sheet_team, lt, org_id)
-                    total_imported += r.get("lines_imported", 0)
-                    all_errors.extend(r.get("errors", []))
-                    teams_processed.append(sheet_team)
-                result["lines_imported"] = total_imported
-                result["errors"] = all_errors
-                result["teams_processed"] = teams_processed
-                logger.info("Multi-team lines import: %s", teams_processed)
-            else:
-                if not team_name:
-                    raise HTTPException(status_code=400, detail="team_name required for lines imports")
-                lt = line_type or "full"
-                r = _import_lines(rows, season, team_name, lt, org_id)
-                result.update(r)
+            if not team_name:
+                raise HTTPException(status_code=400, detail="team_name required for lines imports")
+            lt = line_type or "full"
+            r = _import_lines(rows, season, team_name, lt, org_id)
+            result.update(r)
         else:
             raise HTTPException(status_code=400, detail=f"Could not detect file type. Headers: {headers[:10]}")
     except HTTPException:
@@ -13474,7 +11849,6 @@ def _import_league_skaters(rows, season, org_id):
         (org_id,)
     ).fetchall()
     existing_list = [dict(p) for p in existing_players]
-    player_index = _build_player_index(existing_list)
 
     for i, row in enumerate(rows):
         try:
@@ -13499,15 +11873,38 @@ def _import_league_skaters(rows, season, org_id):
                 if val:
                     bio[field] = val
 
-            # Match against existing players — indexed + early-exit matching
+            # Match against existing players — multi-signal matching
             player_id = None
             csv_name = f"{first_name} {last_name}".lower()
             csv_last = last_name.lower().strip()
             csv_dob = bio.get("dob", "")
+            best_score = 0.0
+            best_match = None
 
-            best_match, best_score = _find_best_player_match(
-                csv_name, csv_last, csv_dob, team, existing_list, player_index
-            )
+            for ep in existing_list:
+                existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
+                existing_last = ep["last_name"].lower().strip()
+                existing_dob = ep.get("dob", "") or ""
+
+                # Start with name similarity
+                score = _fuzzy_name_match(csv_name, existing_name)
+
+                # DOB match is a very strong signal
+                if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
+                    if csv_dob == existing_dob:
+                        # Same DOB: huge boost — if last names also match, it's nearly certain
+                        if csv_last == existing_last:
+                            score = max(score, 0.98)  # Same last name + same DOB = same person
+                        else:
+                            score += 0.15  # Same DOB, different last name — minor boost
+
+                # Team match bonus
+                if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
+                    score += 0.1
+
+                if score > best_score and score >= 0.85:
+                    best_score = score
+                    best_match = ep
 
             if best_match:
                 player_id = best_match["id"]
@@ -13538,42 +11935,15 @@ def _import_league_skaters(rows, season, org_id):
                        current_team, current_league, dob)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (player_id, org_id, first_name, last_name, position,
-                     bio.get("shoots", ""), team, "GOJHL", bio.get("dob", ""))
+                     bio.get("shoots", ""), team, "GOHL", bio.get("dob", ""))
                 )
-                # Add to existing list + index for matching remaining rows
-                new_entry = {"id": player_id, "first_name": first_name, "last_name": last_name,
-                             "current_team": team, "position": position, "dob": bio.get("dob", "")}
-                existing_list.append(new_entry)
-                ln = last_name.lower().strip()
-                if ln:
-                    player_index.setdefault(ln, []).append(new_entry)
-                    if len(ln) >= 3:
-                        player_index.setdefault(f"~{ln[:3]}", []).append(new_entry)
+                # Add to existing list for matching remaining rows (include DOB for future matching)
+                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
+                                     "current_team": team, "position": position, "dob": bio.get("dob", "")})
                 created += 1
 
             # Parse stats
             core, extended = _parse_instat_row(row, INSTAT_SKATER_CORE_MAP, INSTAT_SKATER_EXTENDED_MAP)
-
-            # ── Per-game average detection ──
-            # InStat league exports sometimes report per-game averages instead of season totals.
-            # Detect: if GP > 10 and g/a/p are all < 5 (fractional), they're likely per-game rates.
-            _gp = core.get("gp", 0) or 0
-            _g = core.get("g", 0) or 0
-            _a = core.get("a", 0) or 0
-            _p = core.get("p", 0) or 0
-            if _gp >= 10 and isinstance(_g, (int, float)) and isinstance(_a, (int, float)):
-                if (0 < _g < 5 and _g != int(_g)) or (0 < _a < 5 and _a != int(_a)) or (0 < _p < 5 and _p != int(_p)):
-                    # These are per-game averages — multiply by GP to get totals
-                    logger.warning("InStat per-game average detected for %s (GP=%d, G=%.2f, A=%.2f). Converting to totals.",
-                                   full_name, _gp, _g, _a)
-                    core["g"] = round(_g * _gp)
-                    core["a"] = round(_a * _gp)
-                    core["p"] = core["g"] + core["a"]
-                    # Also fix other rate stats if fractional
-                    for k in ("plus_minus", "pim", "shots", "sog"):
-                        v = core.get(k, 0) or 0
-                        if isinstance(v, float) and v != int(v) and abs(v) < 5:
-                            core[k] = round(v * _gp)
 
             # Delete existing InStat season stats for this player/season (replace)
             conn.execute(
@@ -13618,7 +11988,6 @@ def _import_league_goalies(rows, season, org_id):
         (org_id,)
     ).fetchall()
     existing_list = [dict(p) for p in existing_players]
-    player_index = _build_player_index(existing_list)
 
     for i, row in enumerate(rows):
         try:
@@ -13639,15 +12008,32 @@ def _import_league_goalies(rows, season, org_id):
                 if val:
                     bio[field] = val
 
-            # Match player — indexed + early-exit matching
+            # Match player — multi-signal matching (same as skaters)
             player_id = None
             csv_name = f"{first_name} {last_name}".lower()
             csv_last = last_name.lower().strip()
             csv_dob = bio.get("dob", "")
+            best_score = 0.0
+            best_match = None
 
-            best_match, best_score = _find_best_player_match(
-                csv_name, csv_last, csv_dob, team, existing_list, player_index
-            )
+            for ep in existing_list:
+                existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
+                existing_last = ep["last_name"].lower().strip()
+                existing_dob = ep.get("dob", "") or ""
+
+                score = _fuzzy_name_match(csv_name, existing_name)
+
+                # DOB match is a very strong signal
+                if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
+                    if csv_dob == existing_dob and csv_last == existing_last:
+                        score = max(score, 0.98)
+
+                if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
+                    score += 0.1
+
+                if score > best_score and score >= 0.85:
+                    best_score = score
+                    best_match = ep
 
             if best_match:
                 player_id = best_match["id"]
@@ -13663,14 +12049,8 @@ def _import_league_goalies(rows, season, org_id):
                     (player_id, org_id, first_name, last_name,
                      bio.get("shoots", ""), team, "GOHL", bio.get("dob", ""))
                 )
-                new_entry = {"id": player_id, "first_name": first_name, "last_name": last_name,
-                             "current_team": team, "position": "G", "dob": bio.get("dob", "")}
-                existing_list.append(new_entry)
-                ln = last_name.lower().strip()
-                if ln:
-                    player_index.setdefault(ln, []).append(new_entry)
-                    if len(ln) >= 3:
-                        player_index.setdefault(f"~{ln[:3]}", []).append(new_entry)
+                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
+                                     "current_team": team, "position": "G", "dob": bio.get("dob", "")})
                 created += 1
 
             # Parse goalie stats
@@ -13778,397 +12158,6 @@ def _import_lines(rows, season, team_name, line_type, org_id):
     return {"stats_imported": stats_imported, "errors": errors}
 
 
-def _parse_instat_game_date(raw_date: str, season: str) -> str:
-    """Parse InStat game date formats into ISO date string.
-
-    Formats seen:
-      '15/02'      → 2026-02-15 (infer year from season)
-      '06/09/25'   → 2025-09-06 (2-digit year)
-      '06/09/2025' → 2025-09-06
-    """
-    if not raw_date or raw_date == "None":
-        return ""
-    raw_date = str(raw_date).strip()
-
-    # Extract base year from season string (e.g., "2025-2026" → start=2025, end=2026)
-    season_start_year = 2025
-    season_end_year = 2026
-    if season and "-" in season:
-        parts = season.split("-")
-        try:
-            season_start_year = int(parts[0])
-            season_end_year = int(parts[1]) if len(parts[1]) == 4 else int(parts[0][:2] + parts[1])
-        except ValueError:
-            pass
-
-    date_parts = raw_date.split("/")
-    try:
-        if len(date_parts) == 2:
-            # DD/MM — no year, infer from season
-            day = int(date_parts[0])
-            month = int(date_parts[1])
-            year = season_end_year if month <= 8 else season_start_year
-            return f"{year}-{month:02d}-{day:02d}"
-        elif len(date_parts) == 3:
-            day = int(date_parts[0])
-            month = int(date_parts[1])
-            yr = date_parts[2]
-            year = int(yr) if len(yr) == 4 else 2000 + int(yr)
-            return f"{year}-{month:02d}-{day:02d}"
-    except (ValueError, IndexError):
-        pass
-    return raw_date
-
-
-def _parse_instat_opponent(raw_opponent: str) -> tuple:
-    """Parse InStat opponent string into (opponent_name, home_away).
-
-    Formats:
-      'vs Listowel Cyclones' → ('Listowel Cyclones', 'H')
-      '@ Stratford Warriors'  → ('Stratford Warriors', 'A')
-    """
-    if not raw_opponent or raw_opponent == "None":
-        return ("", "")
-    s = str(raw_opponent).strip()
-    if s.lower().startswith("vs "):
-        return (s[3:].strip(), "H")
-    elif s.startswith("@ "):
-        return (s[2:].strip(), "A")
-    elif s.startswith("@"):
-        return (s[1:].strip(), "A")
-    return (s, "")
-
-
-def _import_team_games(rows, season, team_name, org_id):
-    """Import team game-by-game schedule/results from InStat Games XLSX.
-
-    Each row = one game with 102 columns of team stats.
-    Columns: Date, Opponent, Score, Goals, Penalties, Faceoffs, Shots, xG, CORSI%, etc.
-    Last row may be 'Average per game' summary — skip it.
-    """
-    conn = get_db()
-    games_imported = 0
-    errors = []
-
-    if rows:
-        logger.info("Team games import: %d rows, team=%s, columns=%s",
-                     len(rows), team_name, list(rows[0].keys())[:10])
-
-    for i, row in enumerate(rows):
-        try:
-            raw_date = row.get("date", "").strip()
-            raw_opponent = row.get("opponent", "").strip()
-
-            # Skip summary rows (date is empty, opponent is "Average per game")
-            if not raw_date or "average" in raw_opponent.lower():
-                continue
-
-            game_date = _parse_instat_game_date(raw_date, season)
-            if not game_date:
-                errors.append(f"Row {i+1}: could not parse date '{raw_date}'")
-                continue
-
-            opponent_name, home_away = _parse_instat_opponent(raw_opponent)
-            if not opponent_name:
-                errors.append(f"Row {i+1}: missing opponent")
-                continue
-
-            # Parse score (format: "4:3")
-            score_str = str(row.get("score", "")).strip()
-            team_score = 0
-            opp_score = 0
-            if score_str and ":" in score_str:
-                sp = score_str.split(":")
-                team_score = _to_int(sp[0])
-                opp_score = _to_int(sp[1])
-
-            # Determine home/away scores
-            if home_away == "H":
-                home_score, away_score = team_score, opp_score
-                home_team, away_team = team_name, opponent_name
-            elif home_away == "A":
-                home_score, away_score = opp_score, team_score
-                home_team, away_team = opponent_name, team_name
-            else:
-                home_team, away_team = team_name, opponent_name
-                home_score, away_score = team_score, opp_score
-
-            # Parse extended stats (all 99+ stat columns)
-            _, extended = _parse_instat_row(row, {}, INSTAT_TEAM_EXTENDED_MAP)
-
-            # Upsert: check if this game already exists
-            existing = conn.execute(
-                """SELECT id FROM games
-                   WHERE org_id = ? AND team_name = ? AND game_date = ?
-                   AND data_source = 'instat'""",
-                (org_id, team_name, game_date)
-            ).fetchone()
-
-            if existing:
-                conn.execute(
-                    """UPDATE games SET home_team = ?, away_team = ?, home_score = ?,
-                       away_score = ?, status = 'final', extended_stats = ?
-                       WHERE id = ?""",
-                    (home_team, away_team, home_score, away_score,
-                     json.dumps(extended) if extended else None, existing["id"])
-                )
-            else:
-                conn.execute(
-                    """INSERT INTO games (id, league, season, game_date, home_team, away_team,
-                       home_score, away_score, status, data_source, org_id, team_name, extended_stats)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'final', 'instat', ?, ?, ?)""",
-                    (gen_id(), "GOJHL", season, game_date, home_team, away_team,
-                     home_score, away_score, org_id, team_name,
-                     json.dumps(extended) if extended else None)
-                )
-
-            games_imported += 1
-
-        except Exception as e:
-            errors.append(f"Row {i+1}: {str(e)}")
-
-    conn.commit()
-    conn.close()
-    return {"games_imported": games_imported, "errors": errors}
-
-
-def _import_game_skaters(rows, season, team_name, org_id, game_date=None, opponent=None):
-    """Import single-game skater box score into player_game_stats.
-
-    Each row = one player's stats from a single game (133 columns).
-    No 'Games played' column — that's how we know it's game-level, not season-level.
-    """
-    conn = get_db()
-    stats_imported = 0
-    players_created = 0
-    players_updated = 0
-    errors = []
-    player_ids = []
-
-    # Determine home/away from opponent string
-    home_away = ""
-    if opponent:
-        opp_clean, ha = _parse_instat_opponent(opponent)
-        if ha:
-            home_away = ha
-            opponent = opp_clean
-
-    # Load existing players for matching
-    existing_players = conn.execute(
-        "SELECT id, first_name, last_name, current_team, position, dob FROM players WHERE org_id = ?",
-        (org_id,)
-    ).fetchall()
-    existing_list = [dict(p) for p in existing_players]
-    player_index = _build_player_index(existing_list)
-
-    if rows:
-        logger.info("Game skaters import: %d rows, team=%s, date=%s, opponent=%s",
-                     len(rows), team_name, game_date, opponent)
-
-    for i, row in enumerate(rows):
-        try:
-            player_name = row.get("player", "").strip()
-            if not player_name:
-                errors.append(f"Row {i+1}: missing player name")
-                continue
-
-            # Split name (InStat format: "Ewan McChesney")
-            name_parts = player_name.split(None, 1)
-            first_name = name_parts[0] if name_parts else player_name
-            last_name = name_parts[1] if len(name_parts) > 1 else ""
-
-            position = row.get("position", "").strip().upper() or "F"
-            jersey = row.get("shirt_number", "").strip()
-
-            # Match to existing player — indexed + early-exit
-            csv_name = player_name.lower()
-            csv_last = last_name.lower().strip()
-            best_match, best_score = _find_best_player_match(
-                csv_name, csv_last, "", team_name, existing_list, player_index
-            )
-
-            if best_match:
-                player_id = best_match["id"]
-                players_updated += 1
-            else:
-                # Create new player
-                player_id = gen_id()
-                conn.execute(
-                    """INSERT INTO players (id, org_id, first_name, last_name, position,
-                       current_team, current_league, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, 'GOJHL', ?)""",
-                    (player_id, org_id, first_name, last_name, position,
-                     team_name, datetime.now().isoformat())
-                )
-                # Add to cache + index for subsequent rows
-                new_entry = {"id": player_id, "first_name": first_name, "last_name": last_name,
-                             "current_team": team_name, "position": position, "dob": None}
-                existing_list.append(new_entry)
-                ln = last_name.lower().strip()
-                if ln:
-                    player_index.setdefault(ln, []).append(new_entry)
-                    if len(ln) >= 3:
-                        player_index.setdefault(f"~{ln[:3]}", []).append(new_entry)
-                players_created += 1
-
-            player_ids.append(player_id)
-
-            # Parse core stats
-            core, extended = _parse_instat_row(row, INSTAT_SKATER_CORE_MAP, INSTAT_SKATER_EXTENDED_MAP)
-
-            # Delete existing game stats for this player+date+source (upsert)
-            if game_date:
-                conn.execute(
-                    """DELETE FROM player_game_stats
-                       WHERE player_id = ? AND game_date = ? AND data_source = 'instat_game'""",
-                    (player_id, game_date)
-                )
-
-            # Insert into player_game_stats
-            conn.execute(
-                """INSERT INTO player_game_stats (id, player_id, game_date, opponent, home_away,
-                   goals, assists, points, plus_minus, pim, shots, toi_seconds,
-                   season, league, data_source, extended_stats)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'GOJHL', 'instat_game', ?)""",
-                (gen_id(), player_id, game_date, opponent, home_away,
-                 core.get("g", 0) or 0, core.get("a", 0) or 0,
-                 (core.get("g", 0) or 0) + (core.get("a", 0) or 0),
-                 core.get("plus_minus", 0) or 0, core.get("pim", 0) or 0,
-                 core.get("shots", 0) or 0, core.get("toi_seconds", 0) or 0,
-                 season, json.dumps(extended) if extended else None)
-            )
-            stats_imported += 1
-
-        except Exception as e:
-            errors.append(f"Row {i+1} ({player_name}): {str(e)}")
-
-    conn.commit()
-    conn.close()
-    return {
-        "players_created": players_created,
-        "players_updated": players_updated,
-        "stats_imported": stats_imported,
-        "errors": errors,
-        "player_ids": player_ids,
-    }
-
-
-def _import_game_goalies(rows, season, team_name, org_id, game_date=None, opponent=None):
-    """Import single-game goalie box score into player_game_stats.
-
-    Each row = one goalie's stats from a single game (19 columns).
-    No 'Games played' column — single-game data.
-    """
-    conn = get_db()
-    stats_imported = 0
-    players_created = 0
-    players_updated = 0
-    errors = []
-    player_ids = []
-
-    home_away = ""
-    if opponent:
-        opp_clean, ha = _parse_instat_opponent(opponent)
-        if ha:
-            home_away = ha
-            opponent = opp_clean
-
-    existing_rows = conn.execute(
-        "SELECT id, first_name, last_name, current_team, position, dob FROM players WHERE org_id = ?",
-        (org_id,)
-    ).fetchall()
-    existing_list = [dict(r) for r in existing_rows]
-    player_index = _build_player_index(existing_list)
-
-    for i, row in enumerate(rows):
-        try:
-            player_name = row.get("player", "").strip()
-            if not player_name:
-                errors.append(f"Row {i+1}: missing player name")
-                continue
-
-            name_parts = player_name.split(None, 1)
-            first_name = name_parts[0] if name_parts else player_name
-            last_name = name_parts[1] if len(name_parts) > 1 else ""
-            jersey = row.get("shirt_number", "").strip()
-
-            # Match to existing player — indexed two-pass lookup
-            best_match, best_score = _find_best_player_match(
-                player_name, last_name, None, team_name,
-                existing_list, player_index
-            )
-            player_id = best_match["id"] if best_match and best_score >= 0.85 else None
-
-            if player_id:
-                players_updated += 1
-            else:
-                player_id = gen_id()
-                conn.execute(
-                    """INSERT INTO players (id, org_id, first_name, last_name, position,
-                       current_team, current_league, created_at)
-                       VALUES (?, ?, ?, ?, 'G', ?, 'GOJHL', ?)""",
-                    (player_id, org_id, first_name, last_name,
-                     team_name, datetime.now().isoformat())
-                )
-                new_entry = {"id": player_id, "first_name": first_name, "last_name": last_name,
-                     "current_team": team_name, "position": "G", "dob": None}
-                existing_list.append(new_entry)
-                # Update index for new player
-                ln = last_name.lower().strip()
-                if ln:
-                    player_index.setdefault(ln, []).append(new_entry)
-                    if len(ln) >= 3:
-                        player_index.setdefault(f"~{ln[:3]}", []).append(new_entry)
-                players_created += 1
-
-            player_ids.append(player_id)
-
-            # Parse goalie stats
-            core, extended = _parse_instat_row(row, INSTAT_GOALIE_CORE_MAP, INSTAT_GOALIE_EXTENDED_MAP)
-
-            # Delete existing game stats for this player+date+source
-            if game_date:
-                conn.execute(
-                    """DELETE FROM player_game_stats
-                       WHERE player_id = ? AND game_date = ? AND data_source = 'instat_game'""",
-                    (player_id, game_date)
-                )
-
-            # Insert — map goalie stats to player_game_stats columns
-            ga = core.get("ga", 0) or 0
-            sa = core.get("sa", 0) or 0
-            sv = core.get("sv", 0) or 0
-
-            conn.execute(
-                """INSERT INTO player_game_stats (id, player_id, game_date, opponent, home_away,
-                   goals, assists, points, plus_minus, pim, shots, toi_seconds,
-                   season, league, data_source, extended_stats)
-                   VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, ?, 0, ?, ?, 'GOJHL', 'instat_game', ?)""",
-                (gen_id(), player_id, game_date, opponent, home_away,
-                 core.get("pim", 0) or 0, core.get("toi_seconds", 0) or 0,
-                 season, json.dumps({
-                     "goalie": True,
-                     "ga": ga, "sa": sa, "sv": sv,
-                     "sv_pct": core.get("sv_pct"),
-                     **extended,
-                 }))
-            )
-            stats_imported += 1
-
-        except Exception as e:
-            errors.append(f"Row {i+1} ({player_name}): {str(e)}")
-
-    conn.commit()
-    conn.close()
-    return {
-        "players_created": players_created,
-        "players_updated": players_updated,
-        "stats_imported": stats_imported,
-        "errors": errors,
-        "player_ids": player_ids,
-    }
-
-
 # ============================================================
 # TEMPLATES
 # ============================================================
@@ -14191,625 +12180,6 @@ async def list_templates(token_data: dict = Depends(verify_token)):
         d["is_global"] = bool(d.get("is_global", 0))
         results.append(d)
     return results
-
-
-# ============================================================
-# BROADCAST HUB
-# ============================================================
-
-
-class BroadcastGenerateAllRequest(BaseModel):
-    home_team: str
-    away_team: str
-    game_date: Optional[str] = None
-    mode: str = "broadcast"
-    depth: str = "standard"
-    audience: str = "informed"
-    game_state: str = "pre_game"
-
-
-class BroadcastGenerateToolRequest(BaseModel):
-    home_team: str
-    away_team: str
-    game_date: Optional[str] = None
-    mode: str = "broadcast"
-    depth: str = "standard"
-    audience: str = "informed"
-    game_state: str = "pre_game"
-    tool_name: str
-    additional_context: Optional[Dict[str, Any]] = None
-
-
-class BroadcastPostGameRequest(BaseModel):
-    home_team: str
-    away_team: str
-    home_score: int
-    away_score: int
-    period: Optional[str] = "Final"
-    three_stars: Optional[List[str]] = None
-    format: str = "60_second"
-    mode: str = "broadcast"
-    audience: str = "informed"
-
-
-def _gather_broadcast_data(conn, org_id: str, home_team: str, away_team: str) -> dict:
-    """Gather all relevant data for broadcast content generation.
-    - Splits active roster vs out-tonight (IR/injured/scratched/suspended)
-    - Includes line combinations so Claude knows actual deployment
-    - Slim player records to keep under token limits
-    """
-    data: Dict[str, Any] = {"home_team": home_team, "away_team": away_team}
-
-    for side, team_name in [("home", home_team), ("away", away_team)]:
-        # ── Roster — all non-deleted players on team ──
-        players = conn.execute(
-            """SELECT id, first_name, last_name, position, shoots, height_cm, weight_kg, dob,
-                      current_team, current_league, archetype,
-                      COALESCE(roster_status, 'active') as roster_status
-               FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?)
-               AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY position, last_name""",
-            (org_id, team_name),
-        ).fetchall()
-
-        active_roster = []
-        out_tonight = []
-
-        for p in players:
-            pd = {
-                "name": f"{p['first_name']} {p['last_name']}",
-                "pos": p["position"] or "F",
-                "shoots": p["shoots"] or "",
-                "ht": p["height_cm"] or "",
-                "wt": p["weight_kg"] or "",
-                "dob": p["dob"] or "",
-                "archetype": p["archetype"] or "",
-            }
-            # Attach latest stats (compact)
-            stat_row = conn.execute(
-                "SELECT gp, g, a, p, plus_minus, pim, shots, sog, extended_stats FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
-                (p["id"],),
-            ).fetchone()
-            if stat_row:
-                gp_val = stat_row["gp"] or 0
-                p_val = stat_row["p"] or 0
-                pd["s"] = {
-                    "gp": gp_val, "g": stat_row["g"] or 0,
-                    "a": stat_row["a"] or 0, "p": p_val,
-                    "+/-": stat_row["plus_minus"] or 0, "pim": stat_row["pim"] or 0,
-                    "sog": stat_row["sog"] or 0,
-                    "ppg": round(p_val / gp_val, 2) if gp_val > 0 else 0.0,
-                }
-                if stat_row["extended_stats"]:
-                    try:
-                        ext = json.loads(stat_row["extended_stats"])
-                        if isinstance(ext, dict):
-                            for k in ("ppg", "shg", "gwg", "fow_pct", "shooting_pct"):
-                                if ext.get(k):
-                                    pd["s"][k] = ext[k]
-                    except Exception:
-                        pass
-            else:
-                pd["s"] = {"gp": 0, "g": 0, "a": 0, "p": 0}
-
-            # Attach intelligence (compact)
-            intel_row = conn.execute(
-                "SELECT archetype, overall_grade, summary FROM player_intelligence WHERE player_id = ? ORDER BY version DESC LIMIT 1",
-                (p["id"],),
-            ).fetchone()
-            if intel_row:
-                pd["archetype"] = intel_row["archetype"] or pd.get("archetype", "")
-                pd["grade"] = intel_row["overall_grade"] or ""
-                pd["intel"] = (intel_row["summary"] or "")[:120]
-
-            # Split by roster status
-            status = p["roster_status"]
-            if status in ("ir", "injured", "scratched", "suspended", "day-to-day"):
-                pd["status"] = status
-                out_tonight.append(pd)
-            else:
-                active_roster.append(pd)
-
-        data[f"{side}_roster"] = active_roster
-        data[f"{side}_out_tonight"] = out_tonight
-
-        # ── Line Combinations — actual deployment data ──
-        try:
-            lines = conn.execute(
-                """SELECT line_type, line_label, line_order, player_names, toi_seconds,
-                          goals_for, goals_against, data_source
-                   FROM line_combinations
-                   WHERE org_id = ? AND LOWER(team_name) = LOWER(?)
-                   ORDER BY line_type, line_order, toi_seconds DESC""",
-                (org_id, team_name),
-            ).fetchall()
-            lines_data = {}
-            for ln in lines:
-                lt = ln["line_type"] or "unknown"
-                if lt not in lines_data:
-                    lines_data[lt] = []
-                lines_data[lt].append({
-                    "label": ln["line_label"] or "",
-                    "players": ln["player_names"],
-                    "toi": ln["toi_seconds"] or 0,
-                    "gf": ln["goals_for"] or 0,
-                    "ga": ln["goals_against"] or 0,
-                })
-            data[f"{side}_lines"] = lines_data if lines_data else None
-        except Exception:
-            data[f"{side}_lines"] = None
-
-        # ── Team system ──
-        sys_row = conn.execute(
-            "SELECT * FROM team_systems WHERE org_id = ? AND LOWER(team_name) = LOWER(?) ORDER BY updated_at DESC LIMIT 1",
-            (org_id, team_name),
-        ).fetchone()
-        if sys_row:
-            data[f"{side}_system"] = {
-                "forecheck": sys_row["forecheck"], "dz_structure": sys_row["dz_structure"],
-                "oz_setup": sys_row["oz_setup"], "pp_formation": sys_row["pp_formation"],
-                "pk_formation": sys_row["pk_formation"], "breakout": sys_row["breakout"],
-                "pace": sys_row["pace"], "physicality": sys_row["physicality"],
-                "offensive_style": sys_row["offensive_style"],
-                "identity_tags": json.loads(sys_row["identity_tags"]) if sys_row["identity_tags"] else [],
-            }
-        else:
-            data[f"{side}_system"] = None
-
-        # ── Recent games ──
-        try:
-            games = conn.execute(
-                "SELECT game_date, home_team, away_team, home_score, away_score, status FROM games WHERE org_id = ? AND (LOWER(home_team) = LOWER(?) OR LOWER(away_team) = LOWER(?)) ORDER BY game_date DESC LIMIT 10",
-                (org_id, team_name, team_name),
-            ).fetchall()
-            data[f"{side}_recent_games"] = [
-                {
-                    "game_date": g["game_date"], "home_team": g["home_team"], "away_team": g["away_team"],
-                    "home_score": g["home_score"], "away_score": g["away_score"], "status": g["status"],
-                }
-                for g in games
-            ]
-        except Exception:
-            data[f"{side}_recent_games"] = []
-
-    # ── Head-to-head ──
-    try:
-        h2h = conn.execute(
-            """SELECT game_date, home_team, away_team, home_score, away_score FROM games
-               WHERE org_id = ? AND (
-                 (LOWER(home_team) = LOWER(?) AND LOWER(away_team) = LOWER(?)) OR
-                 (LOWER(home_team) = LOWER(?) AND LOWER(away_team) = LOWER(?))
-               ) ORDER BY game_date DESC LIMIT 10""",
-            (org_id, home_team, away_team, away_team, home_team),
-        ).fetchall()
-        data["head_to_head"] = [dict(g) for g in h2h]
-    except Exception:
-        data["head_to_head"] = []
-
-    return data
-
-
-# ── Broadcast Claude prompts ──────────────────────────────
-
-_BROADCAST_DEPTH_GUIDE = {
-    "quick": "Keep all outputs SHORT. Spotting board: top 12 players per team. Talk tracks: 2 per category, 15-word reads. Insights: 5 total. Stat cards: 3. Graphics: 4.",
-    "standard": "Standard detail. Spotting board: full rosters. Talk tracks: 3 per category, ~50-word reads. Insights: 8-10. Stat cards: 5-6. Graphics: 6-8.",
-    "deep": "Maximum detail. Spotting board: full rosters with advanced stats. Talk tracks: 4 per category with contingency notes, ~60-word reads. Insights: 12+. Stat cards: 8. Graphics: 10.",
-}
-
-_BROADCAST_AUDIENCE_GUIDE = {
-    "casual": "Use simple language. Avoid advanced stats jargon (no Corsi, Fenwick, xG). Focus on goals, assists, points, streaks, human interest stories. Explain any stat you reference.",
-    "informed": "Standard hockey language. Use traditional stats freely (G/A/P/+/-/PP%). Reference advanced stats sparingly with brief context. Balance narrative and numbers.",
-    "hardcore": "Full analytics depth. Use Corsi, Fenwick, xG, zone starts, shot quality, heatmaps freely. Assume audience understands possession metrics and deployment analysis. Tactical detail.",
-}
-
-BROADCAST_GENERATE_ALL_PROMPT = """You are the ProspectX Broadcast Intelligence Engine generating content for a live hockey broadcast.
-
-GAME CONTEXT:
-- Home Team: {home_team}
-- Away Team: {away_team}
-- Game Date: {game_date}
-- Game State: {game_state}
-
-IMPORTANT — DATA STRUCTURE:
-The game data includes for each team:
-- **_roster**: ACTIVE players available to play tonight. Build the spotting board from ONLY these players.
-- **_out_tonight**: Players OUT (IR, injured, scratched, suspended, day-to-day). Do NOT include these on the spotting board — list them separately as "out_tonight" in the response.
-- **_lines**: Actual line combinations (forward lines, defense pairs, PP units, PK units) from coaching staff. If provided, USE THESE for the spotting board player order and broadcast_note deployment info (e.g., "Line 1 LW, PP1"). If no lines data exists, order players by points and note "Lines TBD".
-- **_system**: Team tactical system (forecheck, breakout, etc.) — use for tactical talk tracks and matchup analysis.
-
-OUTPUT FORMAT: Return ONLY valid JSON matching this exact schema. No markdown, no code fences, no commentary outside the JSON.
-
-{{
-  "spotting_board": {{
-    "home": {{
-      "team_name": "{home_team}",
-      "lines": {{
-        "line_1": {{"lw": "First Last", "c": "First Last", "rw": "First Last"}},
-        "line_2": {{"lw": "...", "c": "...", "rw": "..."}},
-        "line_3": {{"lw": "...", "c": "...", "rw": "..."}},
-        "line_4": {{"lw": "...", "c": "...", "rw": "..."}},
-        "d_pair_1": {{"ld": "First Last", "rd": "First Last"}},
-        "d_pair_2": {{"ld": "...", "rd": "..."}},
-        "d_pair_3": {{"ld": "...", "rd": "..."}},
-        "pp1": ["First Last", "First Last", "First Last", "First Last", "First Last"],
-        "pp2": ["..."],
-        "pk1": ["First Last", "First Last", "First Last", "First Last"],
-        "pk2": ["..."],
-        "goalies": ["Starter Name", "Backup Name"]
-      }},
-      "players": [
-        {{"name": "Last, First", "position": "C", "line": "1C", "gp": 40, "g": 15, "a": 20, "p": 35, "key_stat": "5-game point streak", "archetype": "Two-Way Playmaker", "broadcast_note": "Line 1 C, PP1 — 4G last 6 games, lives in the blue paint"}}
-      ],
-      "out_tonight": [
-        {{"name": "Last, First", "position": "LW", "status": "IR", "note": "Upper body, out since Jan 15"}}
-      ]
-    }},
-    "away": {{
-      "team_name": "{away_team}",
-      "lines": {{...}},
-      "players": [...],
-      "out_tonight": [...]
-    }}
-  }},
-  "talk_tracks": {{
-    "team_storyline": [
-      {{"headline": "...", "twenty_sec_read": "...(~50 words)...", "stat_hook": "...", "category": "team_storyline"}}
-    ],
-    "matchup_storyline": [...],
-    "player_storyline": [...],
-    "streak_milestone": [...]
-  }},
-  "insights": [
-    {{"category": "PATTERN|MATCHUP|TREND|TACTICAL|MILESTONE", "insight": "One sharp sentence", "stat_support": "One stat line", "suggested_use": "on-air mention|graphic trigger|interview question"}}
-  ],
-  "stat_cards": [
-    {{"card_type": "player_vs_player|line_vs_line|special_teams|goalie|team_trend", "headline_stat": "PP%", "headline_value": "28.4%", "support_stats": [{{"label": "...", "value": "..."}}], "interpretation": "One sentence so-what", "graphic_caption": "Lower-third ready text"}}
-  ],
-  "graphics_suggestions": [
-    {{"priority": 1, "graphic_type": "Line matchup card", "trigger_moment": "After 2nd PP", "caption": "PP1 vs PK1 efficiency", "data_needed": "Last-10 PP% both teams"}}
-  ],
-  "player_profiles": [
-    {{"name": "First Last", "physical": "6'1 / 195 / L", "archetype": "Sniper", "role": "Line 1 LW, PP1", "strengths": "Elite release, net-front presence", "fun_fact": "Hometown kid", "tonight": "Has 3G in last 2 games vs this opponent"}}
-  ],
-  "interview_questions": [
-    {{"question": "Your PP has clicked at 28% the last month — what changed in the approach?", "label": "TACTICAL", "context_tab": "coach_pre"}}
-  ]
-}}
-
-DEPTH GUIDE: {depth_guide}
-AUDIENCE GUIDE: {audience_guide}
-
-RULES:
-- Use ONLY the provided roster and stats data. NEVER invent stats or fabricate player details.
-- If data is insufficient for a field, use "DATA NOT AVAILABLE" as the value.
-- Generate content appropriate for the current game state ({game_state}).
-- Spotting board must include ALL players from the ACTIVE roster (_roster). DO NOT include _out_tonight players on the main spotting board.
-- If line combinations (_lines) are provided, use them to determine player deployment (line assignments, PP/PK units). Reflect these in the "lines" object and each player's "line" field.
-- If no line data exists, order by points and mark lines as "TBD" — do NOT guess at line assignments.
-- The "out_tonight" array should list all players from _out_tonight with their status.
-- Generate 3-4 talk tracks per category (12-16 total).
-- Generate 8-12 insights sorted by impact.
-- Generate 5-8 stat cards of mixed types.
-- Generate 6-10 graphics suggestions sorted by priority.
-- Generate profiles for the top 10-15 notable players across both teams.
-- Generate 25-35 interview questions across all 5 context tabs (coach_pre, coach_post, player_pre, player_post, feature).
-- A player who is OUT (IR/injured/scratched) is a valid talk track topic — mention the absence and its impact on the lineup.
-"""
-
-BROADCAST_SINGLE_TOOL_PROMPTS = {
-    "spotting_board": """Generate ONLY the spotting_board portion. Return JSON with this structure:
-{{"spotting_board": {{"home": {{"team_name": "...", "lines": {{"line_1": {{"lw": "...", "c": "...", "rw": "..."}}, ...}}, "players": [...], "out_tonight": [...]}}, "away": {{...}}}}}}
-Each player: {{"name": "Last, First", "position": "C", "line": "1C", "gp": 0, "g": 0, "a": 0, "p": 0, "key_stat": "...", "archetype": "...", "broadcast_note": "..."}}
-Each out_tonight: {{"name": "Last, First", "position": "LW", "status": "IR", "note": "..."}}
-Use _lines data for line assignments. Include ALL ACTIVE roster players. List _out_tonight players separately.""",
-
-    "talk_tracks": """Generate ONLY talk tracks. Return JSON: {{"talk_tracks": {{"team_storyline": [...], "matchup_storyline": [...], "player_storyline": [...], "streak_milestone": [...]}}}}
-Each track: {{"headline": "...", "twenty_sec_read": "...~50 words...", "stat_hook": "...", "category": "..."}}
-Generate 3-4 tracks per category.""",
-
-    "pxi_insights": """Generate ONLY PXI insights. Return JSON: {{"insights": [...]}}
-Each: {{"category": "PATTERN|MATCHUP|TREND|TACTICAL|MILESTONE", "insight": "...", "stat_support": "...", "suggested_use": "..."}}
-Generate 8-12 insights sorted by impact.""",
-
-    "stat_cards": """Generate ONLY stat cards. Return JSON: {{"stat_cards": [...]}}
-Each: {{"card_type": "player_vs_player|line_vs_line|special_teams|goalie|team_trend", "headline_stat": "...", "headline_value": "...", "support_stats": [{{"label": "...", "value": "..."}}], "interpretation": "...", "graphic_caption": "..."}}
-Generate 5-8 cards of mixed types.""",
-
-    "graphics_suggestions": """Generate ONLY graphics suggestions. Return JSON: {{"graphics_suggestions": [...]}}
-Each: {{"priority": 1, "graphic_type": "...", "trigger_moment": "...", "caption": "...", "data_needed": "..."}}
-Generate 6-10 suggestions sorted by priority.""",
-
-    "player_profiles": """Generate ONLY player profiles. Return JSON: {{"player_profiles": [...]}}
-Each: {{"name": "...", "physical": "6'1 / 195 / L", "archetype": "...", "role": "...", "strengths": "...", "fun_fact": "...", "tonight": "..."}}
-Generate profiles for the top 10-15 notable players.""",
-
-    "interview_questions": """Generate ONLY interview questions. Return JSON: {{"interview_questions": [...]}}
-Each: {{"question": "...", "label": "SAFE|TACTICAL|PRESSURE|NARRATIVE", "context_tab": "coach_pre|coach_post|player_pre|player_post|feature"}}
-Generate 25-35 questions across all 5 tabs.""",
-}
-
-BROADCAST_POST_GAME_PROMPT = """Generate a post-game broadcast script for the following game.
-
-GAME: {away_team} {away_score} @ {home_team} {home_score} (Final: {period})
-{three_stars_text}
-
-FORMAT: {format_name}
-WORD TARGET: {word_target}
-
-Return JSON: {{"script": "...", "format": "{format_key}", "word_count": <number>}}
-
-The script MUST include:
-- Final score with game context
-- Three stars blurbs (one sentence each with key stat)
-- Turning point moment
-- Coach narrative angle
-- Stat headline (one number that tells the story)
-
-AUDIENCE: {audience_guide}
-"""
-
-
-def _parse_broadcast_json(text: str) -> Optional[dict]:
-    """Parse Claude's JSON response with fallback for markdown fences."""
-    text = text.strip()
-    # Strip markdown code fences if present
-    if text.startswith("```"):
-        lines = text.split("\n")
-        # Remove first line (```json) and last line (```)
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        text = "\n".join(lines).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        # Try to find JSON object in text
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                return json.loads(text[start:end + 1])
-            except json.JSONDecodeError:
-                return None
-    return None
-
-
-@app.post("/broadcast/generate-all")
-async def broadcast_generate_all(request: BroadcastGenerateAllRequest, token_data: dict = Depends(verify_token)):
-    """Generate all broadcast tools for a game."""
-    org_id = token_data["org_id"]
-    user_id = token_data["user_id"]
-    conn = get_db()
-    try:
-        _check_tier_permission(user_id, "can_access_live_stats", conn)
-        _check_tier_limit(user_id, "reports", conn)
-
-        client = get_anthropic_client()
-        if not client:
-            conn.close()
-            raise HTTPException(status_code=503, detail="AI service not configured. Set ANTHROPIC_API_KEY.")
-
-        # Gather all game data
-        game_data = _gather_broadcast_data(conn, org_id, request.home_team, request.away_team)
-
-        # Build system prompt
-        mode_block = PXI_MODE_BLOCKS.get(request.mode, PXI_MODE_BLOCKS["broadcast"])
-        system_prompt = PXI_CORE_GUARDRAILS + "\n\n" + mode_block
-
-        # Build user prompt
-        depth_guide = _BROADCAST_DEPTH_GUIDE.get(request.depth, _BROADCAST_DEPTH_GUIDE["standard"])
-        audience_guide = _BROADCAST_AUDIENCE_GUIDE.get(request.audience, _BROADCAST_AUDIENCE_GUIDE["informed"])
-
-        user_prompt = BROADCAST_GENERATE_ALL_PROMPT.format(
-            home_team=request.home_team,
-            away_team=request.away_team,
-            game_date=request.game_date or "Today",
-            game_state=request.game_state,
-            depth_guide=depth_guide,
-            audience_guide=audience_guide,
-        )
-        user_prompt += f"\n\nHere is ALL available data for both teams:\n\n{json.dumps(game_data, indent=2, default=str)}"
-
-        start_time = time.time()
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=8000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        generation_time_ms = int((time.time() - start_time) * 1000)
-        output_text = message.content[0].text
-
-        parsed = _parse_broadcast_json(output_text)
-        if not parsed:
-            conn.close()
-            raise HTTPException(status_code=500, detail="Failed to parse AI response. Please try again.")
-
-        # Track usage
-        try:
-            _increment_usage(user_id, "report", "broadcast_all", org_id, conn)
-        except Exception:
-            pass
-
-        conn.close()
-        return {
-            "spotting_board": parsed.get("spotting_board"),
-            "talk_tracks": parsed.get("talk_tracks"),
-            "insights": parsed.get("insights", []),
-            "stat_cards": parsed.get("stat_cards", []),
-            "graphics_suggestions": parsed.get("graphics_suggestions", []),
-            "player_profiles": parsed.get("player_profiles", []),
-            "interview_questions": parsed.get("interview_questions", []),
-            "generated_at": now_iso(),
-            "generation_time_ms": generation_time_ms,
-        }
-    except HTTPException:
-        conn.close()
-        raise
-    except Exception as e:
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Broadcast generation failed: {str(e)}")
-
-
-@app.post("/broadcast/generate-tool")
-async def broadcast_generate_tool(request: BroadcastGenerateToolRequest, token_data: dict = Depends(verify_token)):
-    """Regenerate a single broadcast tool."""
-    org_id = token_data["org_id"]
-    user_id = token_data["user_id"]
-    conn = get_db()
-    try:
-        _check_tier_permission(user_id, "can_access_live_stats", conn)
-
-        tool_prompt = BROADCAST_SINGLE_TOOL_PROMPTS.get(request.tool_name)
-        if not tool_prompt:
-            conn.close()
-            raise HTTPException(status_code=400, detail=f"Unknown tool: {request.tool_name}")
-
-        client = get_anthropic_client()
-        if not client:
-            conn.close()
-            raise HTTPException(status_code=503, detail="AI service not configured. Set ANTHROPIC_API_KEY.")
-
-        game_data = _gather_broadcast_data(conn, org_id, request.home_team, request.away_team)
-
-        mode_block = PXI_MODE_BLOCKS.get(request.mode, PXI_MODE_BLOCKS["broadcast"])
-        system_prompt = PXI_CORE_GUARDRAILS + "\n\n" + mode_block
-
-        depth_guide = _BROADCAST_DEPTH_GUIDE.get(request.depth, _BROADCAST_DEPTH_GUIDE["standard"])
-        audience_guide = _BROADCAST_AUDIENCE_GUIDE.get(request.audience, _BROADCAST_AUDIENCE_GUIDE["informed"])
-
-        user_prompt = f"""GAME: {request.away_team} @ {request.home_team} | State: {request.game_state}
-DEPTH: {depth_guide}
-AUDIENCE: {audience_guide}
-
-{tool_prompt}
-
-DATA:
-{json.dumps(game_data, indent=2, default=str)}"""
-
-        if request.additional_context:
-            user_prompt += f"\n\nADDITIONAL CONTEXT:\n{json.dumps(request.additional_context, indent=2, default=str)}"
-
-        start_time = time.time()
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        generation_time_ms = int((time.time() - start_time) * 1000)
-        output_text = message.content[0].text
-
-        parsed = _parse_broadcast_json(output_text)
-        if not parsed:
-            conn.close()
-            raise HTTPException(status_code=500, detail="Failed to parse AI response. Please try again.")
-
-        # Extract the tool content from the parsed response
-        tool_key_map = {
-            "spotting_board": "spotting_board",
-            "talk_tracks": "talk_tracks",
-            "pxi_insights": "insights",
-            "stat_cards": "stat_cards",
-            "graphics_suggestions": "graphics_suggestions",
-            "player_profiles": "player_profiles",
-            "interview_questions": "interview_questions",
-        }
-        content_key = tool_key_map.get(request.tool_name, request.tool_name)
-        content = parsed.get(content_key, parsed)
-
-        conn.close()
-        return {
-            "tool_name": request.tool_name,
-            "content": content,
-            "generated_at": now_iso(),
-            "generation_time_ms": generation_time_ms,
-        }
-    except HTTPException:
-        conn.close()
-        raise
-    except Exception as e:
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Tool generation failed: {str(e)}")
-
-
-@app.post("/broadcast/post-game")
-async def broadcast_post_game(request: BroadcastPostGameRequest, token_data: dict = Depends(verify_token)):
-    """Generate a post-game broadcast script."""
-    org_id = token_data["org_id"]
-    user_id = token_data["user_id"]
-    conn = get_db()
-    try:
-        _check_tier_permission(user_id, "can_access_live_stats", conn)
-
-        client = get_anthropic_client()
-        if not client:
-            conn.close()
-            raise HTTPException(status_code=503, detail="AI service not configured. Set ANTHROPIC_API_KEY.")
-
-        game_data = _gather_broadcast_data(conn, org_id, request.home_team, request.away_team)
-
-        format_config = {
-            "30_second": {"name": "30-Second Recap", "word_target": "~75 words"},
-            "60_second": {"name": "60-Second Recap", "word_target": "~150 words"},
-            "2_minute": {"name": "2-Minute Wrap", "word_target": "~300 words"},
-        }
-        fmt = format_config.get(request.format, format_config["60_second"])
-
-        three_stars_text = ""
-        if request.three_stars:
-            three_stars_text = "THREE STARS:\n" + "\n".join(f"  {i+1}. {s}" for i, s in enumerate(request.three_stars))
-
-        mode_block = PXI_MODE_BLOCKS.get(request.mode, PXI_MODE_BLOCKS["broadcast"])
-        system_prompt = PXI_CORE_GUARDRAILS + "\n\n" + mode_block
-        audience_guide = _BROADCAST_AUDIENCE_GUIDE.get(request.audience, _BROADCAST_AUDIENCE_GUIDE["informed"])
-
-        user_prompt = BROADCAST_POST_GAME_PROMPT.format(
-            home_team=request.home_team,
-            away_team=request.away_team,
-            home_score=request.home_score,
-            away_score=request.away_score,
-            period=request.period or "Final",
-            three_stars_text=three_stars_text,
-            format_name=fmt["name"],
-            word_target=fmt["word_target"],
-            format_key=request.format,
-            audience_guide=audience_guide,
-        )
-        user_prompt += f"\n\nGAME DATA:\n{json.dumps(game_data, indent=2, default=str)}"
-
-        start_time = time.time()
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        generation_time_ms = int((time.time() - start_time) * 1000)
-        output_text = message.content[0].text
-
-        parsed = _parse_broadcast_json(output_text)
-        if parsed and "script" in parsed:
-            conn.close()
-            return {
-                "script": parsed["script"],
-                "format": parsed.get("format", request.format),
-                "word_count": parsed.get("word_count", len(parsed["script"].split())),
-                "generated_at": now_iso(),
-            }
-        else:
-            # Fallback: use raw text as script
-            conn.close()
-            return {
-                "script": output_text.strip(),
-                "format": request.format,
-                "word_count": len(output_text.split()),
-                "generated_at": now_iso(),
-            }
-    except HTTPException:
-        conn.close()
-        raise
-    except Exception as e:
-        conn.close()
-        raise HTTPException(status_code=500, detail=f"Post-game script generation failed: {str(e)}")
 
 
 # ============================================================
@@ -16659,8 +14029,8 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
     if not roster:
         raise HTTPException(status_code=404, detail="Empty roster returned from HockeyTech")
 
-    # Use league code (e.g. GOJHL, OHL) for current_league — NOT full display name
-    league_name = league.upper()
+    # Get league display name for current_league field
+    league_name = HT_LEAGUES.get(league, {}).get("name", league.upper())
 
     conn = get_db()
     now = datetime.now(timezone.utc).isoformat()
@@ -16915,7 +14285,7 @@ async def ht_detect_transfers(token_data: dict = Depends(verify_token)):
             # Get current team from profile
             new_team = (player_data.get("most_recent_team_name") or
                         player_data.get("team_name") or "")
-            new_league_name = league_code.upper()
+            new_league_name = HT_LEAGUES.get(league_code, {}).get("name", league_code.upper())
 
             if new_team and old_team and new_team.lower() != old_team.lower():
                 # Transfer detected!
@@ -16995,21 +14365,12 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
         if not season_id:
             raise HTTPException(status_code=404, detail="No current season found")
 
-    # Derive season name from HT seasons list, then normalize to "YYYY-YYYY" format
+    # Derive season name from HT seasons list
     seasons = await client.get_seasons()
     season_name = ""
     for s in seasons:
         if s.get("id") == season_id:
-            raw_name = s.get("name", str(season_id))
-            # Normalize: "2025-2026 GOJHL Season" → "2025-2026", "2025-26 Regular Season" → "2025-26"
-            import re as _re
-            year_match = _re.match(r"(\d{4}-\d{2,4})", raw_name)
-            season_name = year_match.group(1) if year_match else raw_name
-            # Normalize short form: "2025-26" → "2025-2026"
-            if _re.match(r"\d{4}-\d{2}$", season_name):
-                start_year = season_name[:4]
-                end_short = season_name[5:]
-                season_name = f"{start_year}-{start_year[:2]}{end_short}"
+            season_name = s.get("name", str(season_id))
             break
 
     # Fetch stats from HT
@@ -20922,7 +18283,7 @@ async def my_data_summary(token_data: dict = Depends(verify_token)):
     ).fetchone()[0]
 
     uploads = conn.execute(
-        "SELECT COUNT(*) FROM import_jobs WHERE org_id = ? AND uploaded_by = ?",
+        "SELECT COUNT(*) FROM import_jobs WHERE org_id = ? AND user_id = ?",
         (org_id, user_id)
     ).fetchone()[0]
 
@@ -20937,12 +18298,12 @@ async def my_data_summary(token_data: dict = Depends(verify_token)):
     ).fetchone()[0]
 
     reports = conn.execute(
-        "SELECT COUNT(*) FROM reports WHERE org_id = ? AND created_by = ?",
+        "SELECT COUNT(*) FROM reports WHERE org_id = ? AND user_id = ?",
         (org_id, user_id)
     ).fetchone()[0]
 
     notes = conn.execute(
-        "SELECT COUNT(*) FROM scout_notes WHERE org_id = ? AND scout_id = ?",
+        "SELECT COUNT(*) FROM scout_notes WHERE org_id = ? AND user_id = ?",
         (org_id, user_id)
     ).fetchone()[0]
 
@@ -20964,7 +18325,7 @@ async def my_data_uploads(token_data: dict = Depends(verify_token)):
     user_id = token_data["user_id"]
     conn = get_db()
     rows = conn.execute("""
-        SELECT * FROM import_jobs WHERE org_id = ? AND uploaded_by = ?
+        SELECT * FROM import_jobs WHERE org_id = ? AND user_id = ?
         ORDER BY created_at DESC LIMIT 50
     """, (org_id, user_id)).fetchall()
     conn.close()

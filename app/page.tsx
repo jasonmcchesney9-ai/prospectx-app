@@ -3,895 +3,482 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
-  Swords,
-  Users,
-  Target,
-  Zap,
-  FileText,
-  Crown,
-  Trophy,
-  ChevronRight,
-  Briefcase,
-  MessageSquare,
-  UserPlus,
-  AlertCircle,
-  Heart,
-  Radio,
-  BookOpen,
-  BarChart3,
+  Swords, Users, Target, Zap, FileText, Crown, Trophy, ChevronRight,
+  AlertTriangle, Calendar, Radio, Heart, Briefcase, MessageSquare, BookOpen,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import LandingPage from "@/components/LandingPage";
 import ReportCard from "@/components/ReportCard";
-import TeamContextBar from "@/components/TeamContextBar";
 import BenchTalkUsage from "@/components/BenchTalkUsage";
+import TeamContextBar, { getHTLeague } from "@/components/TeamContextBar";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import api from "@/lib/api";
 import { getUser, isAuthenticated } from "@/lib/auth";
-import type { Team, Player, Report, GamePlan, SeriesPlan, ScoutingListItem, AgentClient, HTGame, HTStandings, ScoringLeader } from "@/types/api";
-import { SESSION_TYPES, AGENT_CLIENT_STATUS_COLORS } from "@/types/api";
+import type {
+  Team, Player, Report, GamePlan, SeriesPlan, ScoutingListItem,
+  ScoringLeader, HTGame, HTStandings, PracticePlan,
+} from "@/types/api";
+import { SESSION_TYPES } from "@/types/api";
 
-// ── Auth gate ────────────────────────────────────────────────
-export default function HomePage() {
-  const [authed, setAuthed] = useState<boolean | null>(null);
+const DASHBOARD_TEAM_KEY = "prospectx_dashboard_team";
+type RoleGroup = "PRO" | "MEDIA" | "FAMILY" | "AGENT";
 
-  useEffect(() => {
-    setAuthed(isAuthenticated());
-  }, []);
-
-  if (authed === null) {
-    return (
-      <div className="min-h-screen bg-navy flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
-      </div>
-    );
+function getRoleGroup(hockey_role: string): RoleGroup {
+  switch (hockey_role) {
+    case "broadcaster": case "producer": return "MEDIA";
+    case "player": case "parent": return "FAMILY";
+    case "agent": return "AGENT";
+    default: return "PRO";
   }
-
-  if (!authed) return <LandingPage />;
-
-  return (
-    <ProtectedRoute>
-      <Dashboard />
-    </ProtectedRoute>
-  );
 }
 
-// ── Helpers ──────────────────────────────────────────────────
+const SESSION_TYPE_MAP: Record<string, string> = Object.fromEntries(SESSION_TYPES.map((s) => [s.value, s.label]));
+const SESSION_BADGE_COLORS: Record<string, string> = { pre_game: "bg-teal/10 text-teal", post_game: "bg-orange/10 text-orange", practice: "bg-blue-50 text-blue-600", season_notes: "bg-navy/5 text-navy/70" };
+const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-green-500" };
+const FORMAT_LABELS: Record<string, string> = { best_of_3: "Bo3", best_of_5: "Bo5", best_of_7: "Bo7", round_robin: "RR", single_elim: "SE" };
+const ROSTER_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  inj: { label: "INJ", color: "text-red-700", bg: "bg-red-50 border-red-200" },
+  susp: { label: "SUSP", color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
+  ap: { label: "AP", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
+  scrch: { label: "SCRCH", color: "text-gray-600", bg: "bg-gray-50 border-gray-200" },
+};
+
+function matchTeam(name: string, teamName: string): boolean {
+  const a = name.toLowerCase().trim();
+  const b = teamName.toLowerCase().trim();
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+export default function HomePage() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  useEffect(() => { setAuthed(isAuthenticated()); }, []);
+  if (authed === null) return <div className="min-h-screen bg-navy flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" /></div>;
+  if (!authed) return <LandingPage />;
+  return <ProtectedRoute><Dashboard /></ProtectedRoute>;
+}
 
 function CardSkeleton({ lines = 3 }: { lines?: number }) {
   return (
     <div className="bg-white rounded-xl border border-border p-5 animate-pulse">
       {Array.from({ length: lines }).map((_, i) => (
-        <div
-          key={i}
-          className={`h-3 bg-navy/5 rounded ${i === 0 ? "w-2/3 mb-3" : i === lines - 1 ? "w-1/2 mt-2" : "w-full mt-2"}`}
-        />
+        <div key={i} className={`h-3 bg-navy/5 rounded ${i === 0 ? "w-2/3 mb-3" : i === lines - 1 ? "w-1/2 mt-2" : "w-full mt-2"}`} />
       ))}
     </div>
   );
 }
 
-const SESSION_TYPE_MAP: Record<string, string> = Object.fromEntries(
-  SESSION_TYPES.map((s) => [s.value, s.label])
-);
-const SESSION_BADGE_COLORS: Record<string, string> = {
-  pre_game: "bg-teal/10 text-teal",
-  post_game: "bg-orange/10 text-orange",
-  practice: "bg-blue-50 text-blue-600",
-  season_notes: "bg-navy/5 text-navy/70",
-};
-const PRIORITY_DOT: Record<string, string> = {
-  high: "bg-red-500",
-  medium: "bg-amber-400",
-  low: "bg-green-500",
-};
-const FORMAT_LABELS: Record<string, string> = {
-  best_of_3: "Bo3",
-  best_of_5: "Bo5",
-  best_of_7: "Bo7",
-  round_robin: "RR",
-  single_elim: "SE",
-};
-
-// ── Role group mapping (mirrors NavBar) ──────────────────────
-type RoleGroup = "PRO" | "MEDIA" | "FAMILY" | "AGENT";
-const ROLE_GROUP_MAP: Record<string, RoleGroup> = {
-  scout: "PRO", coach: "PRO", gm: "PRO",
-  player: "FAMILY", parent: "FAMILY",
-  broadcaster: "MEDIA", producer: "MEDIA",
-  agent: "AGENT",
-};
-function getRoleGroup(role?: string): RoleGroup {
-  return ROLE_GROUP_MAP[role || "scout"] || "PRO";
+function SectionCard({ icon, title, link, linkLabel, children }: { icon: React.ReactNode; title: string; link?: string; linkLabel?: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl border border-border p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">{icon}<h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">{title}</h3></div>
+        {link && linkLabel && <Link href={link} className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline font-medium">{linkLabel}</Link>}
+      </div>
+      {children}
+    </div>
+  );
 }
 
-// ── HockeyTech league code mapping ──────────────────────────
-const HT_LEAGUE_CODES: Record<string, string> = {
-  GOJHL: "gojhl", GOHL: "gojhl",
-  OHL: "ohl", OJHL: "ojhl",
-  WHL: "whl", QMJHL: "qmjhl", PWHL: "pwhl",
-};
+function EmptyState({ icon, text, link, linkText }: { icon: React.ReactNode; text: string; link?: string; linkText?: string }) {
+  return (
+    <div className="text-center py-6">
+      <div className="mx-auto text-muted/30 mb-2 flex justify-center">{icon}</div>
+      <p className="text-muted text-sm">{text}</p>
+      {link && linkText && <Link href={link} className="inline-block mt-2 text-xs text-teal hover:underline">{linkText}</Link>}
+    </div>
+  );
+}
 
-const TEAM_LS_KEY = "prospectx_dashboard_team";
-
-// ── Roster alert helpers ─────────────────────────────────────
-const ALERT_STATUS_STYLES: Record<string, { label: string; bg: string; text: string }> = {
-  ir: { label: "IR", bg: "bg-red-50", text: "text-red-700" },
-  injured: { label: "Injured", bg: "bg-red-50", text: "text-red-700" },
-  "day-to-day": { label: "DTD", bg: "bg-amber-50", text: "text-amber-700" },
-  scratched: { label: "Scratched", bg: "bg-gray-50", text: "text-gray-600" },
-  suspended: { label: "Suspended", bg: "bg-yellow-50", text: "text-yellow-700" },
-};
-
-// ── Dashboard ────────────────────────────────────────────────
 function Dashboard() {
   const user = getUser();
-  const { toggleBenchTalk } = useBenchTalk();
-  const roleGroup = getRoleGroup(user?.hockey_role);
+  const roleGroup = getRoleGroup(user?.hockey_role || "scout");
+  const { openBenchTalk } = useBenchTalk();
 
-  // ── Team context ─────────────────────────────────────────
   const [teams, setTeams] = useState<Team[]>([]);
   const [activeTeam, setActiveTeam] = useState<Team | null>(null);
   const [roster, setRoster] = useState<Player[]>([]);
-  const [scoringLeaders, setScoringLeaders] = useState<ScoringLeader[]>([]);
-  const [scorebar, setScorebar] = useState<HTGame[]>([]);
-  const [standings, setStandings] = useState<HTStandings[]>([]);
-
-  // ── Operational data ─────────────────────────────────────
   const [recentReports, setRecentReports] = useState<Report[]>([]);
   const [activeSeries, setActiveSeries] = useState<SeriesPlan[]>([]);
   const [activeGamePlans, setActiveGamePlans] = useState<GamePlan[]>([]);
   const [scoutingList, setScoutingList] = useState<ScoutingListItem[]>([]);
-  const [agentClients, setAgentClients] = useState<AgentClient[]>([]);
-
-  // ── Loading states ───────────────────────────────────────
-  const [loading, setLoading] = useState(true);
-  const [teamDataLoading, setTeamDataLoading] = useState(true);
+  const [scoringLeaders, setScoringLeaders] = useState<ScoringLeader[]>([]);
+  const [scorebar, setScorebar] = useState<HTGame[]>([]);
+  const [standings, setStandings] = useState<HTStandings[]>([]);
+  const [practicePlans, setPracticePlans] = useState<PracticePlan[]>([]);
+  const [loadingWave1, setLoadingWave1] = useState(true);
+  const [loadingWave2, setLoadingWave2] = useState(true);
   const [error, setError] = useState("");
 
-  // ── Load team-specific data (Wave 2) ─────────────────────
-  const loadTeamData = useCallback(async (team: Team) => {
-    setTeamDataLoading(true);
-    const enc = encodeURIComponent(team.name);
-    const htCode = team.league ? HT_LEAGUE_CODES[team.league.toUpperCase()] : null;
-
-    const teamFetches: Promise<unknown>[] = [
-      api.get<Player[]>(`/teams/${enc}/roster`),
-      api.get<ScoringLeader[]>(`/analytics/scoring-leaders?team=${enc}&limit=${roleGroup === "MEDIA" ? 10 : 5}`),
-    ];
-    if (htCode) {
-      teamFetches.push(api.get<HTGame[]>(`/hockeytech/${htCode}/scorebar?days_back=3&days_ahead=7`));
-      teamFetches.push(api.get<HTStandings[]>(`/hockeytech/${htCode}/standings`));
-    }
-
-    const results = await Promise.allSettled(teamFetches);
-    if (results[0].status === "fulfilled") setRoster((results[0] as PromiseFulfilledResult<{ data: Player[] }>).value.data);
-    if (results[1].status === "fulfilled") setScoringLeaders((results[1] as PromiseFulfilledResult<{ data: ScoringLeader[] }>).value.data);
-    if (htCode && results[2]?.status === "fulfilled") setScorebar((results[2] as PromiseFulfilledResult<{ data: HTGame[] }>).value.data);
-    if (htCode && results[3]?.status === "fulfilled") setStandings((results[3] as PromiseFulfilledResult<{ data: HTStandings[] }>).value.data);
-
-    setTeamDataLoading(false);
-  }, [roleGroup]);
-
-  // ── Wave 1: core data on mount ───────────────────────────
   useEffect(() => {
-    async function load() {
-      const isAgent = roleGroup === "AGENT";
-      const fetches: Promise<unknown>[] = [
-        api.get<Team[]>("/teams"),
-        api.get<Report[]>("/reports?limit=5"),
-        api.get<ScoutingListItem[]>("/scouting-list?limit=5"),
-        api.get<GamePlan[]>("/game-plans?status=active"),
-        api.get<SeriesPlan[]>("/series?status=active"),
-      ];
-      if (isAgent) fetches.push(api.get<AgentClient[]>("/agent/clients"));
-
-      const results = await Promise.allSettled(fetches);
-
-      // Teams
+    async function loadWave1() {
+      const results = await Promise.allSettled([
+        api.get<Team[]>("/teams"), api.get<Report[]>("/reports?limit=5"),
+        api.get<ScoutingListItem[]>("/scouting-list?limit=5"), api.get<GamePlan[]>("/game-plans?status=active"),
+        api.get<SeriesPlan[]>("/series?status=active"), api.get<PracticePlan[]>("/practice-plans?limit=5"),
+      ]);
       if (results[0].status === "fulfilled") {
-        const teamData = (results[0] as PromiseFulfilledResult<{ data: Team[] }>).value.data;
-        setTeams(teamData);
-
-        // Resolve active team from localStorage or first team
-        const savedName = typeof window !== "undefined" ? localStorage.getItem(TEAM_LS_KEY) : null;
-        const match = savedName ? teamData.find((t) => t.name === savedName) : null;
-        const resolved = match || teamData[0] || null;
-        setActiveTeam(resolved);
-        if (resolved) loadTeamData(resolved);
-      }
-
-      // Reports
-      if (results[1].status === "fulfilled") {
-        setRecentReports((results[1] as PromiseFulfilledResult<{ data: Report[] }>).value.data);
-      } else {
-        const err = (results[1] as PromiseRejectedResult).reason;
-        setError(err?.response?.data?.detail || err?.message || "Failed to connect to backend");
-      }
-
-      // Scouting
-      if (results[2].status === "fulfilled") setScoutingList((results[2] as PromiseFulfilledResult<{ data: ScoutingListItem[] }>).value.data);
-
-      // Game Plans
-      if (results[3].status === "fulfilled") setActiveGamePlans((results[3] as PromiseFulfilledResult<{ data: GamePlan[] }>).value.data);
-
-      // Series
-      if (results[4].status === "fulfilled") setActiveSeries((results[4] as PromiseFulfilledResult<{ data: SeriesPlan[] }>).value.data);
-
-      // Agent clients
-      if (isAgent && results[5]?.status === "fulfilled") setAgentClients((results[5] as PromiseFulfilledResult<{ data: AgentClient[] }>).value.data);
-
-      setLoading(false);
+        const tl = results[0].value.data; setTeams(tl);
+        const savedId = typeof window !== "undefined" ? localStorage.getItem(DASHBOARD_TEAM_KEY) : null;
+        setActiveTeam((savedId ? tl.find((t: Team) => t.id === savedId) : null) || tl[0] || null);
+      } else { const e = results[0].reason; setError(e?.response?.data?.detail || e?.message || "Failed to connect"); }
+      if (results[1].status === "fulfilled") setRecentReports(results[1].value.data);
+      if (results[2].status === "fulfilled") setScoutingList(results[2].value.data);
+      if (results[3].status === "fulfilled") setActiveGamePlans(results[3].value.data);
+      if (results[4].status === "fulfilled") setActiveSeries(results[4].value.data);
+      if (results[5].status === "fulfilled") setPracticePlans(results[5].value.data);
+      setLoadingWave1(false);
     }
-    load();
-  }, [roleGroup, loadTeamData]);
+    loadWave1();
+  }, []);
 
-  // ── Team change handler ──────────────────────────────────
-  function handleTeamChange(team: Team) {
-    setActiveTeam(team);
-    localStorage.setItem(TEAM_LS_KEY, team.name);
-    setRoster([]);
-    setScoringLeaders([]);
-    setScorebar([]);
-    setStandings([]);
-    loadTeamData(team);
-  }
+  useEffect(() => {
+    if (!activeTeam) return;
+    setLoadingWave2(true);
+    async function loadWave2() {
+      if (!activeTeam) return;
+      const htL = getHTLeague(activeTeam.league);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fetches: Promise<any>[] = [
+        api.get(`/teams/${encodeURIComponent(activeTeam.name)}/roster`),
+        api.get(`/analytics/scoring-leaders?team=${encodeURIComponent(activeTeam.name)}&limit=5`),
+      ];
+      if (htL) { fetches.push(api.get(`/hockeytech/${htL}/scorebar?days_back=3&days_ahead=7`), api.get(`/hockeytech/${htL}/standings`)); }
+      const r = await Promise.allSettled(fetches);
+      if (r[0].status === "fulfilled") setRoster(r[0].value.data);
+      if (r[1].status === "fulfilled") setScoringLeaders(r[1].value.data);
+      if (htL) {
+        if (r[2]?.status === "fulfilled") setScorebar(r[2].value.data); else setScorebar([]);
+        if (r[3]?.status === "fulfilled") setStandings(r[3].value.data); else setStandings([]);
+      } else { setScorebar([]); setStandings([]); }
+      setLoadingWave2(false);
+    }
+    loadWave2();
+  }, [activeTeam]);
 
-  // ── Computed values ──────────────────────────────────────
-  const rosterAlerts = roster.filter((p) => p.roster_status && p.roster_status !== "active" && p.roster_status !== "recalled" && p.roster_status !== "released");
+  const handleTeamChange = useCallback((team: Team) => { setActiveTeam(team); localStorage.setItem(DASHBOARD_TEAM_KEY, team.id); }, []);
 
-  // ── Render ───────────────────────────────────────────────
+  const alertPlayers = roster.filter((p) => p.roster_status && p.roster_status !== "active");
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysPractice = practicePlans.find((pp) => pp.practice_date === today && (!pp.team_name || !activeTeam || matchTeam(pp.team_name, activeTeam.name)));
+
+  const nextGame = activeTeam ? scorebar.filter((g) => !(g.status || "").toLowerCase().includes("final")).filter((g) => matchTeam(g.home_team, activeTeam.name) || matchTeam(g.away_team, activeTeam.name)).sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime())[0] || null : null;
+  const upcomingGames = activeTeam ? scorebar.filter((g) => !(g.status || "").toLowerCase().includes("final")).filter((g) => matchTeam(g.home_team, activeTeam.name) || matchTeam(g.away_team, activeTeam.name)).sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime()).slice(0, 3) : [];
+  const nextGamePlan = nextGame && activeTeam ? activeGamePlans.find((gp) => { const isH = matchTeam(nextGame.home_team, activeTeam.name); return matchTeam(gp.opponent_team_name, isH ? nextGame.away_team : nextGame.home_team); }) : null;
+
+  const scoutingWithGames = scoutingList.map((item) => {
+    const hasGame = scorebar.some((g) => { const gd = new Date(g.game_date || g.date).toISOString().slice(0, 10); const ok = gd === today || !(g.status || "").toLowerCase().includes("final"); return ok && item.current_team ? (matchTeam(g.home_team, item.current_team) || matchTeam(g.away_team, item.current_team)) : false; });
+    return { ...item, playsTonight: hasGame };
+  });
+  const scoutPlayersTonight = scoutingWithGames.filter((s) => s.playsTonight);
+
   return (
     <>
       <NavBar />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Error Banner */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
-            <AlertCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-red-700 font-medium text-sm">Connection Error</p>
-              <p className="text-red-600 text-xs mt-0.5">{error}</p>
+            <span className="text-red-500 mt-0.5">!</span>
+            <div><p className="text-red-700 font-medium text-sm">Backend Connection Error</p><p className="text-red-600 text-xs mt-0.5">{error}</p></div>
+          </div>
+        )}
+
+        <TeamContextBar teams={teams} activeTeam={activeTeam} onTeamChange={handleTeamChange} standings={standings} scorebar={scorebar} gamePlans={activeGamePlans} loading={loadingWave1} />
+
+        {alertPlayers.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
+            <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0"><AlertTriangle size={16} className="text-red-500" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="font-oswald text-xs font-semibold text-red-800 uppercase tracking-wider">{alertPlayers.length} Player{alertPlayers.length > 1 ? "s" : ""} — Non-Active Status</p>
+              <div className="flex gap-2 mt-1.5 flex-wrap">
+                {alertPlayers.map((p) => { const cfg = ROSTER_STATUS_CONFIG[p.roster_status] || ROSTER_STATUS_CONFIG.inj; return (
+                  <Link key={p.id} href={`/players/${p.id}`} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs bg-white hover:shadow-sm transition-shadow ${cfg.bg}`}>
+                    {p.first_name} {p.last_name} <span className={`font-oswald text-[9px] font-bold uppercase tracking-wider ${cfg.color}`}>{cfg.label}</span>
+                  </Link>
+                ); })}
+              </div>
             </div>
           </div>
         )}
 
-        {/* ── Team Context Bar ─────────────────────────────── */}
-        <TeamContextBar
-          teams={teams}
-          activeTeam={activeTeam}
-          onTeamChange={handleTeamChange}
-          roster={roster}
-          scorebar={scorebar}
-          standings={standings}
-          gamePlans={activeGamePlans}
-          loading={loading}
-        />
-
-        {/* ── PRO View (Scout / GM / Coach) ─────────────────── */}
-        {roleGroup === "PRO" && (
-          <>
-            {/* Roster Alerts */}
-            {rosterAlerts.length > 0 && (
-              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle size={14} className="text-amber-600" />
-                  <span className="text-xs font-oswald font-bold text-amber-800 uppercase tracking-wider">
-                    Roster Alert — {rosterAlerts.length} player{rosterAlerts.length !== 1 ? "s" : ""} out
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {rosterAlerts.map((p) => {
-                    const style = ALERT_STATUS_STYLES[p.roster_status || ""] || { label: p.roster_status, bg: "bg-gray-50", text: "text-gray-600" };
-                    return (
-                      <Link
-                        key={p.id}
-                        href={`/players/${p.id}`}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-amber-200 hover:border-amber-300 transition-colors"
-                      >
-                        <span className="text-xs font-medium text-navy">{p.first_name} {p.last_name}</span>
-                        <span className={`text-[9px] font-oswald font-bold uppercase px-1.5 py-0.5 rounded-full ${style.bg} ${style.text}`}>
-                          {style.label}
-                        </span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Two-Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-              {/* LEFT: Operations */}
-              <div className="lg:col-span-3 space-y-5">
-                {/* Active Series */}
-                <DashboardCard
-                  icon={<Trophy size={15} className="text-orange" />}
-                  title="Active Series"
-                  viewAllHref="/series"
-                  loading={loading}
-                  empty={activeSeries.length === 0}
-                  emptyIcon={<Trophy size={24} className="text-muted/30" />}
-                  emptyText="No active series"
-                  emptyLink="/series/new"
-                  emptyLinkText="Start a series"
-                >
-                  <div className="space-y-2">
-                    {activeSeries.map((s) => (
-                      <Link key={s.id} href={`/series/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-navy truncate">
-                            {s.team_name} <span className="text-muted font-normal">vs</span> {s.opponent_team_name}
-                          </p>
-                          {s.series_name && <p className="text-[10px] text-muted truncate mt-0.5">{s.series_name}</p>}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0 ml-3">
-                          <span className="text-sm font-oswald font-bold text-navy">{s.current_score || "0-0"}</span>
-                          <span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60">
-                            {FORMAT_LABELS[s.series_format] || s.series_format}
-                          </span>
-                          <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors" />
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </DashboardCard>
-
-                {/* Chalk Talk Sessions */}
-                <DashboardCard
-                  icon={<Swords size={15} className="text-teal" />}
-                  title="Chalk Talk"
-                  viewAllHref="/game-plans"
-                  loading={loading}
-                  empty={activeGamePlans.length === 0}
-                  emptyIcon={<Swords size={24} className="text-muted/30" />}
-                  emptyText="No active sessions"
-                  emptyLink="/game-plans/new"
-                  emptyLinkText="Create a session"
-                >
-                  <div className="space-y-2">
-                    {activeGamePlans.slice(0, 3).map((gp) => (
-                      <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-navy truncate">
-                            {gp.team_name} <span className="text-muted font-normal">vs</span> {gp.opponent_team_name}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className={`text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${SESSION_BADGE_COLORS[gp.session_type] || "bg-navy/5 text-navy/60"}`}>
-                              {SESSION_TYPE_MAP[gp.session_type] || gp.session_type}
-                            </span>
-                            {gp.game_date && (
-                              <span className="text-[10px] text-muted">
-                                {new Date(gp.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors shrink-0 ml-2" />
-                      </Link>
-                    ))}
-                  </div>
-                </DashboardCard>
-
-                {/* Quick Actions */}
-                <div className="flex flex-wrap gap-2">
-                  <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all">
-                    <Zap size={14} /> New Report
-                  </Link>
-                  <Link href="/game-plans/new" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-border text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
-                    <Swords size={14} /> Chalk Talk
-                  </Link>
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
-                    <MessageSquare size={14} /> Bench Talk
-                  </button>
-                </div>
-              </div>
-
-              {/* RIGHT: Intelligence */}
-              <div className="lg:col-span-2 space-y-5">
-                {/* Scouting List */}
-                <ScoutingListSection scoutingList={scoutingList} loading={loading} />
-
-                {/* Team Leaders */}
-                {!teamDataLoading && scoringLeaders.length > 0 && (
-                  <DashboardCard
-                    icon={<BarChart3 size={15} className="text-teal" />}
-                    title={`${activeTeam?.name || "Team"} Leaders`}
-                    viewAllHref={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}` : "/teams"}
-                    loading={teamDataLoading}
-                    empty={false}
-                  >
-                    <div className="space-y-1">
-                      {scoringLeaders.map((l, i) => (
-                        <Link key={l.id} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
-                          <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
-                          <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
-                            {l.first_name} {l.last_name}
-                          </span>
-                          <span className="font-oswald text-muted/60 w-6 text-center">{l.gp}</span>
-                          <span className="font-oswald text-navy/80 w-14 text-right">
-                            {l.g}G-{l.a}A—<strong>{l.p}</strong>
-                          </span>
-                          <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
-                        </Link>
-                      ))}
-                      <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-border/50">
-                        <span>Player</span>
-                        <span className="flex gap-3"><span>GP</span><span>G-A—P</span><span>P/G</span></span>
-                      </div>
-                    </div>
-                  </DashboardCard>
-                )}
-
-                {/* Recent Reports */}
-                <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
-                  title="Recent Reports"
-                  viewAllHref="/reports"
-                  loading={loading}
-                  empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
-                  emptyText="No reports yet"
-                  emptyLink="/reports/generate"
-                  emptyLinkText="Generate your first report"
-                >
-                  <div className="space-y-2">
-                    {recentReports.slice(0, 3).map((r) => (
-                      <ReportCard key={r.id} report={r} compact />
-                    ))}
-                  </div>
-                </DashboardCard>
-              </div>
-            </div>
-
-            {/* Live Scorebar */}
-            {scorebar.length > 0 && (
-              <div className="mt-5">
-                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} />
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── MEDIA View (Broadcaster / Producer) ───────────── */}
-        {roleGroup === "MEDIA" && (
-          <>
-            {/* Live Scorebar — Top */}
-            {scorebar.length > 0 && (
-              <div className="mb-5">
-                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} />
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-              <div className="lg:col-span-3 space-y-5">
-                {/* Scoring Leaders (expanded) */}
-                {!teamDataLoading && scoringLeaders.length > 0 && (
-                  <DashboardCard
-                    icon={<BarChart3 size={15} className="text-teal" />}
-                    title="Scoring Leaders"
-                    viewAllHref={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}` : "/teams"}
-                    loading={teamDataLoading}
-                    empty={false}
-                  >
-                    <div className="space-y-1">
-                      {scoringLeaders.map((l, i) => (
-                        <Link key={l.id} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
-                          <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
-                          <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
-                            {l.first_name} {l.last_name}
-                          </span>
-                          <span className="text-[10px] text-muted/50 w-6">{l.position}</span>
-                          <span className="font-oswald text-muted/60 w-6 text-center">{l.gp}</span>
-                          <span className="font-oswald text-navy/80 w-14 text-right">
-                            {l.g}G-{l.a}A—<strong>{l.p}</strong>
-                          </span>
-                          <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  </DashboardCard>
-                )}
-
-                {/* Broadcast Hub link */}
-                <Link href="/broadcast" className="flex items-center gap-3 p-4 bg-gradient-to-r from-navy to-navy-light rounded-xl text-white hover:shadow-md transition-all group">
-                  <div className="w-10 h-10 rounded-lg bg-orange/20 flex items-center justify-center shrink-0">
-                    <Radio size={20} className="text-orange" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-oswald font-bold uppercase tracking-wider">Broadcast Hub</p>
-                    <p className="text-[10px] text-white/50">Game prep, spotting boards, talking points</p>
-                  </div>
-                  <ChevronRight size={16} className="text-white/30 group-hover:text-white/60 ml-auto transition-colors" />
+        {roleGroup === "PRO" && (nextGamePlan || todaysPractice || scoutPlayersTonight.length > 0) && (
+          <div className="mb-4">
+            <p className="font-oswald text-[10px] text-muted uppercase tracking-widest mb-2 pl-0.5">Today&apos;s Focus</p>
+            <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-4 flex gap-3 flex-wrap">
+              {nextGamePlan && nextGame && (
+                <Link href={`/game-plans/${nextGamePlan.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
+                  <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Next Game</p>
+                  <p className="font-oswald text-sm font-semibold text-white">{nextGamePlan.team_name} vs {nextGamePlan.opponent_team_name}</p>
+                  <p className="text-[11px] text-white/50 mt-1">{nextGamePlan.game_date ? new Date(nextGamePlan.game_date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : ""}</p>
+                  <span className="inline-block mt-2 font-oswald text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal/20 text-teal">{SESSION_TYPE_MAP[nextGamePlan.session_type] || "Game Plan"}</span>
                 </Link>
-              </div>
-
-              <div className="lg:col-span-2 space-y-5">
-                <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
-                  title="Recent Reports"
-                  viewAllHref="/reports"
-                  loading={loading}
-                  empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
-                  emptyText="No reports yet"
-                  emptyLink="/reports/generate"
-                  emptyLinkText="Generate a report"
-                >
-                  <div className="space-y-2">
-                    {recentReports.slice(0, 5).map((r) => (
-                      <ReportCard key={r.id} report={r} compact />
-                    ))}
-                  </div>
-                </DashboardCard>
-
-                <div className="flex flex-wrap gap-2">
-                  <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-teal text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors">
-                    <Zap size={14} /> Generate Report
-                  </Link>
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
-                    <MessageSquare size={14} /> Bench Talk
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── FAMILY View (Player / Parent) ─────────────────── */}
-        {roleGroup === "FAMILY" && (
-          <>
-            {/* Player Spotlight */}
-            <FamilyPlayerSpotlight scoringLeaders={scoringLeaders} loading={teamDataLoading} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mt-5">
-              <div className="lg:col-span-3 space-y-5">
-                <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
-                  title="Reports"
-                  viewAllHref="/reports"
-                  loading={loading}
-                  empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
-                  emptyText="No reports yet"
-                  emptyLink="/reports/generate"
-                  emptyLinkText="Generate your first report"
-                >
-                  <div className="space-y-2">
-                    {recentReports.slice(0, 5).map((r) => (
-                      <ReportCard key={r.id} report={r} compact />
-                    ))}
-                  </div>
-                </DashboardCard>
-
-                <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-                  <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
-                    <BookOpen size={20} className="text-teal" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">Player Guide</p>
-                    <p className="text-[10px] text-muted">Development resources and monthly focus plans</p>
-                  </div>
-                  <ChevronRight size={16} className="text-muted/30 group-hover:text-teal ml-auto transition-colors" />
+              )}
+              {todaysPractice && (
+                <Link href={`/practice-plans/${todaysPractice.id}`} className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
+                  <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Today&apos;s Practice</p>
+                  <p className="font-oswald text-sm font-semibold text-white">{todaysPractice.title}</p>
+                  <p className="text-[11px] text-white/50 mt-1">{todaysPractice.duration_minutes} min{todaysPractice.focus_areas?.length > 0 && ` \u00b7 ${todaysPractice.focus_areas.join(", ")}`}</p>
+                  <span className="inline-block mt-2 font-oswald text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Practice Plan</span>
                 </Link>
-              </div>
-
-              <div className="lg:col-span-2 space-y-5">
-                <div className="bg-white rounded-xl border border-border p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                    <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
-                      <Crown size={10} />
-                      {user?.subscription_tier || "Rookie"}
-                    </Link>
-                  </div>
-                  <BenchTalkUsage />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
-                    <MessageSquare size={14} /> Ask Bench Talk
-                  </button>
-                </div>
-              </div>
+              )}
+              {scoutPlayersTonight.length > 0 && (
+                <Link href="/scouting" className="flex-1 min-w-[200px] bg-white/[0.08] border border-white/10 rounded-lg p-3.5 hover:bg-white/[0.12] transition-colors">
+                  <p className="font-oswald text-[10px] text-teal uppercase tracking-widest mb-1">Scout Watch Tonight</p>
+                  <p className="font-oswald text-sm font-semibold text-white">{scoutPlayersTonight.length} player{scoutPlayersTonight.length > 1 ? "s" : ""} in action</p>
+                  <p className="text-[11px] text-white/50 mt-1">{scoutPlayersTonight.slice(0, 3).map((s) => `${s.first_name} ${s.last_name}`).join(" \u00b7 ")}</p>
+                  <span className="inline-block mt-2 font-oswald text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal/20 text-teal">Live Games</span>
+                </Link>
+              )}
             </div>
-          </>
+          </div>
         )}
 
-        {/* ── AGENT View ────────────────────────────────────── */}
-        {roleGroup === "AGENT" && (
-          <>
-            {/* Agent Hub */}
-            <div className="bg-gradient-to-r from-navy to-navy-light rounded-xl border border-navy/50 p-5 mb-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-teal/20 flex items-center justify-center">
-                    <Briefcase size={20} className="text-teal" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-oswald font-bold text-white uppercase tracking-wider">Agent Hub</h3>
-                    <p className="text-[10px] text-white/50">Manage your client roster</p>
-                  </div>
-                </div>
-                <Link href="/my-clients" className="text-xs text-teal hover:underline font-medium">View all clients →</Link>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                {[
-                  { label: "Total Clients", value: agentClients.length, color: "text-white" },
-                  { label: "Active Pathways", value: agentClients.filter((c) => c.status === "active").length, color: "text-teal" },
-                  { label: "Committed", value: agentClients.filter((c) => c.status === "committed").length, color: "text-green-400" },
-                  { label: "Unsigned", value: agentClients.filter((c) => c.status === "unsigned").length, color: "text-orange" },
-                ].map((stat) => (
-                  <div key={stat.label} className="bg-white/5 rounded-lg p-3 border border-white/10">
-                    <p className={`text-xl font-oswald font-bold ${stat.color}`}>{stat.value}</p>
-                    <p className="text-[10px] text-white/50 uppercase tracking-wider">{stat.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                {agentClients.length > 0 && (
-                  <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-                    {agentClients.slice(0, 4).map((client) => (
-                      <Link key={client.id} href={`/my-clients/${client.id}`} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/15 transition-colors">
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          client.status === "active" ? "bg-teal" : client.status === "committed" ? "bg-green-500" :
-                          client.status === "unsigned" ? "bg-orange" : "bg-gray-400"
-                        }`} />
-                        <span className="text-xs text-white/80 truncate max-w-[120px]">
-                          {client.player ? `${client.player.first_name} ${client.player.last_name}` : "Client"}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href="/my-clients" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal text-white text-xs font-bold hover:bg-teal/90 transition-colors">
-                    <UserPlus size={12} /> Add Client
-                  </Link>
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 text-white text-xs font-bold hover:bg-white/20 transition-colors border border-white/10">
-                    <MessageSquare size={12} /> Bench Talk
-                  </button>
-                </div>
-              </div>
+        {upcomingGames.length > 0 && activeTeam && (
+          <div className="bg-white rounded-xl border border-border p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2"><Calendar size={14} className="text-navy/60" /><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Upcoming Games</h3></div>
+              <Link href="/schedule" className="text-[10px] font-oswald text-teal uppercase tracking-wider hover:underline">Full Schedule</Link>
             </div>
-
-            {/* Two-column */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-              <div className="lg:col-span-3 space-y-5">
-                <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
-                  title="Recent Reports"
-                  viewAllHref="/reports"
-                  loading={loading}
-                  empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
-                  emptyText="No reports yet"
-                  emptyLink="/reports/generate"
-                  emptyLinkText="Generate a report"
-                >
-                  <div className="space-y-2">
-                    {recentReports.slice(0, 5).map((r) => (
-                      <ReportCard key={r.id} report={r} compact />
-                    ))}
-                  </div>
-                </DashboardCard>
-              </div>
-
-              <div className="lg:col-span-2 space-y-5">
-                <ScoutingListSection scoutingList={scoutingList} loading={loading} />
-                <div className="bg-white rounded-xl border border-border p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                    <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
-                      <Crown size={10} />
-                      {user?.subscription_tier || "Rookie"}
-                    </Link>
-                  </div>
-                  <BenchTalkUsage />
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {upcomingGames.map((g, i) => { const isH = matchTeam(g.home_team, activeTeam.name); const opp = isH ? g.away_team : g.home_team; const ds = new Date(g.game_date || g.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); const hasGP = activeGamePlans.some((gp) => matchTeam(gp.opponent_team_name, opp)); return (
+                <div key={`ug-${g.game_id}-${i}`} className="flex-1 min-w-[150px] border border-border rounded-lg p-3 text-center relative">
+                  <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${hasGP ? "bg-green-500" : "bg-red-400"}`} title={hasGP ? "Game plan ready" : "No game plan"} />
+                  <p className="font-oswald text-[10px] text-muted uppercase tracking-wider mb-1">{ds}</p>
+                  <p className="font-oswald text-sm font-semibold text-navy">{isH ? "vs" : "@"} {opp}</p>
+                  {g.venue && <p className="text-[10px] text-muted mt-1 truncate">{g.venue}</p>}
                 </div>
-              </div>
+              ); })}
             </div>
-          </>
+          </div>
+        )}
+
+        {roleGroup === "PRO" && <ProView activeSeries={activeSeries} activeGamePlans={activeGamePlans} scoutingList={scoutingWithGames} scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} onBT={openBenchTalk} />}
+        {roleGroup === "MEDIA" && <MediaView scoringLeaders={scoringLeaders} recentReports={recentReports} lw1={loadingWave1} lw2={loadingWave2} />}
+        {roleGroup === "FAMILY" && <FamilyView recentReports={recentReports} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
+        {roleGroup === "AGENT" && <AgentView recentReports={recentReports} scoutingList={scoutingWithGames} lw1={loadingWave1} user={user} onBT={openBenchTalk} />}
+
+        {scorebar.length > 0 && activeTeam && (
+          <div className="mt-4">
+            <p className="font-oswald text-[10px] text-muted uppercase tracking-widest mb-2 pl-0.5">{activeTeam.league || "League"} Scorebar</p>
+            <div className="bg-navy rounded-xl p-3.5 flex gap-2.5 overflow-x-auto">
+              {scorebar.slice(0, 8).map((g, i) => { const fin = (g.status || "").toLowerCase().includes("final"); const myG = matchTeam(g.home_team, activeTeam.name) || matchTeam(g.away_team, activeTeam.name); return (
+                <div key={`sb-${g.game_id}-${i}`} className={`min-w-[150px] rounded-lg p-2.5 text-center shrink-0 border ${myG ? "bg-teal/[0.08] border-teal/30" : "bg-white/[0.06] border-white/[0.08]"}`}>
+                  <p className="font-oswald text-[9px] text-white/40 uppercase tracking-wider mb-1.5">{new Date(g.game_date || g.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{!fin && g.time ? ` \u00b7 ${g.time}` : ""}</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className={`font-oswald text-xs font-semibold ${fin && parseInt(g.away_score) > parseInt(g.home_score) ? "text-white" : "text-white/70"}`}>{g.away_code || g.away_team?.slice(0, 3).toUpperCase()}</span>
+                    <span className="font-oswald text-[10px] text-white/40">{fin ? `${g.away_score} \u2014 ${g.home_score}` : "vs"}</span>
+                    <span className={`font-oswald text-xs font-semibold ${fin && parseInt(g.home_score) > parseInt(g.away_score) ? "text-white" : "text-white/70"}`}>{g.home_code || g.home_team?.slice(0, 3).toUpperCase()}</span>
+                  </div>
+                  <p className={`font-oswald text-[9px] uppercase tracking-wider mt-1 ${fin ? "text-white/30" : "text-teal"}`}>{fin ? g.status : "Upcoming"}</p>
+                </div>
+              ); })}
+            </div>
+          </div>
         )}
       </main>
     </>
   );
 }
 
-// ── Reusable Card Wrapper ────────────────────────────────────
 
-function DashboardCard({
-  icon, title, viewAllHref, loading, empty,
-  emptyIcon, emptyText, emptyLink, emptyLinkText,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  viewAllHref: string;
-  loading: boolean;
-  empty: boolean;
-  emptyIcon?: React.ReactNode;
-  emptyText?: string;
-  emptyLink?: string;
-  emptyLinkText?: string;
-  children?: React.ReactNode;
-}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ProView({ activeSeries, activeGamePlans, scoutingList, scoringLeaders, recentReports, lw1, lw2, onBT }: any) {
   return (
-    <div className="bg-white rounded-xl border border-border p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">{title}</h3>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="lg:col-span-3 space-y-4">
+        <SectionCard icon={<Trophy size={14} className="text-orange" />} title="Active Series" link="/series" linkLabel="View all">
+          {lw1 ? <CardSkeleton lines={2} /> : activeSeries.length === 0 ? <EmptyState icon={<Trophy size={28} />} text="No active series" link="/series/new" linkText="Start a series" /> : (
+            <div className="space-y-2">{activeSeries.map((s: SeriesPlan) => (
+              <Link key={s.id} href={`/series/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
+                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate">{s.team_name} <span className="text-muted font-normal">vs</span> {s.opponent_team_name}</p>{s.series_name && <p className="text-[10px] text-muted truncate mt-0.5">{s.series_name}</p>}</div>
+                <div className="flex items-center gap-2 shrink-0 ml-3"><span className="text-sm font-oswald font-bold text-navy">{s.current_score || "0-0"}</span><span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60">{FORMAT_LABELS[s.series_format] || s.series_format}</span><ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors" /></div>
+              </Link>
+            ))}</div>
+          )}
+        </SectionCard>
+
+        <SectionCard icon={<Swords size={14} className="text-teal" />} title="Chalk Talk Sessions" link="/game-plans" linkLabel="View all">
+          {lw1 ? <div className="space-y-2"><CardSkeleton lines={2} /><CardSkeleton lines={2} /></div> : activeGamePlans.length === 0 ? <EmptyState icon={<Swords size={28} />} text="No active sessions" link="/game-plans/new" linkText="Create a session" /> : (
+            <div className="space-y-2">{activeGamePlans.slice(0, 3).map((gp: GamePlan) => (
+              <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors group">
+                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate">{gp.team_name} <span className="text-muted font-normal">vs</span> {gp.opponent_team_name}</p>
+                <div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${SESSION_BADGE_COLORS[gp.session_type] || "bg-navy/5 text-navy/60"}`}>{SESSION_TYPE_MAP[gp.session_type] || gp.session_type}</span>{gp.game_date && <span className="text-[10px] text-muted">{new Date(gp.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}</div></div>
+                <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors shrink-0 ml-2" />
+              </Link>
+            ))}</div>
+          )}
+        </SectionCard>
+
+        <div className="flex gap-2">
+          <Link href="/reports/generate" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-br from-navy to-navy-light text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Zap size={14} /> New Report</Link>
+          <Link href="/game-plans/new" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><Swords size={14} /> Chalk Talk</Link>
+          <button onClick={onBT} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-bg border border-border text-navy font-oswald text-[11px] font-semibold uppercase tracking-wider hover:bg-navy/[0.03] transition-colors"><MessageSquare size={14} /> Bench Talk</button>
         </div>
-        <Link href={viewAllHref} className="text-xs text-teal hover:underline font-medium">View all</Link>
       </div>
-      {loading ? (
-        <CardSkeleton lines={3} />
-      ) : empty ? (
-        <div className="text-center py-5">
-          {emptyIcon && <div className="mb-2">{emptyIcon}</div>}
-          {emptyText && <p className="text-muted text-sm">{emptyText}</p>}
-          {emptyLink && <Link href={emptyLink} className="inline-block mt-2 text-xs text-teal hover:underline">{emptyLinkText}</Link>}
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  );
-}
 
-// ── Scouting List Section ────────────────────────────────────
+      <div className="lg:col-span-2 space-y-4">
+        <SectionCard icon={<Target size={14} className="text-orange" />} title="Scouting List" link="/scouting" linkLabel="View all">
+          {lw1 ? <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="animate-pulse flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-navy/5" /><div className="flex-1"><div className="h-3 bg-navy/5 rounded w-2/3 mb-1.5" /><div className="h-2 bg-navy/5 rounded w-1/3" /></div></div>)}</div> : scoutingList.length === 0 ? <EmptyState icon={<Target size={28} />} text="No players on scouting list" link="/scouting" linkText="Add a player" /> : (
+            <div className="space-y-1">{scoutingList.map((item: ScoutingListItem & { playsTonight: boolean }) => (
+              <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors group">
+                <div className="relative shrink-0"><div className="w-8 h-8 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">{item.position || "?"}</div><span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} /></div>
+                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-navy truncate group-hover:text-teal transition-colors">{item.first_name} {item.last_name}</p><p className="text-[10px] text-muted truncate">{[item.current_team, item.current_league].filter(Boolean).join(" / ") || "No team"}</p></div>
+                {item.playsTonight && <span className="font-oswald text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal/10 text-teal shrink-0">Tonight</span>}
+                {item.position && <span className="text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60 shrink-0">{item.position}</span>}
+              </Link>
+            ))}</div>
+          )}
+        </SectionCard>
 
-function ScoutingListSection({ scoutingList, loading }: { scoutingList: ScoutingListItem[]; loading: boolean }) {
-  return (
-    <DashboardCard
-      icon={<Target size={15} className="text-orange" />}
-      title="Scouting List"
-      viewAllHref="/scouting"
-      loading={loading}
-      empty={scoutingList.length === 0}
-      emptyIcon={<Target size={24} className="text-muted/30" />}
-      emptyText="No players on scouting list"
-      emptyLink="/scouting"
-      emptyLinkText="Add a player"
-    >
-      <div className="space-y-1">
-        {scoutingList.map((item) => (
-          <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors group">
-            <div className="relative shrink-0">
-              <div className="w-7 h-7 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">
-                {item.position || "?"}
-              </div>
-              <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-navy truncate group-hover:text-teal transition-colors">
-                {item.first_name} {item.last_name}
-              </p>
-              <p className="text-[10px] text-muted truncate">
-                {[item.current_team, item.current_league].filter(Boolean).join(" / ") || "No team"}
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </DashboardCard>
-  );
-}
+        <SectionCard icon={<Users size={14} className="text-teal" />} title="Team Leaders" link="/analytics" linkLabel="Analytics">
+          {lw2 ? <CardSkeleton lines={5} /> : scoringLeaders.length === 0 ? <EmptyState icon={<Users size={28} />} text="No scoring data yet" /> : (
+            <table className="w-full text-xs"><thead><tr className="border-b border-border">
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1 w-5">#</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1">Player</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">GP</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">G</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">A</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P/G</th>
+            </tr></thead><tbody>{scoringLeaders.map((pl: ScoringLeader, i: number) => (
+              <tr key={pl.id} className="border-b border-border/50 last:border-0">
+                <td className="py-2 px-1 font-oswald font-semibold text-muted text-[11px]">{i + 1}</td>
+                <td className="py-2 px-1"><Link href={`/players/${pl.id}`} className="font-semibold text-navy hover:text-teal transition-colors">{pl.first_name?.charAt(0)}. {pl.last_name}</Link></td>
+                <td className="py-2 px-1 text-right font-oswald">{pl.gp}</td><td className="py-2 px-1 text-right font-oswald">{pl.g}</td>
+                <td className="py-2 px-1 text-right font-oswald">{pl.a}</td><td className="py-2 px-1 text-right font-oswald font-bold text-navy">{pl.p}</td>
+                <td className="py-2 px-1 text-right font-oswald">{pl.ppg?.toFixed(2)}</td>
+              </tr>
+            ))}</tbody></table>
+          )}
+        </SectionCard>
 
-// ── Live Scorebar ────────────────────────────────────────────
-
-function LiveScorebar({ scorebar, teamName }: { scorebar: HTGame[]; teamName: string }) {
-  const lower = teamName.toLowerCase();
-  // Show games sorted by date, most recent / live first
-  const sorted = [...scorebar].sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime());
-
-  return (
-    <div className="bg-white rounded-xl border border-border p-4">
-      <h3 className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider mb-3">League Scores</h3>
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
-        {sorted.slice(0, 10).map((g) => {
-          const isOurGame = g.home_team.toLowerCase().includes(lower) || g.away_team.toLowerCase().includes(lower) ||
-                            lower.includes(g.home_team.toLowerCase()) || lower.includes(g.away_team.toLowerCase());
-          return (
-            <div
-              key={g.game_id}
-              className={`shrink-0 w-40 rounded-lg border p-2.5 text-center text-xs ${
-                isOurGame ? "border-teal/30 bg-teal/[0.03]" : "border-border"
-              }`}
-            >
-              <p className="text-[9px] text-muted/60 mb-1">
-                {new Date(g.game_date || g.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                {g.time && ` · ${g.time}`}
-              </p>
-              <div className="flex items-center justify-between gap-1">
-                <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.away_team}</span>
-                <span className="font-oswald font-bold text-sm text-navy">{g.away_score || "-"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-1">
-                <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.home_team}</span>
-                <span className="font-oswald font-bold text-sm text-navy">{g.home_score || "-"}</span>
-              </div>
-              <p className={`text-[9px] font-oswald uppercase tracking-wider mt-1 ${
-                g.status === "Final" || g.status === "final" ? "text-muted/50" : "text-green-600 font-bold"
-              }`}>
-                {g.status || "Scheduled"}
-              </p>
-            </div>
-          );
-        })}
+        <SectionCard icon={<FileText size={14} className="text-navy/60" />} title="Recent Reports" link="/reports" linkLabel="View all">
+          {lw1 ? <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="animate-pulse flex items-center gap-3 p-2"><div className="w-9 h-9 rounded-lg bg-navy/5" /><div className="flex-1"><div className="h-3 bg-navy/5 rounded w-3/4 mb-1.5" /><div className="h-2 bg-navy/5 rounded w-1/2" /></div></div>)}</div> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" link="/reports/generate" linkText="Generate your first report" /> : (
+            <div className="space-y-2">{recentReports.slice(0, 3).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
+          )}
+        </SectionCard>
       </div>
     </div>
   );
 }
 
-// ── Family Player Spotlight ──────────────────────────────────
-
-function FamilyPlayerSpotlight({ scoringLeaders, loading }: { scoringLeaders: ScoringLeader[]; loading: boolean }) {
-  const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("prospectx_my_player_id");
-    if (saved) setMyPlayerId(saved);
-  }, []);
-
-  const myPlayer = myPlayerId ? scoringLeaders.find((l) => l.id === myPlayerId) : null;
-
-  if (loading) {
-    return <div className="bg-white rounded-xl border border-border p-5 animate-pulse"><div className="h-16 bg-navy/5 rounded-lg" /></div>;
-  }
-
-  if (!myPlayer) {
-    return (
-      <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-6 text-center">
-        <Heart size={28} className="mx-auto text-teal/40 mb-2" />
-        <p className="text-sm font-semibold text-navy mb-1">Select Your Player</p>
-        <p className="text-xs text-muted mb-3">Set up your player profile to see their stats and development here.</p>
-        <Link href="/my-player" className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors">
-          <Users size={14} /> Choose Player
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function MediaView({ scoringLeaders, recentReports, lw1, lw2 }: any) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="lg:col-span-3 space-y-4">
+        <SectionCard icon={<Users size={14} className="text-teal" />} title="Scoring Leaders" link="/analytics" linkLabel="Full Analytics">
+          {lw2 ? <CardSkeleton lines={5} /> : scoringLeaders.length === 0 ? <EmptyState icon={<Users size={28} />} text="No scoring data" /> : (
+            <table className="w-full text-xs"><thead><tr className="border-b border-border">
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1 w-5">#</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-left py-1.5 px-1">Player</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">GP</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">G</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">A</th>
+              <th className="font-oswald text-[10px] font-semibold text-muted uppercase tracking-wider text-right py-1.5 px-1">P</th>
+            </tr></thead><tbody>{scoringLeaders.slice(0, 10).map((pl: ScoringLeader, i: number) => (
+              <tr key={pl.id} className="border-b border-border/50 last:border-0">
+                <td className="py-2 px-1 font-oswald font-semibold text-muted text-[11px]">{i + 1}</td>
+                <td className="py-2 px-1 font-semibold text-navy">{pl.first_name?.charAt(0)}. {pl.last_name}</td>
+                <td className="py-2 px-1 text-right font-oswald">{pl.gp}</td><td className="py-2 px-1 text-right font-oswald">{pl.g}</td>
+                <td className="py-2 px-1 text-right font-oswald">{pl.a}</td><td className="py-2 px-1 text-right font-oswald font-bold text-navy">{pl.p}</td>
+              </tr>
+            ))}</tbody></table>
+          )}
+        </SectionCard>
+        <Link href="/broadcast" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
+          <div className="w-10 h-10 rounded-lg bg-orange/10 flex items-center justify-center group-hover:scale-110 transition-transform"><Radio size={20} className="text-orange" /></div>
+          <div><p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Broadcast Hub</p><p className="text-xs text-muted mt-0.5">Spotting boards, talk tracks, and graphics</p></div>
+          <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
         </Link>
       </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-xl border border-border p-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-teal/10 flex items-center justify-center">
-            <span className="font-oswald font-bold text-teal text-lg">{myPlayer.position}</span>
-          </div>
-          <div>
-            <h3 className="text-lg font-oswald font-bold text-navy">{myPlayer.first_name} {myPlayer.last_name}</h3>
-            <p className="text-xs text-muted">{myPlayer.current_team} · {myPlayer.position}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4 text-center">
-          <div>
-            <p className="text-lg font-oswald font-bold text-navy">{myPlayer.gp}</p>
-            <p className="text-[9px] text-muted uppercase">GP</p>
-          </div>
-          <div>
-            <p className="text-lg font-oswald font-bold text-navy">{myPlayer.g}</p>
-            <p className="text-[9px] text-muted uppercase">G</p>
-          </div>
-          <div>
-            <p className="text-lg font-oswald font-bold text-navy">{myPlayer.a}</p>
-            <p className="text-[9px] text-muted uppercase">A</p>
-          </div>
-          <div>
-            <p className="text-lg font-oswald font-bold text-teal">{myPlayer.p}</p>
-            <p className="text-[9px] text-muted uppercase">PTS</p>
-          </div>
-          <div>
-            <p className="text-lg font-oswald font-bold text-orange">{myPlayer.ppg.toFixed(2)}</p>
-            <p className="text-[9px] text-muted uppercase">P/G</p>
-          </div>
-        </div>
+      <div className="lg:col-span-2 space-y-4">
+        <SectionCard icon={<FileText size={14} className="text-navy/60" />} title="Recent Reports" link="/reports" linkLabel="View all">
+          {lw1 ? <CardSkeleton lines={3} /> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" /> : (
+            <div className="space-y-2">{recentReports.slice(0, 5).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
+          )}
+        </SectionCard>
       </div>
     </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function FamilyView({ recentReports, lw1, user, onBT }: any) {
+  const myPId = typeof window !== "undefined" ? localStorage.getItem("prospectx_my_player_id") : null;
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="lg:col-span-3 space-y-4">
+        <div className="bg-white rounded-xl border border-border p-5">
+          <div className="flex items-center gap-2 mb-3"><Heart size={14} className="text-[#3B6B8A]" /><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Your Player</h3></div>
+          {myPId ? (
+            <Link href={`/players/${myPId}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors">
+              <div className="w-10 h-10 rounded-full bg-[#3B6B8A]/10 flex items-center justify-center"><Heart size={18} className="text-[#3B6B8A]" /></div>
+              <div><p className="text-sm font-semibold text-navy">View Player Dashboard</p><p className="text-[10px] text-muted mt-0.5">Stats, development, and reports</p></div>
+              <ChevronRight size={14} className="text-muted/40 ml-auto" />
+            </Link>
+          ) : <EmptyState icon={<Heart size={28} />} text="No player selected" link="/my-player" linkText="Select your player" />}
+        </div>
+        <SectionCard icon={<FileText size={14} />} title="Recent Reports" link="/reports" linkLabel="View all">
+          {lw1 ? <CardSkeleton lines={3} /> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" /> : (
+            <div className="space-y-2">{recentReports.slice(0, 3).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
+          )}
+        </SectionCard>
+        <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
+          <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center group-hover:scale-110 transition-transform"><BookOpen size={20} className="text-green-600" /></div>
+          <div><p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Guide</p><p className="text-xs text-muted mt-0.5">Nutrition, workouts, mental game</p></div>
+          <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+        </Link>
+      </div>
+      <div className="lg:col-span-2 space-y-4">
+        <div className="bg-white rounded-xl border border-border p-5">
+          <div className="flex items-center justify-between mb-3"><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+            <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors"><Crown size={10} />{user?.subscription_tier || "Rookie"}</Link>
+          </div>
+          <BenchTalkUsage />
+        </div>
+        <button onClick={onBT} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Ask Bench Talk</button>
+      </div>
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function AgentView({ recentReports, scoutingList, lw1, user, onBT }: any) {
+  return (
+    <>
+      <div className="bg-gradient-to-br from-[#475569] to-[#334155] rounded-xl p-5 mb-4 text-white">
+        <div className="flex items-center gap-3 mb-3"><div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center"><Briefcase size={20} /></div><div><h3 className="font-oswald text-sm font-bold uppercase tracking-wider">Agent Hub</h3><p className="text-xs text-white/60 mt-0.5">Client management and reports</p></div></div>
+        <Link href="/my-clients" className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 transition-colors">Manage Clients <ChevronRight size={12} /></Link>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3 space-y-4">
+          <SectionCard icon={<FileText size={14} />} title="Recent Reports" link="/reports" linkLabel="View all">
+            {lw1 ? <CardSkeleton lines={3} /> : recentReports.length === 0 ? <EmptyState icon={<FileText size={28} />} text="No reports yet" /> : (
+              <div className="space-y-2">{recentReports.slice(0, 5).map((r: Report) => <ReportCard key={r.id} report={r} />)}</div>
+            )}
+          </SectionCard>
+        </div>
+        <div className="lg:col-span-2 space-y-4">
+          <SectionCard icon={<Target size={14} className="text-orange" />} title="Scouting List" link="/scouting" linkLabel="View all">
+            {lw1 ? <CardSkeleton lines={3} /> : scoutingList.length === 0 ? <EmptyState icon={<Target size={28} />} text="No players" link="/scouting" linkText="Add a player" /> : (
+              <div className="space-y-1">{scoutingList.slice(0, 5).map((item: ScoutingListItem) => (
+                <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors">
+                  <div className="relative shrink-0"><div className="w-7 h-7 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">{item.position || "?"}</div><span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} /></div>
+                  <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-navy truncate">{item.first_name} {item.last_name}</p><p className="text-[10px] text-muted truncate">{item.current_team || "No team"}</p></div>
+                </Link>
+              ))}</div>
+            )}
+          </SectionCard>
+          <div className="bg-white rounded-xl border border-border p-5">
+            <div className="flex items-center justify-between mb-3"><h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+              <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors"><Crown size={10} />{user?.subscription_tier || "Rookie"}</Link>
+            </div>
+            <BenchTalkUsage />
+          </div>
+          <button onClick={onBT} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-teal text-white font-oswald text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"><MessageSquare size={14} /> Bench Talk</button>
+        </div>
+      </div>
+    </>
   );
 }
