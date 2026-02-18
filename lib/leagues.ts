@@ -45,25 +45,36 @@ const LEAGUE_MAP: Record<string, LeagueInfo> = {
   AAA:   { abbr: "AAA",   full: "AAA Minor Hockey",                         code: "aaa" },
 };
 
+// Reverse lookup: full name → LeagueInfo (built once at module load)
+const FULL_NAME_MAP: Record<string, LeagueInfo> = {};
+for (const info of Object.values(LEAGUE_MAP)) {
+  FULL_NAME_MAP[info.full.toLowerCase()] = info;
+}
+
+/** Resolve a league string to its LeagueInfo, checking abbreviation first, then full name. */
+function resolve(league: string): LeagueInfo | null {
+  return LEAGUE_MAP[league.toUpperCase()] || FULL_NAME_MAP[league.toLowerCase()] || null;
+}
+
 /**
- * Format a league abbreviation for display: "ABBR — Full Name"
- * Accepts DB values like "GOHL", "OHL", "GOJHL" (case-insensitive).
+ * Format a league for display: "ABBR — Full Name"
+ * Accepts abbreviations ("GOHL", "GOJHL") OR full names ("Greater Ontario Hockey League").
  * Returns the input unchanged if not found in the map.
  */
 export function formatLeague(league: string | null | undefined): string {
   if (!league) return "";
-  const info = LEAGUE_MAP[league.toUpperCase()];
+  const info = resolve(league);
   if (!info) return league; // Unknown league — return as-is
   return `${info.abbr} — ${info.full}`;
 }
 
 /**
  * Get just the abbreviation for a league (short display).
- * Normalizes GOJHL → GOHL, LHJMQ → QMJHL, etc.
+ * Normalizes GOJHL → GOHL, LHJMQ → QMJHL, "Greater Ontario Hockey League" → GOHL, etc.
  */
 export function leagueAbbr(league: string | null | undefined): string {
   if (!league) return "";
-  const info = LEAGUE_MAP[league.toUpperCase()];
+  const info = resolve(league);
   return info ? info.abbr : league;
 }
 
@@ -72,7 +83,7 @@ export function leagueAbbr(league: string | null | undefined): string {
  */
 export function leagueFull(league: string | null | undefined): string {
   if (!league) return "";
-  const info = LEAGUE_MAP[league.toUpperCase()];
+  const info = resolve(league);
   return info ? info.full : league;
 }
 
@@ -81,14 +92,14 @@ export function leagueFull(league: string | null | undefined): string {
  */
 export function leagueCode(league: string | null | undefined): string {
   if (!league) return "";
-  const info = LEAGUE_MAP[league.toUpperCase()];
+  const info = resolve(league);
   return info ? info.code : league.toLowerCase();
 }
 
 /**
- * Get league info by any identifier (abbreviation, code, or full name).
+ * Get league info by any identifier (abbreviation, full name, or code).
  */
 export function getLeagueInfo(league: string | null | undefined): LeagueInfo | null {
   if (!league) return null;
-  return LEAGUE_MAP[league.toUpperCase()] || null;
+  return resolve(league);
 }

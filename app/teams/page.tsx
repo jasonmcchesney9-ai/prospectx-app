@@ -26,7 +26,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api, { assetUrl } from "@/lib/api";
-import { formatLeague } from "@/lib/leagues";
+import { formatLeague, leagueAbbr } from "@/lib/leagues";
 import type { Player, TeamReference, League } from "@/types/api";
 
 interface TeamSummary {
@@ -255,9 +255,9 @@ export default function TeamsPage() {
     }
   };
 
-  // Filter by search + league
+  // Filter by search + league (compare by normalized abbreviation)
   const filtered = teams.filter((t) => {
-    if (leagueFilter && t.league !== leagueFilter) return false;
+    if (leagueFilter && leagueAbbr(t.league) !== leagueFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -269,28 +269,29 @@ export default function TeamsPage() {
     return true;
   });
 
-  // Get unique leagues from teams data for filter
-  const uniqueLeagues = Array.from(new Set(teams.map((t) => t.league).filter(Boolean) as string[])).sort();
+  // Get unique leagues from teams data for filter (deduplicated by abbreviation)
+  const uniqueLeagues = Array.from(
+    new Set(teams.map((t) => leagueAbbr(t.league)).filter(Boolean))
+  ).sort();
 
   // Build league-level map from DB leagues
   const leagueLevelMap = new Map<string, string>();
-  const leagueNameMap = new Map<string, string>();
   for (const l of leagues) {
     leagueLevelMap.set(l.abbreviation, l.level);
-    leagueNameMap.set(l.abbreviation, l.name);
   }
 
-  // Group teams by tier → league
+  // Group teams by tier → league (normalize league names to abbreviations)
   const tierGroups = TIER_ORDER.map((tier) => {
     const tierTeams = filtered.filter((t) => {
-      const level = t.league ? leagueLevelMap.get(t.league) : undefined;
+      const abbr = leagueAbbr(t.league);
+      const level = abbr ? leagueLevelMap.get(abbr) : undefined;
       return getTierForLevel(level) === tier.key;
     });
 
-    // Sub-group by league within this tier
+    // Sub-group by normalized abbreviation within this tier
     const leagueMap = new Map<string, TeamSummary[]>();
     for (const team of tierTeams) {
-      const lg = team.league || "Unassigned";
+      const lg = leagueAbbr(team.league) || "Unassigned";
       if (!leagueMap.has(lg)) leagueMap.set(lg, []);
       leagueMap.get(lg)!.push(team);
     }
@@ -540,7 +541,7 @@ export default function TeamsPage() {
                                 {formatLeague(leagueName)}
                               </h3>
                               <span className="text-[10px] text-muted">
-                                {leagueNameMap.get(leagueName) || ""} &middot; {leagueTeams.length} teams
+                                {leagueTeams.length} {leagueTeams.length === 1 ? "team" : "teams"}
                               </span>
                             </div>
                           )}
@@ -597,7 +598,7 @@ function TeamCard({ team, onSync, syncing }: { team: TeamSummary; onSync: (t: Te
           <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
             {team.league && (
               <span className="px-1.5 py-0.5 rounded bg-teal/10 text-teal font-oswald font-bold text-[10px]">
-                {formatLeague(team.league)}
+                {leagueAbbr(team.league)}
               </span>
             )}
             {team.city && (
