@@ -14509,7 +14509,7 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                         "SELECT id, logo_url FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
                         (team_name_synced, org_id)
                     ).fetchone()
-                    if team_row and (not team_row["logo_url"] or team_row["logo_url"].startswith("http")):
+                    if team_row:
                         # Download the logo locally
                         import httpx as httpx_sync
                         async with httpx_sync.AsyncClient(timeout=10) as dl_client:
