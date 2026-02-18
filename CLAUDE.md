@@ -236,6 +236,55 @@ OHL, GOJHL, OJHL, WHL, QMJHL (LHJMQ), PWHL — with live roster sync, stat sync,
 9. **Error handling:** Backend raises `HTTPException`. Frontend Axios interceptor handles 401 globally.
 10. **Images:** Use `assetUrl()` and `hasRealImage()` from `@/lib/api` for player/team images.
 
+## 🔴 MANDATORY RULES — DO NOT VIOLATE
+
+These rules exist because working features have been destroyed multiple times. They are NON-NEGOTIABLE.
+
+### Rule 1: ONLY touch files explicitly named in the spec
+- If a spec says "change file A and file B", you touch ONLY file A and file B
+- NEVER make "while I'm here" improvements to other files
+- NEVER refactor, restyle, or reorganize files not listed in the spec
+- If you think another file needs changes, STOP and ask the user first
+
+### Rule 2: NEVER rewrite a file — make surgical edits only
+- Use the Edit tool for targeted find-and-replace, not the Write tool to overwrite entire files
+- If you need to change 3 lines in a 500-line file, change exactly those 3 lines
+- NEVER rewrite, restructure, or "clean up" surrounding code
+- NEVER change imports, styling, variable names, or formatting in lines you weren't asked to touch
+
+### Rule 3: Before editing any file, read it first and state what you will change
+- Read the current file content
+- List the EXACT lines you plan to change and why
+- Do NOT add, remove, or modify anything not in that list
+- If a section of code is working, do not touch it even if you think it could be "better"
+
+### Rule 4: NEVER change styling or borders unless the spec explicitly says to
+- Do not change `border-border` to `border-teal/20` or any other color
+- Do not change margins, padding, colors, or layout
+- Do not "upgrade" or "enhance" visual appearance
+- Styling changes have repeatedly broken the dashboard — treat all CSS as frozen unless told otherwise
+
+### Rule 5: Verify before pushing — diff check required
+- After ALL edits, run `git diff` and review EVERY changed line
+- If the diff shows changes you weren't asked to make, REVERT those changes before committing
+- The diff should contain ONLY the changes described in the spec — nothing more
+
+### Rule 6: One spec = one commit. No scope creep.
+- Each spec gets exactly one commit
+- Do not bundle unrelated changes
+- Do not "fix" things you notice along the way
+- If you see a bug in another file, tell the user — do NOT fix it silently
+
+### Rule 7: When told to revert a file, use `git checkout <commit> -- <file>`
+- Do not manually try to undo changes line by line
+- Use git to restore the exact file from the specified commit
+- This prevents partial reverts and missed changes
+
+### Rule 8: NEVER delete working features
+- Sync buttons, dropdowns, filters, columns — if they exist and work, do not remove them
+- If a spec doesn't mention a feature, that feature must survive unchanged
+- Before committing, verify that existing functionality still exists in the diff
+
 ## Important Notes
 
 - Backend `main.py` is a large monolithic file (~16K lines). All routes, DB setup, models, and logic live there.
