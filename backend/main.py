@@ -13595,6 +13595,34 @@ async def analytics_scoring_leaders(
     return [dict(r) for r in rows]
 
 
+@app.get("/analytics/top-prospects")
+async def get_top_prospects(
+    limit: int = Query(default=10, ge=1, le=50),
+    token_data: dict = Depends(verify_token),
+):
+    """Top-graded players based on scout notes overall_grade."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT p.id, p.first_name, p.last_name, p.position, p.current_team, p.current_league,
+               MAX(n.overall_grade) as top_grade,
+               COUNT(n.id) as note_count,
+               MAX(n.created_at) as last_noted
+        FROM scout_notes n
+        JOIN players p ON n.player_id = p.id
+        WHERE n.org_id = ?
+          AND n.overall_grade IS NOT NULL
+          AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+          AND (n.visibility != 'PRIVATE' OR n.scout_id = ?)
+        GROUP BY p.id
+        ORDER BY top_grade DESC, note_count DESC
+        LIMIT ?
+    """, (org_id, user_id, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 @app.get("/analytics/team-rankings")
 async def analytics_team_rankings(
     league: str = None,
