@@ -394,7 +394,8 @@ def _increment_tracking(user_id: str, resource_type: str, conn):
 # APP + MIDDLEWARE
 # ============================================================
 
-_show_docs = ENVIRONMENT == "development"
+_is_deployed = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID") or os.getenv("VERCEL"))
+_show_docs = ENVIRONMENT == "development" and not _is_deployed
 app = FastAPI(
     title="ProspectX API",
     description="Decision-Grade Hockey Intelligence Platform",
@@ -474,7 +475,7 @@ app.add_middleware(
     allow_origins=_allowed_origins,
     allow_origin_regex=(
         r"https://prospectx-app(-[a-z0-9]+)?(-[a-z0-9]+)?\.vercel\.app"
-        if ENVIRONMENT != "development"
+        if (_is_deployed or ENVIRONMENT != "development")
         else r"https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?"
     ),
     allow_credentials=True,
@@ -516,7 +517,7 @@ async def add_request_id(request: Request, call_next):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        if ENVIRONMENT != "development":
+        if _is_deployed or ENVIRONMENT != "development":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         # Log server errors to DB for admin dashboard
         if response.status_code >= 500:
