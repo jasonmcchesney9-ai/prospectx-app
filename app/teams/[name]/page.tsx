@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import toast from "react-hot-toast";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -329,7 +330,7 @@ export default function TeamDetailPage() {
       setTeamRef((prev) => prev ? { ...prev, logo_url: data.logo_url } : prev);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to upload logo";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setUploadingLogo(false);
       e.target.value = "";
@@ -924,7 +925,7 @@ export default function TeamDetailPage() {
                             setTeamIntel(data);
                           } catch (err: unknown) {
                             const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to refresh";
-                            alert(msg);
+                            toast.error(msg);
                           } finally {
                             setRefreshingIntel(false);
                           }
@@ -1072,7 +1073,7 @@ export default function TeamDetailPage() {
                       setTeamIntel(data);
                     } catch (err: unknown) {
                       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to generate team identity";
-                      alert(msg);
+                      toast.error(msg);
                     } finally {
                       setRefreshingIntel(false);
                     }

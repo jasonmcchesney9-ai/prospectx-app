@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -154,7 +155,7 @@ function GamePlanDetail() {
       setEditing(false);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Save failed";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -166,7 +167,7 @@ function GamePlanDetail() {
       await api.delete(`/game-plans/${planId}`);
       router.push("/game-plans");
     } catch {
-      alert("Failed to delete game plan");
+      toast.error("Failed to delete game plan");
     }
   };
 
@@ -176,7 +177,7 @@ function GamePlanDetail() {
       setPlan(data);
       setEditData((prev) => ({ ...prev, status: newStatus }));
     } catch {
-      alert("Failed to update status");
+      toast.error("Failed to update status");
     }
   };
 

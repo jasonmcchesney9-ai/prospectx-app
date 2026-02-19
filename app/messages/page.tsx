@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import toast from "react-hot-toast";
 import { MessageSquare, ArrowLeft } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import SafetyBanner from "@/components/messages/SafetyBanner";
@@ -152,7 +153,7 @@ export default function MessagesPage() {
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };
       if (error.response?.data?.detail === "approval_required") {
-        alert("This contact requires parental approval. Please send a contact request instead.");
+        toast.error("This contact requires parental approval. Please send a contact request instead.");
       } else {
         console.error("Failed to send message:", err);
       }
@@ -170,7 +171,7 @@ export default function MessagesPage() {
         message,
       });
       setShowNewMessage(false);
-      alert("Contact request sent. You'll be notified when it's reviewed.");
+      toast.success("Contact request sent. You'll be notified when it's reviewed.");
     } catch (err) {
       console.error("Failed to send contact request:", err);
     } finally {

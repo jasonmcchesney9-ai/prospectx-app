@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import toast from "react-hot-toast";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -200,7 +201,7 @@ export default function PlayerDetailPage() {
       setPlayer((prev) => prev ? { ...prev, image_url: data.image_url } : prev);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to upload image";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setUploadingImage(false);
       e.target.value = "";
@@ -221,7 +222,7 @@ export default function PlayerDetailPage() {
       await api.delete(`/players/${playerId}/image`);
       setPlayer((prev) => prev ? { ...prev, image_url: null } : prev);
     } catch {
-      alert("Failed to delete image");
+      toast.error("Failed to delete image");
     }
   };
 
@@ -253,7 +254,7 @@ export default function PlayerDetailPage() {
       await loadNotes();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to save note";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setSavingNote(false);
     }
@@ -299,7 +300,7 @@ export default function PlayerDetailPage() {
       } catch { /* ok */ }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to refresh intelligence";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setRefreshingIntel(false);
     }
@@ -1142,7 +1143,7 @@ export default function PlayerDetailPage() {
                             setPlayer({ ...player, archetype: archetypeValue.trim() || null });
                             setEditingArchetype(false);
                           } catch {
-                            alert("Failed to save archetype");
+                            toast.error("Failed to save archetype");
                           }
                         }}
                         className="flex items-center gap-1 px-3 py-1.5 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
@@ -1613,7 +1614,7 @@ export default function PlayerDetailPage() {
                         setPendingCorrections((p) => p + 1);
                       } catch (err: unknown) {
                         const msg = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-                        alert(typeof msg === "string" ? msg : "Failed to submit correction");
+                        toast.error(typeof msg === "string" ? msg : "Failed to submit correction");
                       } finally {
                         setSubmittingCorrection(false);
                       }

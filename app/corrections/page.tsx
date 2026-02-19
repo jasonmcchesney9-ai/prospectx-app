@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import Link from "next/link";
 import {
   CheckSquare,
@@ -75,7 +76,7 @@ function CorrectionsAdmin() {
       loadCorrections();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Review failed";
-      alert(msg);
+      toast.error(msg);
     } finally {
       setProcessing(false);
     }

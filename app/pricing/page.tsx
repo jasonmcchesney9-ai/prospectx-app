@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import Link from "next/link";
 import {
   Check,
@@ -171,7 +172,7 @@ export default function PricingPage() {
       window.location.reload();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };
-      alert(error?.response?.data?.detail || "Failed to upgrade. Please try again.");
+      toast.error(error?.response?.data?.detail || "Failed to upgrade. Please try again.");
     } finally {
       setUpgrading(null);
     }

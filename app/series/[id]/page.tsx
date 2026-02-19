@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import Link from "next/link";
 import {
   Trophy,
@@ -189,7 +190,7 @@ function SeriesDetail() {
       await api.delete(`/series/${seriesId}`);
       router.push("/series");
     } catch {
-      alert("Failed to delete series");
+      toast.error("Failed to delete series");
     }
   };
 
