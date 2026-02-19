@@ -249,6 +249,13 @@ export default function NewPlayerPage() {
               rows={3} className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" placeholder="Scout notes, observations..." />
           </div>
 
+          {/* Elite Prospects URL */}
+          <div>
+            <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Elite Prospects URL</label>
+            <input type="url" value={form.elite_prospects_url || ""} onChange={(e) => update("elite_prospects_url", e.target.value || undefined)}
+              placeholder="https://www.eliteprospects.com/player/..." className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm" />
+          </div>
+
           {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
 
           <button type="submit" disabled={loading}

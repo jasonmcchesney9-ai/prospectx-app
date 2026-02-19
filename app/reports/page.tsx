@@ -87,7 +87,10 @@ export default function ReportsPage() {
             <PXIBadge size={32} variant="dark" showDot={false} />
             <div>
               <h1 className="text-2xl font-bold text-navy">My Reports</h1>
-              <p className="text-xs text-muted mt-0.5">
+              <p className="text-muted text-sm mt-1">
+                AI-generated scouting reports — 24+ templates for prospects, goalies, game prep, and trade analysis
+              </p>
+              <p className="text-xs text-muted/60 mt-0.5">
                 {reports.length} {reports.length === 1 ? "report" : "reports"} across {Object.keys(grouped).length} {Object.keys(grouped).length === 1 ? "category" : "categories"}
               </p>
             </div>

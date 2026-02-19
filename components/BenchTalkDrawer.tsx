@@ -707,7 +707,7 @@ export default function BenchTalkDrawer() {
           <PXIBadge size={36} variant="dark" showDot={true} />
           <div className="flex-1">
             <h2 className="font-oswald font-bold text-white text-sm uppercase tracking-wider">Bench Talk</h2>
-            <p className="text-[10px] text-white/40">Let&apos;s talk hockey.</p>
+            <p className="text-[10px] text-white/40">AI-powered hockey ops assistant — ask about players, stats, trades, and strategy</p>
           </div>
           <div className="flex items-center gap-1">
             <button

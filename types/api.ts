@@ -39,6 +39,7 @@ export interface Player {
   tags: string[];
   archetype: string | null;
   image_url: string | null;
+  elite_prospects_url: string | null;
   birth_year: number | null;
   age_group: string | null;
   draft_eligible_year: number | null;
@@ -100,6 +101,7 @@ export interface PlayerCreate {
   tags?: string[];
   archetype?: string;
   commitment_status?: string;
+  elite_prospects_url?: string;
 }
 
 // ── Player Card Data (enriched for visual cards) ──────────────

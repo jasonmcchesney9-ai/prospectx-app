@@ -34,6 +34,7 @@ import {
   Flame,
   Download,
   ClipboardCheck,
+  ExternalLink,
 } from "lucide-react";
 import {
   RadarChart,
@@ -1041,6 +1042,19 @@ export default function PlayerDetailPage() {
                       </div>
                     </div>
                   )}
+                  {player.elite_prospects_url && (
+                    <div className="pt-2 border-t border-teal/10">
+                      <a
+                        href={player.elite_prospects_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-teal hover:text-teal/80 transition-colors"
+                      >
+                        <ExternalLink size={14} />
+                        Elite Prospects Profile
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1159,9 +1173,12 @@ export default function PlayerDetailPage() {
                 {/* ProspectX Metrics */}
                 {(playerMetrics || stats.length > 0) && (
                   <div className="mt-4 pt-4 border-t border-teal/10">
-                    <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">
+                    <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-0.5">
                       ProspectX Metrics
                     </h4>
+                    <p className="text-[10px] text-muted/50 mb-2">
+                      PXI grades across 6 dimensions — derived from stats, scouting notes, and AI analysis
+                    </p>
                     {playerMetrics ? (
                       <>
                         <MetricsRadarChart indices={playerMetrics} />

@@ -1989,6 +1989,13 @@ def init_db():
         conn.commit()
         logger.info("Migration: added Scout Notes v2 columns")
 
+    # ── Migration: add elite_prospects_url to players (CR-012) ──
+    p_cols_ep = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    if "elite_prospects_url" not in p_cols_ep:
+        conn.execute("ALTER TABLE players ADD COLUMN elite_prospects_url TEXT")
+        conn.commit()
+        logger.info("Migration: added elite_prospects_url column to players")
+
     # ── Migration: rename old subscription tiers (CR-009) ──
     try:
         n1 = conn.execute("UPDATE users SET subscription_tier = 'scout' WHERE subscription_tier = 'novice'").rowcount
@@ -5021,6 +5028,7 @@ class PlayerCreate(BaseModel):
     archetype: Optional[str] = None
     image_url: Optional[str] = None
     commitment_status: Optional[str] = "Uncommitted"
+    elite_prospects_url: Optional[str] = None
 
 class PlayerResponse(BaseModel):
     id: str
@@ -5044,6 +5052,7 @@ class PlayerResponse(BaseModel):
     draft_eligible_year: Optional[int] = None
     league_tier: Optional[str] = None
     commitment_status: Optional[str] = "Uncommitted"
+    elite_prospects_url: Optional[str] = None
     roster_status: Optional[str] = "active"
     created_at: str
 
@@ -7096,8 +7105,8 @@ async def create_player(player: PlayerCreate, token_data: dict = Depends(verify_
         INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots, height_cm, weight_kg,
                              current_team, current_league, passports, notes, tags, archetype, image_url,
                              birth_year, age_group, draft_eligible_year, league_tier, commitment_status,
-                             created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             elite_prospects_url, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         player_id, org_id, player.first_name, player.last_name, player.dob,
         player.position.upper(), player.shoots, player.height_cm, player.weight_kg,
@@ -7106,7 +7115,7 @@ async def create_player(player: PlayerCreate, token_data: dict = Depends(verify_
         player.archetype, player.image_url,
         birth_year, age_group, draft_eligible_year, league_tier,
         player.commitment_status or "Uncommitted",
-        user_id, now, now,
+        player.elite_prospects_url, user_id, now, now,
     ))
     conn.commit()
 
@@ -7267,7 +7276,7 @@ async def update_player(player_id: str, player: PlayerCreate, token_data: dict =
         UPDATE players SET first_name=?, last_name=?, dob=?, position=?, shoots=?, height_cm=?, weight_kg=?,
                           current_team=?, current_league=?, passports=?, notes=?, tags=?, archetype=?, image_url=?,
                           birth_year=?, age_group=?, draft_eligible_year=?, league_tier=?,
-                          commitment_status=?, updated_at=?
+                          commitment_status=?, elite_prospects_url=?, updated_at=?
         WHERE id = ? AND org_id = ?
     """, (
         player.first_name, player.last_name, player.dob, player.position.upper(), player.shoots,
@@ -7276,7 +7285,7 @@ async def update_player(player_id: str, player: PlayerCreate, token_data: dict =
         player.archetype, player.image_url,
         birth_year, age_group, draft_eligible_year, league_tier,
         player.commitment_status or "Uncommitted",
-        now_iso(), player_id, org_id,
+        player.elite_prospects_url, now_iso(), player_id, org_id,
     ))
     conn.commit()
     row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()

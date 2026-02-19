@@ -91,7 +91,7 @@ function ChalkTalkList() {
             Chalk Talk
           </h1>
           <p className="text-muted text-sm mt-1">
-            Pre-game plans, post-game reviews, practice notes, and season strategy
+            Pre-game plans, post-game reviews, practice notes, and season strategy — your tactical playbook
           </p>
         </div>
         <Link

@@ -199,7 +199,10 @@ function AnalyticsDashboard() {
             Analytics Dashboard
           </h1>
           <p className="text-muted text-sm mt-1">
-            Hockey intelligence across {overview?.total_players || 0} players and{" "}
+            PXI scoring, league leaders, position breakdowns, and team rankings — all in one view
+          </p>
+          <p className="text-xs text-muted/60 mt-0.5">
+            {overview?.total_players || 0} players and{" "}
             {overview?.total_teams || 0} teams
             {hasFilters && (
               <span className="ml-1 text-teal font-medium">(filtered)</span>

@@ -91,7 +91,7 @@ function ScoutNotesList() {
             Scout Notes
           </h1>
           <p className="text-muted text-sm mt-1">
-            Structured scouting evaluations
+            Structured scouting evaluations — tag strengths, flag concerns, and track player development over time
           </p>
         </div>
         <Link
