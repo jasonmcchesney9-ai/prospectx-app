@@ -33,6 +33,7 @@ import {
   Wand2,
   Flame,
   Download,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   RadarChart,
@@ -53,7 +54,7 @@ import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection } from "@/types/api";
-import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS } from "@/types/api";
+import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports";
 type StatsSubView = "current" | "progression" | "gamelog";
@@ -1792,22 +1793,31 @@ export default function PlayerDetailPage() {
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-navy">Scout Notes</h2>
-              <button
-                onClick={() => {
-                  setShowNoteForm(!showNoteForm);
-                  setEditingNoteId(null);
-                  if (!showNoteForm) {
-                    setNoteText("");
-                    setNoteType("general");
-                    setNoteTags([]);
-                    setNotePrivate(false);
-                  }
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/30 transition-colors"
-              >
-                {showNoteForm ? <X size={14} /> : <PenLine size={14} />}
-                {showNoteForm ? "Cancel" : "Add Note"}
-              </button>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/scout-notes/new?player_id=${playerId}`}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal text-white hover:bg-teal/90 transition-colors"
+                >
+                  <ClipboardCheck size={14} />
+                  Scout Evaluation
+                </Link>
+                <button
+                  onClick={() => {
+                    setShowNoteForm(!showNoteForm);
+                    setEditingNoteId(null);
+                    if (!showNoteForm) {
+                      setNoteText("");
+                      setNoteType("general");
+                      setNoteTags([]);
+                      setNotePrivate(false);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/30 transition-colors"
+                >
+                  {showNoteForm ? <X size={14} /> : <PenLine size={14} />}
+                  {showNoteForm ? "Cancel" : "Quick Note"}
+                </button>
+              </div>
             </div>
 
             {/* Note Form — Mobile Optimized */}
@@ -1923,8 +1933,60 @@ export default function PlayerDetailPage() {
                           </span>
                         </div>
 
+                        {/* v2: Overall Grade + Prospect Status */}
+                        {(note.overall_grade || note.prospect_status) && (
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {note.overall_grade && (
+                              <span className={`w-7 h-7 rounded flex items-center justify-center text-xs font-oswald font-bold ${
+                                note.overall_grade >= 4 ? "bg-green-100 text-green-700" :
+                                note.overall_grade === 3 ? "bg-amber-50 text-amber-700" :
+                                "bg-red-100 text-red-700"
+                              }`}>
+                                {note.overall_grade}
+                              </span>
+                            )}
+                            {note.prospect_status && PROSPECT_STATUS_LABELS[note.prospect_status] && (
+                              <span className={`text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${PROSPECT_STATUS_LABELS[note.prospect_status].color}`}>
+                                {PROSPECT_STATUS_LABELS[note.prospect_status].label}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* v2: Ratings row */}
+                        {(note.skating_rating || note.puck_skills_rating || note.hockey_iq_rating || note.compete_rating || note.defense_rating) && (
+                          <div className="flex gap-1.5 mb-2 flex-wrap">
+                            {[
+                              { label: "SKT", value: note.skating_rating },
+                              { label: "PKS", value: note.puck_skills_rating },
+                              { label: "IQ", value: note.hockey_iq_rating },
+                              { label: "CMP", value: note.compete_rating },
+                              { label: "DEF", value: note.defense_rating },
+                            ].filter(r => r.value).map((r) => (
+                              <span key={r.label} className="text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60">
+                                {r.label} {r.value}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* v2: One-line summary */}
+                        {note.one_line_summary && (
+                          <p className="text-xs text-navy/80 mb-2 italic">{note.one_line_summary}</p>
+                        )}
+
+                        {/* v2: Strengths / Improvements */}
+                        {note.strengths_notes && (
+                          <p className="text-sm text-navy whitespace-pre-wrap mb-1"><span className="text-[10px] font-oswald uppercase tracking-wider text-navy/50">Strengths: </span>{note.strengths_notes}</p>
+                        )}
+                        {note.improvements_notes && (
+                          <p className="text-sm text-navy whitespace-pre-wrap mb-1"><span className="text-[10px] font-oswald uppercase tracking-wider text-navy/50">Improve: </span>{note.improvements_notes}</p>
+                        )}
+
                         {/* Note Text */}
-                        <p className="text-sm text-navy whitespace-pre-wrap">{note.note_text}</p>
+                        {note.note_text && (
+                          <p className="text-sm text-navy whitespace-pre-wrap">{note.note_text}</p>
+                        )}
 
                         {/* Tags + Scout */}
                         <div className="flex items-center gap-2 mt-2 flex-wrap">

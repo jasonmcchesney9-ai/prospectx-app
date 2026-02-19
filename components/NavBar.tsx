@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Settings,
   UserPlus,
+  ClipboardCheck,
   ClipboardList,
   BookOpen,
   Swords,
@@ -127,6 +128,7 @@ const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
 const COACHING_ITEMS: NavItem[] = [
   { href: "/game-plans", label: "Chalk Talk", icon: Swords },
   { href: "/scouting", label: "Scouting List", icon: Target },
+  { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
   { href: "/drills", label: "Drill Library", icon: BookOpen },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },

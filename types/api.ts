@@ -577,6 +577,20 @@ export interface GlossaryTerm {
 }
 
 // --- Scout Notes ---
+
+export type CompetitionLevel =
+  | "U13_AAA" | "U14_AAA" | "U15_AAA" | "U16_AAA" | "U18_AAA"
+  | "USHL" | "OHL" | "WHL" | "QMJHL" | "BCHL" | "NAHL"
+  | "NCAA_D1" | "NCAA_D3" | "AHL" | "ECHL" | "PRO" | "OTHER";
+
+export type ProspectStatus =
+  | "TOP_TARGET" | "A_PROSPECT" | "B_PROSPECT"
+  | "C_PROSPECT" | "FOLLOW_UP" | "PASS";
+
+export type NoteVisibility = "PRIVATE" | "ORG_SHARED";
+export type NoteMode = "QUICK" | "DETAILED";
+export type GradeScale = "1-5" | "20-80";
+
 export interface ScoutNote {
   id: string;
   org_id: string;
@@ -589,13 +603,56 @@ export interface ScoutNote {
   is_private: boolean;
   created_at: string;
   updated_at: string;
+  // v2 fields
+  game_date: string | null;
+  opponent: string | null;
+  competition_level: CompetitionLevel | null;
+  venue: string | null;
+  overall_grade: number | null;
+  grade_scale: GradeScale;
+  skating_rating: number | null;
+  puck_skills_rating: number | null;
+  hockey_iq_rating: number | null;
+  compete_rating: number | null;
+  defense_rating: number | null;
+  strengths_notes: string | null;
+  improvements_notes: string | null;
+  development_notes: string | null;
+  one_line_summary: string | null;
+  prospect_status: ProspectStatus | null;
+  visibility: NoteVisibility;
+  note_mode: NoteMode;
+  // Joined display fields
+  player_name?: string;
+  player_team?: string;
+  player_position?: string;
+  author_name?: string;
 }
 
 export interface NoteCreate {
-  note_text: string;
+  player_id?: string;
+  note_text?: string;
   note_type?: string;
   tags?: string[];
   is_private?: boolean;
+  game_date?: string;
+  opponent?: string;
+  competition_level?: string;
+  venue?: string;
+  overall_grade?: number;
+  grade_scale?: string;
+  skating_rating?: number;
+  puck_skills_rating?: number;
+  hockey_iq_rating?: number;
+  compete_rating?: number;
+  defense_rating?: number;
+  strengths_notes?: string;
+  improvements_notes?: string;
+  development_notes?: string;
+  one_line_summary?: string;
+  prospect_status?: string;
+  visibility?: string;
+  note_mode?: string;
 }
 
 export const NOTE_TYPE_LABELS: Record<string, string> = {
@@ -623,6 +680,24 @@ export const NOTE_TAG_LABELS: Record<string, string> = {
   leadership: "Leadership",
   coachability: "Coachability",
   work_ethic: "Work Ethic",
+};
+
+export const COMPETITION_LEVEL_LABELS: Record<string, string> = {
+  U13_AAA: "U13 AAA", U14_AAA: "U14 AAA", U15_AAA: "U15 AAA",
+  U16_AAA: "U16 AAA", U18_AAA: "U18 AAA",
+  USHL: "USHL", OHL: "OHL", WHL: "WHL", QMJHL: "QMJHL",
+  BCHL: "BCHL", NAHL: "NAHL",
+  NCAA_D1: "NCAA D1", NCAA_D3: "NCAA D3",
+  AHL: "AHL", ECHL: "ECHL", PRO: "Pro", OTHER: "Other",
+};
+
+export const PROSPECT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  TOP_TARGET: { label: "Top Target", color: "bg-red-100 text-red-700" },
+  A_PROSPECT: { label: "A Prospect", color: "bg-orange/10 text-orange" },
+  B_PROSPECT: { label: "B Prospect", color: "bg-teal/10 text-teal" },
+  C_PROSPECT: { label: "C Prospect", color: "bg-blue-50 text-blue-600" },
+  FOLLOW_UP: { label: "Follow Up", color: "bg-amber-50 text-amber-700" },
+  PASS: { label: "Pass", color: "bg-gray-100 text-gray-500" },
 };
 
 // --- Batch Import ---

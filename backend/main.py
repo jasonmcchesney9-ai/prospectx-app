@@ -417,7 +417,7 @@ _allowed_origins = list({o for o in _allowed_origins if o})
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"https://prospectx-app[a-z0-9-]*\.vercel\.app",
+    allow_origin_regex=r"https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -1799,6 +1799,35 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN email_verify_sent_at TEXT")
         conn.commit()
         logger.info("Migration: added email_verified columns to users")
+
+    # ── Scout Notes v2 columns ──
+    sn_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scout_notes)").fetchall()}
+    if "overall_grade" not in sn_cols:
+        for col_sql in [
+            "ALTER TABLE scout_notes ADD COLUMN game_date TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN opponent TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN competition_level TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN venue TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN overall_grade INTEGER",
+            "ALTER TABLE scout_notes ADD COLUMN grade_scale TEXT DEFAULT '1-5'",
+            "ALTER TABLE scout_notes ADD COLUMN skating_rating INTEGER",
+            "ALTER TABLE scout_notes ADD COLUMN puck_skills_rating INTEGER",
+            "ALTER TABLE scout_notes ADD COLUMN hockey_iq_rating INTEGER",
+            "ALTER TABLE scout_notes ADD COLUMN compete_rating INTEGER",
+            "ALTER TABLE scout_notes ADD COLUMN defense_rating INTEGER",
+            "ALTER TABLE scout_notes ADD COLUMN strengths_notes TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN improvements_notes TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN development_notes TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN one_line_summary TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN prospect_status TEXT",
+            "ALTER TABLE scout_notes ADD COLUMN visibility TEXT DEFAULT 'PRIVATE'",
+            "ALTER TABLE scout_notes ADD COLUMN note_mode TEXT DEFAULT 'QUICK'",
+        ]:
+            conn.execute(col_sql)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_scout_notes_date ON scout_notes(game_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_scout_notes_status ON scout_notes(prospect_status)")
+        conn.commit()
+        logger.info("Migration: added Scout Notes v2 columns")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -4897,17 +4926,62 @@ class StatsResponse(BaseModel):
     created_at: str
 
 # --- Scout Notes ---
+COMPETITION_LEVELS = [
+    "U13_AAA", "U14_AAA", "U15_AAA", "U16_AAA", "U18_AAA",
+    "USHL", "OHL", "WHL", "QMJHL", "BCHL", "NAHL",
+    "NCAA_D1", "NCAA_D3", "AHL", "ECHL", "PRO", "OTHER",
+]
+PROSPECT_STATUSES = ["TOP_TARGET", "A_PROSPECT", "B_PROSPECT", "C_PROSPECT", "FOLLOW_UP", "PASS"]
+
 class NoteCreate(BaseModel):
-    note_text: str = Field(..., min_length=1)
-    note_type: str = "general"  # game, practice, interview, general
+    player_id: Optional[str] = None  # Can be set via URL param or body
+    note_text: str = ""
+    note_type: str = "general"
     tags: Optional[List[str]] = []
     is_private: bool = False
+    # v2 fields
+    game_date: Optional[str] = None
+    opponent: Optional[str] = None
+    competition_level: Optional[str] = None
+    venue: Optional[str] = None
+    overall_grade: Optional[int] = Field(None, ge=1, le=80)
+    grade_scale: str = "1-5"
+    skating_rating: Optional[int] = Field(None, ge=1, le=5)
+    puck_skills_rating: Optional[int] = Field(None, ge=1, le=5)
+    hockey_iq_rating: Optional[int] = Field(None, ge=1, le=5)
+    compete_rating: Optional[int] = Field(None, ge=1, le=5)
+    defense_rating: Optional[int] = Field(None, ge=1, le=5)
+    strengths_notes: Optional[str] = None
+    improvements_notes: Optional[str] = None
+    development_notes: Optional[str] = None
+    one_line_summary: Optional[str] = None
+    prospect_status: Optional[str] = None
+    visibility: str = "PRIVATE"
+    note_mode: str = "QUICK"
 
 class NoteUpdate(BaseModel):
     note_text: Optional[str] = None
     note_type: Optional[str] = None
     tags: Optional[List[str]] = None
     is_private: Optional[bool] = None
+    game_date: Optional[str] = None
+    opponent: Optional[str] = None
+    competition_level: Optional[str] = None
+    venue: Optional[str] = None
+    overall_grade: Optional[int] = Field(None, ge=1, le=80)
+    grade_scale: Optional[str] = None
+    skating_rating: Optional[int] = Field(None, ge=1, le=5)
+    puck_skills_rating: Optional[int] = Field(None, ge=1, le=5)
+    hockey_iq_rating: Optional[int] = Field(None, ge=1, le=5)
+    compete_rating: Optional[int] = Field(None, ge=1, le=5)
+    defense_rating: Optional[int] = Field(None, ge=1, le=5)
+    strengths_notes: Optional[str] = None
+    improvements_notes: Optional[str] = None
+    development_notes: Optional[str] = None
+    one_line_summary: Optional[str] = None
+    prospect_status: Optional[str] = None
+    visibility: Optional[str] = None
+    note_mode: Optional[str] = None
 
 class NoteResponse(BaseModel):
     id: str
@@ -4921,6 +4995,30 @@ class NoteResponse(BaseModel):
     is_private: bool
     created_at: str
     updated_at: str
+    # v2 fields
+    game_date: Optional[str] = None
+    opponent: Optional[str] = None
+    competition_level: Optional[str] = None
+    venue: Optional[str] = None
+    overall_grade: Optional[int] = None
+    grade_scale: str = "1-5"
+    skating_rating: Optional[int] = None
+    puck_skills_rating: Optional[int] = None
+    hockey_iq_rating: Optional[int] = None
+    compete_rating: Optional[int] = None
+    defense_rating: Optional[int] = None
+    strengths_notes: Optional[str] = None
+    improvements_notes: Optional[str] = None
+    development_notes: Optional[str] = None
+    one_line_summary: Optional[str] = None
+    prospect_status: Optional[str] = None
+    visibility: str = "PRIVATE"
+    note_mode: str = "QUICK"
+    # Joined display fields
+    player_name: Optional[str] = None
+    player_team: Optional[str] = None
+    player_position: Optional[str] = None
+    author_name: Optional[str] = None
 
 # --- Line Combinations ---
 class LinePlayerRef(BaseModel):
@@ -11658,10 +11756,95 @@ async def refresh_player_intelligence(player_id: str, token_data: dict = Depends
 NOTE_TAGS = ["skating", "shooting", "compete", "hockey_iq", "puck_skills", "positioning",
              "physicality", "speed", "vision", "leadership", "coachability", "work_ethic"]
 
+_NOTE_V2_FIELDS = [
+    "game_date", "opponent", "competition_level", "venue", "overall_grade", "grade_scale",
+    "skating_rating", "puck_skills_rating", "hockey_iq_rating", "compete_rating", "defense_rating",
+    "strengths_notes", "improvements_notes", "development_notes", "one_line_summary",
+    "prospect_status", "visibility", "note_mode",
+]
+
+def _build_note_response(d: dict) -> NoteResponse:
+    """Build a NoteResponse from a joined DB row dict."""
+    tags = d.get("tags", "[]")
+    if isinstance(tags, str):
+        try:
+            tags = json.loads(tags)
+        except Exception:
+            tags = []
+    scout_name = f"{d.get('scout_first', '') or ''} {d.get('scout_last', '') or ''}".strip()
+    player_name = f"{d.get('player_first', '') or ''} {d.get('player_last', '') or ''}".strip()
+    return NoteResponse(
+        id=d["id"], org_id=d["org_id"], player_id=d["player_id"], scout_id=d["scout_id"],
+        scout_name=scout_name or None, note_text=d.get("note_text") or "", note_type=d.get("note_type") or "general",
+        tags=tags, is_private=bool(d.get("is_private")),
+        created_at=d["created_at"], updated_at=d["updated_at"],
+        game_date=d.get("game_date"), opponent=d.get("opponent"),
+        competition_level=d.get("competition_level"), venue=d.get("venue"),
+        overall_grade=d.get("overall_grade"), grade_scale=d.get("grade_scale") or "1-5",
+        skating_rating=d.get("skating_rating"), puck_skills_rating=d.get("puck_skills_rating"),
+        hockey_iq_rating=d.get("hockey_iq_rating"), compete_rating=d.get("compete_rating"),
+        defense_rating=d.get("defense_rating"), strengths_notes=d.get("strengths_notes"),
+        improvements_notes=d.get("improvements_notes"), development_notes=d.get("development_notes"),
+        one_line_summary=d.get("one_line_summary"), prospect_status=d.get("prospect_status"),
+        visibility=d.get("visibility") or ("PRIVATE" if d.get("is_private") else "ORG_SHARED"),
+        note_mode=d.get("note_mode") or "QUICK",
+        player_name=player_name or None,
+        player_team=d.get("current_team"),
+        player_position=d.get("position"),
+        author_name=scout_name or None,
+    )
+
+_NOTE_JOIN_SQL = """
+    SELECT n.*, u.first_name as scout_first, u.last_name as scout_last,
+           p.first_name as player_first, p.last_name as player_last,
+           p.current_team, p.position
+    FROM scout_notes n
+    LEFT JOIN users u ON n.scout_id = u.id
+    LEFT JOIN players p ON n.player_id = p.id
+"""
+
+_NOTE_VISIBILITY_WHERE = "AND (n.is_private = 0 OR (n.visibility IS NOT NULL AND n.visibility != 'PRIVATE') OR n.scout_id = ?)"
+
+
 @app.get("/notes/tags")
 async def get_note_tags():
     """Return available note tag options."""
     return NOTE_TAGS
+
+
+@app.get("/notes/meta")
+async def get_note_meta():
+    """Return enums for scout note forms."""
+    return {
+        "tags": NOTE_TAGS,
+        "competition_levels": COMPETITION_LEVELS,
+        "prospect_statuses": PROSPECT_STATUSES,
+    }
+
+
+def _insert_scout_note(conn, note_id: str, org_id: str, player_id: str, user_id: str, note: NoteCreate, now: str):
+    """Insert a scout note with all v1+v2 fields."""
+    conn.execute("""
+        INSERT INTO scout_notes (
+            id, org_id, player_id, scout_id, note_text, note_type, tags, is_private,
+            game_date, opponent, competition_level, venue, overall_grade, grade_scale,
+            skating_rating, puck_skills_rating, hockey_iq_rating, compete_rating, defense_rating,
+            strengths_notes, improvements_notes, development_notes, one_line_summary,
+            prospect_status, visibility, note_mode, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        note_id, org_id, player_id, user_id,
+        note.note_text, note.note_type, json.dumps(note.tags or []),
+        1 if note.is_private or note.visibility == "PRIVATE" else 0,
+        note.game_date, note.opponent, note.competition_level, note.venue,
+        note.overall_grade, note.grade_scale,
+        note.skating_rating, note.puck_skills_rating, note.hockey_iq_rating,
+        note.compete_rating, note.defense_rating,
+        note.strengths_notes, note.improvements_notes, note.development_notes,
+        note.one_line_summary, note.prospect_status, note.visibility, note.note_mode,
+        now, now,
+    ))
+    conn.commit()
 
 
 @app.post("/players/{player_id}/notes", response_model=NoteResponse, status_code=201)
@@ -11670,7 +11853,6 @@ async def create_note(player_id: str, note: NoteCreate, token_data: dict = Depen
     user_id = token_data["user_id"]
     conn = get_db()
 
-    # Verify player belongs to org
     player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
     if not player:
         conn.close()
@@ -11678,29 +11860,108 @@ async def create_note(player_id: str, note: NoteCreate, token_data: dict = Depen
 
     note_id = gen_id()
     now = now_iso()
+    _insert_scout_note(conn, note_id, org_id, player_id, user_id, note, now)
 
-    conn.execute("""
-        INSERT INTO scout_notes (id, org_id, player_id, scout_id, note_text, note_type, tags, is_private, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (note_id, org_id, player_id, user_id, note.note_text, note.note_type,
-          json.dumps(note.tags or []), 1 if note.is_private else 0, now, now))
-    conn.commit()
-
-    # Fetch scout name
-    user_row = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
-    scout_name = f"{user_row['first_name'] or ''} {user_row['last_name'] or ''}".strip() if user_row else None
-
+    row = conn.execute(_NOTE_JOIN_SQL + " WHERE n.id = ?", (note_id,)).fetchone()
     conn.close()
     logger.info("Note created for player %s by %s", player_id, user_id)
-
-    # Trigger intelligence refresh in background (notes change context)
     asyncio.create_task(_generate_player_intelligence(player_id, org_id, trigger="note"))
+    return _build_note_response(dict(row))
 
-    return NoteResponse(
-        id=note_id, org_id=org_id, player_id=player_id, scout_id=user_id,
-        scout_name=scout_name, note_text=note.note_text, note_type=note.note_type,
-        tags=note.tags or [], is_private=note.is_private, created_at=now, updated_at=now,
-    )
+
+@app.post("/scout-notes", response_model=NoteResponse, status_code=201)
+async def create_scout_note_standalone(note: NoteCreate, token_data: dict = Depends(verify_token)):
+    """Standalone create — player_id comes from request body."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    if not note.player_id:
+        raise HTTPException(status_code=422, detail="player_id is required")
+    conn = get_db()
+
+    player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (note.player_id, org_id)).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    note_id = gen_id()
+    now = now_iso()
+    _insert_scout_note(conn, note_id, org_id, note.player_id, user_id, note, now)
+
+    row = conn.execute(_NOTE_JOIN_SQL + " WHERE n.id = ?", (note_id,)).fetchone()
+    conn.close()
+    logger.info("Scout note created for player %s by %s", note.player_id, user_id)
+    asyncio.create_task(_generate_player_intelligence(note.player_id, org_id, trigger="note"))
+    return _build_note_response(dict(row))
+
+
+@app.get("/scout-notes", response_model=List[NoteResponse])
+async def list_scout_notes(
+    player_id: Optional[str] = None,
+    prospect_status: Optional[str] = None,
+    competition_level: Optional[str] = None,
+    game_date_from: Optional[str] = None,
+    game_date_to: Optional[str] = None,
+    visibility: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+    token_data: dict = Depends(verify_token),
+):
+    """Paginated list of scout notes with filters."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    query = _NOTE_JOIN_SQL + " WHERE n.org_id = ? " + _NOTE_VISIBILITY_WHERE
+    params: list = [org_id, user_id]
+
+    if player_id:
+        query += " AND n.player_id = ?"
+        params.append(player_id)
+    if prospect_status:
+        query += " AND n.prospect_status = ?"
+        params.append(prospect_status)
+    if competition_level:
+        query += " AND n.competition_level = ?"
+        params.append(competition_level)
+    if game_date_from:
+        query += " AND n.game_date >= ?"
+        params.append(game_date_from)
+    if game_date_to:
+        query += " AND n.game_date <= ?"
+        params.append(game_date_to)
+    if visibility == "PRIVATE":
+        query += " AND n.scout_id = ? AND (n.visibility = 'PRIVATE' OR n.is_private = 1)"
+        params.append(user_id)
+
+    query += " ORDER BY COALESCE(n.game_date, n.created_at) DESC LIMIT ? OFFSET ?"
+    limit = min(limit, 100)
+    params.extend([limit, offset])
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [_build_note_response(dict(r)) for r in rows]
+
+
+@app.get("/scout-notes/{note_id}", response_model=NoteResponse)
+async def get_scout_note(note_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single scout note by ID."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    row = conn.execute(_NOTE_JOIN_SQL + " WHERE n.id = ? AND n.org_id = ?", (note_id, org_id)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    d = dict(row)
+    is_private = d.get("visibility") == "PRIVATE" or d.get("is_private")
+    if is_private and d["scout_id"] != user_id:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    conn.close()
+    return _build_note_response(d)
 
 
 @app.get("/players/{player_id}/notes", response_model=List[NoteResponse])
@@ -11714,43 +11975,20 @@ async def get_player_notes(
     user_id = token_data["user_id"]
     conn = get_db()
 
-    # Show all shared notes + user's own private notes
-    query = """
-        SELECT n.*, u.first_name as scout_first, u.last_name as scout_last
-        FROM scout_notes n
-        LEFT JOIN users u ON n.scout_id = u.id
-        WHERE n.player_id = ? AND n.org_id = ?
-        AND (n.is_private = 0 OR n.scout_id = ?)
-    """
+    query = _NOTE_JOIN_SQL + " WHERE n.player_id = ? AND n.org_id = ? " + _NOTE_VISIBILITY_WHERE
     params: list = [player_id, org_id, user_id]
 
     if note_type:
         query += " AND n.note_type = ?"
         params.append(note_type)
 
-    query += " ORDER BY n.created_at DESC"
+    query += " ORDER BY COALESCE(n.game_date, n.created_at) DESC"
 
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
-    results = []
-    for r in rows:
-        d = dict(r)
-        tags = d.get("tags", "[]")
-        if isinstance(tags, str):
-            try:
-                tags = json.loads(tags)
-            except Exception:
-                tags = []
-        scout_name = f"{d.get('scout_first', '') or ''} {d.get('scout_last', '') or ''}".strip()
-        results.append(NoteResponse(
-            id=d["id"], org_id=d["org_id"], player_id=d["player_id"], scout_id=d["scout_id"],
-            scout_name=scout_name or None, note_text=d["note_text"], note_type=d["note_type"],
-            tags=tags, is_private=bool(d["is_private"]),
-            created_at=d["created_at"], updated_at=d["updated_at"],
-        ))
+    results = [_build_note_response(dict(r)) for r in rows]
 
-    # Filter by tag in Python (since tags are JSON in SQLite)
     if tag:
         results = [n for n in results if tag in n.tags]
 
@@ -11768,7 +12006,6 @@ async def update_note(note_id: str, note: NoteUpdate, token_data: dict = Depends
         conn.close()
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # Only the author can edit their note
     if row["scout_id"] != user_id:
         conn.close()
         raise HTTPException(status_code=403, detail="Can only edit your own notes")
@@ -11782,6 +12019,14 @@ async def update_note(note_id: str, note: NoteUpdate, token_data: dict = Depends
         updates["tags"] = json.dumps(note.tags)
     if note.is_private is not None:
         updates["is_private"] = 1 if note.is_private else 0
+    # v2 fields
+    for field in _NOTE_V2_FIELDS:
+        val = getattr(note, field, None)
+        if val is not None:
+            updates[field] = val
+    # Sync visibility ↔ is_private
+    if note.visibility is not None:
+        updates["is_private"] = 1 if note.visibility == "PRIVATE" else 0
 
     if updates:
         updates["updated_at"] = now_iso()
@@ -11790,28 +12035,9 @@ async def update_note(note_id: str, note: NoteUpdate, token_data: dict = Depends
         conn.execute(f"UPDATE scout_notes SET {set_clause} WHERE id = ?", vals)
         conn.commit()
 
-    updated_row = conn.execute("""
-        SELECT n.*, u.first_name as scout_first, u.last_name as scout_last
-        FROM scout_notes n LEFT JOIN users u ON n.scout_id = u.id
-        WHERE n.id = ?
-    """, (note_id,)).fetchone()
+    updated_row = conn.execute(_NOTE_JOIN_SQL + " WHERE n.id = ?", (note_id,)).fetchone()
     conn.close()
-
-    d = dict(updated_row)
-    tags = d.get("tags", "[]")
-    if isinstance(tags, str):
-        try:
-            tags = json.loads(tags)
-        except Exception:
-            tags = []
-    scout_name = f"{d.get('scout_first', '') or ''} {d.get('scout_last', '') or ''}".strip()
-
-    return NoteResponse(
-        id=d["id"], org_id=d["org_id"], player_id=d["player_id"], scout_id=d["scout_id"],
-        scout_name=scout_name or None, note_text=d["note_text"], note_type=d["note_type"],
-        tags=tags, is_private=bool(d["is_private"]),
-        created_at=d["created_at"], updated_at=d["updated_at"],
-    )
+    return _build_note_response(dict(updated_row))
 
 
 @app.delete("/notes/{note_id}")
