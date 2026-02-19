@@ -159,7 +159,19 @@ export default function BroadcastPage() {
         league: t.league,
       }));
       setTeams(list);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error("Broadcast: Failed to load teams:", err);
+      // Retry once after 1 second (auth may not be ready)
+      setTimeout(() => {
+        api.get("/teams").then(({ data }) => {
+          const list: TeamRef[] = (data || []).map((t: { name: string; league?: string }) => ({
+            name: t.name,
+            league: t.league,
+          }));
+          setTeams(list);
+        }).catch((err2) => console.error("Broadcast: Retry failed:", err2));
+      }, 1000);
+    });
   }, []);
 
   // ── Load rosters when teams change ─────────────────────

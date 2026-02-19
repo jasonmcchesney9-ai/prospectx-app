@@ -3,6 +3,13 @@ ProspectX API Server — SQLite Version
 Zero external DB dependencies. Just SQLite + FastAPI.
 """
 
+# Prevent Python from writing .pyc files to __pycache__/
+# This stops Turbopack from detecting file changes in backend/ and crashing
+import os
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+import sys
+sys.dont_write_bytecode = True
+
 import asyncio
 import json
 import logging
@@ -24,6 +31,7 @@ if _this_dir not in sys.path:
 import csv
 import io
 
+import httpx
 import jwt
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, status
@@ -1639,6 +1647,117 @@ def init_db():
         conn.execute("ALTER TABLE practice_plans ADD COLUMN practice_date TEXT")
         conn.commit()
         logger.info("Migration: added practice_date column to practice_plans")
+
+    # ── Calendar & Schedule tables ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            team_id TEXT,
+            player_id TEXT,
+            created_by_user_id TEXT,
+            feed_id TEXT,
+            type TEXT NOT NULL DEFAULT 'OTHER',
+            source TEXT NOT NULL DEFAULT 'MANUAL',
+            source_external_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            start_time TEXT NOT NULL,
+            end_time TEXT,
+            timezone TEXT DEFAULT 'America/Toronto',
+            location TEXT,
+            league_name TEXT,
+            opponent_name TEXT,
+            is_home INTEGER,
+            visibility TEXT DEFAULT 'ORG',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS calendar_feeds (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            team_id TEXT,
+            label TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'ICAL_GENERIC',
+            url TEXT NOT NULL,
+            active INTEGER DEFAULT 1,
+            last_sync_at TEXT,
+            sync_error TEXT,
+            event_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_org ON events(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_time)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_team ON events(team_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_source ON events(org_id, source, source_external_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_calendar_feeds_org ON calendar_feeds(org_id)")
+    conn.commit()
+
+    # ── Messaging tables ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS msg_conversations (
+            id TEXT PRIMARY KEY,
+            org_id TEXT,
+            participant_ids TEXT NOT NULL,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS msg_messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL REFERENCES msg_conversations(id),
+            sender_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            sent_at TEXT DEFAULT (datetime('now')),
+            read_at TEXT,
+            is_system_message INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contact_requests (
+            id TEXT PRIMARY KEY,
+            requester_id TEXT NOT NULL,
+            requester_name TEXT,
+            requester_role TEXT,
+            requester_org TEXT,
+            target_player_id TEXT NOT NULL,
+            parent_id TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            message TEXT,
+            requested_at TEXT DEFAULT (datetime('now')),
+            resolved_at TEXT,
+            cooldown_until TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS message_blocks (
+            id TEXT PRIMARY KEY,
+            blocker_id TEXT NOT NULL,
+            blocked_id TEXT NOT NULL,
+            reason TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(blocker_id, blocked_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_messages_conv ON msg_messages(conversation_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_messages_sent ON msg_messages(sent_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_conv_participants ON msg_conversations(participant_ids)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_contact_req_parent ON contact_requests(parent_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_contact_req_target ON contact_requests(target_player_id)")
+    conn.commit()
+
+    # Add linked_player_id to users table for parent→player linking
+    user_cols = [col[1] for col in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "linked_player_id" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN linked_player_id TEXT")
+        conn.commit()
+        logger.info("Migration: added linked_player_id column to users")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -8782,11 +8901,67 @@ async def get_team_hockeytech_info(team_name: str, token_data: dict = Depends(ve
             "SELECT hockeytech_league FROM players WHERE LOWER(current_team) = LOWER(?) AND org_id = ? AND hockeytech_id IS NOT NULL LIMIT 1",
             (decoded_name, org_id)
         ).fetchone()
+        if not ht_player:
+            return {
+                "hockeytech_team_id": None,
+                "hockeytech_league": None,
+                "linked": False,
+                "has_ht_players": False,
+            }
+
+        # Auto-repair: team has HT players but no team link — try to find and store the HT team_id
+        ht_league = ht_player["hockeytech_league"]
+        ht_team_id_found = None
+        try:
+            from hockeytech import HockeyTechClient, LEAGUES as HT_LEAGUES
+            if ht_league and ht_league in HT_LEAGUES:
+                client = HockeyTechClient(ht_league)
+                seasons = await client.get_seasons()
+                if seasons:
+                    current_season = seasons[0]["id"]
+                    ht_teams = await client.get_teams(current_season)
+                    name_lower = decoded_name.lower()
+                    for ht_team in ht_teams:
+                        ht_name = (ht_team.get("name") or "").lower()
+                        ht_city = (ht_team.get("city") or "").lower()
+                        ht_nick = (ht_team.get("nickname") or "").lower()
+                        # Match by: full name, city+nickname, or substring
+                        if (name_lower == ht_name
+                            or name_lower == f"{ht_city} {ht_nick}"
+                            or ht_name in name_lower
+                            or name_lower in ht_name
+                            or (ht_nick and ht_nick in name_lower)):
+                            ht_team_id_found = ht_team.get("id")
+                            break
+                    await client.close()
+                    if ht_team_id_found:
+                        # Write the link to teams table
+                        team_db_row = conn.execute(
+                            "SELECT id FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
+                            (decoded_name, org_id)
+                        ).fetchone()
+                        if team_db_row:
+                            conn.execute(
+                                "UPDATE teams SET hockeytech_team_id = ?, hockeytech_league = ? WHERE id = ?",
+                                (ht_team_id_found, ht_league, team_db_row["id"])
+                            )
+                            conn.commit()
+                            logger.info("Auto-repair: linked team %s → HT team_id=%d, league=%s", decoded_name, ht_team_id_found, ht_league)
+        except Exception as e:
+            logger.warning("Auto-repair HT team link failed for %s: %s", decoded_name, e)
+
+        if ht_team_id_found:
+            return {
+                "hockeytech_team_id": ht_team_id_found,
+                "hockeytech_league": ht_league,
+                "linked": True,
+                "has_ht_players": True,
+            }
         return {
             "hockeytech_team_id": None,
-            "hockeytech_league": ht_player["hockeytech_league"] if ht_player else None,
+            "hockeytech_league": ht_league,
             "linked": False,
-            "has_ht_players": ht_player is not None,
+            "has_ht_players": True,
         }
     finally:
         conn.close()
@@ -14495,8 +14670,32 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
         created += 1
         results.append({"name": f"{first} {last}", "action": "created", "player_id": player_id})
 
-    # ── Sync team logo from HockeyTech if we don't have one locally ──
+    # ── Helper: find team row in DB using multiple name strategies ──
     team_name_synced = roster[0].get("team_name", "") if roster else ""
+
+    def _find_team_row_for_sync(conn_inner, names_to_try, org_inner, cols="id"):
+        """Try multiple name strategies to find a team in the DB."""
+        for try_name in names_to_try:
+            if not try_name:
+                continue
+            row = conn_inner.execute(
+                f"SELECT {cols} FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
+                (try_name, org_inner)
+            ).fetchone()
+            if row:
+                return row
+        return None
+
+    # Build list of names to try: HT team name, then synced players' current_team
+    names_to_try = [team_name_synced]
+    for r in results[:10]:
+        pid = r.get("player_id")
+        if pid:
+            p_row = conn.execute("SELECT current_team FROM players WHERE id = ?", (pid,)).fetchone()
+            if p_row and p_row["current_team"] and p_row["current_team"] not in names_to_try:
+                names_to_try.append(p_row["current_team"])
+
+    # ── Sync team logo from HockeyTech if we don't have one locally ──
     logo_synced = None
     if team_name_synced:
         try:
@@ -14505,14 +14704,10 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                 if ht_team.get("id") == team_id and ht_team.get("logo"):
                     ht_logo_url = ht_team["logo"]
                     # Check if this team exists in our DB and needs a logo
-                    team_row = conn.execute(
-                        "SELECT id, logo_url FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
-                        (team_name_synced, org_id)
-                    ).fetchone()
+                    team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url")
                     if team_row:
                         # Download the logo locally
-                        import httpx as httpx_sync
-                        async with httpx_sync.AsyncClient(timeout=10) as dl_client:
+                        async with httpx.AsyncClient(timeout=10) as dl_client:
                             img_resp = await dl_client.get(ht_logo_url)
                             if img_resp.status_code == 200:
                                 ext = "png" if "png" in ht_logo_url.lower() else "jpg"
@@ -14525,19 +14720,13 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                                              (local_logo_url, team_row["id"]))
                                 logo_synced = local_logo_url
                                 logger.info("Synced team logo for %s from HockeyTech", team_name_synced)
-                    elif not team_row:
-                        # Team doesn't exist in our DB yet — store external URL for reference
-                        pass
                     break
         except Exception as e:
             logger.warning("Could not sync team logo for %s: %s", team_name_synced, e)
 
         # Store HockeyTech team_id and league on the teams table
         try:
-            team_row_ht = conn.execute(
-                "SELECT id FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
-                (team_name_synced, org_id)
-            ).fetchone()
+            team_row_ht = _find_team_row_for_sync(conn, names_to_try, org_id)
             if team_row_ht:
                 conn.execute(
                     "UPDATE teams SET hockeytech_team_id = ?, hockeytech_league = ? WHERE id = ?",
@@ -18089,6 +18278,67 @@ class BenchTalkContextRequest(BaseModel):
     report_ids: list[str] = []
 
 
+# ── Calendar & Schedule ────────────────────────────────────
+class CalendarEventCreate(BaseModel):
+    type: str = "OTHER"
+    title: str
+    description: Optional[str] = None
+    start_time: str  # ISO 8601
+    end_time: Optional[str] = None
+    timezone: str = "America/Toronto"
+    location: Optional[str] = None
+    league_name: Optional[str] = None
+    opponent_name: Optional[str] = None
+    is_home: Optional[bool] = None
+    team_id: Optional[str] = None
+    player_id: Optional[str] = None
+    visibility: str = "ORG"
+
+
+class CalendarEventUpdate(BaseModel):
+    type: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    timezone: Optional[str] = None
+    location: Optional[str] = None
+    league_name: Optional[str] = None
+    opponent_name: Optional[str] = None
+    is_home: Optional[bool] = None
+    team_id: Optional[str] = None
+    player_id: Optional[str] = None
+    visibility: Optional[str] = None
+
+
+class CalendarFeedCreate(BaseModel):
+    label: str
+    provider: str = "ICAL_GENERIC"
+    url: str
+    team_id: Optional[str] = None
+
+
+# ── Messaging ──────────────────────────────────────────────
+class SendMessageRequest(BaseModel):
+    conversation_id: Optional[str] = None
+    recipient_id: Optional[str] = None
+    content: str
+
+
+class ContactRequestCreate(BaseModel):
+    target_player_id: str
+    message: Optional[str] = None
+
+
+class ContactRequestResolve(BaseModel):
+    status: str  # "approved" or "denied"
+
+
+class BlockUserRequest(BaseModel):
+    blocked_id: str
+    reason: Optional[str] = None
+
+
 @app.post("/bench-talk/context")
 async def get_bench_talk_context(req: BenchTalkContextRequest, token_data: dict = Depends(verify_token)):
     """Fetch full Player and Report objects for Bench Talk sidebar context display."""
@@ -18722,6 +18972,913 @@ async def my_data_corrections(token_data: dict = Depends(verify_token)):
     """, (org_id, user_id)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ============================================================
+# CALENDAR & SCHEDULE
+# ============================================================
+
+
+def _sync_ical_feed(conn, feed_id: str, org_id: str) -> dict:
+    """Fetch and parse an iCal feed, upsert events into the events table."""
+    try:
+        from icalendar import Calendar as ICalendar
+    except ImportError:
+        return {"synced_count": 0, "errors": ["icalendar library not installed"]}
+
+    feed = conn.execute("SELECT * FROM calendar_feeds WHERE id = ? AND org_id = ?", (feed_id, org_id)).fetchone()
+    if not feed:
+        return {"synced_count": 0, "errors": ["Feed not found"]}
+
+    feed_url = feed["url"]
+    errors = []
+    synced = 0
+
+    try:
+        resp = httpx.get(feed_url, timeout=30.0, follow_redirects=True)
+        resp.raise_for_status()
+        ical_text = resp.text
+    except Exception as e:
+        error_msg = f"Failed to fetch feed: {str(e)}"
+        conn.execute("UPDATE calendar_feeds SET sync_error = ?, updated_at = datetime('now') WHERE id = ?", (error_msg, feed_id))
+        conn.commit()
+        return {"synced_count": 0, "errors": [error_msg]}
+
+    try:
+        cal = ICalendar.from_ical(ical_text)
+    except Exception as e:
+        error_msg = f"Failed to parse iCal: {str(e)}"
+        conn.execute("UPDATE calendar_feeds SET sync_error = ?, updated_at = datetime('now') WHERE id = ?", (error_msg, feed_id))
+        conn.commit()
+        return {"synced_count": 0, "errors": [error_msg]}
+
+    for component in cal.walk():
+        if component.name != "VEVENT":
+            continue
+        try:
+            uid = str(component.get("UID", ""))
+            summary = str(component.get("SUMMARY", "Untitled Event"))
+            description = str(component.get("DESCRIPTION", "")) if component.get("DESCRIPTION") else None
+            location = str(component.get("LOCATION", "")) if component.get("LOCATION") else None
+
+            dtstart = component.get("DTSTART")
+            dtend = component.get("DTEND")
+            start_dt = dtstart.dt if dtstart else None
+            end_dt = dtend.dt if dtend else None
+
+            if not start_dt:
+                continue
+
+            # Convert date to datetime if needed
+            if hasattr(start_dt, "isoformat"):
+                start_str = start_dt.isoformat()
+            else:
+                start_str = str(start_dt)
+
+            end_str = None
+            if end_dt:
+                if hasattr(end_dt, "isoformat"):
+                    end_str = end_dt.isoformat()
+                else:
+                    end_str = str(end_dt)
+
+            # Timezone
+            tz = "America/Toronto"
+            if dtstart and hasattr(dtstart, "params") and "TZID" in dtstart.params:
+                tz = str(dtstart.params["TZID"])
+
+            # Heuristics for event type and opponent
+            event_type = "GAME"
+            opponent = None
+            is_home = None
+            summary_lower = summary.lower()
+
+            if "practice" in summary_lower or "skate" in summary_lower:
+                event_type = "PRACTICE"
+            elif "tournament" in summary_lower or "tourney" in summary_lower:
+                event_type = "TOURNAMENT"
+            elif "showcase" in summary_lower:
+                event_type = "SHOWCASE"
+            elif "meeting" in summary_lower:
+                event_type = "MEETING"
+            elif "deadline" in summary_lower:
+                event_type = "DEADLINE"
+
+            # Try to extract opponent from "vs" or "@"
+            if " vs " in summary or " vs. " in summary:
+                parts = re.split(r"\s+vs\.?\s+", summary, maxsplit=1)
+                if len(parts) == 2:
+                    opponent = parts[1].strip()
+                    is_home = 1
+            elif " @ " in summary or " at " in summary_lower:
+                parts = re.split(r"\s+[@]\s+|\s+at\s+", summary, maxsplit=1, flags=re.IGNORECASE)
+                if len(parts) == 2:
+                    opponent = parts[1].strip()
+                    is_home = 0
+
+            # Upsert: check if exists by source_external_id
+            existing = conn.execute(
+                "SELECT id FROM events WHERE org_id = ? AND source = 'ICAL' AND source_external_id = ?",
+                (org_id, uid)
+            ).fetchone()
+
+            if existing:
+                conn.execute("""
+                    UPDATE events SET title = ?, start_time = ?, end_time = ?, location = ?,
+                    description = ?, type = ?, opponent_name = ?, is_home = ?, timezone = ?,
+                    updated_at = datetime('now')
+                    WHERE id = ?
+                """, (summary, start_str, end_str, location, description, event_type,
+                      opponent, is_home, tz, existing["id"]))
+            else:
+                event_id = str(uuid.uuid4())
+                conn.execute("""
+                    INSERT INTO events (id, org_id, team_id, feed_id, type, source, source_external_id,
+                    title, description, start_time, end_time, timezone, location,
+                    opponent_name, is_home, visibility)
+                    VALUES (?, ?, ?, ?, ?, 'ICAL', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ORG')
+                """, (event_id, org_id, feed["team_id"], feed_id, event_type, uid,
+                      summary, description, start_str, end_str, tz, location,
+                      opponent, is_home))
+            synced += 1
+        except Exception as e:
+            errors.append(f"Event parse error: {str(e)}")
+
+    # Update feed metadata
+    event_count = conn.execute("SELECT COUNT(*) FROM events WHERE feed_id = ?", (feed_id,)).fetchone()[0]
+    conn.execute("""
+        UPDATE calendar_feeds SET last_sync_at = datetime('now'), event_count = ?,
+        sync_error = NULL, updated_at = datetime('now')
+        WHERE id = ?
+    """, (event_count, feed_id))
+    conn.commit()
+
+    return {"synced_count": synced, "errors": errors}
+
+
+@app.get("/api/calendar/events")
+async def get_calendar_events(
+    token_data: dict = Depends(verify_token),
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    team_id: Optional[str] = None,
+    player_id: Optional[str] = None,
+    event_type: Optional[str] = Query(None, alias="type"),
+):
+    """Get calendar events for the user's org, filtered by params."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    query = "SELECT * FROM events WHERE org_id = ?"
+    params: list = [org_id]
+
+    if from_date:
+        query += " AND start_time >= ?"
+        params.append(from_date)
+    if to_date:
+        query += " AND start_time <= ?"
+        params.append(to_date + "T23:59:59")
+    if team_id:
+        query += " AND team_id = ?"
+        params.append(team_id)
+    if player_id:
+        query += " AND player_id = ?"
+        params.append(player_id)
+    if event_type:
+        query += " AND type = ?"
+        params.append(event_type)
+
+    query += " ORDER BY start_time ASC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/calendar/events")
+async def create_calendar_event(
+    body: CalendarEventCreate,
+    token_data: dict = Depends(verify_token),
+):
+    """Create a manual calendar event."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    event_id = str(uuid.uuid4())
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO events (id, org_id, team_id, player_id, created_by_user_id, type, source,
+        title, description, start_time, end_time, timezone, location,
+        league_name, opponent_name, is_home, visibility)
+        VALUES (?, ?, ?, ?, ?, ?, 'MANUAL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (event_id, org_id, body.team_id, body.player_id, user_id, body.type,
+          body.title, body.description, body.start_time, body.end_time, body.timezone,
+          body.location, body.league_name, body.opponent_name,
+          1 if body.is_home is True else (0 if body.is_home is False else None),
+          body.visibility))
+    conn.commit()
+    row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.put("/api/calendar/events/{event_id}")
+async def update_calendar_event(
+    event_id: str,
+    body: CalendarEventUpdate,
+    token_data: dict = Depends(verify_token),
+):
+    """Update a manual calendar event. Only creator or admin can edit. Only manual events."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    event = conn.execute("SELECT * FROM events WHERE id = ? AND org_id = ?", (event_id, org_id)).fetchone()
+    if not event:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event["source"] != "MANUAL":
+        conn.close()
+        raise HTTPException(status_code=400, detail="Only manual events can be edited")
+    if event["created_by_user_id"] != user_id:
+        role = token_data.get("role", "")
+        if role != "admin":
+            conn.close()
+            raise HTTPException(status_code=403, detail="Only the creator or admin can edit this event")
+
+    updates = {}
+    for field in ["type", "title", "description", "start_time", "end_time", "timezone",
+                  "location", "league_name", "opponent_name", "team_id", "player_id", "visibility"]:
+        val = getattr(body, field, None)
+        if val is not None:
+            updates[field] = val
+    if body.is_home is not None:
+        updates["is_home"] = 1 if body.is_home else 0
+
+    if updates:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values())
+        vals.append(event_id)
+        conn.execute(f"UPDATE events SET {set_clause}, updated_at = datetime('now') WHERE id = ?", vals)
+        conn.commit()
+
+    row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.delete("/api/calendar/events/{event_id}")
+async def delete_calendar_event(
+    event_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    """Delete a manual calendar event."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    event = conn.execute("SELECT * FROM events WHERE id = ? AND org_id = ?", (event_id, org_id)).fetchone()
+    if not event:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event["source"] != "MANUAL":
+        conn.close()
+        raise HTTPException(status_code=400, detail="Only manual events can be deleted")
+    if event["created_by_user_id"] != user_id:
+        role = token_data.get("role", "")
+        if role != "admin":
+            conn.close()
+            raise HTTPException(status_code=403, detail="Only the creator or admin can delete this event")
+
+    conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    return {"detail": "Event deleted"}
+
+
+@app.get("/api/calendar/feeds")
+async def get_calendar_feeds(token_data: dict = Depends(verify_token)):
+    """Get all calendar feeds for the user's org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM calendar_feeds WHERE org_id = ? ORDER BY created_at DESC", (org_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/calendar/feeds")
+async def create_calendar_feed(
+    body: CalendarFeedCreate,
+    token_data: dict = Depends(verify_token),
+):
+    """Create a calendar feed and trigger initial sync."""
+    org_id = token_data["org_id"]
+    feed_id = str(uuid.uuid4())
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO calendar_feeds (id, org_id, team_id, label, provider, url)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (feed_id, org_id, body.team_id, body.label, body.provider, body.url))
+    conn.commit()
+
+    # Trigger initial sync
+    sync_result = _sync_ical_feed(conn, feed_id, org_id)
+
+    row = conn.execute("SELECT * FROM calendar_feeds WHERE id = ?", (feed_id,)).fetchone()
+    conn.close()
+    result = dict(row)
+    result["sync_result"] = sync_result
+    return result
+
+
+@app.post("/api/calendar/feeds/{feed_id}/sync")
+async def sync_calendar_feed(
+    feed_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    """Manually trigger sync for a specific feed."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    feed = conn.execute("SELECT * FROM calendar_feeds WHERE id = ? AND org_id = ?", (feed_id, org_id)).fetchone()
+    if not feed:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Feed not found")
+
+    result = _sync_ical_feed(conn, feed_id, org_id)
+    conn.close()
+    return result
+
+
+@app.delete("/api/calendar/feeds/{feed_id}")
+async def delete_calendar_feed(
+    feed_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    """Delete a calendar feed and all its events."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    feed = conn.execute("SELECT * FROM calendar_feeds WHERE id = ? AND org_id = ?", (feed_id, org_id)).fetchone()
+    if not feed:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Feed not found")
+
+    conn.execute("DELETE FROM events WHERE feed_id = ? AND org_id = ?", (feed_id, org_id))
+    conn.execute("DELETE FROM calendar_feeds WHERE id = ?", (feed_id,))
+    conn.commit()
+    conn.close()
+    return {"detail": "Feed and associated events deleted"}
+
+
+# ============================================================
+# MESSAGING + PARENTAL APPROVAL
+# ============================================================
+
+
+# ── Safety Rules Engine ────────────────────────────────────
+MINOR_ROLES = {"player"}
+INTERNAL_ROLES = {"coach", "gm", "admin"}
+
+
+def _check_messaging_permission(conn, sender_id: str, recipient_id: str, sender_org_id: str) -> dict:
+    """Check if sender can message recipient. Returns {allowed, reason, parent_id}."""
+    # Check blocks
+    block = conn.execute(
+        "SELECT id FROM message_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)",
+        (recipient_id, sender_id, sender_id, recipient_id)
+    ).fetchone()
+    if block:
+        return {"allowed": False, "reason": "blocked"}
+
+    # Get sender + recipient user info
+    sender = conn.execute("SELECT id, org_id, hockey_role, email FROM users WHERE id = ?", (sender_id,)).fetchone()
+    recipient = conn.execute("SELECT id, org_id, hockey_role, email, linked_player_id FROM users WHERE id = ?", (recipient_id,)).fetchone()
+
+    if not sender or not recipient:
+        return {"allowed": False, "reason": "not_allowed"}
+
+    sender_role = (sender["hockey_role"] or "").lower()
+    recipient_role = (recipient["hockey_role"] or "").lower()
+    same_org = sender["org_id"] == recipient["org_id"]
+
+    # Player-to-player messaging blocked in v1
+    if sender_role in MINOR_ROLES and recipient_role in MINOR_ROLES:
+        return {"allowed": False, "reason": "not_allowed"}
+
+    # Same org: free messaging
+    if same_org:
+        return {"allowed": True}
+
+    # External: check if recipient is a minor (player role = minor in v1)
+    if recipient_role in MINOR_ROLES:
+        # Find parent linked to this player
+        parent = conn.execute(
+            "SELECT id FROM users WHERE linked_player_id = ? AND hockey_role = 'parent'",
+            (recipient_id,)
+        ).fetchone()
+        if not parent:
+            # Try by linked_player_id matching player's associated player record
+            # Check if recipient has a linked player in the players table
+            player_rec = conn.execute(
+                "SELECT id FROM players WHERE id = ? OR (LOWER(first_name || ' ' || last_name) IN (SELECT LOWER(first_name || ' ' || last_name) FROM users WHERE id = ?))",
+                (recipient_id, recipient_id)
+            ).fetchone()
+            if player_rec:
+                parent = conn.execute(
+                    "SELECT id FROM users WHERE linked_player_id = ?",
+                    (player_rec["id"],)
+                ).fetchone()
+        if parent:
+            # Check if there's already an approved contact request
+            approved = conn.execute(
+                "SELECT id FROM contact_requests WHERE requester_id = ? AND target_player_id = ? AND status = 'approved'",
+                (sender_id, recipient_id)
+            ).fetchone()
+            if approved:
+                return {"allowed": True}
+            return {"allowed": False, "reason": "requires_approval", "parent_id": parent["id"]}
+        return {"allowed": False, "reason": "no_parent_linked"}
+
+    # External messaging to parent role — check if sender role needs approval
+    if recipient_role == "parent":
+        # Scouts/agents messaging parents externally needs approval via the player
+        return {"allowed": True}  # Parent can decide to respond or block
+
+    # Default: allow for adult-to-adult cross-org
+    return {"allowed": True}
+
+
+def _hydrate_participants(conn, participant_ids: list) -> list:
+    """Hydrate user IDs into participant objects."""
+    participants = []
+    for uid in participant_ids:
+        user = conn.execute(
+            "SELECT id, first_name, last_name, hockey_role, org_id FROM users WHERE id = ?",
+            (uid,)
+        ).fetchone()
+        if user:
+            org = conn.execute("SELECT name FROM organizations WHERE id = ?", (user["org_id"],)).fetchone()
+            participants.append({
+                "user_id": user["id"],
+                "name": f"{user['first_name'] or ''} {user['last_name'] or ''}".strip() or user["id"][:8],
+                "role": user["hockey_role"] or "unknown",
+                "org_name": org["name"] if org else None,
+                "is_verified": True,
+            })
+    return participants
+
+
+@app.get("/api/messages/conversations")
+async def get_conversations(token_data: dict = Depends(verify_token)):
+    """Get all conversations for the authenticated user."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    # Get user info (check if parent)
+    user = conn.execute("SELECT hockey_role, linked_player_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    user_role = (user["hockey_role"] or "").lower() if user else ""
+    linked_player_id = user["linked_player_id"] if user else None
+
+    # Find conversations where user is a participant
+    rows = conn.execute("SELECT * FROM msg_conversations ORDER BY updated_at DESC").fetchall()
+    result = []
+
+    for row in rows:
+        try:
+            pids = json.loads(row["participant_ids"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        # User is participant OR parent with linked player in conversation
+        is_participant = user_id in pids
+        is_parent_observer = (user_role == "parent" and linked_player_id and linked_player_id in pids)
+
+        if not is_participant and not is_parent_observer:
+            continue
+
+        conv = dict(row)
+        conv["participant_ids"] = pids
+        conv["participants"] = _hydrate_participants(conn, pids)
+
+        # Last message
+        last_msg = conn.execute(
+            "SELECT m.*, u.first_name, u.last_name FROM msg_messages m LEFT JOIN users u ON m.sender_id = u.id WHERE m.conversation_id = ? ORDER BY m.sent_at DESC LIMIT 1",
+            (row["id"],)
+        ).fetchone()
+        if last_msg:
+            conv["last_message"] = {
+                "id": last_msg["id"],
+                "conversation_id": last_msg["conversation_id"],
+                "sender_id": last_msg["sender_id"],
+                "sender_name": f"{last_msg['first_name'] or ''} {last_msg['last_name'] or ''}".strip(),
+                "content": last_msg["content"],
+                "sent_at": last_msg["sent_at"],
+                "read_at": last_msg["read_at"],
+                "is_system_message": bool(last_msg["is_system_message"]),
+            }
+
+        # Unread count
+        unread = conn.execute(
+            "SELECT COUNT(*) FROM msg_messages WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
+            (row["id"], user_id)
+        ).fetchone()[0]
+        conv["unread_count"] = unread
+
+        result.append(conv)
+
+    conn.close()
+    return result
+
+
+@app.post("/api/messages/send")
+async def send_message(body: SendMessageRequest, token_data: dict = Depends(verify_token)):
+    """Send a message. Creates conversation if needed."""
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    if not body.content or not body.content.strip():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    conversation_id = body.conversation_id
+
+    if conversation_id:
+        # Verify user is participant
+        conv = conn.execute("SELECT * FROM msg_conversations WHERE id = ?", (conversation_id,)).fetchone()
+        if not conv:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        pids = json.loads(conv["participant_ids"])
+        if user_id not in pids:
+            conn.close()
+            raise HTTPException(status_code=403, detail="Not a participant")
+        if conv["status"] == "blocked":
+            conn.close()
+            raise HTTPException(status_code=403, detail="This conversation has been blocked")
+        if conv["status"] == "pending_approval":
+            conn.close()
+            raise HTTPException(status_code=403, detail="Waiting for parental approval")
+    elif body.recipient_id:
+        # Check safety rules
+        perm = _check_messaging_permission(conn, user_id, body.recipient_id, org_id)
+        if not perm["allowed"]:
+            conn.close()
+            if perm["reason"] == "requires_approval":
+                raise HTTPException(status_code=403, detail=json.dumps({
+                    "error": "approval_required",
+                    "parent_id": perm.get("parent_id"),
+                    "message": "This player is a minor. A contact request must be sent to their parent for approval."
+                }))
+            elif perm["reason"] == "blocked":
+                raise HTTPException(status_code=403, detail="You have been blocked by this user")
+            elif perm["reason"] == "no_parent_linked":
+                raise HTTPException(status_code=403, detail="No parent account linked to this player")
+            else:
+                raise HTTPException(status_code=403, detail="Messaging not allowed")
+
+        # Find or create conversation
+        existing = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
+        conversation_id = None
+        for ex in existing:
+            try:
+                ex_pids = json.loads(ex["participant_ids"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if set(ex_pids) == {user_id, body.recipient_id}:
+                conversation_id = ex["id"]
+                break
+
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
+            participants = json.dumps([user_id, body.recipient_id])
+            conv_org = org_id if conn.execute("SELECT org_id FROM users WHERE id = ?", (body.recipient_id,)).fetchone()["org_id"] == org_id else None
+            conn.execute(
+                "INSERT INTO msg_conversations (id, org_id, participant_ids, status) VALUES (?, ?, ?, 'active')",
+                (conversation_id, conv_org, participants)
+            )
+    else:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Either conversation_id or recipient_id is required")
+
+    # Create message
+    msg_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO msg_messages (id, conversation_id, sender_id, content) VALUES (?, ?, ?, ?)",
+        (msg_id, conversation_id, user_id, body.content.strip())
+    )
+    conn.execute("UPDATE msg_conversations SET updated_at = datetime('now') WHERE id = ?", (conversation_id,))
+    conn.commit()
+
+    # Get sender name
+    sender = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
+    sender_name = f"{sender['first_name'] or ''} {sender['last_name'] or ''}".strip() if sender else ""
+
+    msg = conn.execute("SELECT * FROM msg_messages WHERE id = ?", (msg_id,)).fetchone()
+    conn.close()
+
+    return {
+        "id": msg["id"],
+        "conversation_id": msg["conversation_id"],
+        "sender_id": msg["sender_id"],
+        "sender_name": sender_name,
+        "content": msg["content"],
+        "sent_at": msg["sent_at"],
+        "read_at": msg["read_at"],
+        "is_system_message": False,
+    }
+
+
+@app.get("/api/messages/{conversation_id}")
+async def get_messages(conversation_id: str, token_data: dict = Depends(verify_token)):
+    """Get messages for a conversation. Marks unread as read."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    conv = conn.execute("SELECT * FROM msg_conversations WHERE id = ?", (conversation_id,)).fetchone()
+    if not conv:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    pids = json.loads(conv["participant_ids"])
+
+    # Check access: participant or parent observer
+    user = conn.execute("SELECT hockey_role, linked_player_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    user_role = (user["hockey_role"] or "").lower() if user else ""
+    linked_player_id = user["linked_player_id"] if user else None
+    is_participant = user_id in pids
+    is_parent_observer = (user_role == "parent" and linked_player_id and linked_player_id in pids)
+
+    if not is_participant and not is_parent_observer:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Mark unread messages as read (only if direct participant, not parent observer)
+    if is_participant:
+        conn.execute(
+            "UPDATE msg_messages SET read_at = datetime('now') WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
+            (conversation_id, user_id)
+        )
+        conn.commit()
+
+    # Fetch messages
+    rows = conn.execute(
+        "SELECT m.*, u.first_name, u.last_name FROM msg_messages m LEFT JOIN users u ON m.sender_id = u.id WHERE m.conversation_id = ? ORDER BY m.sent_at ASC",
+        (conversation_id,)
+    ).fetchall()
+
+    messages = []
+    for r in rows:
+        messages.append({
+            "id": r["id"],
+            "conversation_id": r["conversation_id"],
+            "sender_id": r["sender_id"],
+            "sender_name": f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
+            "content": r["content"],
+            "sent_at": r["sent_at"],
+            "read_at": r["read_at"],
+            "is_system_message": bool(r["is_system_message"]),
+        })
+
+    conn.close()
+    return {
+        "conversation": dict(conv) | {"participant_ids": pids, "participants": _hydrate_participants(conn if not conn else get_db(), pids)},
+        "messages": messages,
+        "is_parent_observer": is_parent_observer,
+    }
+
+
+@app.post("/api/messages/contact-request")
+async def create_contact_request(body: ContactRequestCreate, token_data: dict = Depends(verify_token)):
+    """Create a contact request for messaging a minor."""
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # Get requester info
+    requester = conn.execute("SELECT first_name, last_name, hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not requester:
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+
+    org = conn.execute("SELECT name FROM organizations WHERE id = ?", (org_id,)).fetchone()
+    requester_name = f"{requester['first_name'] or ''} {requester['last_name'] or ''}".strip()
+    requester_role = requester["hockey_role"] or "unknown"
+    requester_org = org["name"] if org else ""
+
+    # Find parent for target player
+    parent = conn.execute(
+        "SELECT id FROM users WHERE linked_player_id = ? AND LOWER(hockey_role) = 'parent'",
+        (body.target_player_id,)
+    ).fetchone()
+    if not parent:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No parent account linked to this player. Contact request cannot be sent.")
+
+    parent_id = parent["id"]
+
+    # Check: blocked?
+    block = conn.execute(
+        "SELECT id FROM message_blocks WHERE blocker_id = ? AND blocked_id = ?",
+        (parent_id, user_id)
+    ).fetchone()
+    if block:
+        conn.close()
+        raise HTTPException(status_code=403, detail="You have been blocked by this player's parent")
+
+    # Check: pending request already?
+    pending = conn.execute(
+        "SELECT id FROM contact_requests WHERE requester_id = ? AND target_player_id = ? AND status = 'pending'",
+        (user_id, body.target_player_id)
+    ).fetchone()
+    if pending:
+        conn.close()
+        raise HTTPException(status_code=400, detail="You already have a pending contact request for this player")
+
+    # Check: cooldown from previous denial?
+    denied = conn.execute(
+        "SELECT cooldown_until FROM contact_requests WHERE requester_id = ? AND target_player_id = ? AND status = 'denied' ORDER BY resolved_at DESC LIMIT 1",
+        (user_id, body.target_player_id)
+    ).fetchone()
+    if denied and denied["cooldown_until"]:
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        if now_str < denied["cooldown_until"]:
+            conn.close()
+            raise HTTPException(status_code=403, detail=f"Contact request denied. You can try again after {denied['cooldown_until'][:10]}")
+
+    # Create request
+    req_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO contact_requests (id, requester_id, requester_name, requester_role, requester_org, target_player_id, parent_id, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (req_id, user_id, requester_name, requester_role, requester_org, body.target_player_id, parent_id, body.message)
+    )
+    conn.commit()
+
+    row = conn.execute("SELECT * FROM contact_requests WHERE id = ?", (req_id,)).fetchone()
+    conn.close()
+    result = dict(row)
+
+    # Add target player name
+    pconn = get_db()
+    player = pconn.execute("SELECT first_name, last_name FROM players WHERE id = ?", (body.target_player_id,)).fetchone()
+    pconn.close()
+    if player:
+        result["target_player_name"] = f"{player['first_name'] or ''} {player['last_name'] or ''}".strip()
+
+    return result
+
+
+@app.get("/api/messages/contact-requests")
+async def get_contact_requests(token_data: dict = Depends(verify_token)):
+    """Get pending contact requests (for parents and admins)."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    user = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+    role = (user["hockey_role"] or "").lower() if user else ""
+
+    if role == "parent":
+        rows = conn.execute(
+            "SELECT cr.*, p.first_name, p.last_name FROM contact_requests cr LEFT JOIN players p ON cr.target_player_id = p.id WHERE cr.parent_id = ? ORDER BY cr.requested_at DESC",
+            (user_id,)
+        ).fetchall()
+    elif role in ("admin", "gm"):
+        org_id = token_data["org_id"]
+        rows = conn.execute(
+            "SELECT cr.*, p.first_name, p.last_name FROM contact_requests cr LEFT JOIN players p ON cr.target_player_id = p.id LEFT JOIN users u ON cr.parent_id = u.id WHERE u.org_id = ? ORDER BY cr.requested_at DESC",
+            (org_id,)
+        ).fetchall()
+    else:
+        conn.close()
+        return []
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        if r["first_name"]:
+            d["target_player_name"] = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+        result.append(d)
+
+    conn.close()
+    return result
+
+
+@app.put("/api/messages/contact-requests/{request_id}")
+async def resolve_contact_request(request_id: str, body: ContactRequestResolve, token_data: dict = Depends(verify_token)):
+    """Approve or deny a contact request. Parent or admin only."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    req = conn.execute("SELECT * FROM contact_requests WHERE id = ?", (request_id,)).fetchone()
+    if not req:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Contact request not found")
+
+    # Verify parent or admin
+    if req["parent_id"] != user_id:
+        user = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+        role = (user["hockey_role"] or "").lower() if user else ""
+        if role not in ("admin", "gm"):
+            conn.close()
+            raise HTTPException(status_code=403, detail="Only the parent or admin can resolve this request")
+
+    if body.status not in ("approved", "denied"):
+        conn.close()
+        raise HTTPException(status_code=400, detail="Status must be 'approved' or 'denied'")
+
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    if body.status == "approved":
+        # Create conversation between requester and target player
+        conv_id = str(uuid.uuid4())
+        participants = json.dumps([req["requester_id"], req["target_player_id"]])
+        conn.execute(
+            "INSERT INTO msg_conversations (id, org_id, participant_ids, status) VALUES (?, NULL, ?, 'active')",
+            (conv_id, participants)
+        )
+
+        # Add system message
+        parent_user = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (req["parent_id"],)).fetchone()
+        parent_name = f"{parent_user['first_name'] or ''} {parent_user['last_name'] or ''}".strip() if parent_user else "Parent"
+        sys_msg_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO msg_messages (id, conversation_id, sender_id, content, is_system_message) VALUES (?, ?, ?, ?, 1)",
+            (sys_msg_id, conv_id, req["parent_id"], f"Contact approved by {parent_name}. You may now communicate.")
+        )
+
+        conn.execute(
+            "UPDATE contact_requests SET status = 'approved', resolved_at = ? WHERE id = ?",
+            (now_str, request_id)
+        )
+    else:
+        # Denied — set 30-day cooldown
+        cooldown = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            "UPDATE contact_requests SET status = 'denied', resolved_at = ?, cooldown_until = ? WHERE id = ?",
+            (now_str, cooldown, request_id)
+        )
+
+    conn.commit()
+    row = conn.execute("SELECT * FROM contact_requests WHERE id = ?", (request_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.post("/api/messages/block")
+async def block_user(body: BlockUserRequest, token_data: dict = Depends(verify_token)):
+    """Block a user from messaging."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    # Check not blocking self
+    if body.blocked_id == user_id:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Cannot block yourself")
+
+    # Create block
+    block_id = str(uuid.uuid4())
+    try:
+        conn.execute(
+            "INSERT INTO message_blocks (id, blocker_id, blocked_id, reason) VALUES (?, ?, ?, ?)",
+            (block_id, user_id, body.blocked_id, body.reason)
+        )
+    except sqlite3.IntegrityError:
+        conn.close()
+        return {"detail": "User already blocked"}
+
+    # Block any active conversations between them
+    convs = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
+    for c in convs:
+        try:
+            pids = json.loads(c["participant_ids"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if user_id in pids and body.blocked_id in pids:
+            conn.execute("UPDATE msg_conversations SET status = 'blocked', updated_at = datetime('now') WHERE id = ?", (c["id"],))
+
+    conn.commit()
+    conn.close()
+    return {"detail": "User blocked"}
+
+
+@app.get("/api/messages/unread-count")
+async def get_unread_count(token_data: dict = Depends(verify_token)):
+    """Get total unread message count for nav badge."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    # Get all conversations user is in
+    convs = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
+    total_unread = 0
+    for c in convs:
+        try:
+            pids = json.loads(c["participant_ids"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if user_id in pids:
+            unread = conn.execute(
+                "SELECT COUNT(*) FROM msg_messages WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
+                (c["id"], user_id)
+            ).fetchone()[0]
+            total_unread += unread
+
+    conn.close()
+    return {"unread_count": total_unread}
 
 
 # ============================================================

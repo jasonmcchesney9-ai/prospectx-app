@@ -132,7 +132,7 @@ const ALERT_STATUS_STYLES: Record<string, { label: string; bg: string; text: str
 // ── Dashboard ────────────────────────────────────────────────
 function Dashboard() {
   const user = getUser();
-  const { toggleBenchTalk } = useBenchTalk();
+  useBenchTalk(); // Keep provider active for header/sidebar access
   const roleGroup = getRoleGroup(user?.hockey_role);
 
   // ── Team context ─────────────────────────────────────────
@@ -150,6 +150,9 @@ function Dashboard() {
   const [scoutingList, setScoutingList] = useState<ScoutingListItem[]>([]);
   const [agentClients, setAgentClients] = useState<AgentClient[]>([]);
 
+  // ── League switcher (scorebar override) ─────────────────
+  const [scorebarLeague, setScorebarLeague] = useState<string>("");
+
   // ── Loading states ───────────────────────────────────────
   const [loading, setLoading] = useState(true);
   const [teamDataLoading, setTeamDataLoading] = useState(true);
@@ -160,7 +163,7 @@ function Dashboard() {
     try {
       setTeamDataLoading(true);
       const enc = encodeURIComponent(team.name);
-      const htCode = team.league ? HT_LEAGUE_CODES[team.league.toUpperCase()] : null;
+      const htCode = scorebarLeague || (team.league ? HT_LEAGUE_CODES[team.league.toUpperCase()] : null);
 
       const teamFetches: Promise<unknown>[] = [
         api.get<Player[]>(`/teams/${enc}/roster`),
@@ -181,7 +184,7 @@ function Dashboard() {
     } finally {
       setTeamDataLoading(false);
     }
-  }, [roleGroup]);
+  }, [roleGroup, scorebarLeague]);
 
   // ── Wave 1: core data on mount ───────────────────────────
   useEffect(() => {
@@ -240,6 +243,14 @@ function Dashboard() {
     });
   }, [roleGroup, loadTeamData]);
 
+  // ── Re-fetch scorebar when league switcher changes ───────
+  useEffect(() => {
+    if (activeTeam && scorebarLeague) {
+      loadTeamData(activeTeam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scorebarLeague]);
+
   // ── Team change handler ──────────────────────────────────
   function handleTeamChange(team: Team) {
     setActiveTeam(team);
@@ -288,7 +299,7 @@ function Dashboard() {
             {/* Live Scorebar — moved to top, under TeamContextBar */}
             {scorebar.length > 0 && (
               <div className="mb-4">
-                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} />
+                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} scorebarLeague={scorebarLeague} onLeagueChange={setScorebarLeague} />
               </div>
             )}
 
@@ -402,9 +413,6 @@ function Dashboard() {
                   <Link href="/game-plans/new" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-teal/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
                     <Swords size={14} /> Chalk Talk
                   </Link>
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
-                    <MessageSquare size={14} /> Bench Talk
-                  </button>
                 </div>
               </div>
 
@@ -424,7 +432,7 @@ function Dashboard() {
                   >
                     <div className="space-y-1">
                       {scoringLeaders.map((l, i) => (
-                        <Link key={l.id} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+                        <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
                           <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
                           <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
                             {l.first_name} {l.last_name}
@@ -488,7 +496,7 @@ function Dashboard() {
             {/* Live Scorebar — Top */}
             {scorebar.length > 0 && (
               <div className="mb-5">
-                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} />
+                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} scorebarLeague={scorebarLeague} onLeagueChange={setScorebarLeague} />
               </div>
             )}
 
@@ -505,7 +513,7 @@ function Dashboard() {
                   >
                     <div className="space-y-1">
                       {scoringLeaders.map((l, i) => (
-                        <Link key={l.id} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+                        <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
                           <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
                           <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
                             {l.first_name} {l.last_name}
@@ -558,9 +566,6 @@ function Dashboard() {
                   <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-teal text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors">
                     <Zap size={14} /> Generate Report
                   </Link>
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
-                    <MessageSquare size={14} /> Bench Talk
-                  </button>
                 </div>
               </div>
             </div>
@@ -569,126 +574,125 @@ function Dashboard() {
 
         {/* ── FAMILY View (Player / Parent) ─────────────────── */}
         {roleGroup === "FAMILY" && (
-          <>
-            {/* Player Spotlight */}
-            <FamilyPlayerSpotlight scoringLeaders={scoringLeaders} loading={teamDataLoading} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 mt-5">
-              <div className="lg:col-span-3 space-y-5">
-                <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
-                  title="Reports"
-                  viewAllHref="/reports"
-                  loading={loading}
-                  empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
-                  emptyText="No reports yet"
-                  emptyLink="/reports/generate"
-                  emptyLinkText="Generate your first report"
-                >
-                  <div className="space-y-2">
-                    {recentReports.slice(0, 5).map((r) => (
-                      <ReportCard key={r.id} report={r} compact />
-                    ))}
-                  </div>
-                </DashboardCard>
-
-                <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-                  <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
-                    <BookOpen size={20} className="text-teal" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">Player Guide</p>
-                    <p className="text-[10px] text-muted">Development resources and monthly focus plans</p>
-                  </div>
-                  <ChevronRight size={16} className="text-muted/30 group-hover:text-teal ml-auto transition-colors" />
-                </Link>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            {/* Left (3/5) */}
+            <div className="lg:col-span-3 space-y-4">
+              {/* Your Player */}
+              <div className="bg-white rounded-xl border border-border p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Heart size={14} className="text-[#3B6B8A]" />
+                  <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Your Player</h3>
+                </div>
+                {(() => {
+                  const myPId = typeof window !== "undefined" ? localStorage.getItem("prospectx_my_player_id") : null;
+                  return myPId ? (
+                    <Link href={`/players/${myPId}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors">
+                      <div className="w-10 h-10 rounded-full bg-[#3B6B8A]/10 flex items-center justify-center">
+                        <Heart size={18} className="text-[#3B6B8A]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-navy">View Player Dashboard</p>
+                        <p className="text-[10px] text-muted mt-0.5">Stats, development, and reports</p>
+                      </div>
+                      <ChevronRight size={14} className="text-muted/40 ml-auto" />
+                    </Link>
+                  ) : (
+                    <div className="text-center py-5">
+                      <Heart size={28} className="mx-auto text-muted/30 mb-2" />
+                      <p className="text-muted text-sm">No player selected</p>
+                      <Link href="/my-player" className="inline-block mt-2 text-xs text-teal hover:underline">Select your player</Link>
+                    </div>
+                  );
+                })()}
               </div>
 
-              <div className="lg:col-span-2 space-y-5">
-                <div className="bg-white rounded-xl border border-border p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                    <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
-                      <Crown size={10} />
-                      {user?.subscription_tier || "Rookie"}
-                    </Link>
-                  </div>
-                  <BenchTalkUsage />
+              {/* Recent Reports */}
+              <DashboardCard
+                icon={<FileText size={15} className="text-navy" />}
+                title="Recent Reports"
+                viewAllHref="/reports"
+                loading={loading}
+                empty={recentReports.length === 0}
+                emptyIcon={<FileText size={24} className="text-muted/30" />}
+                emptyText="No reports yet"
+                emptyLink="/reports/generate"
+                emptyLinkText="Generate your first report"
+              >
+                <div className="space-y-2">
+                  {recentReports.slice(0, 3).map((r) => (
+                    <ReportCard key={r.id} report={r} compact />
+                  ))}
                 </div>
+              </DashboardCard>
 
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-4 py-2.5 bg-orange/10 text-orange border border-orange/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-orange/20 transition-colors">
-                    <MessageSquare size={14} /> Ask Bench Talk
-                  </button>
+              {/* Player Guide */}
+              <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
+                <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                  <BookOpen size={20} className="text-green-600" />
                 </div>
+                <div>
+                  <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Guide</p>
+                  <p className="text-xs text-muted mt-0.5">Nutrition, workouts, mental game, and pathways</p>
+                </div>
+                <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+              </Link>
+            </div>
+
+            {/* Right (2/5) */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Messages Link Card */}
+              <Link href="/messages" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                  <MessageSquare size={20} className="text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Messages</p>
+                  <p className="text-xs text-muted mt-0.5">Team communications and updates</p>
+                </div>
+                <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+              </Link>
+
+              {/* Monthly Usage */}
+              <div className="bg-white rounded-xl border border-border p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+                  <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
+                    <Crown size={10} />
+                    {user?.subscription_tier || "Rookie"}
+                  </Link>
+                </div>
+                <BenchTalkUsage />
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* ── AGENT View ────────────────────────────────────── */}
         {roleGroup === "AGENT" && (
           <>
-            {/* Agent Hub */}
-            <div className="bg-gradient-to-r from-navy to-navy-light rounded-xl border border-navy/50 p-5 mb-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-teal/20 flex items-center justify-center">
-                    <Briefcase size={20} className="text-teal" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-oswald font-bold text-white uppercase tracking-wider">Agent Hub</h3>
-                    <p className="text-[10px] text-white/50">Manage your client roster</p>
-                  </div>
+            {/* Agent Hub Banner */}
+            <div className="bg-gradient-to-br from-[#475569] to-[#334155] rounded-xl p-5 mb-4 text-white">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Briefcase size={20} />
                 </div>
-                <Link href="/my-clients" className="text-xs text-teal hover:underline font-medium">View all clients →</Link>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                {[
-                  { label: "Total Clients", value: agentClients.length, color: "text-white" },
-                  { label: "Active Pathways", value: agentClients.filter((c) => c.status === "active").length, color: "text-teal" },
-                  { label: "Committed", value: agentClients.filter((c) => c.status === "committed").length, color: "text-green-400" },
-                  { label: "Unsigned", value: agentClients.filter((c) => c.status === "unsigned").length, color: "text-orange" },
-                ].map((stat) => (
-                  <div key={stat.label} className="bg-white/5 rounded-lg p-3 border border-white/10">
-                    <p className={`text-xl font-oswald font-bold ${stat.color}`}>{stat.value}</p>
-                    <p className="text-[10px] text-white/50 uppercase tracking-wider">{stat.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                {agentClients.length > 0 && (
-                  <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-                    {agentClients.slice(0, 4).map((client) => (
-                      <Link key={client.id} href={`/my-clients/${client.id}`} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/15 transition-colors">
-                        <span className={`w-1.5 h-1.5 rounded-full ${
-                          client.status === "active" ? "bg-teal" : client.status === "committed" ? "bg-green-500" :
-                          client.status === "unsigned" ? "bg-orange" : "bg-gray-400"
-                        }`} />
-                        <span className="text-xs text-white/80 truncate max-w-[120px]">
-                          {client.player ? `${client.player.first_name} ${client.player.last_name}` : "Client"}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href="/my-clients" className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal text-white text-xs font-bold hover:bg-teal/90 transition-colors">
-                    <UserPlus size={12} /> Add Client
-                  </Link>
-                  <button onClick={toggleBenchTalk} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 text-white text-xs font-bold hover:bg-white/20 transition-colors border border-white/10">
-                    <MessageSquare size={12} /> Bench Talk
-                  </button>
+                <div>
+                  <h3 className="font-oswald text-sm font-bold uppercase tracking-wider">Agent Hub</h3>
+                  <p className="text-xs text-white/60 mt-0.5">Client management and reports</p>
                 </div>
               </div>
+              <Link href="/my-clients" className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 transition-colors">
+                Manage Clients <ChevronRight size={12} />
+              </Link>
             </div>
 
-            {/* Two-column */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-              <div className="lg:col-span-3 space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              {/* Left (3/5) */}
+              <div className="lg:col-span-3 space-y-4">
+                {/* Watch List */}
+                <ScoutingListSection scoutingList={scoutingList} loading={loading} />
+
+                {/* Recent Reports */}
                 <DashboardCard
                   icon={<FileText size={15} className="text-navy" />}
                   title="Recent Reports"
@@ -708,11 +712,24 @@ function Dashboard() {
                 </DashboardCard>
               </div>
 
-              <div className="lg:col-span-2 space-y-5">
-                <ScoutingListSection scoutingList={scoutingList} loading={loading} />
+              {/* Right (2/5) */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Players Link Card */}
+                <Link href="/players" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                    <Users size={20} className="text-teal" />
+                  </div>
+                  <div>
+                    <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Database</p>
+                    <p className="text-xs text-muted mt-0.5">Search, filter, and browse all players</p>
+                  </div>
+                  <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+                </Link>
+
+                {/* Monthly Usage */}
                 <div className="bg-white rounded-xl border border-border p-5">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+                    <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
                     <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
                       <Crown size={10} />
                       {user?.subscription_tier || "Rookie"}
@@ -812,14 +829,31 @@ function ScoutingListSection({ scoutingList, loading }: { scoutingList: Scouting
 
 // ── Live Scorebar ────────────────────────────────────────────
 
-function LiveScorebar({ scorebar, teamName }: { scorebar: HTGame[]; teamName: string }) {
+function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { scorebar: HTGame[]; teamName: string; scorebarLeague?: string; onLeagueChange?: (v: string) => void }) {
   const lower = teamName.toLowerCase();
   // Show games sorted by date, most recent / live first
   const sorted = [...scorebar].sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime());
 
   return (
     <div className="bg-white rounded-xl border border-orange/25 p-4">
-      <h3 className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider mb-3">League Scores</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider">League Scores</h3>
+        {onLeagueChange && (
+          <select
+            value={scorebarLeague || ""}
+            onChange={(e) => onLeagueChange(e.target.value)}
+            className="ml-auto text-[10px] font-oswald uppercase tracking-wider bg-white border border-border rounded px-2 py-0.5 text-navy cursor-pointer"
+          >
+            <option value="">My Team&apos;s League</option>
+            <option value="gojhl">GOJHL</option>
+            <option value="ohl">OHL</option>
+            <option value="ojhl">OJHL</option>
+            <option value="whl">WHL</option>
+            <option value="qmjhl">QMJHL</option>
+            <option value="pwhl">PWHL</option>
+          </select>
+        )}
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
         {sorted.slice(0, 10).map((g) => {
           const isOurGame = g.home_team.toLowerCase().includes(lower) || g.away_team.toLowerCase().includes(lower) ||

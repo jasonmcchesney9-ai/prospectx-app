@@ -2302,3 +2302,123 @@ export interface PressureConfidenceResponse {
   activity: string;
   concern_signs: string;
 }
+
+// ============================================================
+// Calendar & Schedule
+// ============================================================
+
+export interface CalendarEvent {
+  id: string;
+  org_id: string;
+  team_id?: string;
+  player_id?: string;
+  feed_id?: string;
+  type: 'GAME' | 'PRACTICE' | 'TOURNAMENT' | 'SHOWCASE' | 'MEETING' | 'DEADLINE' | 'OTHER';
+  source: 'MANUAL' | 'ICAL' | 'GAMESHEET' | 'SPORTSENGINE' | 'SPORDLE' | 'TEAMSNAP';
+  title: string;
+  description?: string;
+  start_time: string;
+  end_time?: string;
+  timezone: string;
+  location?: string;
+  league_name?: string;
+  opponent_name?: string;
+  is_home?: number | null;
+  visibility: 'ORG' | 'TEAM' | 'PLAYER_FAMILY' | 'PRIVATE';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarFeed {
+  id: string;
+  org_id: string;
+  team_id?: string;
+  label: string;
+  provider: 'ICAL_GENERIC' | 'TEAMSNAP' | 'SPORTSENGINE' | 'GAMESHEET' | 'SPORDLE';
+  url: string;
+  active: boolean;
+  last_sync_at?: string;
+  sync_error?: string;
+  event_count: number;
+  created_at: string;
+}
+
+export type CalendarEventType = CalendarEvent['type'];
+
+export const EVENT_TYPE_COLORS: Record<string, string> = {
+  GAME: '#F97316',
+  PRACTICE: '#0D9488',
+  TOURNAMENT: '#475569',
+  SHOWCASE: '#7C3AED',
+  MEETING: '#3B6B8A',
+  DEADLINE: '#DC2626',
+  OTHER: '#9CA3AF',
+};
+
+export const EVENT_TYPE_LABELS: Record<string, string> = {
+  GAME: 'Game',
+  PRACTICE: 'Practice',
+  TOURNAMENT: 'Tournament',
+  SHOWCASE: 'Showcase',
+  MEETING: 'Meeting',
+  DEADLINE: 'Deadline',
+  OTHER: 'Other',
+};
+
+export const CALENDAR_PROVIDERS: Record<string, { label: string; color: string }> = {
+  ICAL_GENERIC: { label: 'iCal', color: '#6B7280' },
+  TEAMSNAP: { label: 'TeamSnap', color: '#00B140' },
+  SPORTSENGINE: { label: 'SportsEngine', color: '#0066CC' },
+  GAMESHEET: { label: 'GameSheet', color: '#C8102E' },
+  SPORDLE: { label: 'Spordle', color: '#FF6B00' },
+};
+
+// ============================================================
+// Messaging & Parental Approval
+// ============================================================
+
+export interface Conversation {
+  id: string;
+  org_id?: string;
+  participant_ids: string[];
+  participants: ConversationParticipant[];
+  status: 'active' | 'blocked' | 'pending_approval';
+  last_message?: Message;
+  unread_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationParticipant {
+  user_id: string;
+  name: string;
+  role: string;
+  org_name?: string;
+  is_verified: boolean;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  sent_at: string;
+  read_at?: string;
+  is_system_message: boolean;
+}
+
+export interface ContactRequest {
+  id: string;
+  requester_id: string;
+  requester_name: string;
+  requester_role: string;
+  requester_org: string;
+  target_player_id: string;
+  target_player_name?: string;
+  parent_id: string;
+  status: 'pending' | 'approved' | 'denied';
+  message?: string;
+  requested_at: string;
+  resolved_at?: string;
+}

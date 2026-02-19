@@ -198,12 +198,14 @@ export default function NavBar() {
   const user = getUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agentClientCount, setAgentClientCount] = useState<number>(0);
+  const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
 
   // Effective role: admin override takes priority, otherwise real role
   const effectiveHockeyRole = roleOverride || user?.hockey_role;
   const roleGroup = getRoleGroup(effectiveHockeyRole);
   const isAgent = roleGroup === "AGENT";
+  const hasMessages = roleGroup === "MEDIA" || roleGroup === "FAMILY" || roleGroup === "AGENT";
 
   // Fetch client count for agent badge
   useEffect(() => {
@@ -212,6 +214,19 @@ export default function NavBar() {
       .then((res) => setAgentClientCount(Array.isArray(res.data) ? res.data.length : 0))
       .catch(() => {});
   }, [isAgent]);
+
+  // Fetch unread message count (poll every 30s)
+  useEffect(() => {
+    if (!hasMessages) return;
+    const fetchUnread = () => {
+      api.get("/api/messages/unread-count")
+        .then((res) => setUnreadMsgCount(res.data?.count || 0))
+        .catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, [hasMessages]);
 
   if (pathname === "/login") return null;
 
@@ -224,6 +239,16 @@ export default function NavBar() {
     navConfig.left = navConfig.left.map((item) =>
       item.href === "/my-clients" ? { ...item, badge: agentClientCount } : item
     );
+  }
+
+  // Inject unread badge into Messages nav item
+  if (hasMessages && unreadMsgCount > 0) {
+    const injectBadge = (items: NavItem[]) =>
+      items.map((item) =>
+        item.href === "/messages" ? { ...item, badge: unreadMsgCount } : item
+      );
+    navConfig.left = injectBadge(navConfig.left);
+    navConfig.right = injectBadge(navConfig.right);
   }
 
   return (
