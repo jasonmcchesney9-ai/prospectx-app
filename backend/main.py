@@ -15,6 +15,8 @@ import json
 import logging
 import os
 import re
+import secrets
+import hashlib
 import sqlite3
 import sys
 import threading
@@ -95,11 +97,17 @@ logger = logging.getLogger("prospectx")
 _DATA_DIR = os.path.join(os.path.expanduser("~"), ".prospectx")
 os.makedirs(_DATA_DIR, exist_ok=True)
 DB_FILE = os.path.join(_DATA_DIR, "prospectx.db")
-JWT_SECRET = os.getenv("JWT_SECRET", "prospectx_dev_secret_change_in_production_2026")
+_DEFAULT_JWT_SECRET = "prospectx_dev_secret_change_in_production_2026"
+JWT_SECRET = os.getenv("JWT_SECRET", _DEFAULT_JWT_SECRET)
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 24
+JWT_EXPIRY_HOURS = 8
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# P0-2: Refuse to start in production with default JWT secret
+if ENVIRONMENT != "development" and JWT_SECRET == _DEFAULT_JWT_SECRET:
+    print("FATAL: JWT_SECRET is still the default value in '%s' environment. Set a strong JWT_SECRET env var." % ENVIRONMENT)
+    sys.exit(1)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # ── Subscription Tiers ─────────────────────────────────────
@@ -335,6 +343,18 @@ def _check_tier_limit(user_id: str, resource_type: str, conn) -> dict:
     return {"tier": tier, "limit": limit, "used": used}
 
 
+def _check_email_verified(user_id: str, conn):
+    """Raise 403 if user's email is not verified. Used to gate AI features."""
+    row = conn.execute("SELECT email_verified FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not row["email_verified"]:
+        raise HTTPException(status_code=403, detail={
+            "error": "email_not_verified",
+            "message": "Please verify your email before using this feature.",
+        })
+
+
 def _increment_tracking(user_id: str, resource_type: str, conn):
     """Increment the usage_tracking counter for a resource type. Also updates legacy users columns for backwards compat."""
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
@@ -397,7 +417,7 @@ _allowed_origins = list({o for o in _allowed_origins if o})
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://prospectx-app[a-z0-9-]*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -1758,6 +1778,27 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN linked_player_id TEXT")
         conn.commit()
         logger.info("Migration: added linked_player_id column to users")
+
+    # ── Password reset tokens table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+
+    # ── Email verification columns on users ──
+    if "email_verified" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN email_verify_token TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN email_verify_sent_at TEXT")
+        conn.commit()
+        logger.info("Migration: added email_verified columns to users")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -4735,6 +4776,7 @@ class UserOut(BaseModel):
     subscription_tier: str = "rookie"
     monthly_reports_used: int = 0
     monthly_bench_talks_used: int = 0
+    email_verified: bool = False
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -4990,11 +5032,21 @@ async def register(req: RegisterRequest):
     )
     conn.commit()
 
+    # Auto-generate email verification token
+    verify_token_raw = secrets.token_urlsafe(32)
+    conn.execute(
+        "UPDATE users SET email_verify_token = ?, email_verify_sent_at = ? WHERE id = ?",
+        (verify_token_raw, datetime.now(timezone.utc).isoformat(), user_id),
+    )
+    conn.commit()
+    logger.info("EMAIL VERIFICATION LINK: %s/verify-email?token=%s (user: %s)", FRONTEND_URL, verify_token_raw, req.email)
+
     user = UserOut(
         id=user_id, org_id=org_id, email=req.email.lower().strip(),
         first_name=req.first_name, last_name=req.last_name, role="admin",
         hockey_role=hockey_role, subscription_tier="rookie",
         monthly_reports_used=0, monthly_bench_talks_used=0,
+        email_verified=False,
     )
     token = create_token(user_id, org_id, "admin")
     conn.close()
@@ -5022,6 +5074,7 @@ async def login(req: LoginRequest):
         subscription_tier=row["subscription_tier"] or "rookie",
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
+        email_verified=bool(row["email_verified"]) if row["email_verified"] else False,
     )
     token = create_token(row["id"], row["org_id"], row["role"])
     logger.info("User logged in: %s", req.email)
@@ -5042,11 +5095,25 @@ async def get_me(token_data: dict = Depends(verify_token)):
         subscription_tier=row["subscription_tier"] or "rookie",
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
+        email_verified=bool(row["email_verified"]) if row["email_verified"] else False,
     )
 
 
 class UpdateHockeyRoleRequest(BaseModel):
     hockey_role: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
 
 
 @app.put("/auth/hockey-role")
@@ -5067,7 +5134,137 @@ async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = De
         subscription_tier=row["subscription_tier"] or "rookie",
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
+        email_verified=bool(row["email_verified"]) if row["email_verified"] else False,
     )
+
+
+# ============================================================
+# PASSWORD RESET & EMAIL VERIFICATION
+# ============================================================
+
+@app.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    """Request a password reset. Always returns 200 to not leak email existence."""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM users WHERE email = ?", (req.email.lower().strip(),)).fetchone()
+        if not row:
+            return {"message": "If that email is registered, a reset link has been sent."}
+
+        user_id = row["id"]
+
+        # Rate limit: don't generate a new token if one was created in the last 5 minutes
+        recent = conn.execute(
+            "SELECT id FROM password_reset_tokens WHERE user_id = ? AND created_at > datetime('now', '-5 minutes') AND used = 0",
+            (user_id,),
+        ).fetchone()
+        if recent:
+            return {"message": "If that email is registered, a reset link has been sent."}
+
+        # Generate token, store hashed
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+        conn.execute(
+            "INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+            (gen_id(), user_id, token_hash, expires_at),
+        )
+        conn.commit()
+
+        # Alpha: log to console instead of sending email
+        logger.info("PASSWORD RESET LINK: %s/reset-password?token=%s (email: %s)", FRONTEND_URL, raw_token, req.email)
+
+        return {"message": "If that email is registered, a reset link has been sent."}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    """Reset password using a valid reset token."""
+    token_hash = hashlib.sha256(req.token.encode()).hexdigest()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, user_id FROM password_reset_tokens WHERE token_hash = ? AND used = 0 AND expires_at > ?",
+            (token_hash, datetime.now(timezone.utc).isoformat()),
+        ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+
+        # Update password
+        new_hash = pwd_context.hash(req.new_password[:72])
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, row["user_id"]))
+
+        # Mark token as used
+        conn.execute("UPDATE password_reset_tokens SET used = 1 WHERE id = ?", (row["id"],))
+        conn.commit()
+
+        logger.info("Password reset successful for user_id: %s", row["user_id"])
+        return {"message": "Password has been reset successfully. You can now log in."}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/send-verification")
+async def send_verification_email(token_data: dict = Depends(verify_token)):
+    """Resend email verification link. Requires auth."""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT email, email_verified FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        if row["email_verified"]:
+            return {"message": "Email is already verified."}
+
+        verify_token_raw = secrets.token_urlsafe(32)
+        conn.execute(
+            "UPDATE users SET email_verify_token = ?, email_verify_sent_at = ? WHERE id = ?",
+            (verify_token_raw, datetime.now(timezone.utc).isoformat(), token_data["user_id"]),
+        )
+        conn.commit()
+
+        # Alpha: log to console instead of sending email
+        logger.info("EMAIL VERIFICATION LINK: %s/verify-email?token=%s (user: %s)", FRONTEND_URL, verify_token_raw, row["email"])
+
+        return {"message": "Verification email sent. Check the server console for the link."}
+    finally:
+        conn.close()
+
+
+@app.post("/auth/verify-email")
+async def verify_email(req: VerifyEmailRequest):
+    """Verify email using token. No auth required (user clicks link from email)."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, email_verify_sent_at FROM users WHERE email_verify_token = ?",
+            (req.token,),
+        ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=400, detail="Invalid verification token.")
+
+        # Check token is within 24 hours
+        sent_at = row["email_verify_sent_at"]
+        if sent_at:
+            sent_time = datetime.fromisoformat(sent_at)
+            if datetime.now(timezone.utc) - sent_time > timedelta(hours=24):
+                raise HTTPException(status_code=400, detail="Verification token has expired. Please request a new one.")
+
+        # Mark email as verified, clear token
+        conn.execute(
+            "UPDATE users SET email_verified = 1, email_verify_token = NULL, email_verify_sent_at = NULL WHERE id = ?",
+            (row["id"],),
+        )
+        conn.commit()
+
+        logger.info("Email verified for user_id: %s", row["id"])
+        return {"message": "Email verified successfully."}
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -6872,7 +7069,13 @@ async def delete_player_image(
 async def upload_team_logo(team_id: str, file: UploadFile = File(...), token_data: dict = Depends(verify_token)):
     """Upload team logo image."""
     conn = get_db()
-    team = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+    org_id = token_data["org_id"]
+
+    # P0-1: Tier check — uploads require Novice+
+    _check_tier_permission(token_data["user_id"], "can_upload_files", conn)
+
+    # P0-1: org_id scoped query — only allow uploading to own org's teams
+    team = conn.execute("SELECT * FROM teams WHERE id = ? AND org_id = ?", (team_id, org_id)).fetchone()
     if not team:
         conn.close()
         raise HTTPException(status_code=404, detail="Team not found")
@@ -6886,11 +7089,17 @@ async def upload_team_logo(team_id: str, file: UploadFile = File(...), token_dat
     filename = f"team_{team_id}.{ext}"
     filepath = os.path.join(_IMAGES_DIR, filename)
     content = await file.read()
+
+    # P0-1: File size limit — 5MB max
+    if len(content) > 5 * 1024 * 1024:
+        conn.close()
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
+
     with open(filepath, "wb") as f:
         f.write(content)
 
     logo_url = f"/uploads/{filename}"
-    conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?", (logo_url, team_id))
+    conn.execute("UPDATE teams SET logo_url = ? WHERE id = ? AND org_id = ?", (logo_url, team_id, org_id))
     conn.commit()
     conn.close()
 
@@ -17332,6 +17541,9 @@ async def create_bench_talk_conversation(token_data: dict = Depends(verify_token
     """Create a new Bench Talk conversation."""
     user_id = token_data["user_id"]
     org_id = token_data["org_id"]
+    conn_check = get_db()
+    _check_email_verified(user_id, conn_check)
+    conn_check.close()
     conv_id = gen_id()
     conn = get_db()
     try:
@@ -17426,6 +17638,11 @@ async def send_bench_talk_message(
     """Send a message to Bench Talk and get an AI response."""
     user_id = token_data["user_id"]
     org_id = token_data["org_id"]
+
+    # ── Email verification check ──
+    ev_conn = get_db()
+    _check_email_verified(user_id, ev_conn)
+    ev_conn.close()
 
     # ── Usage limit check ──
     usage_conn = get_db()
@@ -17687,6 +17904,7 @@ async def submit_bench_talk_feedback(req: BenchTalkFeedbackRequest, token_data: 
     user_id = token_data["user_id"]
     org_id = token_data["org_id"]
     conn = get_db()
+    _check_email_verified(user_id, conn)
     try:
         feedback_id = gen_id()
         conn.execute("""
@@ -18342,8 +18560,10 @@ class BlockUserRequest(BaseModel):
 @app.post("/bench-talk/context")
 async def get_bench_talk_context(req: BenchTalkContextRequest, token_data: dict = Depends(verify_token)):
     """Fetch full Player and Report objects for Bench Talk sidebar context display."""
+    user_id = token_data["user_id"]
     org_id = token_data["org_id"]
     conn = get_db()
+    _check_email_verified(user_id, conn)
     try:
         players = []
         if req.player_ids:

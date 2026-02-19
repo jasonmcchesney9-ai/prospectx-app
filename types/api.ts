@@ -13,6 +13,7 @@ export interface User {
   subscription_tier: string;
   monthly_reports_used: number;
   monthly_bench_talks_used: number;
+  email_verified: boolean;
 }
 
 export interface TokenResponse {
