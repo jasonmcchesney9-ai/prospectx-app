@@ -1960,6 +1960,13 @@ def init_db():
         conn.commit()
         logger.info("Migration: added email_verified columns to users")
 
+    # ── Migration: auto-verify existing users (no email service configured) ──
+    unverified = conn.execute("SELECT COUNT(*) as c FROM users WHERE email_verified = 0 OR email_verified IS NULL").fetchone()["c"]
+    if unverified > 0:
+        conn.execute("UPDATE users SET email_verified = 1 WHERE email_verified = 0 OR email_verified IS NULL")
+        conn.commit()
+        logger.info("Migration: auto-verified %d users (email verification not enforced)", unverified)
+
     # ── Scout Notes v2 columns ──
     sn_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scout_notes)").fetchall()}
     if "overall_grade" not in sn_cols:
@@ -5320,7 +5327,7 @@ async def register(req: RegisterRequest):
     )
     hockey_role = req.hockey_role if req.hockey_role in ("scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent") else "scout"
     conn.execute(
-        "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
         (user_id, org_id, req.email.lower().strip(), password_hash, req.first_name, req.last_name, "admin", hockey_role),
     )
     conn.commit()
@@ -5339,7 +5346,7 @@ async def register(req: RegisterRequest):
         first_name=req.first_name, last_name=req.last_name, role="admin",
         hockey_role=hockey_role, subscription_tier="rookie",
         monthly_reports_used=0, monthly_bench_talks_used=0,
-        email_verified=False,
+        email_verified=True,
     )
     token = create_token(user_id, org_id, "admin")
     conn.close()
