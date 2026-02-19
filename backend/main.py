@@ -429,7 +429,8 @@ def _get_rate_category(path: str) -> str:
 async def rate_limit_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                  or (request.client.host if request.client else "unknown"))
     category = _get_rate_category(request.url.path)
     limit = _RATE_LIMITS[category]
     key = f"{client_ip}:{category}"
