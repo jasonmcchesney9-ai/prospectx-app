@@ -33,8 +33,10 @@ if _this_dir not in sys.path:
 import csv
 import io
 
+import glob
 import httpx
 import jwt
+import shutil
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -392,11 +394,64 @@ def _increment_tracking(user_id: str, resource_type: str, conn):
 # APP + MIDDLEWARE
 # ============================================================
 
+_show_docs = ENVIRONMENT == "development"
 app = FastAPI(
     title="ProspectX API",
     description="Decision-Grade Hockey Intelligence Platform",
     version="1.0.0",
+    docs_url="/docs" if _show_docs else None,
+    redoc_url="/redoc" if _show_docs else None,
+    openapi_url="/openapi.json" if _show_docs else None,
 )
+
+# ── Rate Limiting ─────────────────────────────────
+# Per-IP rate limits applied via middleware (no endpoint signature changes needed)
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMITS = {
+    "auth": 10,       # /auth/* — 10 requests/minute per IP
+    "data": 60,       # /players, /reports, /scout-notes — 60/min
+    "hockeytech": 30, # /hockeytech/* — 30/min
+    "default": 120,   # everything else — 120/min
+}
+_rate_limit_store: Dict[str, Dict[str, Any]] = {}
+
+def _get_rate_category(path: str) -> str:
+    if path.startswith("/auth/"):
+        return "auth"
+    if path.startswith(("/players", "/reports", "/scout-notes", "/stats/")):
+        return "data"
+    if path.startswith("/hockeytech/"):
+        return "hockeytech"
+    return "default"
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    client_ip = request.client.host if request.client else "unknown"
+    category = _get_rate_category(request.url.path)
+    limit = _RATE_LIMITS[category]
+    key = f"{client_ip}:{category}"
+    now = time.time()
+    entry = _rate_limit_store.get(key)
+    if entry and now - entry["window_start"] < _RATE_LIMIT_WINDOW:
+        entry["count"] += 1
+        if entry["count"] > limit:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": f"Rate limit exceeded. Max {limit} requests per minute for {category} endpoints."},
+            )
+    else:
+        _rate_limit_store[key] = {"window_start": now, "count": 1}
+    # Periodically clean stale entries (every 100 requests)
+    if len(_rate_limit_store) > 1000:
+        cutoff = now - _RATE_LIMIT_WINDOW * 2
+        _rate_limit_store.clear()
+    response = await call_next(request)
+    response.headers["X-RateLimit-Limit"] = str(limit)
+    remaining = max(0, limit - _rate_limit_store.get(key, {}).get("count", 0))
+    response.headers["X-RateLimit-Remaining"] = str(remaining)
+    return response
 
 # ── Images directory ──────────────────────────────
 _IMAGES_DIR = os.path.join(_DATA_DIR, "images")
@@ -417,7 +472,11 @@ _allowed_origins = list({o for o in _allowed_origins if o})
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?",
+    allow_origin_regex=(
+        r"https://prospectx-app(-[a-z0-9]+)?(-[a-z0-9]+)?\.vercel\.app"
+        if ENVIRONMENT != "development"
+        else r"https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?"
+    ),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -452,6 +511,13 @@ async def add_request_id(request: Request, call_next):
     try:
         response = await call_next(request)
         response.headers["X-Request-Id"] = request_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if ENVIRONMENT != "development":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         # Log server errors to DB for admin dashboard
         if response.status_code >= 500:
             _log_error_to_db(request.method, str(request.url.path), response.status_code, "Server error")
@@ -1831,6 +1897,21 @@ def init_db():
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
+
+    # ── Startup backup ──
+    try:
+        backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        ts = now_iso()[:19].replace(":", "-")
+        backup_name = f"prospectx_{ts}.db"
+        shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
+        # Keep last 5 backups only
+        backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
+        for old in backups[:-5]:
+            os.remove(old)
+        logger.info("Startup backup created: %s", backup_name)
+    except Exception as e:
+        logger.warning("Startup backup failed: %s", e)
 
 
 def seed_hockey_os():
@@ -6330,7 +6411,7 @@ async def list_players(
     archetype: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = Query(default="asc", pattern="^(asc|desc)$"),
-    limit: int = Query(default=200, ge=1, le=2000),
+    limit: int = Query(default=100, ge=1, le=100),
     skip: int = Query(default=0, ge=0),
     token_data: dict = Depends(verify_token),
 ):
@@ -13175,6 +13256,21 @@ async def health_check():
     }
 
 
+@app.get("/admin/backup-db")
+async def backup_database(token_data: dict = Depends(verify_token)):
+    """Download the full SQLite database. Admin only."""
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    conn.close()
+    if not user or user["email"] != "jason@prospectx.com":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    backup_name = f"prospectx_backup_{now_iso()[:10]}.db"
+    backup_path = os.path.join(os.path.dirname(DB_FILE), backup_name)
+    shutil.copy2(DB_FILE, backup_path)
+    return FileResponse(backup_path, filename=backup_name, media_type="application/octet-stream")
+
+
 # ============================================================
 # ANALYTICS
 # ============================================================
@@ -14782,7 +14878,7 @@ async def ht_list_leagues():
     ]
 
 @app.get("/hockeytech/{league}/seasons")
-async def ht_seasons(league: str):
+async def ht_seasons(league: str, token_data: dict = Depends(verify_token)):
     """Get all seasons for a league."""
     try:
         client = HockeyTechClient(league)
@@ -14791,7 +14887,7 @@ async def ht_seasons(league: str):
     return await client.get_seasons()
 
 @app.get("/hockeytech/{league}/teams")
-async def ht_teams(league: str, season_id: Optional[int] = None):
+async def ht_teams(league: str, season_id: Optional[int] = None, token_data: dict = Depends(verify_token)):
     """Get teams for a league. If season_id is omitted, uses the current season."""
     try:
         client = HockeyTechClient(league)
@@ -14804,7 +14900,7 @@ async def ht_teams(league: str, season_id: Optional[int] = None):
     return await client.get_teams(season_id)
 
 @app.get("/hockeytech/{league}/roster/{team_id}")
-async def ht_roster(league: str, team_id: int, season_id: Optional[int] = None):
+async def ht_roster(league: str, team_id: int, season_id: Optional[int] = None, token_data: dict = Depends(verify_token)):
     """Get team roster."""
     try:
         client = HockeyTechClient(league)
@@ -14818,7 +14914,7 @@ async def ht_roster(league: str, team_id: int, season_id: Optional[int] = None):
 
 @app.get("/hockeytech/{league}/stats/skaters")
 async def ht_skater_stats(league: str, season_id: Optional[int] = None,
-                           team_id: Optional[int] = None, limit: int = 100):
+                           team_id: Optional[int] = None, limit: int = 100, token_data: dict = Depends(verify_token)):
     """Get skater stats for a league or team."""
     try:
         client = HockeyTechClient(league)
@@ -14831,7 +14927,7 @@ async def ht_skater_stats(league: str, season_id: Optional[int] = None,
     return await client.get_skater_stats(season_id, team_id=team_id, limit=limit)
 
 @app.get("/hockeytech/{league}/stats/leaders")
-async def ht_top_scorers(league: str, season_id: Optional[int] = None, limit: int = 50):
+async def ht_top_scorers(league: str, season_id: Optional[int] = None, limit: int = 50, token_data: dict = Depends(verify_token)):
     """Get league-wide scoring leaders (cross-team)."""
     try:
         client = HockeyTechClient(league)
@@ -14845,7 +14941,7 @@ async def ht_top_scorers(league: str, season_id: Optional[int] = None, limit: in
 
 @app.get("/hockeytech/{league}/stats/goalies")
 async def ht_goalie_stats(league: str, season_id: Optional[int] = None,
-                           team_id: Optional[int] = None, limit: int = 50):
+                           team_id: Optional[int] = None, limit: int = 50, token_data: dict = Depends(verify_token)):
     """Get goalie stats for a league or team."""
     try:
         client = HockeyTechClient(league)
@@ -14858,7 +14954,7 @@ async def ht_goalie_stats(league: str, season_id: Optional[int] = None,
     return await client.get_goalie_stats(season_id, team_id=team_id, limit=limit)
 
 @app.get("/hockeytech/{league}/standings")
-async def ht_standings(league: str, season_id: Optional[int] = None):
+async def ht_standings(league: str, season_id: Optional[int] = None, token_data: dict = Depends(verify_token)):
     """Get league standings."""
     try:
         client = HockeyTechClient(league)
@@ -14871,7 +14967,7 @@ async def ht_standings(league: str, season_id: Optional[int] = None):
     return await client.get_standings(season_id)
 
 @app.get("/hockeytech/{league}/scorebar")
-async def ht_scorebar(league: str, days_back: int = 1, days_ahead: int = 3):
+async def ht_scorebar(league: str, days_back: int = 1, days_ahead: int = 3, token_data: dict = Depends(verify_token)):
     """Get recent and upcoming games."""
     try:
         client = HockeyTechClient(league)
@@ -14880,7 +14976,7 @@ async def ht_scorebar(league: str, days_back: int = 1, days_ahead: int = 3):
     return await client.get_scorebar(days_back=days_back, days_ahead=days_ahead)
 
 @app.get("/hockeytech/{league}/player/{player_id}")
-async def ht_player_profile(league: str, player_id: int):
+async def ht_player_profile(league: str, player_id: int, token_data: dict = Depends(verify_token)):
     """Get player profile from HockeyTech."""
     try:
         client = HockeyTechClient(league)
@@ -14889,7 +14985,7 @@ async def ht_player_profile(league: str, player_id: int):
     return await client.get_player_profile(player_id)
 
 @app.get("/hockeytech/{league}/player/{player_id}/gamelog")
-async def ht_player_gamelog(league: str, player_id: int, season_id: Optional[int] = None):
+async def ht_player_gamelog(league: str, player_id: int, season_id: Optional[int] = None, token_data: dict = Depends(verify_token)):
     """Get player's game-by-game stats."""
     try:
         client = HockeyTechClient(league)
@@ -14902,7 +14998,7 @@ async def ht_player_gamelog(league: str, player_id: int, season_id: Optional[int
     return await client.get_player_game_log(player_id, season_id)
 
 @app.get("/hockeytech/{league}/game/{game_id}")
-async def ht_game_summary(league: str, game_id: int):
+async def ht_game_summary(league: str, game_id: int, token_data: dict = Depends(verify_token)):
     """Get full game summary."""
     try:
         client = HockeyTechClient(league)
