@@ -1367,11 +1367,15 @@ export interface BenchTalkSuggestion {
 export interface SubscriptionTier {
   name: string;
   price: number;
+  annual_price: number;
   monthly_reports: number;
   monthly_bench_talks: number;
+  monthly_practice_plans: number;
   max_seats: number;
   features: string[];
   description: string;
+  target_user?: string;
+  founders_price?: number;
 }
 
 export interface SubscriptionUsage {

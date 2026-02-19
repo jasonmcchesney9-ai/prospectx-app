@@ -114,20 +114,23 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # ── Subscription Tiers ─────────────────────────────────────
 SUBSCRIPTION_TIERS = {
+    # ── Individual Plans ──────────────────────────────────
     "rookie": {
         "name": "Rookie",
         "price": 0,
+        "annual_price": 0,
         "monthly_reports": 0,
-        "monthly_bench_talks": 10,
+        "monthly_bench_talks": 150,  # 5/day × 30
         "monthly_practice_plans": 0,
         "max_seats": 1,
-        "description": "Free tier — browse players, standings, and 10 Bench Talk messages per month.",
-        "features": ["Basic player search", "League standings", "10 Bench Talk/month"],
+        "description": "Browse players, live stats, and basic Bench Talk.",
+        "target_user": "Casual browsers",
+        "features": ["Browse player profiles", "HockeyTech live stats", "Elite Prospects links", "Basic search", "5 Bench Talk messages/day"],
         # Permissions
         "can_sync_data": False,
         "can_bulk_sync": False,
         "can_upload_files": False,
-        "can_access_live_stats": False,
+        "can_access_live_stats": True,
         "can_submit_corrections": False,
         "can_create_game_plans": False,
         "can_create_series": False,
@@ -137,20 +140,48 @@ SUBSCRIPTION_TIERS = {
         "max_file_size_mb": 0,
         "players_tracked": 0,
     },
-    "novice": {
-        "name": "Novice",
-        "price": 25.00,
-        "monthly_reports": 20,
-        "monthly_bench_talks": 50,
-        "monthly_practice_plans": 10,
+    "parent": {
+        "name": "Parent",
+        "price": 10.00,
+        "annual_price": 100.00,
+        "monthly_reports": 3,
+        "monthly_bench_talks": 600,  # 20/day × 30
+        "monthly_practice_plans": 0,
         "max_seats": 1,
-        "description": "Essential scouting tools — reports, practice plans, individual team sync, and file uploads.",
-        "features": ["20 reports/month", "50 Bench Talk/month", "10 practice plans/month", "Player intelligence", "All report templates", "Individual team sync", "5 file uploads/month (10MB max)"],
+        "description": "Development tracking, reports, and advisor directory for hockey parents.",
+        "target_user": "Hockey parents",
+        "features": ["3 reports/month", "20 Bench Talk/day", "Profile analytics", "Development tracking", "Advisor directory", "Add/claim your player", "Direct messaging"],
+        # Permissions
+        "can_sync_data": False,
+        "can_bulk_sync": False,
+        "can_upload_files": False,
+        "can_access_live_stats": True,
+        "can_submit_corrections": False,
+        "can_create_game_plans": False,
+        "can_create_series": False,
+        "can_use_scouting_list": False,
+        "max_scouting_list": 0,
+        "max_uploads_per_month": 0,
+        "max_file_size_mb": 0,
+        "players_tracked": 1,
+    },
+    "scout": {
+        "name": "Scout",
+        "price": 25.00,
+        "annual_price": 250.00,
+        "monthly_reports": 10,
+        "monthly_bench_talks": 1500,  # 50/day × 30
+        "monthly_practice_plans": 3,
+        "monthly_game_plans": 3,
+        "max_seats": 1,
+        "description": "Scout Notes, rated search, limited coaching tools, and PXI basic.",
+        "target_user": "Indie scouts, coaches",
+        "features": ["10 reports/month", "50 Bench Talk/day", "Scout Notes", "Rated search", "3 game plans/month", "3 practice plans/month", "PXI basic", "Individual team sync", "5 file uploads/month (10MB max)"],
         # Permissions
         "can_sync_data": True,
         "can_bulk_sync": False,
         "can_upload_files": True,
-        "can_access_live_stats": False,
+        "can_access_live_stats": True,
         "can_submit_corrections": True,
         "can_create_game_plans": True,
         "can_create_series": False,
@@ -162,13 +193,15 @@ SUBSCRIPTION_TIERS = {
     },
     "pro": {
         "name": "Pro",
-        "price": 49.99,
+        "price": 49.00,
+        "annual_price": 490.00,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
         "max_seats": 1,
-        "description": "Full-power scouting — unlimited everything, live stats, and bulk data sync.",
-        "features": ["Unlimited reports", "Unlimited Bench Talk", "Unlimited practice plans", "Priority generation", "Advanced analytics", "HockeyTech bulk sync", "Live stats", "Unlimited uploads (50MB max)"],
+        "description": "Unlimited reports, full PXI (10 modes), all coaching tools, InStat, and export.",
+        "target_user": "Head coaches, agents, GMs",
+        "features": ["Unlimited reports", "Unlimited Bench Talk", "Full PXI (10 modes)", "All 21 report templates", "Unlimited coaching tools", "InStat game data", "Line builder & series planning", "Multi-team views", "Export & share reports", "Unlimited uploads (50MB max)"],
         # Permissions
         "can_sync_data": True,
         "can_bulk_sync": True,
@@ -183,15 +216,45 @@ SUBSCRIPTION_TIERS = {
         "max_file_size_mb": 50,
         "players_tracked": 10,
     },
-    "team": {
-        "name": "Team",
-        "price": 299.99,
+    "elite": {
+        "name": "Elite",
+        "price": 99.00,
+        "annual_price": 990.00,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
-        "max_seats": 5,
-        "description": "Team-wide scouting platform with shared access and org management.",
-        "features": ["Everything in Pro", "5 user seats", "Team-wide sharing", "Org management", "100MB uploads"],
+        "max_seats": 1,
+        "description": "Everything in Pro plus PXI Auto-Scout, bulk reports, API access, and priority support.",
+        "target_user": "Power users, agencies",
+        "features": ["Everything in Pro", "PXI Auto-Scout", "Bulk report generation", "Aggregate scouting boards", "API access", "Priority support"],
+        # Permissions
+        "can_sync_data": True,
+        "can_bulk_sync": True,
+        "can_upload_files": True,
+        "can_access_live_stats": True,
+        "can_submit_corrections": True,
+        "can_create_game_plans": True,
+        "can_create_series": True,
+        "can_use_scouting_list": True,
+        "max_scouting_list": -1,
+        "max_uploads_per_month": -1,
+        "max_file_size_mb": 500,
+        "players_tracked": -1,
+        "priority_sync": True,
+    },
+    # ── Organization Plans ────────────────────────────────
+    "team_org": {
+        "name": "Team",
+        "price": 249.00,
+        "annual_price": 1990.00,
+        "founders_price": 199.00,
+        "monthly_reports": -1,
+        "monthly_bench_talks": -1,
+        "monthly_practice_plans": -1,
+        "max_seats": 10,
+        "description": "All Pro features for up to 10 seats with shared scouting data.",
+        "target_user": "Single team organizations",
+        "features": ["All Pro features per seat", "10 user seats", "Shared scout notes", "Team branding", "Org admin panel", "100MB uploads"],
         # Permissions
         "can_sync_data": True,
         "can_bulk_sync": True,
@@ -206,15 +269,18 @@ SUBSCRIPTION_TIERS = {
         "max_file_size_mb": 100,
         "players_tracked": 250,
     },
-    "aaa_org": {
-        "name": "AAA Org",
-        "price": 499.00,
+    "program_org": {
+        "name": "Program",
+        "price": 599.00,
+        "annual_price": 4990.00,
+        "founders_price": 499.00,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
-        "max_seats": 25,
-        "description": "Enterprise scouting for multi-team organizations with dedicated support.",
-        "features": ["Everything in Team", "25 user seats", "Multi-team management", "Dedicated support", "Custom templates", "500MB uploads", "Priority sync"],
+        "max_seats": 30,
+        "description": "Multi-team platform with cross-team scouting boards and org-wide analytics.",
+        "target_user": "AAA organizations, multi-team programs",
+        "features": ["Everything in Team", "30 user seats", "Cross-team scouting boards", "Org-wide analytics", "Multi-team branding", "Dedicated support", "500MB uploads", "Priority sync"],
         # Permissions
         "can_sync_data": True,
         "can_bulk_sync": True,
@@ -227,7 +293,33 @@ SUBSCRIPTION_TIERS = {
         "max_scouting_list": -1,
         "max_uploads_per_month": -1,
         "max_file_size_mb": 500,
-        "players_tracked": -1,  # Unlimited
+        "players_tracked": -1,
+        "priority_sync": True,
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "price": -1,  # Custom pricing — "Contact Us"
+        "annual_price": -1,
+        "monthly_reports": -1,
+        "monthly_bench_talks": -1,
+        "monthly_practice_plans": -1,
+        "max_seats": -1,  # Unlimited
+        "description": "Custom solution with unlimited seats, dedicated onboarding, and SLA support.",
+        "target_user": "OHL/WHL teams, large agencies",
+        "features": ["Everything in Program", "Unlimited seats", "Custom branding", "Dedicated onboarding", "White-glove setup", "SLA support", "API access"],
+        # Permissions
+        "can_sync_data": True,
+        "can_bulk_sync": True,
+        "can_upload_files": True,
+        "can_access_live_stats": True,
+        "can_submit_corrections": True,
+        "can_create_game_plans": True,
+        "can_create_series": True,
+        "can_use_scouting_list": True,
+        "max_scouting_list": -1,
+        "max_uploads_per_month": -1,
+        "max_file_size_mb": -1,
+        "players_tracked": -1,
         "priority_sync": True,
     },
 }
@@ -250,14 +342,14 @@ def _check_tier_permission(user_id: str, permission: str, conn) -> dict:
 
     if not tier_config.get(permission, False):
         perm_labels = {
-            "can_sync_data": "Individual team sync requires Novice tier or higher.",
+            "can_sync_data": "Individual team sync requires Scout tier or higher.",
             "can_bulk_sync": "Bulk league sync requires Pro tier or higher.",
-            "can_upload_files": "File uploads require Novice tier or higher.",
+            "can_upload_files": "File uploads require Scout tier or higher.",
             "can_access_live_stats": "Live stats require Pro tier or higher.",
-            "can_submit_corrections": "Submitting corrections requires Novice tier or higher.",
-            "can_create_game_plans": "Game plans require Novice tier or higher.",
+            "can_submit_corrections": "Submitting corrections requires Scout tier or higher.",
+            "can_create_game_plans": "Game plans require Scout tier or higher.",
             "can_create_series": "Series planning requires Pro tier or higher.",
-            "can_use_scouting_list": "Scouting list requires Novice tier or higher.",
+            "can_use_scouting_list": "Scouting list requires Scout tier or higher.",
         }
         raise HTTPException(status_code=403, detail={
             "error": f"{permission}_required",
@@ -1896,6 +1988,17 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_scout_notes_status ON scout_notes(prospect_status)")
         conn.commit()
         logger.info("Migration: added Scout Notes v2 columns")
+
+    # ── Migration: rename old subscription tiers (CR-009) ──
+    try:
+        n1 = conn.execute("UPDATE users SET subscription_tier = 'scout' WHERE subscription_tier = 'novice'").rowcount
+        n2 = conn.execute("UPDATE users SET subscription_tier = 'team_org' WHERE subscription_tier = 'team'").rowcount
+        n3 = conn.execute("UPDATE users SET subscription_tier = 'program_org' WHERE subscription_tier = 'aaa_org'").rowcount
+        if n1 or n2 or n3:
+            conn.commit()
+            logger.info("Tier migration: novice→scout:%d, team→team_org:%d, aaa_org→program_org:%d", n1, n2, n3)
+    except Exception as e:
+        logger.warning("Tier migration note: %s", e)
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)

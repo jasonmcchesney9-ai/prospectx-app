@@ -14,10 +14,13 @@ interface UpgradeModalProps {
 
 const TIER_LABELS: Record<string, string> = {
   rookie: "Rookie",
-  novice: "Novice",
+  parent: "Parent",
+  scout: "Scout",
   pro: "Pro",
-  team: "Team",
-  aaa_org: "AAA Org",
+  elite: "Elite",
+  team_org: "Team",
+  program_org: "Program",
+  enterprise: "Enterprise",
 };
 
 const LIMIT_COPY: Record<string, { title: string; icon: React.ElementType; unit: string }> = {
