@@ -6525,7 +6525,7 @@ async def list_players(
     archetype: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = Query(default="asc", pattern="^(asc|desc)$"),
-    limit: int = Query(default=100, ge=1, le=100),
+    limit: int = Query(default=100, ge=1, le=5000),
     skip: int = Query(default=0, ge=0),
     token_data: dict = Depends(verify_token),
 ):
