@@ -61,7 +61,7 @@ export default function ScoutNoteForm({ initialPlayerId, existingNote }: ScoutNo
     try {
       const { data } = await api.get(`/players?search=${encodeURIComponent(q)}&limit=10`);
       setPlayerResults(data);
-    } catch { setPlayerResults([]); }
+    } catch (err) { console.error("[ScoutNote] Player search error:", err); setPlayerResults([]); }
   }, []);
 
   useEffect(() => {
@@ -113,6 +113,7 @@ export default function ScoutNoteForm({ initialPlayerId, existingNote }: ScoutNo
       }
       router.push("/scout-notes");
     } catch (err: unknown) {
+      console.error("[ScoutNote] Save error:", err);
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to save note";
       setError(typeof msg === "string" ? msg : JSON.stringify(msg));
     } finally {
