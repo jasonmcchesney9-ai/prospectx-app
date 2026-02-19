@@ -6991,6 +6991,31 @@ class PracticePlanGenerateRequest(BaseModel):
     age_level: str = "JUNIOR_COLLEGE_PRO"
     notes: Optional[str] = None
 
+# ── Player Search (autocomplete) ─────────────────────────────
+
+@app.get("/players/search")
+async def search_players_autocomplete(
+    q: str = Query(..., min_length=2, max_length=100),
+    limit: int = Query(default=8, ge=1, le=20),
+    token_data: dict = Depends(verify_token),
+):
+    """Lightweight player search for nav autocomplete."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    pattern = f"%{q}%"
+    rows = conn.execute(
+        """SELECT id, first_name, last_name, current_team, position, jersey_number
+           FROM players
+           WHERE org_id = ?
+             AND (is_deleted = 0 OR is_deleted IS NULL)
+             AND (first_name LIKE ? OR last_name LIKE ? OR (first_name || ' ' || last_name) LIKE ?)
+           ORDER BY last_name, first_name
+           LIMIT ?""",
+        (org_id, pattern, pattern, pattern, limit),
+    ).fetchall()
+    conn.close()
+    return {"results": [dict(r) for r in rows]}
+
 # ── Saved Searches ────────────────────────────────────────────
 
 class SavedSearchCreate(BaseModel):

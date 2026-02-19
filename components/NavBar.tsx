@@ -34,12 +34,14 @@ import {
   Briefcase,
   MessageSquare,
   Eye,
+  Search,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
 import PXIBadge from "./PXIBadge";
+import PlayerSearchDropdown from "./PlayerSearchDropdown";
 
 // ── Role Group Mapping ─────────────────────────────────────────
 // Maps hockey_role to a nav group (PRO, MEDIA, FAMILY, AGENT)
@@ -70,15 +72,13 @@ function getRoleGroup(hockeyRole?: string): RoleGroup {
 // ── Nav Item Definitions ──────────────────────────────────────
 type NavItem = { href: string; label: string; icon: React.ElementType; badge?: number };
 
-// PRO nav: full access
+// PRO nav: full access — most items now in dropdowns
 const PRO_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leagues", label: "Leagues", icon: Trophy },
 ];
 const PRO_NAV_RIGHT: NavItem[] = [
-  { href: "/players", label: "Players", icon: Users },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 // MEDIA nav
@@ -117,7 +117,28 @@ const AGENT_NAV_RIGHT: NavItem[] = [
   { href: "/messages", label: "Messages", icon: MessageSquare },
 ];
 
-// Teams dropdown items (PRO only — visible under Teams dropdown)
+// Players dropdown items (PRO only)
+const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
+  { href: "/players", label: "All Players", icon: Users },
+  { href: "/players/manage", label: "Manage Players", icon: Settings },
+  { href: "/scouting", label: "Scouting List", icon: Target },
+];
+
+// Scouting dropdown items (PRO only)
+const SCOUTING_DROPDOWN_ITEMS: NavItem[] = [
+  { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
+  { href: "/game-plans", label: "Chalk Talk", icon: Swords },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
+];
+
+// Reports dropdown items (PRO only)
+const REPORTS_DROPDOWN_ITEMS: NavItem[] = [
+  { href: "/reports", label: "Generated Reports", icon: FileText },
+  { href: "/reports/custom", label: "Custom Report", icon: PenTool },
+  { href: "/reports/generate", label: "Generate Report", icon: FileText },
+];
+
+// Teams dropdown items (PRO only)
 const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/teams", label: "All Teams", icon: Building2 },
   { href: "/series", label: "Series Plans", icon: Trophy },
@@ -126,9 +147,6 @@ const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
 
 // Coaching items (PRO only)
 const COACHING_ITEMS: NavItem[] = [
-  { href: "/game-plans", label: "Chalk Talk", icon: Swords },
-  { href: "/scouting", label: "Scouting List", icon: Target },
-  { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
   { href: "/drills", label: "Drill Library", icon: BookOpen },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
@@ -144,22 +162,21 @@ const BROADCAST_ITEMS: NavItem[] = [
 const IMPORT_ITEMS: NavItem[] = [
   { href: "/instat", label: "Import Stats (XLSX)", icon: BarChart3 },
   { href: "/players/import", label: "Import Players (CSV)", icon: UserPlus },
-  { href: "/players/manage", label: "Manage Players", icon: Settings },
   { href: "/corrections", label: "Review Corrections", icon: CheckSquare },
   { href: "/my-data", label: "My Data", icon: Database },
 ];
 
 // ── Role-aware nav items function ──────────────────────────────
-function getNavItems(group: RoleGroup): { left: NavItem[]; right: NavItem[]; showCoaching: boolean; showImports: boolean; showBroadcastDropdown: boolean; showTeamsDropdown: boolean } {
+function getNavItems(group: RoleGroup): { left: NavItem[]; right: NavItem[]; showPlayersDropdown: boolean; showScoutingDropdown: boolean; showReportsDropdown: boolean; showCoaching: boolean; showImports: boolean; showBroadcastDropdown: boolean; showTeamsDropdown: boolean } {
   switch (group) {
     case "PRO":
-      return { left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT, showCoaching: true, showImports: true, showBroadcastDropdown: true, showTeamsDropdown: true };
+      return { left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT, showPlayersDropdown: true, showScoutingDropdown: true, showReportsDropdown: true, showCoaching: true, showImports: true, showBroadcastDropdown: true, showTeamsDropdown: true };
     case "MEDIA":
-      return { left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
+      return { left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT, showPlayersDropdown: false, showScoutingDropdown: false, showReportsDropdown: false, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
     case "FAMILY":
-      return { left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
+      return { left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT, showPlayersDropdown: false, showScoutingDropdown: false, showReportsDropdown: false, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
     case "AGENT":
-      return { left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
+      return { left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT, showPlayersDropdown: false, showScoutingDropdown: false, showReportsDropdown: false, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
   }
 }
 
@@ -199,6 +216,7 @@ export default function NavBar() {
   const pathname = usePathname();
   const user = getUser();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [agentClientCount, setAgentClientCount] = useState<number>(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
@@ -286,25 +304,17 @@ export default function NavBar() {
               <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
 
+            {/* Players dropdown (PRO only) */}
+            {navConfig.showPlayersDropdown && <PlayersDropdown pathname={pathname} />}
+
+            {/* Scouting dropdown (PRO only) */}
+            {navConfig.showScoutingDropdown && <ScoutingDropdown pathname={pathname} />}
+
+            {/* Reports dropdown (PRO only) */}
+            {navConfig.showReportsDropdown && <ReportsDropdown pathname={pathname} />}
+
             {/* Teams dropdown (PRO only) */}
             {navConfig.showTeamsDropdown && <TeamsDropdown pathname={pathname} />}
-
-            {/* Bench Talk Toggle (center — always visible) */}
-            <button
-              onClick={toggleBenchTalk}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-oswald font-bold uppercase tracking-wider transition-colors ${
-                benchTalkOpen
-                  ? "bg-orange/20 text-orange"
-                  : "text-orange hover:bg-orange/10"
-              }`}
-            >
-              <PXIBadge size={18} variant="nav" showDot={true} />
-              Bench Talk
-            </button>
-
-            {navConfig.right.map((item) => (
-              <NavLink key={item.href} {...item} pathname={pathname} />
-            ))}
 
             {/* Coaching dropdown (PRO only) */}
             {navConfig.showCoaching && <CoachingDropdown pathname={pathname} />}
@@ -319,6 +329,10 @@ export default function NavBar() {
 
             {/* Imports dropdown (PRO only) */}
             {navConfig.showImports && <ImportDropdown pathname={pathname} />}
+
+            {navConfig.right.map((item) => (
+              <NavLink key={item.href} {...item} pathname={pathname} />
+            ))}
           </div>
 
           {/* ── User + Role Badge + Tier Badge + Logout (far right) ── */}
@@ -377,6 +391,15 @@ export default function NavBar() {
                 {roleGroup}
               </span>
             )}
+            {/* Search icon (mobile) */}
+            <button
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+              className={`p-2 rounded-lg transition-colors ${
+                mobileSearchOpen ? "bg-white/10 text-teal" : "text-white/70 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Search size={18} />
+            </button>
             <button
               onClick={toggleBenchTalk}
               className={`p-2 rounded-lg transition-all ${
@@ -394,6 +417,47 @@ export default function NavBar() {
           </div>
         </div>
       </div>
+
+      {/* ── Row 2: Action Bar ── */}
+      <div className="hidden md:flex items-center h-12 px-4 sm:px-6 lg:px-8 border-t border-white/10 relative">
+        {/* Left: Player Search */}
+        <div className="flex-1">
+          <PlayerSearchDropdown />
+        </div>
+
+        {/* Center: Bench Talk (absolute centered) */}
+        <div className="absolute left-1/2 -translate-x-1/2">
+          <button
+            onClick={toggleBenchTalk}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-oswald font-bold uppercase tracking-wider transition-colors ${
+              benchTalkOpen
+                ? "bg-orange/20 text-orange"
+                : "text-orange hover:bg-orange/10"
+            }`}
+          >
+            <PXIBadge size={18} variant="nav" showDot={true} />
+            Bench Talk
+          </button>
+        </div>
+
+        {/* Right: Quick Actions */}
+        <div className="flex-1 flex justify-end">
+          <Link
+            href="/scout-notes"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-oswald font-bold uppercase tracking-wider text-teal/70 hover:text-teal hover:bg-teal/10 transition-colors"
+          >
+            <ClipboardCheck size={14} />
+            + New Note
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Mobile Search Bar ── */}
+      {mobileSearchOpen && (
+        <div className="md:hidden border-t border-white/10 px-4 py-3">
+          <PlayerSearchDropdown />
+        </div>
+      )}
 
       {/* ── Mobile Menu (role-filtered) ── */}
       {mobileOpen && (
@@ -432,6 +496,81 @@ export default function NavBar() {
               <Radio size={16} />
               Broadcast
             </Link>
+          )}
+
+          {/* Players section (PRO only — mobile) */}
+          {navConfig.showPlayersDropdown && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Players
+              </p>
+              {PLAYERS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Scouting section (PRO only — mobile) */}
+          {navConfig.showScoutingDropdown && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Scouting
+              </p>
+              {SCOUTING_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Reports section (PRO only — mobile) */}
+          {navConfig.showReportsDropdown && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Reports
+              </p>
+              {REPORTS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
           )}
 
           {/* Teams section (PRO only — mobile) */}
@@ -563,6 +702,177 @@ export default function NavBar() {
 }
 
 // ── Dropdown Components ────────────────────────────────────────
+
+function PlayersDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = PLAYERS_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <Users size={16} />
+        Players
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {PLAYERS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScoutingDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = SCOUTING_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <ClipboardCheck size={16} />
+        Scouting
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {SCOUTING_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportsDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = REPORTS_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <FileText size={16} />
+        Reports
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {REPORTS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TeamsDropdown({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);
