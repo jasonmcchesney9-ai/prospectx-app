@@ -55,7 +55,8 @@ export default function PlayerSearchDropdown({ collapsed = false }: { collapsed?
         setResults(res.data.results || []);
         setIsOpen(true);
         setHighlightIndex(-1);
-      } catch {
+      } catch (err) {
+        console.error("[PlayerSearch] Error:", err);
         setResults([]);
       } finally {
         setLoading(false);
