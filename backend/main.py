@@ -80,6 +80,12 @@ from pxi_prompt_core import (
     ELITE_PROFILE_SECTIONS,
     DEVELOPMENT_ACTION_PLANS,
     PARENT_ACTION_PLANS,
+    TRUST_TIER_SYSTEM,
+    FORWARD_OPERATING_PROFILE,
+    DEFENSE_OPERATING_PROFILE,
+    BENCH_CARD,
+    BIAS_CONTROLLED_EVAL,
+    AGENT_PROJECTION,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -833,6 +839,12 @@ TEMPLATE_CATEGORIES = {
     "season_projection":   ("Competitive Intelligence", "League Benchmarks"),
     "free_agent_market":   ("Competitive Intelligence", "Market & Acquisitions"),
     "elite_profile":       ("Player Analytics", "Premium Reports"),
+    # Addendum 2 — Operating Profiles, Bench Card, Bias, Agent
+    "forward_operating_profile": ("Coaching", "Operating Profiles"),
+    "defense_operating_profile": ("Coaching", "Operating Profiles"),
+    "bench_card":                ("Coaching", "Operating Profiles"),
+    "bias_controlled_eval":      ("Competitive Intelligence", "Recruiting"),
+    "agent_projection":          ("Player Analytics", "Premium Reports"),
 }
 
 
@@ -2418,6 +2430,21 @@ def seed_new_templates():
         ("Elite Player Profile", "elite_profile",
          "Player Analytics", "Premium Reports",
          "Gold-standard 16-section profile with CEI Composite Score, CORSI/possession model, xG analysis, Coach Lens deployment sheet, development action plans, and season trend analysis. Pro tier and above."),
+        ("Forward Operating Profile", "forward_operating_profile",
+         "Coaching", "Operating Profiles",
+         "Coach-facing deployment document for forwards. 13-section real-time operational tool with Trust Tier assignment, tool grades, failure modes, minute ceilings, game-state deployment, and overplay warnings."),
+        ("Defenseman Operating Profile", "defense_operating_profile",
+         "Coaching", "Operating Profiles",
+         "Coach-facing deployment document for defensemen. D-specific metrics including gap control, box-out positioning, breakout touch points, partner compatibility, and shot-blocking load."),
+        ("Bench Card", "bench_card",
+         "Coaching", "Operating Profiles",
+         "Condensed one-page deployment reference designed to be printed and laminated. Trust tier, USE WHEN/AVOID WHEN decisions, minute ceiling, failure signals, and series phasing."),
+        ("Bias-Controlled Evaluation", "bias_controlled_eval",
+         "Competitive Intelligence", "Recruiting",
+         "External recruiting asset for CHL/NCAA/USHL staff. Conservative, credible, data-grounded evaluation with 4 bias controls, A/B/C/D skill grading, translation analysis, and mandatory bias check."),
+        ("Agent Projection Report", "agent_projection",
+         "Player Analytics", "Premium Reports",
+         "Premium pathway planning report for agents, advisors, and families. Scalability analysis, advancement triggers, OHL/CHL trajectory model, team fit rankings, and SIGN/PASS/WATCHLIST decision."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -10002,7 +10029,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -11828,7 +11855,16 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
 
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
-            max_tokens = 10000 if (drill_list or request.report_type == "elite_profile") else 8000
+            # Per-report-type token limits
+            _type_tokens = {
+                "elite_profile": 10000,
+                "bias_controlled_eval": 8000,
+                "agent_projection": 8000,
+                "forward_operating_profile": 6000,
+                "defense_operating_profile": 6000,
+                "bench_card": 2000,
+            }
+            max_tokens = _type_tokens.get(request.report_type, 10000 if drill_list else 8000)
             message = client.messages.create(
                 model=llm_model,
                 max_tokens=max_tokens,
@@ -17213,7 +17249,15 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
 
         user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
-        _bg_max_tokens = 10000 if report_type == "elite_profile" else 8000
+        _bg_type_tokens = {
+            "elite_profile": 10000,
+            "bias_controlled_eval": 8000,
+            "agent_projection": 8000,
+            "forward_operating_profile": 6000,
+            "defense_operating_profile": 6000,
+            "bench_card": 2000,
+        }
+        _bg_max_tokens = _bg_type_tokens.get(report_type, 8000)
         response = client.messages.create(
             model=llm_model,
             max_tokens=_bg_max_tokens,

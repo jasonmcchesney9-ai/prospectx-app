@@ -1243,6 +1243,20 @@ def build_report_system_prompt(
     elif report_type == "family_card":
         # Parent-facing action plans (plain language, no metrics)
         parts.append(PARENT_ACTION_PLANS)
+    # Addendum 2 — Operating Profiles (include Trust Tier System)
+    elif report_type == "forward_operating_profile":
+        parts.append(TRUST_TIER_SYSTEM)
+        parts.append(FORWARD_OPERATING_PROFILE)
+    elif report_type == "defense_operating_profile":
+        parts.append(TRUST_TIER_SYSTEM)
+        parts.append(DEFENSE_OPERATING_PROFILE)
+    elif report_type == "bench_card":
+        parts.append(TRUST_TIER_SYSTEM)
+        parts.append(BENCH_CARD)
+    elif report_type == "bias_controlled_eval":
+        parts.append(BIAS_CONTROLLED_EVAL)
+    elif report_type == "agent_projection":
+        parts.append(AGENT_PROJECTION)
 
     return "\n\n".join(parts)
 
@@ -1308,5 +1322,19 @@ def build_system_prompt(
         parts.append(DEVELOPMENT_ACTION_PLANS)
     elif report_type == "family_card":
         parts.append(PARENT_ACTION_PLANS)
+    # Addendum 2 — Operating Profiles (include Trust Tier System)
+    elif report_type == "forward_operating_profile":
+        parts.append(TRUST_TIER_SYSTEM)
+        parts.append(FORWARD_OPERATING_PROFILE)
+    elif report_type == "defense_operating_profile":
+        parts.append(TRUST_TIER_SYSTEM)
+        parts.append(DEFENSE_OPERATING_PROFILE)
+    elif report_type == "bench_card":
+        parts.append(TRUST_TIER_SYSTEM)
+        parts.append(BENCH_CARD)
+    elif report_type == "bias_controlled_eval":
+        parts.append(BIAS_CONTROLLED_EVAL)
+    elif report_type == "agent_projection":
+        parts.append(AGENT_PROJECTION)
 
     return "\n\n".join(parts)
