@@ -434,6 +434,8 @@ MODE_TEMPLATE_WIRING = {
     "agent_projection":          {"primary": "agent",   "secondary": "analyst"},
     # Addendum 5 — In-Season Projections
     "in_season_projections":     {"primary": "analyst", "secondary": "coach"},
+    # Addendum 4 — Playoff Series Prep
+    "playoff_series_prep":       {"primary": "coach",   "secondary": "gm"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -473,8 +475,11 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "WHAT_THIS_MEANS_FOR", "IDENTITY_TRACKING_METRICS", "REVISION_HISTORY",
     ],
     "opponent_gameplan": [
-        "OPPONENT_OVERVIEW", "KEY_MATCHUPS", "FORECHECK_PLAN",
-        "DEFENSIVE_KEYS", "SPECIAL_TEAMS_PREP", "LINE_MATCHING", "GAME_KEYS",
+        "DATA_COVERAGE_AND_CONFIDENCE", "OPPONENT_IDENTITY",
+        "HOME_TEAM_IDENTITY_TONIGHT", "PLAYER_ARCHETYPES",
+        "TACTICAL_BREAKDOWN", "SPECIAL_TEAMS_AND_GOALTENDING",
+        "LINE_ROLES_AND_MATCHUPS", "PERIOD_PLAN",
+        "GAME_STATE_TOI_TARGETS", "WIN_CONDITIONS", "BENCH_CUES",
     ],
     "agent_pack": [
         "PLAYER_PROFILE", "STATISTICAL_CASE", "MARKET_POSITION",
@@ -573,6 +578,15 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "DEVELOPMENT_MILESTONE_TRACKING", "XG_REALITY_CHECK",
         "ROLE_AND_DEPLOYMENT_TRENDS", "ADVANCEMENT_READINESS_UPDATE",
         "NEXT_10_GAMES_PROJECTION",
+    ],
+    # Addendum 4
+    "playoff_series_prep": [
+        "DATA_COVERAGE_AND_SERIES_CONFIDENCE", "SERIES_IDENTITY_AND_THESIS",
+        "CORE_SERIES_PRINCIPLES", "MATCHUP_AND_TOI_STRATEGY",
+        "GAME_1_PLAN", "GAMES_2_7_ADJUSTMENT_GRID",
+        "SERIES_ADJUSTMENT_MATRIX", "FATIGUE_AND_OVERLOAD_MONITORING",
+        "OPPONENT_ADJUSTMENT_EXPECTATIONS", "SERIES_WIN_CONDITIONS",
+        "SERIES_STAFF_CUES",
     ],
 }
 
@@ -1319,7 +1333,225 @@ Prioritize depth in sections 2, 3, 7.
 '''
 
 # ─────────────────────────────────────────────────────────
-# L) CONVERSATION_RULES — Bench Talk memory and context
+# L-1) OPPONENT_GAME_PLAN_V1 — Preserved original 7-section format
+# ─────────────────────────────────────────────────────────
+OPPONENT_GAME_PLAN_V1 = '''
+OPPONENT GAME PLAN — ORIGINAL FORMAT (V1)
+==========================================
+Original 7-section format preserved for reference.
+Sections: OPPONENT_OVERVIEW, KEY_MATCHUPS, FORECHECK_PLAN,
+DEFENSIVE_KEYS, SPECIAL_TEAMS_PREP, LINE_MATCHING, GAME_KEYS.
+Superseded by OPPONENT_GAME_PLAN_V2 (Addendum 4).
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-2) OPPONENT_GAME_PLAN_V2 — 11-section staff-grade template
+# ─────────────────────────────────────────────────────────
+OPPONENT_GAME_PLAN_V2 = '''
+OPPONENT GAME PLAN — STAFF TEMPLATE v2
+========================================
+Audience: coach_gm (staff-only). Do not soften language.
+Purpose: Pre-game tactical brief. Every section must be immediately usable.
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding
+before any bullets, tables, or tactical details.
+
+REQUIRED HEADER (from Global Context Schema):
+Level: [level] | Data Depth: [data_depth] | Audience: coach_gm
+Home Team: [home_team] | Opponent: [opponent]
+Game Context: [regular season / playoff / must-win / back-to-back]
+
+SECTION 1 — DATA COVERAGE & CONFIDENCE:
+State explicitly: games covered, date range, sources used.
+State what is missing or unknown.
+Assign confidence: Low / Medium / High with one-line justification.
+NEVER present thin data as confident analysis.
+
+SECTION 2 — OPPONENT IDENTITY:
+Core identity in 1-2 sentences (what they are built to do).
+How they actually win: minutes usage, game script, special teams reliance.
+Mis-scout traps: what they are NOT — prevents reactive adjustments to
+tendencies that don't exist.
+Where they crack: primary and secondary vulnerabilities.
+
+SECTION 3 — HOME TEAM IDENTITY TONIGHT:
+Who we are tonight (not aspirational — actual).
+Strengths to lean on. Weaknesses to manage around.
+One-line identity: 'We are a _____ team tonight.'
+
+SECTION 4 — PLAYER ARCHETYPES:
+Group by function BEFORE naming individuals:
+Trust Drivers: players opponent leans on, high-minutes profile
+Structured Scorers: how they score inside the system
+Functional Depth: role players, shift pattern, what they provide
+Then name primary threats with specific neutralization strategy.
+
+SECTION 5 — TACTICAL BREAKDOWN:
+Forecheck: primary structure, pressure triggers, recovery patterns.
+Neutral Zone: trap vs aggressive, how they transition.
+Defensive Zone: structure, coverage rules, where they cheat.
+Offensive Zone: entries, cycle vs direct, net-front presence.
+For each: 'Attack vector' — how we exploit it.
+
+SECTION 6 — SPECIAL TEAMS & GOALTENDING:
+PP structure, formation, one-timer threats, entry tendencies.
+PK structure, pressure points, short-handed threat level.
+Goaltender: glove/blocker preference, movement patterns,
+rebound control, mental state (confidence/recent struggles).
+
+SECTION 7 — LINE ROLES & MATCHUPS:
+For each home team line and D pair, generate:
+Role Tonight: one-line identity
+Likely Opponent Matchup: which opponent group they face
+Why This Matchup Works: 2-3 specific bullets
+Risks: 1-2 bullets (what happens if we misuse this line)
+Instructions: 3-5 specific execution bullets
+Success Metrics: measurable outcome for this line tonight
+
+SECTION 8 — PERIOD PLAN:
+Each period gets a label (e.g., 'Establish Structure', 'Tilt the Ice').
+Third period MUST include game-state branching:
+If Tied: [deployment, who doubles, who sits]
+If Leading: [which lines go, what we forbid]
+If Trailing: [pace levers, risk acceptance, activation rules]
+
+SECTION 9 — GAME-STATE TOI TARGETS:
+TOI allocations that shift based on score:
+Tied: base deployment
+Leading by 1: [adjustments]
+Leading by 2+: [adjustments]
+Trailing by 1: [adjustments]
+Trailing by 2+: [adjustments]
+
+SECTION 10 — WIN CONDITIONS:
+Exactly 3 specific, measurable conditions.
+Not 'play well defensively' but 'hold opponent to fewer than
+8 high-danger chances.' Trackable in real time from the bench.
+
+SECTION 11 — BENCH CUES:
+What to watch for during the game that signals adjustment needed.
+Format: 'If you see [X], consider [Y].'
+Keep to 4-6 cues maximum. Prioritize by likelihood.
+
+LEVEL ADAPTATION:
+U16/basic: Use usage tiers (heavy/moderate/light) instead of exact TOI minutes.
+           Simplify tactical terminology. Omit advanced metrics.
+Junior/advanced: Full TOI targets, CORSI context, micro-stat references.
+NHL/advanced: Peer comparisons, shift analytics, detailed zone tracking.
+
+Generate all 11 sections in order.
+Max tokens: 8000.
+Prioritize depth in sections 2, 4, 7, 8, 10.
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-3) PLAYOFF_SERIES_PREP — 11-section war room template
+# ─────────────────────────────────────────────────────────
+PLAYOFF_SERIES_PREP = '''
+PLAYOFF SERIES PREP — STAFF TEMPLATE
+======================================
+Audience: coach_gm (staff-only). This is the war room document.
+Purpose: Series-level strategy, game-by-game adjustment grid,
+fatigue management, pre-built counters to opponent adjustments.
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding
+before any bullets, tables, or details.
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth] | Audience: coach_gm
+Home Team: [home_team] | Opponent: [opponent]
+Series Format: [Best-of-3 / 5 / 7]
+Series Context: [Round, seedings, rivalry, travel notes]
+
+SECTION 1 — DATA COVERAGE & SERIES CONFIDENCE:
+Separate knowns from unknowns explicitly.
+Unknowns include: injuries, call-ups, young player volatility,
+goalie stability, officiating tendencies.
+Rate confidence Low/Medium/High with justification.
+
+SECTION 2 — SERIES IDENTITY & THESIS:
+The thesis is the series in one sentence.
+Example: 'They win when games stay slow and benches stay even;
+we win when pace comes in layers and leverage beats fairness.'
+Every deployment decision in the series must trace back to this thesis.
+
+SECTION 3 — CORE SERIES PRINCIPLES:
+These do not change across the series unless opponent forces
+a fundamental adjustment. State them as rules, not suggestions.
+Include series risk flags: how we lose if we ignore these.
+
+SECTION 4 — MATCHUP & TOI STRATEGY:
+Primary matchups for each line pair.
+TOI bands per line: target range, ceiling, floor.
+Who we shelter, who we expose, who gets the tough minutes.
+Special teams deployment priorities.
+
+SECTION 5 — GAME 1 PLAN:
+This is the specific plan for opening the series.
+Include: starting lineup priorities, opening period approach,
+how we establish tempo, what we want to learn in Game 1.
+Game 1 is information-gathering — state what we're testing.
+
+SECTION 6 — GAMES 2-7 ADJUSTMENT GRID:
+For each game, generate three branches:
+LEADING: How we manage risk and when we reveal new looks
+TIED: Aggressive vs conservative posture and matchup priorities
+TRAILING: What changes first — matchups, forecheck, NZ, PP/PK, personnel
+Keep each branch to 2-3 bullets. Not full rewrites each game.
+
+SECTION 7 — SERIES ADJUSTMENT MATRIX:
+Format for each domain:
+'We start with X; if they do Y, we move to Z.'
+Cover: Forecheck, Neutral Zone, Defensive Zone, Offensive Zone,
+Power Play (primary + alternate), Penalty Kill (base + pressure trigger)
+
+SECTION 8 — FATIGUE & OVERLOAD MONITORING:
+Series fatigue is cumulative. Games 4-7 are where depth advantages
+show and top-heavy teams break. Track:
+- Average shift length trend (creeping up = fatigue signal)
+- TOI above ceiling for 3+ consecutive games = red flag
+- Visible cues: late gap closures, delayed backcheck, breakout errors
+State planned responses: minute redistribution, matchup adjustments,
+rest planning (if level and schedule allow).
+
+SECTION 9 — OPPONENT ADJUSTMENT EXPECTATIONS:
+Pre-build responses before the series starts.
+Do not generate reactive guesses mid-series.
+Think: what will they change after a loss? After a win?
+What can their coaching staff realistically adjust in 24-48 hours?
+
+SECTION 10 — SERIES WIN CONDITIONS:
+3-5 measurable conditions that predict series victory.
+These should be trackable game-to-game.
+Example: 'Win the special teams battle in 4+ games.'
+Example: 'Hold their top line to under 2 points/game.'
+
+SECTION 11 — SERIES STAFF CUES:
+What coaching staff should watch for across the series.
+Format: 'If [pattern emerges], adjust [specific deployment].'
+Include: fatigue signals, momentum shifts, goaltender reads,
+opponent pattern recognition.
+
+LEVEL ADAPTATION:
+U16/basic: Simplified TOI tiers, no advanced tracking references,
+           focus on line roles and key matchups only.
+U18/intermediate: Add FO% tracking, possession context, ST grades.
+Junior/advanced: Full TOI bands, CORSI context, micro-stat references.
+Pro/NHL: Complete analytics suite, contract/depth implications.
+
+LIVING DOCUMENT NOTE:
+This report should be regenerated after each game with actual results
+and adjustments logged. Version and date each regeneration.
+
+Generate all 11 sections in order.
+Max tokens: 10000. This is the longest report in the system.
+Prioritize depth in sections 2, 3, 6, 7, 9.
+'''
+
+# ─────────────────────────────────────────────────────────
+# M) CONVERSATION_RULES — Bench Talk memory and context
 # ─────────────────────────────────────────────────────────
 CONVERSATION_RULES = """═══ CONVERSATION MEMORY ═══
 When operating in conversation mode (Bench Talk):
