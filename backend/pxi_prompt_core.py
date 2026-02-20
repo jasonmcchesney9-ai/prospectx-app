@@ -1480,6 +1480,7 @@ def build_report_system_prompt(
     level: Optional[str] = None,
     data_depth: Optional[str] = None,
     audience: Optional[str] = None,
+    perspective: Optional[str] = None,
 ) -> str:
     """Assemble a report system prompt in the spec-required injection order.
 
@@ -1493,16 +1494,18 @@ def build_report_system_prompt(
     7. compliance disclaimer (if mode requires it)
     8. (optional) report-type-specific constants (Addenda 1+2)
     """
-    # Build context header with resolved values (Addendum 3)
+    # Build context header with resolved values (Addendum 3 + 5)
     resolved_level = level or "Junior"
     resolved_depth = data_depth or "basic"
     resolved_audience = audience or "coach_gm"
+    resolved_perspective = perspective or "internal"
 
     context_header = GLOBAL_CONTEXT_SCHEMA + f"""
 RESOLVED CONTEXT FOR THIS REPORT:
 Level: {resolved_level}
 Data Depth: {resolved_depth}
 Audience: {resolved_audience}
+Perspective: {resolved_perspective}
 """
 
     parts = [context_header, IMMUTABLE_GUARDRAILS]
@@ -1553,6 +1556,11 @@ Audience: {resolved_audience}
         parts.append(BIAS_CONTROLLED_EVAL)
     elif report_type == "agent_projection":
         parts.append(AGENT_PROJECTION)
+    # Addendum 5 — Team Identity V2 + In-Season Projections
+    elif report_type == "team_identity":
+        parts.append(TEAM_IDENTITY_V2)
+    elif report_type == "in_season_projections":
+        parts.append(IN_SEASON_PROJECTIONS)
 
     return "\n\n".join(parts)
 
@@ -1568,6 +1576,7 @@ def build_system_prompt(
     level: Optional[str] = None,
     data_depth: Optional[str] = None,
     audience: Optional[str] = None,
+    perspective: Optional[str] = None,
 ) -> str:
     """Assemble a general-purpose system prompt for Bench Talk and non-report use.
 
@@ -1583,16 +1592,18 @@ def build_system_prompt(
     9. (optional) COMPLIANCE_DISCLAIMERS[mode] — if mode has compliance needs
     10. (optional) Action plan constants — if report_type matches
     """
-    # Build context header with resolved values (Addendum 3)
+    # Build context header with resolved values (Addendum 3 + 5)
     resolved_level = level or "Junior"
     resolved_depth = data_depth or "basic"
     resolved_audience = audience or "coach_gm"
+    resolved_perspective = perspective or "internal"
 
     context_header = GLOBAL_CONTEXT_SCHEMA + f"""
 RESOLVED CONTEXT FOR THIS REPORT:
 Level: {resolved_level}
 Data Depth: {resolved_depth}
 Audience: {resolved_audience}
+Perspective: {resolved_perspective}
 """
 
     parts = [context_header, IMMUTABLE_GUARDRAILS]
@@ -1648,5 +1659,10 @@ Audience: {resolved_audience}
         parts.append(BIAS_CONTROLLED_EVAL)
     elif report_type == "agent_projection":
         parts.append(AGENT_PROJECTION)
+    # Addendum 5 — Team Identity V2 + In-Season Projections
+    elif report_type == "team_identity":
+        parts.append(TEAM_IDENTITY_V2)
+    elif report_type == "in_season_projections":
+        parts.append(IN_SEASON_PROJECTIONS)
 
     return "\n\n".join(parts)
