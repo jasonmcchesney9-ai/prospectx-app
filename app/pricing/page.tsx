@@ -89,6 +89,7 @@ const FEATURE_MATRIX: FeatureCategory[] = [
     name: "COMMUNICATION",
     features: [
       { label: "Bench Talk messages/day", values: { rookie: "5", parent: "20", scout: "50", pro: "Unlimited", elite: "Unlimited" } },
+      { label: "AI Custom Reports", values: { rookie: false, parent: false, scout: "10/mo", pro: "Unlimited", elite: "Unlimited+" } },
       { label: "Messaging (direct)", values: { rookie: false, parent: true, scout: true, pro: true, elite: true } },
       { label: "Parental safety controls", values: { rookie: false, parent: true, scout: "N/A", pro: "N/A", elite: "N/A" } },
     ],
@@ -493,9 +494,12 @@ export default function PricingPage() {
 
               {/* ── Feature Comparison Matrix ────────────────── */}
               <div className="max-w-7xl mx-auto mb-16">
-                <h2 className="font-oswald text-2xl font-bold text-navy text-center mb-8 uppercase tracking-wider">
+                <h2 className="font-oswald text-2xl font-bold text-navy text-center mb-3 uppercase tracking-wider">
                   Feature Comparison
                 </h2>
+                <p className="text-center text-navy/50 text-xs italic mb-8 max-w-xl mx-auto">
+                  Bench Talk is your AI coaching conversation with PXI. Ask questions, get analysis, build plans.
+                </p>
                 <div className="overflow-x-auto rounded-xl border border-border">
                   <table className="w-full text-sm min-w-[700px]">
                     <thead>
