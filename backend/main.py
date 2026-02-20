@@ -7025,6 +7025,7 @@ async def search_players_autocomplete(
            WHERE org_id = ?
              AND (is_deleted = 0 OR is_deleted IS NULL)
              AND (first_name LIKE ? OR last_name LIKE ? OR (first_name || ' ' || last_name) LIKE ?)
+           GROUP BY id
            ORDER BY last_name, first_name
            LIMIT ?""",
         (org_id, pattern, pattern, pattern, limit),
