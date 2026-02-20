@@ -603,6 +603,45 @@ function Dashboard() {
 
         {/* ── FAMILY View (Player / Parent) ─────────────────── */}
         {roleGroup === "FAMILY" && (
+          <>
+            {/* Live Scorebar */}
+            {scorebar.length > 0 && (
+              <div className="mb-4">
+                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} scorebarLeague={scorebarLeague} onLeagueChange={setScorebarLeague} />
+              </div>
+            )}
+
+            {/* Team Leaders */}
+            {!teamDataLoading && scoringLeaders.length > 0 && (
+              <DashboardCard
+                icon={<BarChart3 size={15} className="text-teal" />}
+                title={`${activeTeam?.name || "Team"} Leaders`}
+                viewAllHref={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}` : "/teams"}
+                loading={teamDataLoading}
+                empty={false}
+              >
+                <div className="space-y-1">
+                  {scoringLeaders.map((l, i) => (
+                    <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+                      <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
+                      <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
+                        {l.first_name} {l.last_name}
+                      </span>
+                      <span className="font-oswald text-muted/60 w-6 text-center">{l.gp}</span>
+                      <span className="font-oswald text-navy/80 w-14 text-right">
+                        {l.g}G-{l.a}A—<strong>{l.p}</strong>
+                      </span>
+                      <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
+                    </Link>
+                  ))}
+                  <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
+                    <span>Player</span>
+                    <span className="flex gap-3"><span>GP</span><span>G-A—P</span><span>P/G</span></span>
+                  </div>
+                </div>
+              </DashboardCard>
+            )}
+
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             {/* Left (3/5) */}
             <div className="lg:col-span-3 space-y-4">
@@ -694,11 +733,50 @@ function Dashboard() {
               </div>
             </div>
           </div>
+          </>
         )}
 
         {/* ── AGENT View ────────────────────────────────────── */}
         {roleGroup === "AGENT" && (
           <>
+            {/* Live Scorebar */}
+            {scorebar.length > 0 && (
+              <div className="mb-4">
+                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} scorebarLeague={scorebarLeague} onLeagueChange={setScorebarLeague} />
+              </div>
+            )}
+
+            {/* Team Leaders */}
+            {!teamDataLoading && scoringLeaders.length > 0 && (
+              <DashboardCard
+                icon={<BarChart3 size={15} className="text-teal" />}
+                title={`${activeTeam?.name || "Team"} Leaders`}
+                viewAllHref={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}` : "/teams"}
+                loading={teamDataLoading}
+                empty={false}
+              >
+                <div className="space-y-1">
+                  {scoringLeaders.map((l, i) => (
+                    <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+                      <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
+                      <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
+                        {l.first_name} {l.last_name}
+                      </span>
+                      <span className="font-oswald text-muted/60 w-6 text-center">{l.gp}</span>
+                      <span className="font-oswald text-navy/80 w-14 text-right">
+                        {l.g}G-{l.a}A—<strong>{l.p}</strong>
+                      </span>
+                      <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
+                    </Link>
+                  ))}
+                  <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
+                    <span>Player</span>
+                    <span className="flex gap-3"><span>GP</span><span>G-A—P</span><span>P/G</span></span>
+                  </div>
+                </div>
+              </DashboardCard>
+            )}
+
             {/* Agent Hub Banner */}
             <div className="bg-gradient-to-br from-[#475569] to-[#334155] rounded-xl p-5 mb-4 text-white">
               <div className="flex items-center gap-3 mb-3">
