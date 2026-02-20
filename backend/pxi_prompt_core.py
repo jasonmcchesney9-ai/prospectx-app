@@ -1793,6 +1793,11 @@ Perspective: {resolved_perspective}
         parts.append(TEAM_IDENTITY_V2)
     elif report_type == "in_season_projections":
         parts.append(IN_SEASON_PROJECTIONS)
+    # Addendum 4 — Opponent Game Plan V2 + Playoff Series Prep
+    elif report_type == "opponent_gameplan":
+        parts.append(OPPONENT_GAME_PLAN_V2)
+    elif report_type == "playoff_series_prep":
+        parts.append(PLAYOFF_SERIES_PREP)
 
     return "\n\n".join(parts)
 
@@ -1896,5 +1901,10 @@ Perspective: {resolved_perspective}
         parts.append(TEAM_IDENTITY_V2)
     elif report_type == "in_season_projections":
         parts.append(IN_SEASON_PROJECTIONS)
+    # Addendum 4 — Opponent Game Plan V2 + Playoff Series Prep
+    elif report_type == "opponent_gameplan":
+        parts.append(OPPONENT_GAME_PLAN_V2)
+    elif report_type == "playoff_series_prep":
+        parts.append(PLAYOFF_SERIES_PREP)
 
     return "\n\n".join(parts)
