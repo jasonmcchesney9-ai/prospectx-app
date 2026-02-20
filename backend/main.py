@@ -87,6 +87,9 @@ from pxi_prompt_core import (
     BENCH_CARD,
     BIAS_CONTROLLED_EVAL,
     AGENT_PROJECTION,
+    TEAM_IDENTITY_V1,
+    TEAM_IDENTITY_V2,
+    IN_SEASON_PROJECTIONS,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -846,6 +849,8 @@ TEMPLATE_CATEGORIES = {
     "bench_card":                ("Coaching", "Operating Profiles"),
     "bias_controlled_eval":      ("Competitive Intelligence", "Recruiting"),
     "agent_projection":          ("Player Analytics", "Premium Reports"),
+    # Addendum 5
+    "in_season_projections":     ("Player Analytics", "Projections & Development"),
 }
 
 
@@ -2446,6 +2451,9 @@ def seed_new_templates():
         ("Agent Projection Report", "agent_projection",
          "Player Analytics", "Premium Reports",
          "Premium pathway planning report for agents, advisors, and families. Scalability analysis, advancement triggers, OHL/CHL trajectory model, team fit rankings, and SIGN/PASS/WATCHLIST decision."),
+        ("In-Season Projections", "in_season_projections",
+         "Player Analytics", "Projections & Development",
+         "Mid-season trajectory check with pace-to-finish projections, trend classification, milestone tracking, advancement readiness, and next 10 games outlook."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -5223,6 +5231,7 @@ class ReportGenerateRequest(BaseModel):
     level: Optional[str] = "Junior"       # U14/U16/U18/Junior/Pro/NHL
     data_depth: Optional[str] = "basic"   # basic/intermediate/advanced
     audience: Optional[str] = "coach_gm"  # coach_gm/scout/agent/parent/player
+    perspective: Optional[str] = "internal"  # internal/external/both
 
 class ReportResponse(BaseModel):
     model_config = {"extra": "ignore"}
@@ -10033,7 +10042,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -11823,6 +11832,7 @@ Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, 
                 level=request.level,
                 data_depth=request.data_depth,
                 audience=request.audience,
+                perspective=request.perspective,
             )
 
             # ── Report-type-specific prompt enhancements ──
@@ -11865,10 +11875,12 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             # Per-report-type token limits
             _type_tokens = {
                 "elite_profile": 10000,
+                "team_identity": 10000,
                 "bias_controlled_eval": 8000,
                 "agent_projection": 8000,
                 "forward_operating_profile": 6000,
                 "defense_operating_profile": 6000,
+                "in_season_projections": 6000,
                 "bench_card": 2000,
             }
             max_tokens = _type_tokens.get(request.report_type, 10000 if drill_list else 8000)
@@ -17060,7 +17072,8 @@ def _pt_start_report(params: dict, org_id: str, user_id: str) -> tuple[dict, dic
 
 
 def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, player_id: str, report_type: str, title: str,
-                                    level: str = "Junior", data_depth: str = "basic", audience: str = "coach_gm"):
+                                    level: str = "Junior", data_depth: str = "basic", audience: str = "coach_gm",
+                                    perspective: str = "internal"):
     """Background thread: generate a report using Claude API.
     Uses the same logic as the /reports/generate endpoint."""
     conn = get_db()
@@ -17240,6 +17253,7 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
             level=level,
             data_depth=data_depth,
             audience=audience,
+            perspective=perspective,
         )
 
         # ── Build input data ──
@@ -17262,10 +17276,12 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
 
         _bg_type_tokens = {
             "elite_profile": 10000,
+            "team_identity": 10000,
             "bias_controlled_eval": 8000,
             "agent_projection": 8000,
             "forward_operating_profile": 6000,
             "defense_operating_profile": 6000,
+            "in_season_projections": 6000,
             "bench_card": 2000,
         }
         _bg_max_tokens = _bg_type_tokens.get(report_type, 8000)
