@@ -2026,6 +2026,13 @@ Perspective: {resolved_perspective}
         parts.append(OPPONENT_GAME_PLAN_V2)
     elif report_type == "playoff_series_prep":
         parts.append(PLAYOFF_SERIES_PREP)
+    # Addendum 6 — Full-Team Coaching + Personnel Suggestion + Role Adjustment
+    elif report_type == "full_team_coaching":
+        parts.append(FULL_TEAM_COACHING)
+    elif report_type == "personnel_suggestion":
+        parts.append(PERSONNEL_SUGGESTION)
+    elif report_type == "role_adjustment":
+        parts.append(ROLE_ADJUSTMENT)
 
     return "\n\n".join(parts)
 
@@ -2134,5 +2141,12 @@ Perspective: {resolved_perspective}
         parts.append(OPPONENT_GAME_PLAN_V2)
     elif report_type == "playoff_series_prep":
         parts.append(PLAYOFF_SERIES_PREP)
+    # Addendum 6 — Full-Team Coaching + Personnel Suggestion + Role Adjustment
+    elif report_type == "full_team_coaching":
+        parts.append(FULL_TEAM_COACHING)
+    elif report_type == "personnel_suggestion":
+        parts.append(PERSONNEL_SUGGESTION)
+    elif report_type == "role_adjustment":
+        parts.append(ROLE_ADJUSTMENT)
 
     return "\n\n".join(parts)
