@@ -143,7 +143,7 @@ export default function LeagueHubPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold font-oswald text-navy">League Hub</h1>
-              <p className="text-sm text-muted">Live standings, stats, and scores from HockeyTech</p>
+              <p className="text-sm text-muted">Live standings, stats, and scores from Live Stats & Data</p>
             </div>
           </div>
 
@@ -181,7 +181,7 @@ export default function LeagueHubPage() {
           <div>
             <p className="text-xl font-oswald font-bold">{leagueInfo.full}</p>
             <p className="text-white/60 text-sm mt-0.5">
-              {standings.length} teams &middot; Live data from HockeyTech
+              {standings.length} teams &middot; Live data from Live Stats & Data
             </p>
           </div>
           <div className="text-right text-sm text-white/40">

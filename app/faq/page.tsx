@@ -27,15 +27,15 @@ const FAQ_DATA: FAQCategory[] = [
       },
       {
         q: "Is there a free tier?",
-        a: "Yes. The Rookie tier is free forever — browse player profiles, view HockeyTech live stats, use basic search, and get 5 Bench Talk (PXI) messages per day. No credit card required.",
+        a: "Yes. The Rookie tier is free forever — browse player profiles, view live stats, use basic search, and get 5 Bench Talk (PXI) messages per day. No credit card required.",
       },
       {
-        q: "Do I need a HockeyTech account?",
-        a: "No. ProspectX integrates with HockeyTech-connected leagues (OHL, GOJHL, OJHL, WHL, QMJHL, PWHL) directly. You can also import player data via CSV or Excel for any league.",
+        q: "Do I need a separate account for live stats?",
+        a: "No. ProspectX integrates with supported leagues (OHL, GOJHL, OJHL, WHL, QMJHL, PWHL) directly. You can also import player data via CSV or Excel for any league.",
       },
       {
         q: "What leagues does ProspectX support?",
-        a: "Any HockeyTech-connected league gets live roster sync, stat sync, game logs, standings, and scorebar data. For leagues not on HockeyTech, you can import rosters and stats via CSV/Excel upload.",
+        a: "Any supported league gets live roster sync, stat sync, game logs, standings, and scorebar data. For other leagues, you can import rosters and stats via CSV/Excel upload.",
       },
     ],
   },
@@ -123,7 +123,7 @@ const FAQ_DATA: FAQCategory[] = [
       },
       {
         q: "How does ProspectX get my child's data?",
-        a: "Player data comes from HockeyTech league sync (automatic for supported leagues) or manual entry via CSV/Excel upload. You can also create a player profile and add stats manually.",
+        a: "Player data comes from Live Stats & Data league sync (automatic for supported leagues) or manual entry via CSV/Excel upload. You can also create a player profile and add stats manually.",
       },
       {
         q: "Is messaging with scouts safe?",

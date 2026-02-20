@@ -107,7 +107,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Can ProspectX integrate with our existing tools?",
-        a: "Currently supports CSV/Excel import and XLSX analytics exports from Game Stats & Data, internal systems, and other platforms. RinkNet API connector coming in 2-3 months. Sportlogiq, HockeyTech, and custom API integrations planned for 6-12 months. Enterprise tier includes dedicated integration support.",
+        a: "Currently supports CSV/Excel import and XLSX analytics exports from Game Stats & Data, internal systems, and other platforms. RinkNet API connector coming in 2-3 months. Sportlogiq and custom API integrations planned for 6-12 months. Enterprise tier includes dedicated integration support.",
       },
     ],
   },
@@ -446,7 +446,7 @@ export default function LandingPage() {
                 <span className="text-3xl font-oswald font-bold text-white">Free</span>
               </div>
               <ul className="space-y-2">
-                {["Browse player profiles", "HockeyTech live stats", "5 Bench Talk messages/day", "Basic search"].map((item) => (
+                {["Browse player profiles", "Live Stats & Data", "5 Bench Talk messages/day", "Basic search"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-white/50">
                     <CheckCircle2 size={12} className="text-teal shrink-0" />
                     {item}
