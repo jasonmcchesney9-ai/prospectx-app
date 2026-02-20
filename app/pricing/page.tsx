@@ -127,7 +127,7 @@ const FEATURE_MATRIX: FeatureCategory[] = [
 function renderFeatureValue(val: FeatureValue) {
   if (val === true) return <Check size={16} className="text-teal mx-auto" />;
   if (val === false) return <XIcon size={14} className="text-navy/20 mx-auto" />;
-  return <span className="text-xs text-navy/70 font-medium">{val}</span>;
+  return <span className="text-xs text-navy font-medium">{val}</span>;
 }
 
 function formatLimit(value: number): string {
@@ -178,7 +178,7 @@ export default function PricingPage() {
 
   return (
     <MarketingLayout>
-      <div className="min-h-screen bg-gradient-to-b from-navy/[0.02] to-white">
+      <div className="min-h-screen bg-white">
         {/* Header */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-4">
 
@@ -305,7 +305,7 @@ export default function PricingPage() {
                           {tier.features.map((feature, i) => (
                             <div key={i} className="flex items-start gap-2 text-sm">
                               <Check size={14} className="text-teal shrink-0 mt-0.5" />
-                              <span className="text-navy/80">{feature}</span>
+                              <span className="text-navy">{feature}</span>
                             </div>
                           ))}
                         </div>
@@ -444,7 +444,7 @@ export default function PricingPage() {
                           {tier.features.map((feature, i) => (
                             <div key={i} className="flex items-start gap-2 text-sm">
                               <Check size={14} className="text-teal shrink-0 mt-0.5" />
-                              <span className="text-navy/80">{feature}</span>
+                              <span className="text-navy">{feature}</span>
                             </div>
                           ))}
                         </div>
@@ -522,7 +522,7 @@ export default function PricingPage() {
                           </tr>
                           {category.features.map((feature, fi) => (
                             <tr key={`${ci}-${fi}`} className="border-t border-navy/5 hover:bg-navy/[0.01]">
-                              <td className="p-3 text-navy/80">{feature.label}</td>
+                              <td className="p-3 text-navy">{feature.label}</td>
                               {INDIVIDUAL_KEYS.map((key) => (
                                 <td key={key} className="text-center p-3">
                                   {renderFeatureValue(feature.values[key])}
@@ -563,7 +563,7 @@ export default function PricingPage() {
               <h2 className="font-oswald text-2xl sm:text-3xl font-bold text-navy">
                 Start Free Today
               </h2>
-              <p className="text-navy/60 text-sm mt-3 max-w-lg mx-auto">
+              <p className="text-navy/80 text-sm mt-3 max-w-lg mx-auto">
                 Create a free Rookie account. No credit card required. Upgrade anytime.
               </p>
               <Link
