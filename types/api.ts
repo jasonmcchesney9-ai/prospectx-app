@@ -2210,6 +2210,44 @@ export interface AdminErrorLog {
   created_at: string;
 }
 
+// ── Superadmin Dashboard ──────────────────────────────────────
+
+export interface SuperadminOrg {
+  org_id: string;
+  name: string;
+  org_type: string | null;
+  created_at: string;
+  user_count: number;
+  highest_tier: string;
+  report_count: number;
+  users: Array<{ email: string; role: string; tier: string }>;
+}
+
+export interface SuperadminStats {
+  total_orgs: number;
+  total_users: number;
+  total_reports: number;
+  tier_breakdown: Record<string, number>;
+  monthly_revenue_estimate: number;
+  reports_this_month: number;
+  new_orgs_this_month: number;
+}
+
+export interface SuperadminUser {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  role: string;
+  hockey_role: string;
+  subscription_tier: string;
+  created_at: string;
+  org_id: string;
+  org_name: string;
+  monthly_reports_used: number;
+  monthly_bench_talks_used: number;
+}
+
 // ── Game State (Broadcast) ───────────────────────────────────
 export type GameState = "pre_game" | "live" | "intermission" | "post_game";
 

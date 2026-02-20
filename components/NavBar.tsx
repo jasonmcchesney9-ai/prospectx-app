@@ -251,7 +251,7 @@ export default function NavBar() {
   if (pathname === "/login") return null;
 
   const navConfig = getNavItems(roleGroup);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const isPreviewing = !!roleOverride;
 
   // Inject badge into agent Clients nav item
@@ -357,7 +357,7 @@ export default function NavBar() {
                 >
                   {user.subscription_tier || "Rookie"}
                 </Link>
-                {user.role === "admin" && (
+                {(user.role === "admin" || user.role === "superadmin") && (
                   <Link
                     href="/admin"
                     className={`flex items-center gap-1 text-sm transition-colors ${
@@ -368,6 +368,19 @@ export default function NavBar() {
                   >
                     <Shield size={14} />
                     Admin
+                  </Link>
+                )}
+                {user.role === "superadmin" && (
+                  <Link
+                    href="/superadmin"
+                    className={`flex items-center gap-1 text-sm transition-colors ${
+                      pathname.startsWith("/superadmin")
+                        ? "text-teal"
+                        : "text-teal/70 hover:text-teal"
+                    }`}
+                  >
+                    <Shield size={14} />
+                    Super
                   </Link>
                 )}
               </>

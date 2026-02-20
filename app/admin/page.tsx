@@ -425,7 +425,7 @@ function AdminDashboard() {
   const user = getUser();
 
   // Check admin role
-  if (user && user.role !== "admin") {
+  if (user && user.role !== "admin" && user.role !== "superadmin") {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <Shield size={48} className="text-red-400 mx-auto mb-4" />
