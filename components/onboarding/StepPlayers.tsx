@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, Users, Search, CheckCircle, Lock, UserCheck, Radio } from "lucide-react";
+import { Loader2, Users, Search, CheckCircle, Lock, UserCheck, Radio, Shield } from "lucide-react";
 import api from "@/lib/api";
 
 interface HTTeam {
