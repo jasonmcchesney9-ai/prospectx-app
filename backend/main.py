@@ -77,6 +77,9 @@ from pxi_prompt_core import (
     REQUIRED_SECTIONS_BY_TYPE,
     EVIDENCE_DISCIPLINE,
     BROADCAST_SUB_PROMPTS,
+    ELITE_PROFILE_SECTIONS,
+    DEVELOPMENT_ACTION_PLANS,
+    PARENT_ACTION_PLANS,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -829,6 +832,7 @@ TEMPLATE_CATEGORIES = {
     "league_benchmarks":   ("Competitive Intelligence", "League Benchmarks"),
     "season_projection":   ("Competitive Intelligence", "League Benchmarks"),
     "free_agent_market":   ("Competitive Intelligence", "Market & Acquisitions"),
+    "elite_profile":       ("Player Analytics", "Premium Reports"),
 }
 
 
@@ -2411,6 +2415,9 @@ def seed_new_templates():
         ("Prep/College Player Guide", "player_guide_prep_college",
          "Player Development", "Pathway Guides",
          "Comprehensive guide for players transitioning to prep school or college hockey with readiness assessment, pathway options, and family action items."),
+        ("Elite Player Profile", "elite_profile",
+         "Player Analytics", "Premium Reports",
+         "Gold-standard 16-section profile with CEI Composite Score, CORSI/possession model, xG analysis, Coach Lens deployment sheet, development action plans, and season trend analysis. Pro tier and above."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -9995,7 +10002,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -11766,7 +11773,7 @@ Include quantitative analysis where stats exist. If data is limited, note what a
 
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by the section content."""
 
-            # ── PXI Mode injection (guardrails + mode block before base prompt) ──
+            # ── PXI Mode injection (guardrails + mode block + action plans) ──
             # Fetch user hockey_role for mode resolution fallback
             _user_role_row = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
             _user_hockey_role = _user_role_row["hockey_role"] if _user_role_row and _user_role_row["hockey_role"] else "scout"
@@ -11775,8 +11782,14 @@ Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, 
                 explicit_mode=request.mode,
                 template_slug=request.report_type,
             )
-            _mode_block = PXI_MODE_BLOCKS.get(_resolved_mode, "")
-            system_prompt = PXI_CORE_GUARDRAILS + "\n\n" + _mode_block + "\n\n" + system_prompt
+            tpl_prompt = template["prompt_text"] if template else None
+            system_prompt = build_report_system_prompt(
+                mode=_resolved_mode,
+                base_prompt=system_prompt,
+                template_prompt=tpl_prompt if tpl_prompt and len(tpl_prompt) > 200 else None,
+                template_name=report_type_name,
+                report_type=request.report_type,
+            )
 
             # ── Report-type-specific prompt enhancements ──
             if request.report_type == "indices_dashboard":
@@ -11807,17 +11820,7 @@ Project this player's performance for the NEXT season (2026-27). Structure your 
 7. RECOMMENDATION — Clear actionable guidance
 Use the player's birth_year and age_group from the data. Today's date is {datetime.now().date().isoformat()}. Reference specific stats when projecting."""
 
-            # ── Append template-specific instructions from DB ──
-            tpl_prompt = template["prompt_text"] if template else None
-            if tpl_prompt:
-                # Only append if it's a rich prompt (not the old generic one-liner)
-                if len(tpl_prompt) > 200:
-                    system_prompt += f"""
-
-TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
-{tpl_prompt}
-
-Note: Follow the section structure specified in the template instructions above. Use ALL_CAPS_WITH_UNDERSCORES format for all section headers. The template instructions define WHAT to analyze and which sections to produce — the base instructions above define HOW to format, grade, and present evidence."""
+            # Note: template-specific instructions are now handled by build_report_system_prompt()
 
             # ── Append drill recommendation instructions if drills were requested ──
             if drill_prompt_addon:
@@ -11825,7 +11828,7 @@ Note: Follow the section structure specified in the template instructions above.
 
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
-            max_tokens = 10000 if drill_list else 8000
+            max_tokens = 10000 if (drill_list or request.report_type == "elite_profile") else 8000
             message = client.messages.create(
                 model=llm_model,
                 max_tokens=max_tokens,
@@ -17157,7 +17160,7 @@ def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, pl
             pass  # Table may not exist or be empty
 
         # ── Build system prompt (aligned with main report generator) ──
-        bg_system_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine. Generate a professional-grade {report_type_name} report.
+        _bg_base_prompt = f"""You are ProspectX, an elite hockey scouting intelligence engine. Generate a professional-grade {report_type_name} report.
 
 Your report must be:
 - Data-driven: Reference specific stats (GP, G, A, P, +/-, PIM, S%, etc.) when available
@@ -17181,13 +17184,16 @@ EVIDENCE DISCIPLINE:
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by content.
 Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
 
-        # Append template-specific instructions if rich prompt exists
+        # Resolve mode and build full system prompt with guardrails + action plans
+        _bg_mode = resolve_mode(template_slug=report_type)
         bg_tpl_prompt = template["prompt_text"] if template else None
-        if bg_tpl_prompt and len(bg_tpl_prompt) > 200:
-            bg_system_prompt += f"""
-
-TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
-{bg_tpl_prompt}"""
+        bg_system_prompt = build_report_system_prompt(
+            mode=_bg_mode,
+            base_prompt=_bg_base_prompt,
+            template_prompt=bg_tpl_prompt if bg_tpl_prompt and len(bg_tpl_prompt) > 200 else None,
+            template_name=report_type_name,
+            report_type=report_type,
+        )
 
         # ── Build input data ──
         input_data = {
@@ -17207,9 +17213,10 @@ TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
 
         user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
+        _bg_max_tokens = 10000 if report_type == "elite_profile" else 8000
         response = client.messages.create(
             model=llm_model,
-            max_tokens=8000,
+            max_tokens=_bg_max_tokens,
             system=bg_system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -17219,7 +17226,7 @@ TEMPLATE-SPECIFIC INSTRUCTIONS FOR {report_type_name.upper()}:
         generation_time = int((time.perf_counter() - start_time) * 1000)
 
         # ── Validate and optionally repair the report output (mode-aware) ──
-        _bg_mode = resolve_mode(template_slug=report_type)
+        # _bg_mode already resolved above for build_report_system_prompt()
         output_text, validation_warnings = _validate_and_repair_report(
             output_text, report_type, client, llm_model, mode=_bg_mode
         )
