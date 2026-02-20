@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -643,6 +644,26 @@ def get_db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+@contextmanager
+def safe_db():
+    """Context manager for safe database access with auto-rollback and cleanup.
+
+    Usage:
+        with safe_db() as conn:
+            conn.execute("INSERT INTO ...")
+            # auto-commits on success, auto-rollbacks on error, always closes
+    """
+    conn = get_db()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ── League Tier Classification ──────────────────────────────────────────────
@@ -2024,9 +2045,9 @@ def init_db():
         ts = now_iso()[:19].replace(":", "-")
         backup_name = f"prospectx_{ts}.db"
         shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
-        # Keep last 5 backups only
+        # Keep last 20 backups
         backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
-        for old in backups[:-5]:
+        for old in backups[:-20]:
             os.remove(old)
         logger.info("Startup backup created: %s", backup_name)
     except Exception as e:
@@ -4518,6 +4539,30 @@ seed_drills_v2()
 seed_drills_pxi()
 generate_missing_diagrams()
 seed_glossary_v2()
+
+
+# ── Auto-backup thread ──────────────────────────────────────────────
+def _auto_backup_loop():
+    """Background thread: backup database every 6 hours."""
+    while True:
+        time.sleep(6 * 3600)  # 6 hours
+        try:
+            backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            ts = now_iso()[:19].replace(":", "-")
+            backup_name = f"prospectx_auto_{ts}.db"
+            shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
+            # Keep last 20 backups total
+            all_backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
+            for old in all_backups[:-20]:
+                os.remove(old)
+            logger.info("Auto backup created: %s", backup_name)
+        except Exception as e:
+            logger.warning("Auto backup failed: %s", e)
+
+_backup_thread = threading.Thread(target=_auto_backup_loop, daemon=True)
+_backup_thread.start()
+logger.info("Auto-backup thread started (every 6 hours)")
 
 
 # ============================================================
@@ -12691,20 +12736,6 @@ async def preview_import(
 async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: dict = Depends(verify_token)):
     """Execute the import — create new players, handle duplicate resolutions."""
     org_id = token_data["org_id"]
-    conn = get_db()
-
-    job = conn.execute("SELECT * FROM import_jobs WHERE id = ? AND org_id = ?", (job_id, org_id)).fetchone()
-    if not job:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Import job not found")
-
-    job = dict(job)
-    all_rows = json.loads(job["preview_data"])
-    duplicates = json.loads(job["duplicate_data"])
-    dup_indices = {d["row_index"] for d in duplicates}
-
-    # Build resolution map from admin decisions
-    resolution_map = {r.row_index: r.action for r in body.resolutions}
 
     created = 0
     merged = 0
@@ -12717,97 +12748,109 @@ async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: di
         except (ValueError, TypeError):
             return None
 
-    for rd in all_rows:
-        idx = rd["row_index"]
-        now = now_iso()
+    with safe_db() as conn:
+        job = conn.execute("SELECT * FROM import_jobs WHERE id = ? AND org_id = ?", (job_id, org_id)).fetchone()
+        if not job:
+            raise HTTPException(status_code=404, detail="Import job not found")
 
-        if idx in dup_indices:
-            dup = next(d for d in duplicates if d["row_index"] == idx)
-            action = resolution_map.get(idx, "skip")
+        job = dict(job)
+        all_rows = json.loads(job["preview_data"])
+        duplicates = json.loads(job["duplicate_data"])
+        dup_indices = {d["row_index"] for d in duplicates}
 
-            if action == "skip":
-                skipped += 1
-                continue
-            elif action == "create_new":
-                # Create as new player even though duplicate detected
+        # Build resolution map from admin decisions
+        resolution_map = {r.row_index: r.action for r in body.resolutions}
+
+        for rd in all_rows:
+            idx = rd["row_index"]
+            now = now_iso()
+
+            if idx in dup_indices:
+                dup = next(d for d in duplicates if d["row_index"] == idx)
+                action = resolution_map.get(idx, "skip")
+
+                if action == "skip":
+                    skipped += 1
+                    continue
+                elif action == "create_new":
+                    # Create as new player even though duplicate detected
+                    player_id = gen_id()
+                    conn.execute("""
+                        INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots,
+                                            height_cm, weight_kg, current_team, current_league, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (player_id, org_id, rd["first_name"], rd["last_name"], rd.get("dob"),
+                          rd["position"], rd.get("shoots"), safe_int(rd.get("height_cm")),
+                          safe_int(rd.get("weight_kg")), rd.get("current_team"),
+                          rd.get("current_league"), now, now))
+                    created += 1
+
+                    # Import stats if present
+                    if rd.get("gp"):
+                        g = safe_int(rd.get("g")) or 0
+                        a = safe_int(rd.get("a")) or 0
+                        p = safe_int(rd.get("p")) or (g + a)
+                        conn.execute("""
+                            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
+                            VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
+                        """, (gen_id(), player_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
+                              g, a, p, safe_int(rd.get("plus_minus")) or 0,
+                              safe_int(rd.get("pim")) or 0, now))
+
+                elif action == "merge":
+                    # Update existing player's stats — delete old season stats first to prevent doubling
+                    existing_id = dup["existing_id"]
+                    if rd.get("gp"):
+                        season_val = rd.get("season", "")
+                        g = safe_int(rd.get("g")) or 0
+                        a = safe_int(rd.get("a")) or 0
+                        p = safe_int(rd.get("p")) or (g + a)
+                        # Remove existing season stats for this player/season to prevent duplicates
+                        conn.execute(
+                            "DELETE FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source IS NULL",
+                            (existing_id, season_val)
+                        )
+                        conn.execute("""
+                            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
+                            VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
+                        """, (gen_id(), existing_id, season_val, safe_int(rd.get("gp")) or 0,
+                              g, a, p, safe_int(rd.get("plus_minus")) or 0,
+                              safe_int(rd.get("pim")) or 0, now))
+                    merged += 1
+            else:
+                # New player — create
                 player_id = gen_id()
-                conn.execute("""
-                    INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots,
-                                        height_cm, weight_kg, current_team, current_league, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (player_id, org_id, rd["first_name"], rd["last_name"], rd.get("dob"),
-                      rd["position"], rd.get("shoots"), safe_int(rd.get("height_cm")),
-                      safe_int(rd.get("weight_kg")), rd.get("current_team"),
-                      rd.get("current_league"), now, now))
-                created += 1
-
-                # Import stats if present
-                if rd.get("gp"):
-                    g = safe_int(rd.get("g")) or 0
-                    a = safe_int(rd.get("a")) or 0
-                    p = safe_int(rd.get("p")) or (g + a)
+                try:
                     conn.execute("""
-                        INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
-                        VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                    """, (gen_id(), player_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
-                          g, a, p, safe_int(rd.get("plus_minus")) or 0,
-                          safe_int(rd.get("pim")) or 0, now))
+                        INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots,
+                                            height_cm, weight_kg, current_team, current_league, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (player_id, org_id, rd["first_name"], rd["last_name"], rd.get("dob"),
+                          rd["position"], rd.get("shoots"), safe_int(rd.get("height_cm")),
+                          safe_int(rd.get("weight_kg")), rd.get("current_team"),
+                          rd.get("current_league"), now, now))
+                    created += 1
 
-            elif action == "merge":
-                # Update existing player's stats — delete old season stats first to prevent doubling
-                existing_id = dup["existing_id"]
-                if rd.get("gp"):
-                    season_val = rd.get("season", "")
-                    g = safe_int(rd.get("g")) or 0
-                    a = safe_int(rd.get("a")) or 0
-                    p = safe_int(rd.get("p")) or (g + a)
-                    # Remove existing season stats for this player/season to prevent duplicates
-                    conn.execute(
-                        "DELETE FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source IS NULL",
-                        (existing_id, season_val)
-                    )
-                    conn.execute("""
-                        INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
-                        VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                    """, (gen_id(), existing_id, season_val, safe_int(rd.get("gp")) or 0,
-                          g, a, p, safe_int(rd.get("plus_minus")) or 0,
-                          safe_int(rd.get("pim")) or 0, now))
-                merged += 1
-        else:
-            # New player — create
-            player_id = gen_id()
-            try:
-                conn.execute("""
-                    INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots,
-                                        height_cm, weight_kg, current_team, current_league, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (player_id, org_id, rd["first_name"], rd["last_name"], rd.get("dob"),
-                      rd["position"], rd.get("shoots"), safe_int(rd.get("height_cm")),
-                      safe_int(rd.get("weight_kg")), rd.get("current_team"),
-                      rd.get("current_league"), now, now))
-                created += 1
+                    # Import stats if present
+                    if rd.get("gp"):
+                        g = safe_int(rd.get("g")) or 0
+                        a = safe_int(rd.get("a")) or 0
+                        p = safe_int(rd.get("p")) or (g + a)
+                        conn.execute("""
+                            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
+                            VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
+                        """, (gen_id(), player_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
+                              g, a, p, safe_int(rd.get("plus_minus")) or 0,
+                              safe_int(rd.get("pim")) or 0, now))
+                except Exception as e:
+                    errors.append(f"Row {idx+1}: {str(e)}")
 
-                # Import stats if present
-                if rd.get("gp"):
-                    g = safe_int(rd.get("g")) or 0
-                    a = safe_int(rd.get("a")) or 0
-                    p = safe_int(rd.get("p")) or (g + a)
-                    conn.execute("""
-                        INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
-                        VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                    """, (gen_id(), player_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
-                          g, a, p, safe_int(rd.get("plus_minus")) or 0,
-                          safe_int(rd.get("pim")) or 0, now))
-            except Exception as e:
-                errors.append(f"Row {idx+1}: {str(e)}")
-
-    # Update job status
-    conn.execute("""
-        UPDATE import_jobs SET status = 'complete', new_players = ?, duplicates_found = ?
-        WHERE id = ?
-    """, (created, merged, job_id))
-    conn.commit()
-    conn.close()
+        # Update job status
+        conn.execute("""
+            UPDATE import_jobs SET status = 'complete', new_players = ?, duplicates_found = ?
+            WHERE id = ?
+        """, (created, merged, job_id))
+        # safe_db() auto-commits here on success, auto-rollbacks on error
 
     logger.info("Import executed: %s — %d created, %d merged, %d skipped, %d errors",
                 job_id, created, merged, skipped, len(errors))
@@ -13416,6 +13459,26 @@ async def backup_database(token_data: dict = Depends(verify_token)):
     backup_path = os.path.join(os.path.dirname(DB_FILE), backup_name)
     shutil.copy2(DB_FILE, backup_path)
     return FileResponse(backup_path, filename=backup_name, media_type="application/octet-stream")
+
+
+@app.post("/admin/backup")
+async def create_server_backup(token_data: dict = Depends(verify_token)):
+    """Create a server-side database backup. Available to all authenticated users."""
+    backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    ts = now_iso()[:19].replace(":", "-")
+    backup_name = f"prospectx_manual_{ts}.db"
+    backup_path = os.path.join(backup_dir, backup_name)
+    shutil.copy2(DB_FILE, backup_path)
+
+    # Keep last 20 backups (manual + auto + startup)
+    all_backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
+    for old in all_backups[:-20]:
+        os.remove(old)
+
+    size_mb = round(os.path.getsize(backup_path) / (1024 * 1024), 1)
+    logger.info("Manual backup created: %s (%.1f MB)", backup_name, size_mb)
+    return {"detail": f"Backup created: {backup_name}", "size_mb": size_mb, "file": backup_name}
 
 
 # ============================================================
@@ -15273,177 +15336,178 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
     # Get league display name for current_league field
     league_name = HT_LEAGUES.get(league, {}).get("name", league.upper())
 
-    conn = get_db()
-    now = datetime.now(timezone.utc).isoformat()
     created, updated, skipped = 0, 0, 0
     results = []
+    team_name_synced = ""
+    logo_synced = False
 
-    for rp in roster:
-        ht_id = rp.get("id")
-        first = (rp.get("first_name") or "").strip()
-        last = (rp.get("last_name") or "").strip()
-        if not first or not last:
-            skipped += 1
-            continue
+    with safe_db() as conn:
+        now = datetime.now(timezone.utc).isoformat()
 
-        position = _normalize_position(rp.get("position", ""))
-        dob = _normalize_dob(rp.get("dob", ""))
-        height_cm = _parse_ht_height_to_cm(rp.get("height", ""))
-        weight_kg = _parse_ht_weight_to_kg(rp.get("weight", ""))
-        shoots = (rp.get("shoots") or "")[:1].upper()
-        team_name = rp.get("team_name", "")
-        photo_url = rp.get("photo", "")
-        # Filter out HockeyTech "no photo" placeholders — treat as empty
-        if photo_url and "nophoto" in photo_url.lower():
-            photo_url = ""
-        jersey = rp.get("jersey", "")
-
-        # Derive fields
-        birth_year = int(dob[:4]) if dob and len(dob) >= 4 else None
-        age_group = _get_age_group(birth_year) if birth_year else None
-        league_tier = _get_league_tier(league_name)
-
-        # 1. Check by hockeytech_id first (exact match)
-        existing = conn.execute(
-            "SELECT id, first_name, last_name FROM players WHERE hockeytech_id = ? AND org_id = ?",
-            (ht_id, org_id)
-        ).fetchone()
-
-        if existing:
-            # Update bio fields
-            conn.execute("""
-                UPDATE players SET
-                    current_team = ?, current_league = ?, position = ?, shoots = ?,
-                    height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
-                    dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
-                    birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
-                    league_tier = COALESCE(?, league_tier), hockeytech_league = ?,
-                    updated_at = ?
-                WHERE id = ?
-            """, (team_name, league_name, position, shoots, height_cm, weight_kg,
-                  dob, photo_url, birth_year, age_group, league_tier, league, now, existing[0]))
-            updated += 1
-            results.append({"name": f"{first} {last}", "action": "updated", "player_id": existing[0]})
-            continue
-
-        # 2. Fuzzy match by name + DOB
-        candidates = conn.execute(
-            "SELECT id, first_name, last_name, dob FROM players WHERE org_id = ? AND LOWER(last_name) = LOWER(?)",
-            (org_id, last)
-        ).fetchall()
-
-        matched_id = None
-        for c in candidates:
-            # Exact first name match (case insensitive)
-            if c[1].lower() == first.lower():
-                matched_id = c[0]
-                break
-            # First name starts with same letters (handle nicknames like "Mike" vs "Michael")
-            if dob and c[3] == dob and (c[1].lower().startswith(first[:3].lower()) or first.lower().startswith(c[1][:3].lower())):
-                matched_id = c[0]
-                break
-
-        if matched_id:
-            # Link and update
-            conn.execute("""
-                UPDATE players SET
-                    hockeytech_id = ?, hockeytech_league = ?,
-                    current_team = ?, current_league = ?, position = ?, shoots = ?,
-                    height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
-                    dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
-                    birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
-                    league_tier = COALESCE(?, league_tier),
-                    updated_at = ?
-                WHERE id = ?
-            """, (ht_id, league, team_name, league_name, position, shoots, height_cm, weight_kg,
-                  dob, photo_url, birth_year, age_group, league_tier, now, matched_id))
-            updated += 1
-            results.append({"name": f"{first} {last}", "action": "linked+updated", "player_id": matched_id})
-            continue
-
-        # 3. Create new player
-        player_id = gen_id()
-        conn.execute("""
-            INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots,
-                                height_cm, weight_kg, current_team, current_league, image_url,
-                                hockeytech_id, hockeytech_league,
-                                birth_year, age_group, league_tier,
-                                tags, passports, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?)
-        """, (player_id, org_id, first, last, dob, position, shoots,
-              height_cm, weight_kg, team_name, league_name, photo_url,
-              ht_id, league, birth_year, age_group, league_tier, now, now))
-        created += 1
-        results.append({"name": f"{first} {last}", "action": "created", "player_id": player_id})
-
-    # ── Helper: find team row in DB using multiple name strategies ──
-    team_name_synced = roster[0].get("team_name", "") if roster else ""
-
-    def _find_team_row_for_sync(conn_inner, names_to_try, org_inner, cols="id"):
-        """Try multiple name strategies to find a team in the DB."""
-        for try_name in names_to_try:
-            if not try_name:
+        for rp in roster:
+            ht_id = rp.get("id")
+            first = (rp.get("first_name") or "").strip()
+            last = (rp.get("last_name") or "").strip()
+            if not first or not last:
+                skipped += 1
                 continue
-            row = conn_inner.execute(
-                f"SELECT {cols} FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
-                (try_name, org_inner)
+
+            position = _normalize_position(rp.get("position", ""))
+            dob = _normalize_dob(rp.get("dob", ""))
+            height_cm = _parse_ht_height_to_cm(rp.get("height", ""))
+            weight_kg = _parse_ht_weight_to_kg(rp.get("weight", ""))
+            shoots = (rp.get("shoots") or "")[:1].upper()
+            team_name = rp.get("team_name", "")
+            photo_url = rp.get("photo", "")
+            # Filter out HockeyTech "no photo" placeholders — treat as empty
+            if photo_url and "nophoto" in photo_url.lower():
+                photo_url = ""
+            jersey = rp.get("jersey", "")
+
+            # Derive fields
+            birth_year = int(dob[:4]) if dob and len(dob) >= 4 else None
+            age_group = _get_age_group(birth_year) if birth_year else None
+            league_tier = _get_league_tier(league_name)
+
+            # 1. Check by hockeytech_id first (exact match)
+            existing = conn.execute(
+                "SELECT id, first_name, last_name FROM players WHERE hockeytech_id = ? AND org_id = ?",
+                (ht_id, org_id)
             ).fetchone()
-            if row:
-                return row
-        return None
 
-    # Build list of names to try: HT team name, then synced players' current_team
-    names_to_try = [team_name_synced]
-    for r in results[:10]:
-        pid = r.get("player_id")
-        if pid:
-            p_row = conn.execute("SELECT current_team FROM players WHERE id = ?", (pid,)).fetchone()
-            if p_row and p_row["current_team"] and p_row["current_team"] not in names_to_try:
-                names_to_try.append(p_row["current_team"])
+            if existing:
+                # Update bio fields
+                conn.execute("""
+                    UPDATE players SET
+                        current_team = ?, current_league = ?, position = ?, shoots = ?,
+                        height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
+                        dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
+                        birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
+                        league_tier = COALESCE(?, league_tier), hockeytech_league = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, (team_name, league_name, position, shoots, height_cm, weight_kg,
+                      dob, photo_url, birth_year, age_group, league_tier, league, now, existing[0]))
+                updated += 1
+                results.append({"name": f"{first} {last}", "action": "updated", "player_id": existing[0]})
+                continue
 
-    # ── Sync team logo from HockeyTech if we don't have one locally ──
-    logo_synced = None
-    if team_name_synced:
-        try:
-            ht_teams = await client.get_teams(season_id)
-            for ht_team in ht_teams:
-                if ht_team.get("id") == team_id and ht_team.get("logo"):
-                    ht_logo_url = ht_team["logo"]
-                    # Check if this team exists in our DB and needs a logo
-                    team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url")
-                    if team_row:
-                        # Download the logo locally
-                        async with httpx.AsyncClient(timeout=10) as dl_client:
-                            img_resp = await dl_client.get(ht_logo_url)
-                            if img_resp.status_code == 200:
-                                ext = "png" if "png" in ht_logo_url.lower() else "jpg"
-                                logo_filename = f"team_{team_row['id']}_ht.{ext}"
-                                logo_path = os.path.join(_IMAGES_DIR, logo_filename)
-                                with open(logo_path, "wb") as f:
-                                    f.write(img_resp.content)
-                                local_logo_url = f"/uploads/{logo_filename}"
-                                conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
-                                             (local_logo_url, team_row["id"]))
-                                logo_synced = local_logo_url
-                                logger.info("Synced team logo for %s from HockeyTech", team_name_synced)
+            # 2. Fuzzy match by name + DOB
+            candidates = conn.execute(
+                "SELECT id, first_name, last_name, dob FROM players WHERE org_id = ? AND LOWER(last_name) = LOWER(?)",
+                (org_id, last)
+            ).fetchall()
+
+            matched_id = None
+            for c in candidates:
+                # Exact first name match (case insensitive)
+                if c[1].lower() == first.lower():
+                    matched_id = c[0]
                     break
-        except Exception as e:
-            logger.warning("Could not sync team logo for %s: %s", team_name_synced, e)
+                # First name starts with same letters (handle nicknames like "Mike" vs "Michael")
+                if dob and c[3] == dob and (c[1].lower().startswith(first[:3].lower()) or first.lower().startswith(c[1][:3].lower())):
+                    matched_id = c[0]
+                    break
 
-        # Store HockeyTech team_id and league on the teams table
-        try:
-            team_row_ht = _find_team_row_for_sync(conn, names_to_try, org_id)
-            if team_row_ht:
-                conn.execute(
-                    "UPDATE teams SET hockeytech_team_id = ?, hockeytech_league = ? WHERE id = ?",
-                    (team_id, league, team_row_ht["id"])
-                )
-                logger.info("Updated HT team mapping: %s → team_id=%d, league=%s", team_name_synced, team_id, league)
-        except Exception as e:
-            logger.warning("Could not save HT team mapping for %s: %s", team_name_synced, e)
+            if matched_id:
+                # Link and update
+                conn.execute("""
+                    UPDATE players SET
+                        hockeytech_id = ?, hockeytech_league = ?,
+                        current_team = ?, current_league = ?, position = ?, shoots = ?,
+                        height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
+                        dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
+                        birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
+                        league_tier = COALESCE(?, league_tier),
+                        updated_at = ?
+                    WHERE id = ?
+                """, (ht_id, league, team_name, league_name, position, shoots, height_cm, weight_kg,
+                      dob, photo_url, birth_year, age_group, league_tier, now, matched_id))
+                updated += 1
+                results.append({"name": f"{first} {last}", "action": "linked+updated", "player_id": matched_id})
+                continue
 
-    conn.commit()
-    conn.close()
+            # 3. Create new player
+            player_id = gen_id()
+            conn.execute("""
+                INSERT INTO players (id, org_id, first_name, last_name, dob, position, shoots,
+                                    height_cm, weight_kg, current_team, current_league, image_url,
+                                    hockeytech_id, hockeytech_league,
+                                    birth_year, age_group, league_tier,
+                                    tags, passports, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?)
+            """, (player_id, org_id, first, last, dob, position, shoots,
+                  height_cm, weight_kg, team_name, league_name, photo_url,
+                  ht_id, league, birth_year, age_group, league_tier, now, now))
+            created += 1
+            results.append({"name": f"{first} {last}", "action": "created", "player_id": player_id})
+
+        # ── Helper: find team row in DB using multiple name strategies ──
+        team_name_synced = roster[0].get("team_name", "") if roster else ""
+
+        def _find_team_row_for_sync(conn_inner, names_to_try_inner, org_inner, cols="id"):
+            """Try multiple name strategies to find a team in the DB."""
+            for try_name in names_to_try_inner:
+                if not try_name:
+                    continue
+                row = conn_inner.execute(
+                    f"SELECT {cols} FROM teams WHERE LOWER(name) = LOWER(?) AND org_id IN (?, '__global__')",
+                    (try_name, org_inner)
+                ).fetchone()
+                if row:
+                    return row
+            return None
+
+        # Build list of names to try: HT team name, then synced players' current_team
+        names_to_try = [team_name_synced]
+        for r in results[:10]:
+            pid = r.get("player_id")
+            if pid:
+                p_row = conn.execute("SELECT current_team FROM players WHERE id = ?", (pid,)).fetchone()
+                if p_row and p_row["current_team"] and p_row["current_team"] not in names_to_try:
+                    names_to_try.append(p_row["current_team"])
+
+        # ── Sync team logo from HockeyTech if we don't have one locally ──
+        if team_name_synced:
+            try:
+                ht_teams = await client.get_teams(season_id)
+                for ht_team in ht_teams:
+                    if ht_team.get("id") == team_id and ht_team.get("logo"):
+                        ht_logo_url = ht_team["logo"]
+                        # Check if this team exists in our DB and needs a logo
+                        team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url")
+                        if team_row:
+                            # Download the logo locally
+                            async with httpx.AsyncClient(timeout=10) as dl_client:
+                                img_resp = await dl_client.get(ht_logo_url)
+                                if img_resp.status_code == 200:
+                                    ext = "png" if "png" in ht_logo_url.lower() else "jpg"
+                                    logo_filename = f"team_{team_row['id']}_ht.{ext}"
+                                    logo_path = os.path.join(_IMAGES_DIR, logo_filename)
+                                    with open(logo_path, "wb") as f:
+                                        f.write(img_resp.content)
+                                    local_logo_url = f"/uploads/{logo_filename}"
+                                    conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
+                                                 (local_logo_url, team_row["id"]))
+                                    logo_synced = local_logo_url
+                                    logger.info("Synced team logo for %s from HockeyTech", team_name_synced)
+                        break
+            except Exception as e:
+                logger.warning("Could not sync team logo for %s: %s", team_name_synced, e)
+
+            # Store HockeyTech team_id and league on the teams table
+            try:
+                team_row_ht = _find_team_row_for_sync(conn, names_to_try, org_id)
+                if team_row_ht:
+                    conn.execute(
+                        "UPDATE teams SET hockeytech_team_id = ?, hockeytech_league = ? WHERE id = ?",
+                        (team_id, league, team_row_ht["id"])
+                    )
+                    logger.info("Updated HT team mapping: %s → team_id=%d, league=%s", team_name_synced, team_id, league)
+            except Exception as e:
+                logger.warning("Could not save HT team mapping for %s: %s", team_name_synced, e)
+
+        # safe_db() auto-commits here on success, auto-rollbacks on error
 
     roster_result = {
         "synced": len(results),
