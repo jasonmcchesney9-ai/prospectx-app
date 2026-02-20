@@ -2137,6 +2137,30 @@ def init_db():
     except Exception as e:
         logger.warning("Tier migration note: %s", e)
 
+    # ── Migration: set superadmin role for jason@prospectx.com ──
+    try:
+        n = conn.execute(
+            "UPDATE users SET role = 'superadmin' WHERE email = 'jason@prospectx.com' AND role != 'superadmin'"
+        ).rowcount
+        if n:
+            conn.commit()
+            logger.info("Migration: set superadmin role for jason@prospectx.com")
+    except Exception as e:
+        logger.warning("Superadmin migration note: %s", e)
+
+    # ── Table: impersonation_logs ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS impersonation_logs (
+            id TEXT PRIMARY KEY,
+            superadmin_user_id TEXT NOT NULL,
+            target_user_id TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (superadmin_user_id) REFERENCES users(id),
+            FOREIGN KEY (target_user_id) REFERENCES users(id)
+        )
+    """)
+    conn.commit()
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
