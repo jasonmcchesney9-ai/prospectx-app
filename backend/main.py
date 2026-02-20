@@ -1962,6 +1962,28 @@ def init_db():
         conn.commit()
         logger.info("Migration: added linked_player_id column to users")
 
+    # ── Migration: onboarding wizard columns on users ──
+    user_cols = [col[1] for col in conn.execute("PRAGMA table_info(users)").fetchall()]
+    onboarding_cols = {
+        "onboarding_completed": "INTEGER DEFAULT 0",
+        "onboarding_step": "INTEGER DEFAULT 0",
+        "preferred_league": "TEXT",
+        "preferred_team_id": "TEXT",
+        "covered_teams": "TEXT",
+    }
+    for col_name, col_type in onboarding_cols.items():
+        if col_name not in user_cols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to users", col_name)
+
+    # Auto-complete onboarding for existing users (they were already using the platform)
+    existing_users = conn.execute("SELECT COUNT(*) as c FROM users WHERE onboarding_completed IS NULL OR onboarding_completed = 0").fetchone()["c"]
+    if existing_users > 0:
+        conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at < datetime('now', '-1 minute')")
+        conn.commit()
+        logger.info("Migration: auto-completed onboarding for %d existing users", existing_users)
+
     # ── Password reset tokens table ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -5053,6 +5075,11 @@ class UserOut(BaseModel):
     monthly_reports_used: int = 0
     monthly_bench_talks_used: int = 0
     email_verified: bool = False
+    onboarding_completed: bool = False
+    onboarding_step: int = 0
+    preferred_league: Optional[str] = None
+    preferred_team_id: Optional[str] = None
+    covered_teams: Optional[List[str]] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -5394,6 +5421,7 @@ async def register(req: RegisterRequest):
         hockey_role=hockey_role, subscription_tier="rookie",
         monthly_reports_used=0, monthly_bench_talks_used=0,
         email_verified=True,
+        onboarding_completed=False, onboarding_step=0,
     )
     token = create_token(user_id, org_id, "admin")
     conn.close()
@@ -5414,6 +5442,12 @@ async def login(req: LoginRequest):
     if not pwd_context.verify(req.password[:72], row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    covered = None
+    if row["covered_teams"]:
+        try:
+            covered = json.loads(row["covered_teams"])
+        except Exception:
+            covered = None
     user = UserOut(
         id=row["id"], org_id=row["org_id"], email=row["email"],
         first_name=row["first_name"], last_name=row["last_name"], role=row["role"],
@@ -5422,6 +5456,11 @@ async def login(req: LoginRequest):
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
         email_verified=bool(row["email_verified"]) if row["email_verified"] else False,
+        onboarding_completed=bool(row["onboarding_completed"]) if row["onboarding_completed"] else False,
+        onboarding_step=row["onboarding_step"] or 0,
+        preferred_league=row["preferred_league"],
+        preferred_team_id=row["preferred_team_id"],
+        covered_teams=covered,
     )
     token = create_token(row["id"], row["org_id"], row["role"])
     logger.info("User logged in: %s", req.email)
@@ -5435,6 +5474,12 @@ async def get_me(token_data: dict = Depends(verify_token)):
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
+    covered = None
+    if row["covered_teams"]:
+        try:
+            covered = json.loads(row["covered_teams"])
+        except Exception:
+            covered = None
     return UserOut(
         id=row["id"], org_id=row["org_id"], email=row["email"],
         first_name=row["first_name"], last_name=row["last_name"], role=row["role"],
@@ -5443,6 +5488,11 @@ async def get_me(token_data: dict = Depends(verify_token)):
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
         email_verified=bool(row["email_verified"]) if row["email_verified"] else False,
+        onboarding_completed=bool(row["onboarding_completed"]) if row["onboarding_completed"] else False,
+        onboarding_step=row["onboarding_step"] or 0,
+        preferred_league=row["preferred_league"],
+        preferred_team_id=row["preferred_team_id"],
+        covered_teams=covered,
     )
 
 
@@ -5474,6 +5524,12 @@ async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = De
     conn.commit()
     row = conn.execute("SELECT * FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
     conn.close()
+    covered = None
+    if row["covered_teams"]:
+        try:
+            covered = json.loads(row["covered_teams"])
+        except Exception:
+            covered = None
     return UserOut(
         id=row["id"], org_id=row["org_id"], email=row["email"],
         first_name=row["first_name"], last_name=row["last_name"], role=row["role"],
@@ -5482,6 +5538,11 @@ async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = De
         monthly_reports_used=row["monthly_reports_used"] or 0,
         monthly_bench_talks_used=row["monthly_bench_talks_used"] or 0,
         email_verified=bool(row["email_verified"]) if row["email_verified"] else False,
+        onboarding_completed=bool(row["onboarding_completed"]) if row["onboarding_completed"] else False,
+        onboarding_step=row["onboarding_step"] or 0,
+        preferred_league=row["preferred_league"],
+        preferred_team_id=row["preferred_team_id"],
+        covered_teams=covered,
     )
 
 
@@ -21088,6 +21149,156 @@ Write approximately {fmt_cfg['word_target']} words. Use real player names and st
     except Exception as e:
         logger.error("Broadcast post-game error: %s", str(e))
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+# ============================================================
+# ONBOARDING WIZARD
+# ============================================================
+
+class OnboardingStepData(BaseModel):
+    preferred_league: Optional[str] = None
+    preferred_team_id: Optional[str] = None
+    team_name: Optional[str] = None
+    team_league_name: Optional[str] = None
+    hockey_role: Optional[str] = None
+    linked_player_id: Optional[str] = None
+    covered_teams: Optional[List[str]] = None
+
+
+@app.get("/onboarding/state")
+async def get_onboarding_state(token_data: dict = Depends(verify_token)):
+    """Return current onboarding progress and saved data."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT onboarding_completed, onboarding_step, preferred_league, "
+        "preferred_team_id, covered_teams, hockey_role, linked_player_id "
+        "FROM users WHERE id = ?",
+        (token_data["user_id"],),
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    covered = None
+    if row["covered_teams"]:
+        try:
+            covered = json.loads(row["covered_teams"])
+        except Exception:
+            covered = None
+    return {
+        "onboarding_completed": bool(row["onboarding_completed"]) if row["onboarding_completed"] else False,
+        "onboarding_step": row["onboarding_step"] or 0,
+        "preferred_league": row["preferred_league"],
+        "preferred_team_id": row["preferred_team_id"],
+        "covered_teams": covered,
+        "hockey_role": row["hockey_role"] or "scout",
+        "linked_player_id": row["linked_player_id"],
+    }
+
+
+@app.put("/onboarding/step/{step_number}")
+async def save_onboarding_step(step_number: int, body: OnboardingStepData, token_data: dict = Depends(verify_token)):
+    """Save onboarding step data and advance the step counter."""
+    if step_number < 1 or step_number > 4:
+        raise HTTPException(status_code=400, detail="Step must be 1-4")
+
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    try:
+        if step_number == 1:
+            updates = []
+            params = []
+            if body.preferred_league is not None:
+                updates.append("preferred_league = ?")
+                params.append(body.preferred_league)
+            if body.preferred_team_id is not None:
+                updates.append("preferred_team_id = ?")
+                params.append(body.preferred_team_id)
+
+            # Create team record if team_name provided and doesn't exist
+            if body.team_name:
+                existing = conn.execute(
+                    "SELECT id FROM teams WHERE org_id = ? AND LOWER(name) = LOWER(?)",
+                    (org_id, body.team_name),
+                ).fetchone()
+                if not existing:
+                    team_id = gen_id()
+                    conn.execute(
+                        "INSERT INTO teams (id, org_id, name, league) VALUES (?, ?, ?, ?)",
+                        (team_id, org_id, body.team_name, body.team_league_name or body.preferred_league or ""),
+                    )
+                    conn.commit()
+                    logger.info("Onboarding: created team '%s' for org %s", body.team_name, org_id)
+
+            updates.append("onboarding_step = ?")
+            params.append(step_number)
+            params.append(user_id)
+            conn.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+
+        elif step_number == 2:
+            valid_roles = {"scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent"}
+            if body.hockey_role and body.hockey_role in valid_roles:
+                conn.execute(
+                    "UPDATE users SET hockey_role = ?, onboarding_step = ? WHERE id = ?",
+                    (body.hockey_role, step_number, user_id),
+                )
+            else:
+                conn.execute("UPDATE users SET onboarding_step = ? WHERE id = ?", (step_number, user_id))
+            conn.commit()
+
+        elif step_number == 3:
+            if body.linked_player_id:
+                conn.execute(
+                    "UPDATE users SET linked_player_id = ?, onboarding_step = ? WHERE id = ?",
+                    (body.linked_player_id, step_number, user_id),
+                )
+            elif body.covered_teams:
+                conn.execute(
+                    "UPDATE users SET covered_teams = ?, onboarding_step = ? WHERE id = ?",
+                    (json.dumps(body.covered_teams), step_number, user_id),
+                )
+            else:
+                conn.execute("UPDATE users SET onboarding_step = ? WHERE id = ?", (step_number, user_id))
+            conn.commit()
+
+        elif step_number == 4:
+            conn.execute("UPDATE users SET onboarding_step = ? WHERE id = ?", (step_number, user_id))
+            conn.commit()
+
+    finally:
+        conn.close()
+
+    return {"onboarding_step": step_number, "detail": f"Step {step_number} saved"}
+
+
+@app.post("/onboarding/complete")
+async def complete_onboarding(token_data: dict = Depends(verify_token)):
+    """Mark onboarding as finished."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET onboarding_completed = 1, onboarding_step = 5 WHERE id = ?",
+        (token_data["user_id"],),
+    )
+    conn.commit()
+    conn.close()
+    logger.info("Onboarding completed for user %s", token_data["user_id"])
+    return {"onboarding_completed": True, "detail": "Onboarding complete"}
+
+
+@app.post("/onboarding/skip")
+async def skip_onboarding(token_data: dict = Depends(verify_token)):
+    """Skip onboarding entirely — marks as complete."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET onboarding_completed = 1, onboarding_step = 5 WHERE id = ?",
+        (token_data["user_id"],),
+    )
+    conn.commit()
+    conn.close()
+    logger.info("Onboarding skipped for user %s", token_data["user_id"])
+    return {"onboarding_completed": True, "detail": "Onboarding skipped"}
 
 
 # ============================================================
