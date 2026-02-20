@@ -78,7 +78,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "How much does ProspectX cost?",
-        a: "Founding Member pricing (first 10 customers, locked forever): GOHL $299/mo, OJHL $499/mo, OHL $999/mo. Standard pricing after that: GOHL $399/mo, OJHL $699/mo, OHL $1,499/mo. Annual discounts of 16-20% available. AAA organizations start at $599/mo, agents at $149/mo per player.",
+        a: "ProspectX starts free with the Rookie tier (browse players, live stats, Bench Talk). Individual plans: Parent $10/mo, Scout $25/mo, Pro $49/mo (unlimited reports + all features), Elite $99/mo (Auto-Scout + API access). Organization plans: Team $249/mo (10 seats), Program $599/mo (30 seats), Enterprise (custom). Annual billing saves ~17%. All plans are month-to-month with no long-term commitment.",
       },
       {
         q: "Can I try ProspectX for free?",
@@ -419,24 +419,22 @@ export default function LandingPage() {
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-oswald font-bold text-white">
-              First 10 Customers Lock In Forever
+              Plans for Every Role in Hockey
             </h2>
             <p className="text-white/40 text-sm mt-2">
               Month-to-month. Cancel anytime. Your data is always yours.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* GOHL */}
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">GOHL Tier</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Rookie — Free */}
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">Rookie</div>
               <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-3xl font-oswald font-bold text-white">$299</span>
-                <span className="text-sm text-white/30">/month</span>
+                <span className="text-3xl font-oswald font-bold text-white">Free</span>
               </div>
-              <div className="text-xs text-white/20 mb-4 line-through">Standard: $399/month</div>
               <ul className="space-y-2">
-                {["Up to 50 players", "8 core report types", "Batch CSV/Excel import", "Scout notes", "3 admin users"].map((item) => (
+                {["Browse player profiles", "HockeyTech live stats", "5 Bench Talk messages/day", "Basic search"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-white/50">
                     <CheckCircle2 size={12} className="text-teal shrink-0" />
                     {item}
@@ -445,19 +443,52 @@ export default function LandingPage() {
               </ul>
             </div>
 
-            {/* OJHL — Featured */}
-            <div className="rounded-xl border border-teal/30 bg-teal/[0.05] p-6 ring-1 ring-teal/20 relative">
+            {/* Parent */}
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">Parent</div>
+              <div className="flex items-baseline gap-1 mb-4">
+                <span className="text-3xl font-oswald font-bold text-white">$10</span>
+                <span className="text-sm text-white/30">/month</span>
+              </div>
+              <ul className="space-y-2">
+                {["3 reports/month", "20 Bench Talk/day", "Development tracking", "Profile analytics"].map((item) => (
+                  <li key={item} className="flex items-center gap-2 text-xs text-white/50">
+                    <CheckCircle2 size={12} className="text-teal shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Scout */}
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">Scout</div>
+              <div className="flex items-baseline gap-1 mb-4">
+                <span className="text-3xl font-oswald font-bold text-white">$25</span>
+                <span className="text-sm text-white/30">/month</span>
+              </div>
+              <ul className="space-y-2">
+                {["10 reports/month", "Scout Notes", "Rated search", "3 game plans/month", "File uploads"].map((item) => (
+                  <li key={item} className="flex items-center gap-2 text-xs text-white/50">
+                    <CheckCircle2 size={12} className="text-teal shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Pro — Featured */}
+            <div className="rounded-xl border border-teal/30 bg-teal/[0.05] p-5 ring-1 ring-teal/20 relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-teal rounded-full text-[10px] font-oswald uppercase tracking-widest text-white font-bold">
                 Most Popular
               </div>
-              <div className="text-xs font-oswald uppercase tracking-widest text-teal mb-1">OJHL Tier</div>
+              <div className="text-xs font-oswald uppercase tracking-widest text-teal mb-1">Pro</div>
               <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-3xl font-oswald font-bold text-white">$499</span>
+                <span className="text-3xl font-oswald font-bold text-white">$49</span>
                 <span className="text-sm text-white/30">/month</span>
               </div>
-              <div className="text-xs text-white/20 mb-4 line-through">Standard: $699/month</div>
               <ul className="space-y-2">
-                {["Up to 100 players", "All 19 report types", "Hockey Operating System", "5 admin users", "Priority support", "API access"].map((item) => (
+                {["Unlimited reports", "Unlimited Bench Talk", "All 21 templates", "InStat game data", "Series planning"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-white/60">
                     <CheckCircle2 size={12} className="text-teal shrink-0" />
                     {item}
@@ -466,16 +497,15 @@ export default function LandingPage() {
               </ul>
             </div>
 
-            {/* OHL */}
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">OHL Tier</div>
+            {/* Elite */}
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="text-xs font-oswald uppercase tracking-widest text-white/40 mb-1">Elite</div>
               <div className="flex items-baseline gap-1 mb-4">
-                <span className="text-3xl font-oswald font-bold text-white">$999</span>
+                <span className="text-3xl font-oswald font-bold text-white">$99</span>
                 <span className="text-sm text-white/30">/month</span>
               </div>
-              <div className="text-xs text-white/20 mb-4 line-through">Standard: $1,499/month</div>
               <ul className="space-y-2">
-                {["Unlimited players & users", "White-label reports", "Dedicated account manager", "Custom integrations", "Phone + Slack support", "Quarterly strategy reviews"].map((item) => (
+                {["Everything in Pro", "PXI Auto-Scout", "Bulk report generation", "API access", "Priority support"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-white/50">
                     <CheckCircle2 size={12} className="text-teal shrink-0" />
                     {item}
@@ -485,9 +515,15 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <p className="text-center text-xs text-white/30 mt-6">
-            All plans include 2-week free trial. No credit card required.
-            Founding member pricing locked forever.
+          <p className="text-center text-xs text-white/40 mt-6">
+            Need a team or organization plan?{" "}
+            <Link href="/pricing" className="text-teal hover:text-teal/80 underline underline-offset-2">
+              View All Plans &rarr;
+            </Link>
+          </p>
+
+          <p className="text-center text-xs text-white/30 mt-4">
+            Rookie tier is free forever. Paid plans are month-to-month &mdash; cancel anytime. Your data is always yours.
           </p>
         </div>
       </section>
