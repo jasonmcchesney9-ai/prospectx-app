@@ -27,7 +27,7 @@ Every report in this system uses the same global context schema.
 Read level, data_depth, and audience from the input before generating anything.
 
 REQUIRED HEADER (include at top of every report):
-Level: [level value]  |  Data Depth: [data_depth value]  |  Audience: [audience value]
+Level: [level value]  |  Data Depth: [data_depth value]  |  Audience: [audience value]  |  Perspective: [perspective value]
 
 LEVEL — controls age/league context and projection framing:
 U14    → Age 13-14, Minor hockey, project to U16/U18, no contact emphasis
@@ -60,6 +60,20 @@ scout    → Analytical, opinionated, source tags required, conservative project
 agent    → Professional, pathway-focused, compliance disclaimer required
 parent   → Plain language, no jargon, warm and honest, growth framing
 player   → Direct, motivating, first-person where appropriate, actionable
+
+PERSPECTIVE -- controls internal vs external framing (team reports only):
+internal -> Self-identity. Named players, trust tiers, bench cues for own staff.
+           Include: player identity cards, internal reality checks,
+           revision history, internal game management section.
+           Omit: mis-scout traps, how-to-attack guidance.
+external -> Opponent scouting. Archetypes instead of names.
+           Include: mis-scout traps, how-to-attack for each vulnerability,
+           external game-planning section.
+           Omit: named player cards, internal bench cues, revision history.
+both     -> Full document. Internal sections first, external sections appended.
+           Use for season-long reference. Longest output.
+
+Default: internal (safest -- never exposes named players when not intended)
 
 SAME STRUCTURE FOR ALL LEVELS:
 Use the same report template regardless of level.
@@ -418,6 +432,8 @@ MODE_TEMPLATE_WIRING = {
     "bench_card":                {"primary": "coach",   "secondary": None},
     "bias_controlled_eval":      {"primary": "scout",   "secondary": "analyst"},
     "agent_projection":          {"primary": "agent",   "secondary": "analyst"},
+    # Addendum 5 — In-Season Projections
+    "in_season_projections":     {"primary": "analyst", "secondary": "coach"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -449,8 +465,12 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "ASSET_MANAGEMENT", "RISK_FACTORS", "RECOMMENDATION",
     ],
     "team_identity": [
-        "TEAM_IDENTITY", "SYSTEM_DETAILS", "PLAYER_ARCHETYPE_FIT",
-        "SPECIAL_TEAMS_IDENTITY", "KEY_PERSONNEL", "VULNERABILITIES",
+        "PURPOSE_AND_SCOPE", "CORE_TEAM_IDENTITY", "HOW_WE_WIN",
+        "HOW_WE_LOSE", "WHAT_THIS_IDENTITY_IS_NOT", "ROLE_ARCHITECTURE",
+        "GAME_MANAGEMENT_PRINCIPLES", "SPECIAL_TEAMS_IDENTITY",
+        "WHERE_WE_CRACK", "PLAYOFF_READINESS_SCORECARD",
+        "PLAYER_IDENTITY_CARDS", "BENCH_LEVEL_REMINDERS",
+        "WHAT_THIS_MEANS_FOR", "IDENTITY_TRACKING_METRICS", "REVISION_HISTORY",
     ],
     "opponent_gameplan": [
         "OPPONENT_OVERVIEW", "KEY_MATCHUPS", "FORECHECK_PLAN",
@@ -546,6 +566,13 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "OHL_CHL_TRAJECTORY_MODEL", "TIME_TO_TIER_ESTIMATES", "ADVANCEMENT_TRIGGERS",
         "PROJECTION_RISK_FACTORS", "TEAM_FIT_RANKINGS", "MARKETABLE_VALUE_DRIVERS",
         "AGENT_POSITIONING_SUMMARY",
+    ],
+    # Addendum 5
+    "in_season_projections": [
+        "SEASON_SNAPSHOT", "PACE_TO_FINISH_PROJECTIONS", "HOT_COLD_STREAK_ANALYSIS",
+        "DEVELOPMENT_MILESTONE_TRACKING", "XG_REALITY_CHECK",
+        "ROLE_AND_DEPLOYMENT_TRENDS", "ADVANCEMENT_READINESS_UPDATE",
+        "NEXT_10_GAMES_PROJECTION",
     ],
 }
 
@@ -1099,6 +1126,196 @@ PASS: Player is not projecting to target level based on current data
 Always include specific justification — never just the label.
 
 Max tokens: 8000. Depth in sections 3, 4, 6, 10 is most valuable.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K11) TEAM_IDENTITY_V1 — original 6-section template (PRESERVED)
+# ─────────────────────────────────────────────────────────
+TEAM_IDENTITY_V1 = '''
+TEAM IDENTITY CARD — v1 (PRESERVED)
+====================================
+Original 6-section team identity template.
+Sections: TEAM_IDENTITY, SYSTEM_DETAILS, PLAYER_ARCHETYPE_FIT,
+SPECIAL_TEAMS_IDENTITY, KEY_PERSONNEL, VULNERABILITIES
+Superseded by TEAM_IDENTITY_V2 in Addendum 5.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K12) TEAM_IDENTITY_V2 — 15-section elite template (Addendum 5)
+# ─────────────────────────────────────────────────────────
+TEAM_IDENTITY_V2 = '''
+TEAM IDENTITY & GAME MANAGEMENT PROFILE — v2
+==============================================
+Audience: coach_gm (staff-only)
+Purpose: Foundational team document. Feeds into Opponent Game Plan
+and Playoff Series Prep. Generate this first, reference in game plans.
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth] | Perspective: [perspective]
+Team: [team_name] | Games Analyzed: [X] | Season Context: [context]
+Update Frequency: [After every X games / Monthly / As needed]
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+PERSPECTIVE RULES — apply before generating any section:
+internal → Named players, trust tiers, internal cues, revision history
+           Sections 11, 12, 15 are REQUIRED
+           Section 5 = internal reality checks (We are NOT...)
+           Section 13 = keys to deploying our identity
+external → Archetypes only, no player names, mis-scout traps
+           Sections 11, 12, 15 are OMITTED
+           Section 5 = mis-scout traps (They are NOT...) — most critical section
+           Section 13 = how to beat them
+           Section 9 = every vulnerability includes How to Exploit
+both     → All 15 sections. Internal content first, external additions appended.
+
+SECTION 2 — CORE IDENTITY:
+Identity statement captures the team in 2-3 sentences.
+Internal example: 'We are a structure-first, pace-layering team that wins
+through role clarity and disciplined leverage management.'
+External example: 'They are a control-and-suffocation team built to slow
+games down, win the middle 40 feet, and win 2-1, 3-2 games.'
+
+SECTION 5 — MIS-SCOUT TRAPS (external/both only):
+This section prevents coaching staff from chasing tendencies that don't
+exist. Be specific. 'They are NOT fast through the neutral zone' is more
+useful than 'they play a controlled game.'
+Minimum 4 mis-scout traps. Each with one-line evidence.
+
+SECTION 6 — ROLE ARCHITECTURE:
+Internal: Name every player with GP > 5. Assign to exactly one tier:
+  Trust Anchors (18-22 min, all situations)
+  Structural Buffers (16-18 min, transition)
+  Possession Buffers (14-17 min, cycle/extend)
+  Finishers (17-20 min, OZ-heavy)
+  Energy/Depth (10-14 min, burst usage)
+External: Three archetypes only. Each with How to Attack.
+  Trust Drivers | Structured Scorers | Functional Depth
+
+SECTION 10 — PLAYOFF READINESS SCORECARD:
+Grade each category A/B/C/D with 1-line justification:
+Defensive Structure, Special Teams, Depth, Pace Adaptability,
+Comeback Ability, Identity Clarity, Coaching/Adjustments,
+Goaltending, Overall Readiness
+End with 2-3 sentence playoff summary.
+
+SECTION 11 — PLAYER IDENTITY CARDS (internal only):
+For each player with GP > 5, generate a condensed card:
+Name (#XX) — Position
+GP/TOI: [X GP / XX.X min avg]
+Production: G/A/P ([X.XX P/gm]) | +/-
+Role: [Trust Anchor / Finisher / Possession Buffer / Energy]
+Identity: [One-sentence role summary]
+Strengths: [2-3 key strengths]
+Limitations: [1-2 key limitations]
+Trust Tier: [HIGH TRUST / TRUST / SHELTERED]
+Playoff Note: [Availability, role discipline, special considerations]
+
+SECTION 14 — IDENTITY TRACKING METRICS:
+Include trend indicators: ↑ improving / → stable / ↓ declining
+Metrics: Record, GF/game, GA/game, PP%, PK%, CF% (if advanced),
+PDO (if advanced), Home record, Road record, Close game record,
+When leading after 2, When trailing after 2
+
+DATA DEPTH ADAPTATION:
+basic → Record, GF/GA, PP%, PK% only. No possession metrics.
+intermediate → Add zone starts, shot attempts, basic possession.
+advanced → Full suite including CF%, PDO, xG differential.
+
+LIVING DOCUMENT NOTE:
+Section 15 (Revision History) must be updated when:
+- Major identity shift occurs (injury, trade, role change)
+- Tactical evolution (system change, ST restructure)
+- Personnel change affects trust tier assignments
+
+FEEDS INTO: Opponent Game Plan (Section 2 opponent identity),
+Playoff Series Prep (Section 2 series thesis)
+
+Generate all sections appropriate to perspective.
+Max tokens: 10000. Prioritize depth in sections 2, 5, 6, 9, 10.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K13) IN_SEASON_PROJECTIONS — mid-season trajectory check (Addendum 5)
+# ─────────────────────────────────────────────────────────
+IN_SEASON_PROJECTIONS = '''
+IN-SEASON PROJECTIONS REPORT
+=============================
+Purpose: Mid-season trajectory check. Where is this season heading?
+Audience: Determined by audience field (coach, scout, agent, parent, player)
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth] | Audience: [audience]
+Player: [name] | Team: [team] | GP to Date: [X] | GP Remaining: [Y]
+Report Date: [date]
+
+SECTION 1 — SEASON SNAPSHOT:
+Current stats vs preseason expectations in one clear comparison.
+One-line status verdict: AHEAD / ON TRACK / BEHIND / SIGNIFICANTLY BEHIND
+Do not soften this verdict. Coaches need honest assessment.
+
+SECTION 2 — PACE-TO-FINISH PROJECTIONS:
+Three projection bands — label them clearly:
+CONSERVATIVE: last 5 GP pace extrapolated to season end
+REALISTIC: full season pace extrapolated
+OPTIMISTIC: best 10 GP pace extrapolated
+
+MINIMUM SAMPLE SIZE WARNING:
+If GP < 10: state 'Sample size too small for reliable projection (X GP).'
+Provide range only, no confident point projections.
+If GP 10-19: note projection has moderate reliability.
+If GP 20+: projection is reliable.
+
+SECTION 3 — TREND CLASSIFICATION:
+Classify current trend as exactly one of:
+BREAKOUT: sustained production increase over 5+ games above season avg
+REGRESSION: declining from earlier peak, below season avg last 5 GP
+PLATEAU: consistent production, neither improving nor declining
+VOLATILE: high game-to-game variance, no clear trend
+State classification clearly. Give evidence.
+
+SECTION 4 — MILESTONE TRACKING:
+Reference the player's Development Action Plans if available.
+For each priority: [Priority Name] | Current: [value] | Target: [value]
+| Status: ON TRACK / AHEAD / BEHIND / CRITICAL
+
+SECTION 5 — xG REALITY CHECK:
+Only generate if data_depth = advanced.
+If basic/intermediate: 'xG data not available at current data depth.'
+If overperforming: explicitly state regression risk and by how much.
+If underperforming: state positive regression likelihood.
+
+SECTION 6 — ROLE & DEPLOYMENT TRENDS:
+Is TOI trending up or down over last 10 games?
+Zone start distribution shifting? PP/PK usage changing?
+These signal role changes before they show in production stats.
+Flag any significant deployment changes.
+
+SECTION 7 — ADVANCEMENT READINESS:
+Verdict must be one of: ACCELERATING / HOLDING / DECLINING
+Tie verdict to specific numeric thresholds from Development Priority Map.
+Example: 'FO% has improved from 49% to 51% over last 10 games.
+Advancement trigger is 52%. Currently: ACCELERATING.'
+
+SECTION 8 — NEXT 10 GAMES:
+State point range as: [X–Y points in next 10 games]
+Note any back-to-backs, long road trips, or strong opponent clusters
+that affect the projection.
+
+AUDIENCE ADAPTATION:
+coach_gm → Focus on sections 1, 3, 6, 7 (deployment implications)
+scout    → Focus on sections 2, 3, 5, 7 (advancement projection)
+agent    → Focus on sections 2, 7, 8 (market positioning)
+parent   → Plain language. Focus on sections 1, 3, 4. No jargon.
+           Replace metric names with plain descriptions.
+player   → Direct. Focus on sections 3, 4, 7, 8. Motivating but honest.
+
+Generate all 8 sections. Max tokens: 6000.
+Prioritize depth in sections 2, 3, 7.
 '''
 
 # ─────────────────────────────────────────────────────────
