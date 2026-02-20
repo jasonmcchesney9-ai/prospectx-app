@@ -349,6 +349,12 @@ MODE_TEMPLATE_WIRING = {
     "player_guide_prep_college": {"primary": "parent", "secondary": "agent"},
     # Phase 3 — Elite Profile
     "elite_profile":             {"primary": "analyst", "secondary": "scout"},
+    # Addendum 2 — Operating Profiles + Bench Card + Bias + Agent
+    "forward_operating_profile": {"primary": "coach",   "secondary": "analyst"},
+    "defense_operating_profile": {"primary": "coach",   "secondary": "analyst"},
+    "bench_card":                {"primary": "coach",   "secondary": None},
+    "bias_controlled_eval":      {"primary": "scout",   "secondary": "analyst"},
+    "agent_projection":          {"primary": "agent",   "secondary": "analyst"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -449,6 +455,34 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "ROLE_IDENTITY_CLASSIFICATION", "SPECIAL_TEAMS_IMPACT", "MICRO_STAT_IMPACT_MODEL",
         "PLAYER_DNA_PROFILE", "LEAGUE_PROJECTION_MODEL", "DEVELOPMENT_PRIORITY_MAP",
         "DEVELOPMENT_ACTION_PLANS", "SEASON_TREND_ANALYSIS", "FINAL_COACH_DECISION_BLOCK",
+    ],
+    # Addendum 2 — Operating Profiles (13 sections each)
+    "forward_operating_profile": [
+        "ROLE_IDENTITY", "RELIABLE_DELIVERABLES", "STRENGTH_PROFILE",
+        "FAILURE_MODES", "MINUTE_CEILINGS", "GAME_STATE_DEPLOYMENT",
+        "LINEMATE_COMPATIBILITY", "SPECIAL_TEAMS_ROLE", "OVERPLAY_WARNINGS",
+        "PLAYOFF_TRANSLATION", "DEVELOPMENT_TRACKING", "LEAGUE_CONTEXT", "INTERNAL_TRUST_TIER",
+    ],
+    "defense_operating_profile": [
+        "ROLE_IDENTITY", "RELIABLE_DELIVERABLES", "STRENGTH_PROFILE",
+        "FAILURE_MODES", "MINUTE_CEILINGS", "GAME_STATE_DEPLOYMENT",
+        "PARTNER_COMPATIBILITY", "SPECIAL_TEAMS_ROLE", "OVERPLAY_WARNINGS",
+        "PLAYOFF_TRANSLATION", "DEVELOPMENT_TRACKING", "LEAGUE_CONTEXT", "INTERNAL_TRUST_TIER",
+    ],
+    "bench_card": [
+        "ROLE", "TRUST_TIER", "USE_WHEN", "AVOID_WHEN", "MINUTE_CEILING",
+        "SPECIAL_TEAMS", "TOP_3_STRENGTHS", "WATCH_FOR", "SERIES_PHASING",
+    ],
+    "bias_controlled_eval": [
+        "EVALUATION_FRAMEWORK", "ROLE_SUMMARY", "DATA_SNAPSHOT",
+        "SKILL_BY_SKILL_GRADING", "LIMITATIONS", "IDEAL_USAGE",
+        "TRANSLATION_ANALYSIS", "FINAL_UNBIASED_SUMMARY", "BIAS_CHECK",
+    ],
+    "agent_projection": [
+        "AGE_MATURITY_ADJUSTMENT", "SKILL_SCALABILITY_ANALYSIS", "LEAGUE_PROJECTION_MODEL",
+        "OHL_CHL_TRAJECTORY_MODEL", "TIME_TO_TIER_ESTIMATES", "ADVANCEMENT_TRIGGERS",
+        "PROJECTION_RISK_FACTORS", "TEAM_FIT_RANKINGS", "MARKETABLE_VALUE_DRIVERS",
+        "AGENT_POSITIONING_SUMMARY",
     ],
 }
 
@@ -759,6 +793,113 @@ WHAT WE'RE WORKING ON: Passing to open teammates in scoring areas more often
 WHAT THIS MEANS: Your player is a great finisher. What he's adding is the ability to find teammates in good scoring spots when defenders are focused on him. This makes the whole line better.
 WHAT YOU'LL SEE AT GAMES: Watch what he does below the goal line or in the corner. Is he looking for a teammate in the slot, or going to the net himself? Both are good — we want him reading both options.
 WHAT TO ASK YOUR PLAYER: "Did you have any moments tonight where you saw a teammate open and got them the puck? How did that feel?"
+'''
+
+# ─────────────────────────────────────────────────────────
+# K5) TRUST_TIER_SYSTEM — shared across Operating Profiles
+# ─────────────────────────────────────────────────────────
+TRUST_TIER_SYSTEM = '''
+TRUST TIER SYSTEM
+=================
+Assign one of three tiers based on deployment reliability over 15+ game sample.
+
+TIER 1 — HIGH TRUST
+Definition: Multi-state deployment. Trusted in all game states, ST, matchup situations.
+Minutes: 18-22/game. Can absorb increased load without performance degradation.
+Bench decision: 'When in doubt, this player goes.'
+Tags: Matchup Center, Top-4 Two-Way, Shutdown Pair, High-Impact Starter
+
+TIER 2 — TRUST
+Definition: Reliable in defined role. Strong in specific game states, has limitations in others.
+Minutes: 14-17/game. Needs proper linemate/partner fit and context management.
+Bench decision: 'Use correctly in defined role, avoid mismatches.'
+Tags: Energy Line, Structure Forward, Secondary PK, PP2 Contributor, Offensive Activator
+
+TIER 3 — SHELTERED / SPECIALIST
+Definition: Requires sheltering or narrow deployment. Effective in specific situations only.
+Minutes: 8-12/game or situational. Cannot handle top matchups without support.
+Bench decision: 'Use sparingly in defined situations only.'
+Tags: PP Specialist, 4th Line Energy, OZ Start Only, 3rd Pair Sheltered
+
+ASSIGNMENT RULES:
+- Assign based on actual deployment data, not projection or potential
+- Minimum 15-game sample required for reliable tier assignment
+- Reassess every 10 games or after major role change
+- State the justification in 1-3 lines tying deployment, reliability, and ST value
+'''
+
+# ─────────────────────────────────────────────────────────
+# K6) FORWARD_OPERATING_PROFILE — coach deployment document
+# ─────────────────────────────────────────────────────────
+FORWARD_OPERATING_PROFILE = '''
+FORWARD OPERATING PROFILE — REQUIRED FORMAT
+============================================
+This is a coach-facing deployment document. Purpose: real-time game decisions.
+NOT a scouting report. NOT a development plan. Answers: how do I use this player to win.
+
+SECTION SUMMARY RULE: Every section begins with 1-2 sentences synthesizing
+the key finding before any bullets, tables, or data.
+
+TOOL GRADES — NHL 7-SCALE:
+7 = ELITE (NHL top-line tool)
+6 = PLUS (NHL regular, above NHL average)
+5 = ABOVE-AVG (NHL average+ / strong at current level)
+4 = AVERAGE (NHL average / solid at current level)
+3 = BELOW-AVG (Below NHL average / developing)
+2 = FRINGE (Significant development needed)
+1 = NOT YET (Not functional at this level)
+
+RISK INDEX FOR EXPOSURE MATCHUPS:
+HIGH RISK: Include mitigation strategy (adjust linemates, reduce TOI, increase OZ%)
+MEDIUM RISK: Note the context and monitoring approach
+
+xG REALITY CHECK (required in Failure Modes section):
+State current xG differential, expected regression at next level,
+and role adjustment if regression occurs.
+
+QUANTIFIED PERFORMANCE THRESHOLDS (required in Minute Ceilings):
+MAINTAIN: [FO% target, CF% target, shot rate target, exit % target]
+WARNING: Any metric drops >10% from baseline over 3-game stretch
+CRITICAL: [specific floor values for each metric]
+
+VISUAL OVERPLAY CUES (required in Overplay Warnings):
+Observable in-game signs: hands on knees, slow first strides, delayed backcheck,
+extended shifts >60 sec, missed routes, turnovers in own end.
+
+GENERATE ALL 13 SECTIONS IN ORDER.
+Reference TRUST_TIER_SYSTEM for tier assignment.
+Max tokens: 6000. Prioritize depth in sections 4, 5, 6, 13.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K7) DEFENSE_OPERATING_PROFILE — D-specific deployment document
+# ─────────────────────────────────────────────────────────
+DEFENSE_OPERATING_PROFILE = '''
+DEFENSEMAN OPERATING PROFILE — REQUIRED FORMAT
+===============================================
+Coach-facing deployment document for defensemen. Same structure as Forward profile
+with D-specific metrics throughout. Purpose: real-time game decisions.
+
+SECTION SUMMARY RULE: Every section begins with 1-2 sentences synthesizing
+the key finding before any bullets or data.
+
+KEY D-SPECIFIC METRICS:
+Gap control rate, Box-out success %, Breakout touch points/game,
+Partner dependency score, Shot-blocking load, DZ retrieval %,
+Weak-side rotation completion %, High-danger chances against with/without
+
+FAILURE MODES — D-SPECIFIC TRIGGERS:
+Gap collapses (threshold: >X per game), Box-out failures (net-front goals against),
+Breakout errors with fatigue, Partner injury or ineffectiveness,
+Heavy shot-blocking accumulation (injury risk)
+
+PARTNER COMPATIBILITY (replaces Linemate section):
+Best pairing archetypes: puck-mover + stabilizer, physical + mobility
+Do not pair: two high-risk activators, two slow-gap defenders against speed
+
+GENERATE ALL 13 SECTIONS IN ORDER.
+Reference TRUST_TIER_SYSTEM for tier assignment.
+Max tokens: 6000. Prioritize depth in sections 4, 5, 6, 13.
 '''
 
 # ─────────────────────────────────────────────────────────
