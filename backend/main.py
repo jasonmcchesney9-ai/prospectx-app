@@ -72,6 +72,8 @@ from pxi_prompt_core import (
     VALID_MODES,
     MODE_TEMPLATE_WIRING,
     REQUIRED_SECTIONS_BY_TYPE,
+    EVIDENCE_DISCIPLINE,
+    BROADCAST_SUB_PROMPTS,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -20666,6 +20668,177 @@ async def get_unread_count(token_data: dict = Depends(verify_token)):
 
     conn.close()
     return {"unread_count": total_unread}
+
+
+# ============================================================
+# BROADCAST — AI-POWERED BROADCAST INTELLIGENCE
+# ============================================================
+
+
+def _gather_broadcast_data(team_name: str, org_id: str, conn) -> list:
+    """Gather roster with latest season stats for broadcast endpoints."""
+    decoded = team_name.replace("%20", " ")
+    rows = conn.execute(
+        """SELECT * FROM players
+           WHERE org_id = ? AND LOWER(current_team) = LOWER(?)
+           AND (is_deleted = 0 OR is_deleted IS NULL)
+           ORDER BY position, last_name""",
+        (org_id, decoded),
+    ).fetchall()
+    result = []
+    for r in rows:
+        p = _player_from_row(r)
+        stats_row = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+            (p["id"],),
+        ).fetchone()
+        stats = {}
+        if stats_row:
+            stats = {
+                "season": stats_row["season"], "gp": stats_row["gp"],
+                "g": stats_row["g"], "a": stats_row["a"], "p": stats_row["p"],
+                "plus_minus": stats_row["plus_minus"], "pim": stats_row["pim"],
+                "shots": stats_row["shots"],
+            }
+        result.append({
+            "name": f"{p.get('first_name', '')} {p.get('last_name', '')}".strip(),
+            "position": p.get("position", ""),
+            "jersey": p.get("jersey_number", ""),
+            "archetype": p.get("archetype", ""),
+            "shoots": p.get("shoots", ""),
+            "height_cm": p.get("height_cm"),
+            "weight_kg": p.get("weight_kg"),
+            "stats": stats,
+        })
+    return result
+
+
+def _strip_json_fences(text: str) -> str:
+    """Strip markdown code fences from Claude JSON responses."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text)
+    return text
+
+
+class BroadcastGenerateAllRequest(BaseModel):
+    home_team: str
+    away_team: str
+    game_date: str = ""
+    mode: str = "broadcast"
+    depth: str = "standard"
+    audience: str = "informed"
+    game_state: str = "pre_game"
+
+
+@app.post("/broadcast/generate-all")
+async def broadcast_generate_all(
+    body: BroadcastGenerateAllRequest,
+    token_data: dict = Depends(verify_token),
+):
+    """Generate complete broadcast preparation package (all 7 tools)."""
+    org_id = token_data["org_id"]
+
+    if body.mode not in ("broadcast", "producer"):
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be 'broadcast' or 'producer'.")
+
+    conn = get_db()
+    home_data = _gather_broadcast_data(body.home_team, org_id, conn)
+    away_data = _gather_broadcast_data(body.away_team, org_id, conn)
+    conn.close()
+
+    client = get_anthropic_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Anthropic API key not configured. Broadcast generation requires an API key.")
+
+    # Build system prompt
+    system_parts = [
+        PXI_CORE_GUARDRAILS,
+        EVIDENCE_DISCIPLINE,
+        PXI_MODE_BLOCKS.get(body.mode, PXI_MODE_BLOCKS["broadcast"]),
+    ]
+    if body.mode == "broadcast":
+        system_parts.append("SECONDARY MODE CONTEXT: Use analytical rigor (Analyst mode) to support all stat references.")
+
+    system_parts.append(f"""BROADCAST GENERATION TASK — COMPLETE PACKAGE
+Game: {body.home_team} vs {body.away_team}
+Date: {body.game_date}
+Game State: {body.game_state}
+Depth: {body.depth}
+Audience: {body.audience}
+
+Return a single JSON object with exactly these 7 keys.
+
+DEPTH CALIBRATION:
+- quick: 3-4 items per category, essential stats only
+- standard: 5-7 items per category, supporting context
+- deep: 8-10 items per category, exhaustive analysis
+
+AUDIENCE CALIBRATION:
+- casual: Explain hockey terms, focus on storylines and personalities
+- informed: Standard hockey language, mix of stats and narrative
+- hardcore: Advanced metrics, tactical detail, deep statistical analysis
+
+REQUIRED JSON SCHEMA:
+{{
+  "spotting_board": {{
+    "home": {{ "team_name": "{body.home_team}", "players": [
+      {{ "jersey": "str", "name": "str", "position": "str", "gp": 0, "g": 0, "a": 0, "p": 0, "key_stat": "str", "archetype": "str", "pronunciation": null, "broadcast_note": "one-line color commentary for on-air use", "xg": null, "cf_pct": null, "zone_starts_oz_pct": null }}
+    ] }},
+    "away": {{ "team_name": "{body.away_team}", "players": [same shape] }}
+  }},
+  "talk_tracks": {{
+    "team_storyline": [{{ "headline": "str", "twenty_sec_read": "~50 words spoken aloud", "stat_hook": "one sentence with key number" }}],
+    "matchup_storyline": [same shape],
+    "player_storyline": [same shape],
+    "streak_milestone": [same shape]
+  }},
+  "insights": [{{ "category": "PATTERN|TREND|MATCHUP|STORYLINE|STAT|MILESTONE|ANOMALY", "insight": "str", "stat_support": "str", "suggested_use": "on-air mention | graphic trigger | interview question" }}],
+  "stat_cards": [{{ "card_type": "player_vs_player|line_vs_line|special_teams|goalie|team_trend", "headline_stat": "str", "headline_value": "str", "support_stats": [{{"label": "str", "value": "str"}}], "interpretation": "str", "graphic_caption": "str" }}],
+  "graphics_suggestions": [{{ "priority": 1, "graphic_type": "str", "trigger_moment": "str", "caption": "str", "data_needed": "str" }}],
+  "player_profiles": [{{ "name": "str", "archetype": "str", "physical": "str", "role": "str", "strengths": "str", "fun_fact": "str", "tonight": "str" }}],
+  "interview_questions": [{{ "context_tab": "coach_pre|coach_post|player_pre|player_post|feature", "label": "SAFE|PROBE|FEATURE|INSIGHT|FOLLOW_UP", "question": "str" }}]
+}}
+
+Return ONLY valid JSON. No markdown fences, no commentary outside the JSON.""")
+
+    system_prompt = "\n\n".join(system_parts)
+
+    user_prompt = f"""Generate the complete broadcast preparation package for this game.
+
+HOME TEAM: {body.home_team}
+ROSTER & STATS:
+{json.dumps(home_data, indent=2, default=str)}
+
+AWAY TEAM: {body.away_team}
+ROSTER & STATS:
+{json.dumps(away_data, indent=2, default=str)}
+
+Generate all 7 sections using the real player data above. Use actual names, numbers, and stats.
+For fields where data is unavailable (xg, cf_pct, etc.), use null.
+For pronunciation, provide only if the name is non-obvious; otherwise null."""
+
+    max_tokens_map = {"quick": 6000, "standard": 8000, "deep": 10000}
+    max_tokens = max_tokens_map.get(body.depth, 8000)
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw_text = message.content[0].text.strip()
+        raw_text = _strip_json_fences(raw_text)
+        result = json.loads(raw_text)
+        return result
+    except json.JSONDecodeError as e:
+        logger.error("Broadcast generate-all: JSON parse error: %s | raw: %s", str(e), raw_text[:500] if 'raw_text' in dir() else "N/A")
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response as JSON: {str(e)}")
+    except Exception as e:
+        logger.error("Broadcast generate-all error: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 
 # ============================================================
