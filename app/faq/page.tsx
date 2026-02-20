@@ -87,6 +87,14 @@ const FAQ_DATA: FAQCategory[] = [
         q: "What report types are available?",
         a: "ProspectX offers 24+ report types including Pro Skater Evaluation, Unified Prospect Report, Goalie Analysis, Game Decision Brief, Trade Target Analysis, Draft Comparative, Agent Pack, Development Roadmap, Player Guide (Prep/College), Pre-Game Intel Brief, and more.",
       },
+      {
+        q: "What is Bench Talk?",
+        a: "Bench Talk is your private AI coaching conversation with PXI. Open it from the nav bar at any time. Ask about players, get game plans, understand stats, or get development guidance — PXI responds in the language of your role. Scouts get scouting answers. Parents get plain-language answers. Coaches get tactical answers.",
+      },
+      {
+        q: "Can PXI generate custom reports for me?",
+        a: "Yes. On Scout tier and above, you can ask PXI to generate a custom scouting report, development assessment, game preparation pack, or parent summary. These are AI-generated analyses tailored to your specific question — not pre-built templates. Available 10 times/month on Scout, unlimited on Pro and above.",
+      },
     ],
   },
   {
