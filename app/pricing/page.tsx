@@ -60,7 +60,7 @@ const FEATURE_MATRIX: FeatureCategory[] = [
       { label: "Basic search (name, team)", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
       { label: "Search with ratings/stats", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
       { label: "Player search in nav bar", values: { rookie: false, parent: true, scout: true, pro: true, elite: true } },
-      { label: "InStat game data", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
+      { label: "Game Stats & Data", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
     ],
   },
   {

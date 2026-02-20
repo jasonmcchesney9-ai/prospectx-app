@@ -57,7 +57,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "What data formats do you accept?",
-        a: "We accept CSV files, Excel (.xlsx, .xls), XLSX analytics exports (InStat, internal systems, and more), and manual data entry. Required data: player name, position, and basic stats (GP, G, A, P, +/-, PIM). Optional data like advanced stats, microstats, and scout notes enhance report quality.",
+        a: "We accept CSV files, Excel (.xlsx, .xls), XLSX analytics exports (Game Stats & Data, internal systems, and more), and manual data entry. Required data: player name, position, and basic stats (GP, G, A, P, +/-, PIM). Optional data like advanced stats, microstats, and scout notes enhance report quality.",
       },
       {
         q: "Can I add scout notes?",
@@ -107,7 +107,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Can ProspectX integrate with our existing tools?",
-        a: "Currently supports CSV/Excel import and XLSX analytics exports from InStat, internal systems, and other platforms. RinkNet API connector coming in 2-3 months. Sportlogiq, HockeyTech, and custom API integrations planned for 6-12 months. Enterprise tier includes dedicated integration support.",
+        a: "Currently supports CSV/Excel import and XLSX analytics exports from Game Stats & Data, internal systems, and other platforms. RinkNet API connector coming in 2-3 months. Sportlogiq, HockeyTech, and custom API integrations planned for 6-12 months. Enterprise tier includes dedicated integration support.",
       },
     ],
   },
@@ -500,7 +500,7 @@ export default function LandingPage() {
                 <span className="text-sm text-white/30">/month</span>
               </div>
               <ul className="space-y-2">
-                {["Unlimited reports", "Unlimited Bench Talk", "All 21 templates", "InStat game data", "Series planning"].map((item) => (
+                {["Unlimited reports", "Unlimited Bench Talk", "All 21 templates", "Game Stats & Data", "Series planning"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-white/60">
                     <CheckCircle2 size={12} className="text-teal shrink-0" />
                     {item}
