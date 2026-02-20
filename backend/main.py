@@ -90,6 +90,9 @@ from pxi_prompt_core import (
     TEAM_IDENTITY_V1,
     TEAM_IDENTITY_V2,
     IN_SEASON_PROJECTIONS,
+    OPPONENT_GAME_PLAN_V1,
+    OPPONENT_GAME_PLAN_V2,
+    PLAYOFF_SERIES_PREP,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -851,6 +854,8 @@ TEMPLATE_CATEGORIES = {
     "agent_projection":          ("Player Analytics", "Premium Reports"),
     # Addendum 5
     "in_season_projections":     ("Player Analytics", "Projections & Development"),
+    # Addendum 4
+    "playoff_series_prep":       ("Competitive Intelligence", "Opponent Analysis"),
 }
 
 
@@ -2454,6 +2459,9 @@ def seed_new_templates():
         ("In-Season Projections", "in_season_projections",
          "Player Analytics", "Projections & Development",
          "Mid-season trajectory check with pace-to-finish projections, trend classification, milestone tracking, advancement readiness, and next 10 games outlook."),
+        ("Playoff Series Prep", "playoff_series_prep",
+         "Competitive Intelligence", "Opponent Analysis",
+         "Series-level strategy with game-by-game adjustment grid, fatigue monitoring, pre-built counters, and series-wide bench cues. The war room document."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -10042,7 +10050,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -11876,8 +11884,10 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             _type_tokens = {
                 "elite_profile": 10000,
                 "team_identity": 10000,
+                "playoff_series_prep": 10000,
                 "bias_controlled_eval": 8000,
                 "agent_projection": 8000,
+                "opponent_gameplan": 8000,
                 "forward_operating_profile": 6000,
                 "defense_operating_profile": 6000,
                 "in_season_projections": 6000,
@@ -17277,8 +17287,10 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
         _bg_type_tokens = {
             "elite_profile": 10000,
             "team_identity": 10000,
+            "playoff_series_prep": 10000,
             "bias_controlled_eval": 8000,
             "agent_projection": 8000,
+            "opponent_gameplan": 8000,
             "forward_operating_profile": 6000,
             "defense_operating_profile": 6000,
             "in_season_projections": 6000,
