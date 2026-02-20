@@ -681,6 +681,41 @@ export default function BenchTalkDrawer() {
   const isNewConversation = messages.length === 0 && !loading;
   const hasContext = contextPlayers.length > 0 || contextReports.length > 0;
 
+  // Role-specific suggestion chips for empty state
+  const ROLE_SUGGESTION_CHIPS: Record<string, string[]> = {
+    scout: ["Scout me a player", "Compare two players", "Who should I watch this week?"],
+    coach: ["Build a game plan", "Suggest line combinations", "Give me a practice drill"],
+    gm: ["Analyze my roster", "Suggest a trade target", "Who needs development work?"],
+    parent: ["How is my player developing?", "What should I focus on?", "Explain this stat"],
+    agent: ["Plan my client's pathway", "Generate a 90-day plan", "Readiness check"],
+    broadcast: ["Tonight's storylines", "Build a spotting board", "Interview questions"],
+    analyst: ["Advanced stats breakdown", "Trend analysis", "Regression candidates"],
+    producer: ["Tonight's storylines", "Segment planning", "Graphics ideas"],
+    skill_coach: ["Drill design for edges", "Practice drill for passing", "Technical development plan"],
+    mental_coach: ["Build a pre-game routine", "Confidence strategies", "Focus techniques"],
+  };
+
+  // Usage/limit state
+  const [usageWarning, setUsageWarning] = useState<{ remaining: number; limit: number } | null>(null);
+
+  // Check usage on mount and after sending
+  useEffect(() => {
+    if (isOpen) {
+      api.get("/subscription/usage").then(({ data }) => {
+        const limit = data.limits?.monthly_bench_talks;
+        const used = data.usage?.bench_talks || 0;
+        if (limit && limit !== -1) {
+          const remaining = limit - used;
+          if (remaining <= 1 && remaining >= 0) {
+            setUsageWarning({ remaining, limit });
+          } else {
+            setUsageWarning(null);
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <>
       {/* ── Side Tab Handle (visible when closed) ── */}
@@ -839,42 +874,44 @@ export default function BenchTalkDrawer() {
         {/* ── Chat Area ── */}
         <div className="flex-1 overflow-y-auto">
           {isNewConversation ? (
-            /* Welcome Screen — themed per role */
+            /* Welcome Screen — PXI empty state */
             (() => {
-              const user = getUser();
               const rg = getRoleGroup(effectiveHockeyRole);
               const theme = BENCH_TALK_THEMES[rg];
-              const name = user?.first_name || "there";
-              const displaySuggestions = suggestions.length > 0 ? suggestions : theme.fallbackSuggestions.map((s) => ({ ...s, text: s.text }));
+              const modeKey = effectiveHockeyRole === "player" ? "parent" : (effectiveHockeyRole || "scout");
+              const chips = ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
               return (
             <div className="flex flex-col items-center justify-center h-full px-4">
-              <div className="mb-4 drop-shadow-lg">
-                <PXIBadge size={56} variant="dark" showDot={true} />
+              <div className="mb-3 drop-shadow-lg">
+                <PXIBadge size={64} variant="dark" showDot={true} />
               </div>
-              <h2 className="font-oswald text-lg font-bold text-navy tracking-wider uppercase mb-1" suppressHydrationWarning>
-                Hey {name}
+              <h2 className="font-oswald text-xl font-bold text-navy tracking-wider uppercase mb-1">
+                Bench Talk
               </h2>
-              <p className="text-muted text-xs text-center mb-2 max-w-sm">
-                {theme.greeting}
-              </p>
-              <p className="text-navy/70 text-xs text-center mb-6 max-w-sm font-medium italic">
-                {theme.question}
+              <p className="text-muted text-sm text-center mb-3 max-w-xs leading-relaxed">
+                Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.
               </p>
 
-              <div className={`grid gap-1.5 w-full max-w-md ${displaySuggestions.length > 4 ? "grid-cols-2" : "grid-cols-1 max-w-sm"}`}>
-                {displaySuggestions.slice(0, 6).map((s, i) => {
-                  const Icon = SUGGESTION_ICONS[s.icon] || Sparkles;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => sendMessage(s.text)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border border-teal/20 bg-white hover:bg-teal/5 hover:${theme.pillBorderActive} transition-all text-left group`}
-                    >
-                      <Icon size={14} className="text-teal shrink-0 group-hover:scale-110 transition-transform" />
-                      <span className="text-[11px] text-navy leading-tight">{s.text}</span>
-                    </button>
-                  );
-                })}
+              {/* Current mode badge */}
+              <span className={`text-[10px] font-oswald font-bold tracking-wider px-3 py-1 rounded-full mb-4 ${theme.modeBadgeColor} border border-teal/20`}>
+                {MODE_LABELS[currentMode] || "SCOUT"} MODE
+              </span>
+
+              {/* Divider */}
+              <div className="w-16 h-px bg-teal/20 mb-4" />
+
+              {/* Role-specific suggestion chips */}
+              <div className="grid gap-2 w-full max-w-sm">
+                {chips.map((chipText, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(chipText)}
+                    className="flex items-center gap-2.5 px-4 py-3 rounded-lg border border-teal/20 bg-white hover:bg-teal/5 hover:border-teal/30 transition-all text-left group"
+                  >
+                    <MessageSquare size={14} className="text-teal shrink-0 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs text-navy leading-tight">{chipText}</span>
+                  </button>
+                ))}
               </div>
             </div>
               );
@@ -974,6 +1011,13 @@ export default function BenchTalkDrawer() {
             </div>
           )}
         </div>
+
+        {/* ── Limit Warning ── */}
+        {usageWarning && usageWarning.remaining <= 1 && (
+          <div className="mx-3 mb-1 bg-orange/10 border border-orange/20 rounded-lg p-3 text-orange text-sm shrink-0">
+            You have {usageWarning.remaining} Bench Talk conversation{usageWarning.remaining !== 1 ? "s" : ""} remaining today. Resets at midnight.
+          </div>
+        )}
 
         {/* ── Input Bar ── */}
         <div className="bg-navy p-3 shrink-0">
