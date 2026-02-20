@@ -20980,6 +20980,116 @@ Use the real player data above. Actual names, numbers, and stats."""
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 
+# ── Broadcast: post-game script ──────────────────────────────
+
+_POST_GAME_FORMAT_CONFIG = {
+    "30_second": {"word_target": 75, "label": "30-Second Recap"},
+    "60_second": {"word_target": 150, "label": "60-Second Recap"},
+    "2_minute": {"word_target": 300, "label": "2-Minute Wrap"},
+}
+
+
+class BroadcastPostGameRequest(BaseModel):
+    home_team: str
+    away_team: str
+    home_score: int
+    away_score: int
+    format: str = "60_second"
+    mode: str = "broadcast"
+    audience: str = "informed"
+
+
+@app.post("/broadcast/post-game")
+async def broadcast_post_game(
+    body: BroadcastPostGameRequest,
+    token_data: dict = Depends(verify_token),
+):
+    """Generate a post-game recap script in broadcast format."""
+    org_id = token_data["org_id"]
+
+    fmt_cfg = _POST_GAME_FORMAT_CONFIG.get(body.format)
+    if not fmt_cfg:
+        raise HTTPException(status_code=400, detail=f"Invalid format. Must be one of: {', '.join(_POST_GAME_FORMAT_CONFIG.keys())}")
+
+    if body.mode not in ("broadcast", "producer"):
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be 'broadcast' or 'producer'.")
+
+    conn = get_db()
+    home_data = _gather_broadcast_data(body.home_team, org_id, conn)
+    away_data = _gather_broadcast_data(body.away_team, org_id, conn)
+    conn.close()
+
+    client = get_anthropic_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Anthropic API key not configured.")
+
+    # Determine winner
+    if body.home_score > body.away_score:
+        winner = body.home_team
+        loser = body.away_team
+    elif body.away_score > body.home_score:
+        winner = body.away_team
+        loser = body.home_team
+    else:
+        winner = "TIE"
+        loser = ""
+
+    system_parts = [
+        PXI_CORE_GUARDRAILS,
+        PXI_MODE_BLOCKS.get(body.mode, PXI_MODE_BLOCKS["broadcast"]),
+        f"""POST-GAME SCRIPT GENERATION
+Format: {fmt_cfg['label']}
+Target: approximately {fmt_cfg['word_target']} words
+Audience: {body.audience}
+
+Final Score: {body.home_team} {body.home_score} — {body.away_team} {body.away_score}
+{"Winner: " + winner if winner != "TIE" else "Result: Tied"}
+
+Write a broadcast-ready post-game recap script. Structure:
+1. Opening hook — score, outcome, game context
+2. Three Stars — one sentence each with a key stat
+3. Turning point — the play/moment that changed the game
+4. Stat headline — the one number that tells the story
+5. Closing — forward look or takeaway
+
+Write ONLY the script text. Natural broadcast language.
+No JSON. No formatting markers. No section labels.
+Just the script a broadcaster would read on air.""",
+    ]
+
+    system_prompt = "\n\n".join(system_parts)
+
+    user_prompt = f"""Generate a {fmt_cfg['label'].lower()} post-game recap script.
+
+HOME TEAM: {body.home_team} (Score: {body.home_score})
+KEY PLAYERS:
+{json.dumps(home_data[:10], indent=2, default=str)}
+
+AWAY TEAM: {body.away_team} (Score: {body.away_score})
+KEY PLAYERS:
+{json.dumps(away_data[:10], indent=2, default=str)}
+
+Write approximately {fmt_cfg['word_target']} words. Use real player names and stats."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        script_text = message.content[0].text.strip()
+        word_count = len(script_text.split())
+        return {
+            "script": script_text,
+            "word_count": word_count,
+            "format": body.format,
+        }
+    except Exception as e:
+        logger.error("Broadcast post-game error: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
 # ============================================================
 # MAIN
 # ============================================================
