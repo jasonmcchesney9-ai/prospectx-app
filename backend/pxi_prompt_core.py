@@ -956,6 +956,89 @@ Max tokens: 2000. If content exceeds one page, cut narrative — keep all header
 '''
 
 # ─────────────────────────────────────────────────────────
+# K9) BIAS_CONTROLLED_EVAL — external recruiting asset
+# ─────────────────────────────────────────────────────────
+BIAS_CONTROLLED_EVAL = '''
+BIAS-CONTROLLED EVALUATION — REQUIRED FORMAT
+=============================================
+Title: PLAYER EVALUATION REPORT (BIAS-CONTROLLED)
+Audience: CHL/NCAA/USHL coaching and scouting staff
+Purpose: External recruiting asset. Conservative, credible, data-grounded.
+
+OPENING DECLARATION (required at top of every report):
+'This report applies four bias controls: role-first evaluation,
+conservative projection (floor > ceiling), balanced limitations,
+and no intangible claims without on-ice evidence.'
+
+SECTION SUMMARY RULE: Every section begins with 1-2 sentences
+synthesizing the key finding before any data or bullets.
+
+GRADING SCALE (Section 4 — Skill-by-Skill):
+A = Elite / translates to higher level with confidence
+B = Above average / projects well with development
+C = Average / functional, not a differentiator
+D = Below average / risk factor at next level
+
+TRANSLATION ANALYSIS (Section 7) — for each league:
+- Short projection (1-2 sentences)
+- The 'why' (what translates, what doesn't)
+- Main limiting factor or risk
+- Confidence level: HIGH / MEDIUM / LOW
+
+BIAS CHECK (Section 9) — required closing section:
+Run this checklist explicitly:
+□ No inflated upside — ceiling mentioned only if data supports it
+□ No narrative fluff — every claim grounded in a number or observation
+□ Strengths and limitations balanced — limitations as prominent as strengths
+□ No intangibles without evidence — no character/leadership claims without data
+
+STYLE: Direct, professional hockey-ops language. Write for a video room.
+Avoid promotional language. If something is a risk, say it is a risk.
+
+Max tokens: 8000. This report goes to external staff — quality over brevity.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K10) AGENT_PROJECTION — pathway planning for agents/families
+# ─────────────────────────────────────────────────────────
+AGENT_PROJECTION = '''
+AGENT PROJECTION REPORT — REQUIRED FORMAT
+==========================================
+Audience: Player agents, advisors, families
+Purpose: Pathway planning, advancement triggers, market positioning
+Tier: ELITE only — this is the premium differentiator
+
+COMPLIANCE NOTICE (prepend to every Agent Projection Report):
+'PXI provides on-ice performance analysis and development pathway information.
+Contact rules, eligibility windows, and impermissible benefits vary by
+governing body (NCAA, Hockey Canada, USA Hockey, CHL, IIHF).
+Always verify compliance requirements before acting on any pathway recommendation.'
+
+SECTION SUMMARY RULE: Every section begins with 1-2 sentences
+synthesizing the key finding before any data or bullets.
+
+SCALABILITY CLASSIFICATION (Section 2):
+HIGH: Production and role translate with minimal adjustment
+MEDIUM: Core value translates but role adjustment required
+LOW: Significant development needed before translation is realistic
+
+ADVANCEMENT TRIGGERS (Section 6) — format for each:
+Trigger: [Metric name]
+Current: [Value]
+Target: [Value]
+Why it matters: [One sentence]
+Timeline: [In-season / Off-season / 2026-27 season]
+
+SIGN / PASS / WATCHLIST DECISION (Section 10):
+SIGN: Player is ready NOW for the target level
+WATCHLIST: Player has the tools but needs 1-2 development triggers met
+PASS: Player is not projecting to target level based on current data
+Always include specific justification — never just the label.
+
+Max tokens: 8000. Depth in sections 3, 4, 6, 10 is most valuable.
+'''
+
+# ─────────────────────────────────────────────────────────
 # L) CONVERSATION_RULES — Bench Talk memory and context
 # ─────────────────────────────────────────────────────────
 CONVERSATION_RULES = """═══ CONVERSATION MEMORY ═══
