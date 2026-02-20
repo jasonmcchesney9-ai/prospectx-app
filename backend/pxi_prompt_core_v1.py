@@ -347,8 +347,6 @@ MODE_TEMPLATE_WIRING = {
     # Phase 2 templates (2)
     "pre_game_intel":            {"primary": "coach",  "secondary": "analyst"},
     "player_guide_prep_college": {"primary": "parent", "secondary": "agent"},
-    # Phase 3 — Elite Profile
-    "elite_profile":             {"primary": "analyst", "secondary": "scout"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -441,14 +439,6 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "PLAYER_PROFILE", "READINESS_ASSESSMENT", "PATHWAY_OPTIONS",
         "ACADEMIC_ATHLETIC_BALANCE", "EXPOSURE_STRATEGY", "DEVELOPMENT_TIMELINE",
         "RECRUITING_REALITY_CHECK", "PARENT_ACTION_ITEMS",
-    ],
-    # Phase 3 — Elite Profile (16 sections)
-    "elite_profile": [
-        "HEADER_BLOCK", "EXECUTIVE_SUMMARY", "CORE_METRICS_TABLE", "CEI_COMPOSITE_SCORE",
-        "CORSI_POSSESSION_PROFILE", "EXPECTED_GOALS_PROFILE", "COACH_LENS_DEPLOYMENT_SHEET",
-        "ROLE_IDENTITY_CLASSIFICATION", "SPECIAL_TEAMS_IMPACT", "MICRO_STAT_IMPACT_MODEL",
-        "PLAYER_DNA_PROFILE", "LEAGUE_PROJECTION_MODEL", "DEVELOPMENT_PRIORITY_MAP",
-        "DEVELOPMENT_ACTION_PLANS", "SEASON_TREND_ANALYSIS", "FINAL_COACH_DECISION_BLOCK",
     ],
 }
 
@@ -590,59 +580,6 @@ PXI does not have access to:
 All roster and personnel recommendations are based solely on on-ice performance data available in the platform.
 Do not use PXI output as the sole basis for financial or contractual decisions.""",
 }
-
-# ─────────────────────────────────────────────────────────
-# K2) ELITE_PROFILE_SECTIONS — 16-section Elite Player Profile
-# ─────────────────────────────────────────────────────────
-ELITE_PROFILE_SECTIONS = '''
-ELITE PLAYER PROFILE — REQUIRED SECTIONS
-=========================================
-Generate ALL 16 sections in order. No section may be omitted.
-If data is unavailable for a section, include the section header
-and note [DATA NOT AVAILABLE] with what data would be needed.
-
-SECTION SUMMARIES: Each section must begin with a 1-2 sentence summary synthesizing the key finding before presenting any tables or data.
-
-1. HEADER BLOCK — player info, team, league, dates
-2. EXECUTIVE SUMMARY — 3-4 paragraphs, prose only
-3. CORE METRICS TABLE — 12+ per-game metrics with team avg + percentile
-4. CEI COMPOSITE SCORE — 5 dimensions, 0-100 score, tier classification
-5. CORSI & POSSESSION PROFILE — CF%, differential, on-ice GF/GA, time ratio
-6. EXPECTED GOALS (xG) PROFILE — individual + on-ice xG, slot breakdown
-7. COACH LENS DEPLOYMENT SHEET — grades by category, shift profile
-8. ROLE IDENTITY CLASSIFICATION — primary + secondary archetypes with evidence
-9. SPECIAL TEAMS IMPACT — PP and PK separately graded
-10. MICRO-STAT IMPACT MODEL — 14 stats, percentile, coach read
-11. PLAYER DNA PROFILE — 7 trait ratings with evidence
-12. LEAGUE PROJECTION MODEL — 3 levels, confidence %, timeline
-13. DEVELOPMENT PRIORITY MAP — top 5, ranked by advancement impact
-14. DEVELOPMENT ACTION PLANS — see DEVELOPMENT_ACTION_PLANS constant
-15. SEASON TREND ANALYSIS — first 10 GP vs last 10 GP, 8+ metrics
-16. FINAL COACH DECISION BLOCK — deployment, line fit, ST, matchup, game-state
-
-CEI COMPOSITE SCORE — CALCULATION INSTRUCTIONS
-===============================================
-5-dimension weighted model, score 0-100:
-
-Dimension        | Weight | Input Metrics
-Offensive Impact | 30%    | Points/game (40%), Primary points rate (25%), Individual xG (20%), Inner slot shots/game (15%)
-Possession       | 25%    | CORSI For% (40%), On-ice xG differential (40%), Fenwick For% (20%)
-Transition       | 15%    | Zone entries/game (40%), Breakouts/game (40%), Rush involvement (20%)
-Defensive        | 20%    | DZ puck losses inverted (30%), Post-shot retrievals (30%), Shot blocking (20%), On-ice GA (20%)
-Discipline       | 10%    | Penalties drawn/game (50%), Penalties taken/game inverted (50%)
-
-Blend each dimension: metric weighted average → percentile rank → multiply by weight × 100
-
-CEI TIER CLASSIFICATIONS:
-90-100 = 1A FRANCHISE PLAYER
-80-89  = 1B HIGH-IMPACT STARTER
-70-79  = 1B/2A SOLID STARTER / TOP-6
-60-69  = 2A BOTTOM-6 / DEPTH CONTRIBUTOR
-50-59  = 2B FRINGE ROSTER / DEVELOPMENTAL
-Below 50 = 3 NOT YET READY / DEVELOPMENTAL
-
-If data unavailable for any dimension: note [DATA NOT AVAILABLE], calculate from available dimensions, state which are missing and impact on score.
-'''
 
 # ─────────────────────────────────────────────────────────
 # L) CONVERSATION_RULES — Bench Talk memory and context
