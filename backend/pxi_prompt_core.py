@@ -645,6 +645,71 @@ If data unavailable for any dimension: note [DATA NOT AVAILABLE], calculate from
 '''
 
 # ─────────────────────────────────────────────────────────
+# K3) DEVELOPMENT_ACTION_PLANS — coach-facing action plans
+# ─────────────────────────────────────────────────────────
+DEVELOPMENT_ACTION_PLANS = '''
+DEVELOPMENT ACTION PLANS — COACH-FACING VERSION
+=================================================
+For each development priority identified in the Development Priority Map,
+generate a structured action plan using this format:
+
+DEVELOPMENT ACTION PLAN — [Priority Name]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CURRENT: [metric and current value]
+TARGET:  [quantified goal]
+TIMELINE: [specific window]
+
+PRACTICE BLOCKS (daily/weekly micro-sessions):
+• [Specific drill or exercise with reps/duration]
+• [Second drill]
+• [Third drill]
+
+TRACKING KPIs (measure every 5 games):
+• [Metric 1 with checkpoint target]
+• [Metric 2 with checkpoint target]
+
+GAME REVIEW PROTOCOL:
+• [What to tag/track in game film]
+
+NOTES: [Caveats, off-season vs in-season, position-specific]
+
+REFERENCE TEMPLATES (adapt to player's data):
+
+Template 1 — Faceoff Mechanics:
+TARGET: 52-53% overall, 50%+ in DZ. TIMELINE: 20 games.
+PRACTICE: 10-15 min daily FO reps, video review 5-10 draws/game, situational draws by zone/score-state.
+KPIs: Overall FO%, DZ FO% (51%+), OZ FO% (50%+).
+REVIEW: Tag every lost FO — grip, body position, timing. Cluster by opponent handedness.
+
+Template 2 — Transition / Carry Game:
+TARGET Stage 1 (in-season): Entries 0.30/game, exits 0.25/game. Stage 2 (off-season): Entries 0.40, exits 0.30.
+PRACTICE: 3v3 carry-before-shoot, NZ middle-lane carries, controlled exit drills.
+KPIs: Controlled entries vs chip/dump ratio, zone exits under control/game.
+REVIEW: Count carry-ins vs chips. Note forced vs habit choices.
+
+Template 3 — Puck Battle Win Rate:
+TARGET In-season: +3%. Off-season: 50%+. TIMELINE: remainder + 8-week off-season block.
+PRACTICE: 1v1/2v2 corner drills (score only after clean win + protect), weekly tracking.
+OFF-SEASON: 2x/week lower-body (single-leg squat, lateral sled), core anti-rotation.
+KPIs: Battle win rate from film tagging, board battle win% in practice.
+REVIEW: Tag 3-5 battles/period — win/loss, body position, stick position.
+
+Template 4 — Physical Engagement:
+TARGET: 0.30 hits/game via through-the-hands contact. TIMELINE: First 10 games.
+DEFINE acceptable engagement: forecheck bumps, finishing in pursuit, PK contact. NOT: open-ice hits, charging.
+PRACTICE: F1/F2 forecheck contact drills, PK bump drills, film review of skill-player contact.
+POST-GAME TRACKER: Finished first forecheck ✓/✗, Won 2+ heavy battles ✓/✗, No 50/50 avoidance ✓/✗.
+KPIs: Hits/game, forecheck completion rate.
+
+Template 5 — Slot Passing / Playmaking:
+TARGET: 0.35-0.40 passes to slot/game maintaining goal rate. TIMELINE: 6-8 weeks.
+PRACTICE: Below-goal-line slot pass before net attack, PP alternate-rep passing, option-reads drill.
+KPIs: Passes to slot/game, shoot-to-pass ratio inside dots.
+REVIEW: Tag 3-5 OZ possessions with pass vs shot option inside dots.
+NOTES: ADD dimension, don't replace finishing instinct. Frame as "becoming harder to defend."
+'''
+
+# ─────────────────────────────────────────────────────────
 # L) CONVERSATION_RULES — Bench Talk memory and context
 # ─────────────────────────────────────────────────────────
 CONVERSATION_RULES = """═══ CONVERSATION MEMORY ═══
