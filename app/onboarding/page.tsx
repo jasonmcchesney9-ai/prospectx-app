@@ -162,29 +162,31 @@ function OnboardingWizard() {
   }, [currentStep, saveStep]);
 
   const handleSkipAll = useCallback(async () => {
+    // Always update localStorage first to prevent redirect loops
+    const user = getUser();
+    if (user) {
+      setUser({ ...user, onboarding_completed: true, onboarding_step: 5 });
+    }
     try {
       await api.post("/onboarding/skip");
-      const user = getUser();
-      if (user) {
-        setUser({ ...user, onboarding_completed: true, onboarding_step: 5 });
-      }
-      router.push("/");
     } catch {
-      router.push("/");
+      // API fail is non-blocking — localStorage already updated
     }
+    router.push("/");
   }, [router]);
 
   const handleComplete = useCallback(async () => {
+    // Always update localStorage first to prevent redirect loops
+    const user = getUser();
+    if (user) {
+      setUser({ ...user, onboarding_completed: true, onboarding_step: 5 });
+    }
     try {
       await api.post("/onboarding/complete");
-      const user = getUser();
-      if (user) {
-        setUser({ ...user, onboarding_completed: true, onboarding_step: 5 });
-      }
-      router.push("/");
     } catch {
-      router.push("/");
+      // API fail is non-blocking — localStorage already updated
     }
+    router.push("/");
   }, [router]);
 
   // Can proceed to next step?
