@@ -15,6 +15,12 @@ import {
   ArrowRight,
   CheckCircle2,
   Star,
+  MessageSquare,
+  Search,
+  Briefcase,
+  Heart,
+  Mic,
+  Film,
 } from "lucide-react";
 
 // ── FAQ Data ────────────────────────────────────
@@ -416,6 +422,100 @@ export default function LandingPage() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PXI Section ──────────────────────────── */}
+      <section className="bg-navy border-y border-white/5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-20">
+          {/* Badge */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal/10 border border-teal/20 mb-4">
+              <Zap size={12} className="text-teal" />
+              <span className="text-xs font-oswald uppercase tracking-widest text-teal">
+                Powered by Claude AI
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-oswald font-bold text-white">
+              Meet PXI — Your AI Hockey Intelligence Partner
+            </h2>
+            <p className="text-white/70 text-sm mt-3 max-w-2xl mx-auto leading-relaxed">
+              PXI is not a chatbot. It thinks like a scout, coaches like a coach, and speaks the language of whoever is asking.
+            </p>
+          </div>
+
+          {/* What is Bench Talk? */}
+          <div className="bg-white/[0.03] border border-teal/20 rounded-2xl p-6 max-w-2xl mx-auto mb-10">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
+                <MessageSquare size={20} className="text-teal" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-sm mb-1">What is Bench Talk?</h3>
+                <p className="text-white/70 text-sm leading-relaxed">
+                  Bench Talk is your private conversation with PXI. Ask about a player, build a game plan, get a scouting report, understand your child&apos;s development — in plain language, in seconds. Every role gets their own version of PXI.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 10 Modes Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-10">
+            {[
+              { name: "Scout", icon: Search, desc: "Evaluate players like a professional scout" },
+              { name: "Coach", icon: Shield, desc: "Build game plans, line combos, and adjustments" },
+              { name: "Analyst", icon: BarChart3, desc: "Deep stats, trends, and advanced metrics" },
+              { name: "GM", icon: Briefcase, desc: "Roster moves, depth charts, trade analysis" },
+              { name: "Agent", icon: Users, desc: "Pathway planning and player representation" },
+              { name: "Parent", icon: Heart, desc: "Plain-language development guidance" },
+              { name: "Skill Coach", icon: Target, desc: "Drill design and technical skill development" },
+              { name: "Mental Coach", icon: Brain, desc: "Confidence, focus, and performance psychology" },
+              { name: "Broadcast", icon: Mic, desc: "Storylines, talk tracks, and on-air preparation" },
+              { name: "Producer", icon: Film, desc: "Segment planning and production rundowns" },
+            ].map((mode) => (
+              <div key={mode.name} className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-teal/20 transition-colors">
+                <mode.icon size={18} className="text-teal mx-auto mb-2" />
+                <div className="text-teal font-oswald text-[11px] font-bold uppercase tracking-wider mb-0.5">
+                  {mode.name}
+                </div>
+                <p className="text-white/50 text-[11px] leading-tight">
+                  {mode.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Custom Reports Callout */}
+          <div className="bg-orange/10 border border-orange/20 rounded-2xl p-6 flex gap-4 items-start max-w-2xl mx-auto mt-6">
+            <div className="shrink-0">
+              <FileText size={32} className="text-orange" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-sm mb-1">AI-Powered Custom Reports</h3>
+              <p className="text-white/70 text-sm leading-relaxed mb-3">
+                Ask PXI to generate a scouting report, development assessment, game preparation pack, or parent summary — customized for your role, your player, and your league. Not a template. A real analysis.
+              </p>
+              <Link
+                href="/pricing"
+                className="text-orange text-xs font-oswald uppercase tracking-wider hover:text-orange/80 transition-colors"
+              >
+                See Report Templates &rarr;
+              </Link>
+            </div>
+          </div>
+
+          {/* Section CTA */}
+          <div className="text-center mt-10">
+            <p className="text-white/50 text-sm mb-4">
+              Try Bench Talk free — no credit card required.
+            </p>
+            <Link
+              href="/login?mode=register"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors text-sm"
+            >
+              Start Free Trial <ArrowRight size={16} />
+            </Link>
           </div>
         </div>
       </section>
