@@ -14,7 +14,6 @@ import {
   Heart,
   Search,
   Globe,
-  ArrowLeft,
   Loader2,
   MessageSquare,
   FileText,
@@ -24,8 +23,7 @@ import {
 import api from "@/lib/api";
 import { getUser, setUser } from "@/lib/auth";
 import type { SubscriptionTier, User } from "@/types/api";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import NavBar from "@/components/NavBar";
+import MarketingLayout from "@/components/MarketingLayout";
 
 const INDIVIDUAL_KEYS = ["rookie", "parent", "scout", "pro", "elite"] as const;
 const ORG_KEYS = ["team_org", "program_org", "enterprise"] as const;
@@ -179,18 +177,10 @@ export default function PricingPage() {
   };
 
   return (
-    <ProtectedRoute>
-      <NavBar />
+    <MarketingLayout>
       <div className="min-h-screen bg-gradient-to-b from-navy/[0.02] to-white">
         {/* Header */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy transition-colors mb-6"
-          >
-            <ArrowLeft size={14} />
-            Back to Dashboard
-          </Link>
 
           <div className="text-center mb-12">
             {/* Season 1 Pricing badge */}
@@ -328,6 +318,17 @@ export default function PricingPage() {
                           >
                             Current Plan
                           </button>
+                        ) : !user ? (
+                          <Link
+                            href={`/login?mode=register&tier=${key}`}
+                            className={`w-full block text-center py-2.5 px-4 rounded-lg font-oswald font-bold uppercase tracking-wider text-sm text-white transition-all ${
+                              meta.popular
+                                ? "bg-orange hover:bg-orange/90 shadow-lg shadow-orange/20"
+                                : "bg-navy hover:bg-navy/90"
+                            }`}
+                          >
+                            {key === "rookie" ? "Sign Up Free" : "Get Started"}
+                          </Link>
                         ) : key === "rookie" ? (
                           <div className="text-center text-xs text-muted py-2.5">
                             Free forever
@@ -457,13 +458,20 @@ export default function PricingPage() {
                             Current Plan
                           </button>
                         ) : isEnterprise ? (
-                          <a
-                            href="mailto:jason@prospectx.com?subject=ProspectX%20Enterprise%20Inquiry"
+                          <Link
+                            href="/contact"
                             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-navy text-white font-oswald font-bold uppercase tracking-wider text-sm hover:bg-navy/90 transition-all"
                           >
                             <Mail size={14} />
                             Contact Us
-                          </a>
+                          </Link>
+                        ) : !user ? (
+                          <Link
+                            href={`/login?mode=register&tier=${key}`}
+                            className="w-full block text-center py-2.5 px-4 rounded-lg bg-navy hover:bg-navy/90 font-oswald font-bold uppercase tracking-wider text-sm text-white transition-all"
+                          >
+                            Get Started
+                          </Link>
                         ) : (
                           <button
                             onClick={() => handleUpgrade(key)}
@@ -548,8 +556,26 @@ export default function PricingPage() {
               </div>
             </div>
           </div>
+
+          {/* CTA Banner */}
+          <div className="max-w-3xl mx-auto pb-16 px-4">
+            <div className="bg-teal/10 border border-teal/20 rounded-2xl p-8 sm:p-12 text-center">
+              <h2 className="font-oswald text-2xl sm:text-3xl font-bold text-navy">
+                Start Free Today
+              </h2>
+              <p className="text-navy/60 text-sm mt-3 max-w-lg mx-auto">
+                Create a free Rookie account. No credit card required. Upgrade anytime.
+              </p>
+              <Link
+                href="/login?mode=register"
+                className="inline-flex items-center gap-2 mt-6 px-8 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors text-sm"
+              >
+                Get Started Free
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
-    </ProtectedRoute>
+    </MarketingLayout>
   );
 }
