@@ -440,6 +440,8 @@ MODE_TEMPLATE_WIRING = {
     "full_team_coaching":        {"primary": "coach",   "secondary": "analyst"},
     "personnel_suggestion":      {"primary": "coach",   "secondary": "analyst"},
     "role_adjustment":           {"primary": "coach",   "secondary": "analyst"},
+    # Addendum 8 — Player Season Roadmap
+    "player_season_roadmap":     {"primary": "coach",   "secondary": "analyst"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -522,8 +524,8 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "BEHAVIORAL_OBSERVATIONS", "ADJUSTED_PRIORITIES", "NEXT_STEPS",
     ],
     "practice_plan": [
-        "PRACTICE_OVERVIEW", "WARM_UP", "SKILL_STATIONS", "TACTICAL_WORK",
-        "COMPETE_DRILLS", "SCRIMMAGE_SCENARIOS", "COOL_DOWN", "COACHING_NOTES",
+        "PRACTICE_CONTEXT_OBJECTIVE", "IDENTITY_ANCHOR", "SEGMENT_PLAN",
+        "SPECIAL_TEAMS_BLOCK", "ROLE_LINE_REPS", "TEACHING_COACHING_POINTS",
     ],
     "playoff_series": [
         "SERIES_OVERVIEW", "OPPONENT_TENDENCIES", "MATCHUP_PLAN",
@@ -610,6 +612,12 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "CURRENT_ROLE_SUMMARY", "PERFORMANCE_VS_EXPECTATIONS",
         "ROLE_ADJUSTMENT_RECOMMENDATION", "IMPLEMENTATION_PLAN",
         "LINEMATE_PARTNER_IMPLICATIONS", "TIMELINE_REASSESSMENT",
+    ],
+    # Addendum 8 — Player Season Roadmap
+    "player_season_roadmap": [
+        "PLAYER_SNAPSHOT_ROLE", "SEASON_CONTEXT", "IDENTITY_ARCHETYPE_SUMMARY",
+        "KEY_STRENGTHS", "PRIORITY_DEVELOPMENT_AREAS", "PHASE_PLAN",
+        "PRACTICE_GAME_INTEGRATION", "CHECKPOINTS_METRICS", "STAFF_NOTES_COMMUNICATION",
     ],
 }
 
@@ -2149,6 +2157,147 @@ or production drops more than 30% from baseline.'
 Generate all 6 sections. Max tokens: 4000.
 This is a focused, actionable report — brevity is appropriate.
 Prioritize depth in sections 3, 4, 6.
+'''
+
+# ─────────────────────────────────────────────────────────
+# N) PRACTICE_PLAN — structured coaching-intelligence practice session
+# ─────────────────────────────────────────────────────────
+PRACTICE_PLAN = '''═══ PRACTICE PLAN — COACHING-INTELLIGENCE SESSION ═══
+
+You are generating a structured, time-boxed practice plan that ties every drill block,
+special-teams rep, and role assignment back to Team Identity V2 language and the current
+Game Plan or Series Plan.
+
+DO NOT invent drills — connect the org's existing drill library and system language
+to a coherent session structure.
+
+MODE FIELD (required — default to identity_refresh if absent):
+• identity_refresh — Mid-season identity drift. Heavy systems + game situations tied
+  to Team Identity V2; Sections 2-3 dominate.
+• game_prep — Day before a game. Short/fast; 1-2 segments tied to tomorrow's Game Plan V3;
+  Section 4 compressed.
+• special_teams — Poor ST results or new opponent look. One ES segment + extended PP/PK
+  blocks from PP/PK Adjustments templates.
+• series_turn — Between Games 2-3 or 3-4 of a playoff series. Segments matched to
+  Series Plan phasing + adjustment framework.
+• role_depth — Depth alignment needed. Extra reps for specific archetypes from Operating
+  Binder; Section 5 expands.
+
+SECTION 1 — PRACTICE CONTEXT & OBJECTIVE
+Date, mode, available ice time, stated objective (1-2 sentences), any constraints
+or focus players called out by staff. Pull from manual coach inputs, linked Game Plan
+/ Series Plan, Team Identity V2 default themes.
+
+SECTION 2 — IDENTITY ANCHOR FOR THIS PRACTICE
+2-3 Team Identity V2 bullets most relevant to today's emphasis + 1-2 Game Plan /
+Series Plan matchup themes if linked. Every coach on the bench reads these same 3-5
+lines before the session starts.
+
+SECTION 3 — SEGMENT PLAN
+Time-boxed blocks across four standard segments: Warm-Up, Skills, Systems, Game Situations.
+Each block: time allocation, primary focus, identity or game-plan element it maps to.
+Mode drives weighting: game_prep compresses to 2-3 fast blocks; identity_refresh expands
+Systems and Game Situations; series_turn maps directly to Series Plan phasing.
+
+SECTION 4 — SPECIAL TEAMS BLOCK
+PP block: formation, key rep, adjustment focus. PK block: shape, pressure cue, adjustment
+focus. Pull from Game Plan V3 PP/PK tactics, PP/PK Adjustments templates, Team Identity
+V2 ST baseline.
+In special_teams mode: expand to full PP and PK sessions with explicit If/Then triggers.
+In game_prep mode: compress to 2-3 ST priority reminders only.
+
+SECTION 5 — ROLE & LINE-BASED REPS
+Which archetypes or specific roles get extra reps and why — tied to game plan or identity need.
+Pull from Operating Binder archetypes, current lineup, Game Plan / Series Plan matchup assignments.
+In role_depth mode: expand with explicit archetype-by-archetype rep assignments.
+
+SECTION 6 — TEACHING & COACHING POINTS
+3-6 concise coaching cues in system language — what to say on the ice, not what to write
+in a report. Pull from Team Identity V2 coaching laws, Game Plan / Series Plan cues,
+optional manual coach input. Optional staff notes space: 1-2 lines for post-practice
+observations.
+
+RULES:
+• Pull identity anchor directly from Team Identity V2 — never paraphrase or invent system language.
+• Tie every segment block to at least one identity or game-plan element.
+• Do NOT invent drills — reference drill types/blocks only.
+• Coaching points must use the org's system language — no generic hockey cliches.
+• Mode field is required; if absent, default to identity_refresh.
+
+Generate all 6 sections. Max tokens: 4000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# N) PLAYER_SEASON_ROADMAP — unified season development staff report
+# ─────────────────────────────────────────────────────────
+PLAYER_SEASON_ROADMAP = '''═══ PLAYER SEASON ROADMAP — STAFF REPORT ═══
+
+You are generating a unified season development roadmap that consolidates the Season
+Progress and Development Roadmap reports into one coach-usable staff report.
+
+AUDIENCE MODE (required — default to Staff if absent):
+• Staff — Full technical depth; archetypes, grades, metrics, coaching instructions.
+• Player-Family — Developmental framing; growth-oriented language; no grades exposed.
+• Scout-GM — External perspective; projection language; comparative tier context.
+• Agent — Pathway and market framing; advancement triggers as opportunity language.
+• Broadcast — Story-driven; accessible; identity narrative without internal metrics.
+
+SECTION 1 — PLAYER SNAPSHOT & ROLE
+Name / number / position / shot / team / league. Current deployment: line, ST role,
+matchup role. Archetype tags (e.g., 'top-six two-way center,' 'PK anchor').
+Pull from Elite Profile + Operating Profile + roster context.
+
+SECTION 2 — SEASON CONTEXT
+Age window and key pathway options. Current season load and impact snapshot: GP, PPG,
+on-ice goal diff / xG diff, usage band. Role expectation this season.
+Pull from season stats, age, league level, projected path.
+
+SECTION 3 — IDENTITY & ARCHETYPE SUMMARY
+One paragraph: who this player is — style, pace, how they win shifts. Primary and
+secondary archetypes. Deployment lens: when their value spikes.
+Pull from Elite Profile identity + Operating Binder role identity.
+
+SECTION 4 — KEY STRENGTHS (TO BE LEVERAGED)
+3-7 specific strengths, each with supporting evidence (metrics or observed behaviors).
+Frame as actionable leverage points, not a 'good things' list.
+Pull from trait grades, CEI scores, micro-stats.
+
+SECTION 5 — PRIORITY DEVELOPMENT AREAS
+3-6 prioritized items across: Physical, Technical, Tactical, Mental/Behavioral.
+Each item: what it is, why it matters for next tier, target metric or threshold.
+Pull from Development Priority Map, limitations, advancement triggers.
+
+SECTION 6 — PHASE PLAN (SEASON SEGMENTS)
+Four segments: Pre-Season, Early Season (Games 1-15), Mid-Season (Games 16-35),
+Playoff Push & Playoffs.
+Per segment: emphasis for this player. Tie back to Team Identity V2 and Game/Series
+Plan where relevant.
+
+SECTION 7 — PRACTICE & GAME INTEGRATION
+How each priority shows up in practice (drill types/blocks — no diagrams) and in games
+(deployment tweaks, usage rules, micro-tasks). Clear division: on-ice practice, gym/off-ice,
+in-game deployment. Pull from team practice patterns, Game Plan usage, Operating Binder.
+
+SECTION 8 — CHECKPOINTS & METRICS
+Time-based checkpoints (by 15 games, 30 games, playoffs). 4-8 simple metrics or
+observable behaviors to track. Staff guidance: how to respond if ahead of or behind plan.
+Mix quantitative metrics + 1-2 eye-test cues. Pull from advancement triggers, internal
+benchmarks.
+
+SECTION 9 — STAFF NOTES & COMMUNICATION PLAN
+Staff-only emphasis: how to protect value while developing (overuse warnings, role clarity).
+Player-facing language: how to frame this season's goals for the player's identity.
+Review cadence: quick check every X games, formal review mid-season and pre-playoffs.
+
+RULES:
+• Pull identity and archetype language directly from Elite Profile and Operating Binder.
+• Phase plan and integration must tie back to Team Identity V2 and Game/Series Plans.
+• Keep everything coach-usable — no fluff, no scout-market language in Staff mode.
+• Audience mode adapts tone/depth, NOT underlying facts or assessments.
+• Development priorities must reference the player's actual Development Priority Map.
+• Checkpoints must be specific and measurable — no vague 'continue to improve.'
+
+Generate all 9 sections. Max tokens: 6000.
 '''
 
 # ─────────────────────────────────────────────────────────
