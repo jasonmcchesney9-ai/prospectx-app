@@ -6110,6 +6110,242 @@ async def admin_clear_errors(token_data: dict = Depends(verify_token)):
 
 
 # ============================================================
+# SUPERADMIN ENDPOINTS
+# ============================================================
+
+@app.get("/superadmin/orgs")
+async def superadmin_list_orgs(token_data: dict = Depends(verify_token)):
+    """List all organizations with user counts, tier distribution, and report counts."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        orgs_raw = conn.execute(
+            "SELECT id, name, org_type, created_at FROM organizations ORDER BY created_at DESC"
+        ).fetchall()
+
+        orgs = []
+        for org in orgs_raw:
+            org_id = org["id"]
+            users = conn.execute(
+                "SELECT email, role, COALESCE(subscription_tier, 'rookie') as tier FROM users WHERE org_id = ?",
+                (org_id,),
+            ).fetchall()
+            user_list = [dict(u) for u in users]
+            user_count = len(user_list)
+
+            # Determine highest tier
+            tier_order = ["rookie", "parent", "scout", "pro", "elite", "team_org", "program_org", "enterprise"]
+            highest_tier = "rookie"
+            for u in user_list:
+                t = u.get("tier", "rookie")
+                if t in tier_order and tier_order.index(t) > tier_order.index(highest_tier):
+                    highest_tier = t
+
+            report_count = conn.execute(
+                "SELECT COUNT(*) FROM reports WHERE org_id = ?", (org_id,)
+            ).fetchone()[0]
+
+            orgs.append({
+                "org_id": org_id,
+                "name": org["name"],
+                "org_type": org["org_type"],
+                "created_at": org["created_at"],
+                "user_count": user_count,
+                "highest_tier": highest_tier,
+                "report_count": report_count,
+                "users": user_list,
+            })
+
+        return {"orgs": orgs, "total": len(orgs)}
+    finally:
+        conn.close()
+
+
+@app.get("/superadmin/orgs/{org_id}/users")
+async def superadmin_org_users(org_id: str, token_data: dict = Depends(verify_token)):
+    """List all users in a specific organization with usage data."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.hockey_role,
+                      u.subscription_tier, u.created_at, u.subscription_started_at,
+                      u.monthly_reports_used, u.monthly_bench_talks_used
+               FROM users u WHERE u.org_id = ? ORDER BY u.created_at""",
+            (org_id,),
+        ).fetchall()
+        users = [dict(r) for r in rows]
+
+        now = datetime.now(timezone.utc)
+        current_month = now.strftime("%Y-%m")
+        for user in users:
+            tracking = conn.execute(
+                "SELECT reports_count, bench_talks_count, practice_plans_count, uploads_count FROM usage_tracking WHERE user_id = ? AND month = ?",
+                (user["id"], current_month),
+            ).fetchone()
+            user["usage"] = dict(tracking) if tracking else {
+                "reports_count": 0, "bench_talks_count": 0,
+                "practice_plans_count": 0, "uploads_count": 0
+            }
+        return users
+    finally:
+        conn.close()
+
+
+@app.get("/superadmin/users")
+async def superadmin_list_users(
+    tier: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    token_data: dict = Depends(verify_token),
+):
+    """List all users across all orgs. Supports ?tier=pro&search=email filters."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        query = """SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.hockey_role,
+                          u.subscription_tier, u.created_at, u.org_id,
+                          u.monthly_reports_used, u.monthly_bench_talks_used,
+                          o.name as org_name
+                   FROM users u LEFT JOIN organizations o ON u.org_id = o.id
+                   WHERE 1=1"""
+        params: list = []
+
+        if tier:
+            query += " AND u.subscription_tier = ?"
+            params.append(tier)
+        if search:
+            query += " AND u.email LIKE ?"
+            params.append(f"%{search}%")
+
+        query += " ORDER BY u.created_at DESC"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.put("/superadmin/users/{user_id}/tier")
+async def superadmin_update_user_tier(user_id: str, req: AdminTierUpdateRequest,
+                                       token_data: dict = Depends(verify_token)):
+    """Change any user's tier regardless of org (superadmin only)."""
+    _require_superadmin(token_data)
+
+    if req.tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}. Valid tiers: {', '.join(SUBSCRIPTION_TIERS.keys())}")
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id, email FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        conn.execute(
+            "UPDATE users SET subscription_tier = ?, subscription_started_at = ? WHERE id = ?",
+            (req.tier, datetime.now(timezone.utc).isoformat(), user_id),
+        )
+        conn.commit()
+        logger.info("Superadmin tier update: user %s (%s) → %s", row["email"], user_id, req.tier)
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": row["email"],
+            "tier": req.tier,
+            "tier_name": SUBSCRIPTION_TIERS[req.tier]["name"],
+            "message": f"Tier updated to {SUBSCRIPTION_TIERS[req.tier]['name']}"
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/superadmin/users/{user_id}/impersonate")
+async def superadmin_impersonate(user_id: str, token_data: dict = Depends(verify_token)):
+    """Generate a short-lived JWT for impersonating a user (superadmin only)."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id, org_id, email, role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if row["role"] == "superadmin":
+            raise HTTPException(status_code=403, detail="Cannot impersonate another superadmin")
+
+        # Generate short-lived token (15 minutes)
+        payload = {
+            "user_id": row["id"],
+            "org_id": row["org_id"],
+            "role": row["role"],
+            "impersonated_by": token_data["user_id"],
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+            "iat": datetime.now(timezone.utc),
+        }
+        imp_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+        # Log impersonation
+        conn.execute(
+            "INSERT INTO impersonation_logs (id, superadmin_user_id, target_user_id) VALUES (?, ?, ?)",
+            (gen_id(), token_data["user_id"], user_id),
+        )
+        conn.commit()
+
+        logger.info("Superadmin %s impersonating user %s (%s)", token_data["user_id"], row["email"], user_id)
+        return {
+            "token": imp_token,
+            "user_id": row["id"],
+            "email": row["email"],
+            "expires_in": 900,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/superadmin/stats")
+async def superadmin_platform_stats(token_data: dict = Depends(verify_token)):
+    """Platform-wide statistics for superadmin dashboard."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        stats = {}
+        stats["total_orgs"] = conn.execute("SELECT COUNT(*) FROM organizations").fetchone()[0]
+        stats["total_users"] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        stats["total_reports"] = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+
+        # Tier breakdown
+        tier_rows = conn.execute(
+            "SELECT COALESCE(subscription_tier, 'rookie') as tier, COUNT(*) as count FROM users GROUP BY tier"
+        ).fetchall()
+        stats["tier_breakdown"] = {r["tier"]: r["count"] for r in tier_rows}
+
+        # Monthly revenue estimate
+        revenue = 0
+        for tier_name, count in stats["tier_breakdown"].items():
+            tier_config = SUBSCRIPTION_TIERS.get(tier_name, {})
+            revenue += tier_config.get("price", 0) * count
+        stats["monthly_revenue_estimate"] = round(revenue, 2)
+
+        # Reports this month
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        stats["reports_this_month"] = conn.execute(
+            "SELECT COUNT(*) FROM reports WHERE created_at >= ?", (month_start,)
+        ).fetchone()[0]
+
+        # New orgs this month
+        stats["new_orgs_this_month"] = conn.execute(
+            "SELECT COUNT(*) FROM organizations WHERE created_at >= ?", (month_start,)
+        ).fetchone()[0]
+
+        return stats
+    finally:
+        conn.close()
+
+
+# ============================================================
 # PLAYER ENDPOINTS
 # ============================================================
 
