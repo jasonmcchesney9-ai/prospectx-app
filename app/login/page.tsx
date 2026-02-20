@@ -36,7 +36,11 @@ function LoginForm() {
       const { data } = await api.post<TokenResponse>(endpoint, body);
       setToken(data.access_token);
       setUser(data.user);
-      router.push("/");
+      if (mode === "register" || !data.user.onboarding_completed) {
+        router.push("/onboarding");
+      } else {
+        router.push("/");
+      }
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data

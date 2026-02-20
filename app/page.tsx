@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Swords,
@@ -36,10 +37,18 @@ import { SESSION_TYPES, AGENT_CLIENT_STATUS_COLORS } from "@/types/api";
 // ── Auth gate ────────────────────────────────────────────────
 export default function HomePage() {
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    setAuthed(isAuthenticated());
-  }, []);
+    const isAuth = isAuthenticated();
+    setAuthed(isAuth);
+    if (isAuth) {
+      const user = getUser();
+      if (user && !user.onboarding_completed) {
+        router.push("/onboarding");
+      }
+    }
+  }, [router]);
 
   if (authed === null) {
     return (
