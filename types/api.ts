@@ -14,6 +14,21 @@ export interface User {
   monthly_reports_used: number;
   monthly_bench_talks_used: number;
   email_verified: boolean;
+  onboarding_completed: boolean;
+  onboarding_step: number;
+  preferred_league: string | null;
+  preferred_team_id: string | null;
+  covered_teams: string[] | null;
+}
+
+export interface OnboardingState {
+  onboarding_completed: boolean;
+  onboarding_step: number;
+  preferred_league: string | null;
+  preferred_team_id: string | null;
+  covered_teams: string[] | null;
+  hockey_role: string;
+  linked_player_id: string | null;
 }
 
 export interface TokenResponse {
