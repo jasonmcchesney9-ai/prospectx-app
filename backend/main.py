@@ -20841,6 +20841,145 @@ For pronunciation, provide only if the name is non-obvious; otherwise null."""
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 
+# ── Broadcast: generate single tool ──────────────────────────
+
+BROADCAST_TOOL_SCHEMAS = {
+    "spotting_board": {
+        "mode": "broadcast",
+        "secondary": "Use Analyst mode rigor for all stats.",
+        "schema": '{{ "home": {{ "team_name": "str", "players": [{{ "jersey": "str", "name": "str", "position": "str", "gp": 0, "g": 0, "a": 0, "p": 0, "key_stat": "str", "archetype": "str", "pronunciation": null, "broadcast_note": "one-line color commentary", "xg": null, "cf_pct": null, "zone_starts_oz_pct": null }}] }}, "away": {{ same shape }} }}',
+        "instructions": "Generate a quick-reference spotting board for the broadcast booth. Include ALL rostered players. broadcast_note = one punchy line of color commentary for on-air use.",
+    },
+    "talk_tracks": {
+        "mode": "broadcast",
+        "secondary": None,
+        "schema": '{{ "team_storyline": [{{ "headline": "str", "twenty_sec_read": "~50 words", "stat_hook": "str" }}], "matchup_storyline": [same], "player_storyline": [same], "streak_milestone": [same] }}',
+        "instructions": "Generate structured talk tracks. Each has a headline (punchy), twenty_sec_read (~50 words timed for spoken delivery), and stat_hook (one sentence with the key number). Generate 3-4 tracks per category.",
+    },
+    "pxi_insights": {
+        "mode": "analyst",
+        "secondary": "Use Broadcast mode for suggested_use formatting.",
+        "schema": '[{{ "category": "PATTERN|TREND|MATCHUP|STORYLINE|STAT|MILESTONE|ANOMALY", "insight": "str", "stat_support": "str", "suggested_use": "on-air mention | graphic trigger | interview question" }}]',
+        "instructions": "Generate 8-12 sharp, high-value statistical insights. Categories: PATTERN (team tendencies), MATCHUP (exploitable mismatches), TREND (hot/cold streaks), TACTICAL (systems observations), MILESTONE (approaching records). Each insight is ONE sentence. Sort by impact.",
+    },
+    "stat_cards": {
+        "mode": "analyst",
+        "secondary": None,
+        "schema": '[{{ "card_type": "player_vs_player|line_vs_line|special_teams|goalie|team_trend", "headline_stat": "label", "headline_value": "value", "support_stats": [{{ "label": "str", "value": "str" }}], "interpretation": "the so-what sentence", "graphic_caption": "ready for lower-third copy" }}]',
+        "instructions": "Generate 6-8 broadcast-ready stat cards. Each card = one graphic idea. Include player vs player, team comparisons, special teams, and trend cards. Large headline numbers, concise captions.",
+    },
+    "graphics_suggestions": {
+        "mode": "broadcast",
+        "secondary": None,
+        "schema": '[{{ "priority": 1, "graphic_type": "str", "trigger_moment": "str", "caption": "str", "data_needed": "str" }}]',
+        "instructions": "Generate 8-10 graphics suggestions in checklist format for the producer. Sorted by priority. Each has a trigger moment (when to show), caption (on-screen text), and data needed (what the graphics operator inputs).",
+    },
+    "player_profiles": {
+        "mode": "broadcast",
+        "secondary": "Use Scout mode for archetype and strengths analysis.",
+        "schema": '[{{ "name": "str", "archetype": "str", "physical": "height/weight/shoots", "role": "role on this team", "strengths": "top 2 strengths in one sentence", "fun_fact": "one human interest angle", "tonight": "one storyline angle for this game" }}]',
+        "instructions": "Generate quick broadcast bios for key players (top 8-12 per team). Max 6 fields each. Designed for quick reference during broadcast.",
+    },
+    "interview_questions": {
+        "mode": "broadcast",
+        "secondary": None,
+        "schema": '[{{ "context_tab": "coach_pre|coach_post|player_pre|player_post|feature", "label": "SAFE|PROBE|FEATURE|INSIGHT|FOLLOW_UP", "question": "str" }}]',
+        "instructions": "Generate 5-7 interview questions per context tab (coach_pre, coach_post, player_pre, player_post, feature). Each question has a label: SAFE (easy, no controversy), PROBE (tactical, shows preparation), FEATURE (storytelling, human interest), INSIGHT (analytical), FOLLOW_UP (dig deeper).",
+    },
+}
+
+
+class BroadcastGenerateToolRequest(BaseModel):
+    home_team: str
+    away_team: str
+    game_date: str = ""
+    tool_name: str
+    mode: str = "broadcast"
+    depth: str = "standard"
+    audience: str = "informed"
+    game_state: str = "pre_game"
+
+
+@app.post("/broadcast/generate-tool")
+async def broadcast_generate_tool(
+    body: BroadcastGenerateToolRequest,
+    token_data: dict = Depends(verify_token),
+):
+    """Generate a single broadcast tool's content."""
+    org_id = token_data["org_id"]
+
+    valid_tools = set(BROADCAST_TOOL_SCHEMAS.keys())
+    if body.tool_name not in valid_tools:
+        raise HTTPException(status_code=400, detail=f"Invalid tool_name. Must be one of: {', '.join(sorted(valid_tools))}")
+
+    if body.mode not in ("broadcast", "producer"):
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be 'broadcast' or 'producer'.")
+
+    conn = get_db()
+    home_data = _gather_broadcast_data(body.home_team, org_id, conn)
+    away_data = _gather_broadcast_data(body.away_team, org_id, conn)
+    conn.close()
+
+    client = get_anthropic_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Anthropic API key not configured.")
+
+    tool_cfg = BROADCAST_TOOL_SCHEMAS[body.tool_name]
+
+    # Build system prompt with appropriate PXI mode
+    primary_mode = tool_cfg["mode"] if body.mode == "broadcast" else "producer"
+    system_parts = [
+        PXI_CORE_GUARDRAILS,
+        EVIDENCE_DISCIPLINE,
+        PXI_MODE_BLOCKS.get(primary_mode, PXI_MODE_BLOCKS["broadcast"]),
+    ]
+    if tool_cfg.get("secondary"):
+        system_parts.append(f"SECONDARY MODE CONTEXT: {tool_cfg['secondary']}")
+
+    system_parts.append(f"""BROADCAST TOOL GENERATION: {body.tool_name.upper()}
+Game: {body.home_team} vs {body.away_team} | Date: {body.game_date} | State: {body.game_state}
+Depth: {body.depth} | Audience: {body.audience}
+
+{tool_cfg['instructions']}
+
+Return ONLY valid JSON matching this schema:
+{tool_cfg['schema']}
+
+No markdown fences, no commentary outside the JSON.""")
+
+    system_prompt = "\n\n".join(system_parts)
+
+    user_prompt = f"""Generate {body.tool_name.replace('_', ' ')} content for this game.
+
+HOME TEAM: {body.home_team}
+ROSTER & STATS:
+{json.dumps(home_data, indent=2, default=str)}
+
+AWAY TEAM: {body.away_team}
+ROSTER & STATS:
+{json.dumps(away_data, indent=2, default=str)}
+
+Use the real player data above. Actual names, numbers, and stats."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw_text = message.content[0].text.strip()
+        raw_text = _strip_json_fences(raw_text)
+        content = json.loads(raw_text)
+        return {"content": content}
+    except json.JSONDecodeError as e:
+        logger.error("Broadcast generate-tool (%s): JSON parse error: %s", body.tool_name, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response as JSON: {str(e)}")
+    except Exception as e:
+        logger.error("Broadcast generate-tool (%s) error: %s", body.tool_name, str(e))
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
 # ============================================================
 # MAIN
 # ============================================================
