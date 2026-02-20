@@ -2042,7 +2042,7 @@ def init_db():
     try:
         backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
         os.makedirs(backup_dir, exist_ok=True)
-        ts = now_iso()[:19].replace(":", "-")
+        ts = datetime.now(timezone.utc).isoformat()[:19].replace(":", "-")
         backup_name = f"prospectx_{ts}.db"
         shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
         # Keep last 20 backups
@@ -4549,7 +4549,7 @@ def _auto_backup_loop():
         try:
             backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
             os.makedirs(backup_dir, exist_ok=True)
-            ts = now_iso()[:19].replace(":", "-")
+            ts = datetime.now(timezone.utc).isoformat()[:19].replace(":", "-")
             backup_name = f"prospectx_auto_{ts}.db"
             shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
             # Keep last 20 backups total
