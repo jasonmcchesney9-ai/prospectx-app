@@ -2165,6 +2165,207 @@ def init_db():
     """)
     conn.commit()
 
+    # ── Stat Normalizer tables (instat_ prefix) ─────────────────
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_players (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_name TEXT NOT NULL,
+            jersey_number TEXT,
+            position TEXT,
+            handedness TEXT,
+            dob TEXT,
+            height_cm REAL,
+            weight_kg REAL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(org_id, player_name),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_player_stats (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            season TEXT NOT NULL,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            gp REAL, toi_total TEXT, toi_per_game REAL,
+            goals REAL, primary_assists REAL, secondary_assists REAL, points REAL, ppg REAL,
+            plus_minus REAL, penalties REAL, penalties_drawn REAL,
+            hits REAL, hits_against REAL, blocked_shots REAL, error_leading_goal REAL,
+            shots_total REAL, shots_on_goal REAL, shot_pct REAL,
+            inner_slot_shots REAL, inner_slot_goals REAL, inner_slot_pct REAL,
+            outer_slot_shots REAL, outer_slot_pct REAL,
+            scoring_chances REAL, scoring_chance_pct REAL,
+            passes_to_slot REAL, one_on_one_shots REAL, one_on_one_goals REAL,
+            xg REAL, xg_per_shot REAL, net_xg REAL, team_xg_on REAL, opp_xg_on REAL,
+            xg_conversion REAL, corsi_pct REAL, corsi_for REAL, corsi_against REAL,
+            fenwick_pct REAL, pdo REAL,
+            fo_total REAL, fo_won REAL, fo_pct REAL,
+            fo_dz_pct REAL, fo_oz_pct REAL, fo_nz_pct REAL,
+            battles_total REAL, battles_won REAL, battles_pct REAL,
+            battles_dz REAL, battles_oz REAL, battles_nz REAL,
+            entries_total REAL, entries_carry REAL, entries_dump REAL, entries_pass REAL,
+            entry_success_rate REAL,
+            breakouts_total REAL, breakouts_carry REAL, breakouts_dump REAL,
+            puck_retrievals REAL, ev_dz_retrievals REAL, ev_oz_retrievals REAL,
+            takeaways REAL, takeaways_dz REAL, puck_losses REAL, puck_losses_dz REAL,
+            passes_total REAL, passes_accurate REAL, pass_pct REAL,
+            oz_possession TEXT, dz_possession TEXT, puck_touches REAL, puck_control_time TEXT,
+            pp_appearances REAL, pp_goals REAL, pp_toi TEXT,
+            pk_appearances REAL, pk_toi TEXT, sh_goals REAL,
+            dekes_total REAL, dekes_pct REAL,
+            UNIQUE(player_id, season),
+            FOREIGN KEY (player_id) REFERENCES instat_players(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_goalie_stats (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            season TEXT NOT NULL,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            gp REAL, toi_total TEXT,
+            goals_against REAL, shots_faced REAL, saves REAL, sv_pct REAL,
+            xg_conceded REAL, xg_per_shot REAL, gsax REAL,
+            sv_pct_high_danger REAL,
+            scoring_chances_faced REAL, sc_saves REAL, sc_sv_pct REAL,
+            shootout_saves REAL, shootout_faced REAL, passes_accurate_pct REAL,
+            UNIQUE(player_id, season),
+            FOREIGN KEY (player_id) REFERENCES instat_players(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_line_stats (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            line_players TEXT NOT NULL,
+            line_type TEXT NOT NULL,
+            season TEXT NOT NULL,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            shifts REAL, toi TEXT, goals_for REAL, goals_against REAL, plus_minus REAL,
+            shots_for REAL, shots_on_goal_for REAL, shots_against REAL, sog_against REAL,
+            corsi REAL, corsi_for REAL, corsi_against REAL,
+            pp_time TEXT, pp_goals REAL, pk_time TEXT,
+            UNIQUE(org_id, line_players, line_type, season),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_team_game_log (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            game_date TEXT NOT NULL,
+            opponent TEXT NOT NULL,
+            score TEXT,
+            goals REAL, penalties REAL, penalties_drawn REAL,
+            fo_pct REAL, hits REAL,
+            shots REAL, shots_on_goal REAL, corsi_pct REAL,
+            xg REAL, opp_xg REAL, net_xg REAL,
+            pp_pct REAL, pk_pct REAL,
+            pp_attempts REAL, pp_goals REAL,
+            pk_attempts REAL, pk_goals_against REAL,
+            entries REAL, entries_carry REAL,
+            season TEXT,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(org_id, game_date, opponent),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_player_game_log (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            game_date TEXT NOT NULL,
+            opponent TEXT NOT NULL,
+            score TEXT,
+            shifts REAL, toi TEXT,
+            goals REAL, primary_assists REAL, secondary_assists REAL, points REAL,
+            plus_minus REAL, shots REAL, shots_on_goal REAL,
+            xg REAL, net_xg REAL, corsi_pct REAL,
+            fo_total REAL, fo_won REAL, fo_pct REAL,
+            fo_dz_pct REAL, fo_oz_pct REAL, fo_nz_pct REAL,
+            battles_total REAL, battles_won REAL, battles_pct REAL,
+            inner_slot_shots REAL, inner_slot_goals REAL,
+            entries_total REAL, entries_carry REAL,
+            passes_to_slot REAL, puck_retrievals REAL,
+            pp_appearances REAL, pp_toi TEXT,
+            pk_appearances REAL, pk_toi TEXT,
+            hits REAL, blocked_shots REAL, error_leading_goal REAL,
+            season TEXT,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(player_id, game_date, opponent),
+            FOREIGN KEY (player_id) REFERENCES instat_players(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_league_skater_stats (
+            id TEXT PRIMARY KEY,
+            league_name TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            player_name TEXT NOT NULL,
+            jersey_number TEXT,
+            position TEXT,
+            handedness TEXT,
+            dob TEXT,
+            height_cm REAL,
+            weight_kg REAL,
+            season TEXT NOT NULL,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            gp REAL, toi_total TEXT, toi_per_game REAL,
+            goals REAL, primary_assists REAL, secondary_assists REAL, points REAL, ppg REAL,
+            plus_minus REAL, hits REAL, error_leading_goal REAL,
+            shots_total REAL, shots_on_goal REAL,
+            inner_slot_shots REAL, inner_slot_goals REAL, inner_slot_pct REAL,
+            outer_slot_shots REAL, outer_slot_pct REAL,
+            scoring_chances REAL, scoring_chance_pct REAL,
+            passes_to_slot REAL,
+            xg REAL, net_xg REAL, team_xg_on REAL, opp_xg_on REAL,
+            xg_conversion REAL, corsi_pct REAL, fenwick_pct REAL,
+            fo_total REAL, fo_pct REAL, fo_dz_pct REAL, fo_oz_pct REAL, fo_nz_pct REAL,
+            battles_total REAL, battles_won REAL, battles_pct REAL,
+            entries_total REAL, entries_carry REAL, entry_success_rate REAL,
+            puck_retrievals REAL, takeaways REAL, puck_losses REAL,
+            pp_appearances REAL, pp_goals REAL, pp_toi TEXT,
+            pk_appearances REAL, pk_toi TEXT,
+            UNIQUE(league_name, player_name, team_name, season)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS instat_league_team_stats (
+            id TEXT PRIMARY KEY,
+            league_name TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            season TEXT NOT NULL,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            goals REAL, fo_pct REAL, hits REAL,
+            shots REAL, shots_on_goal REAL, corsi_pct REAL,
+            xg REAL, opp_xg REAL, net_xg REAL, xg_conversion REAL,
+            pp_pct REAL, pk_pct REAL,
+            pp_attempts REAL, pp_goals REAL,
+            pk_attempts REAL,
+            entries REAL, entries_carry REAL, entry_success_rate REAL,
+            battles_total REAL, battles_pct REAL,
+            passes_to_slot REAL, accurate_pass_pct REAL,
+            UNIQUE(league_name, team_name, season)
+        )
+    """)
+    conn.commit()
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -9388,6 +9589,821 @@ def _parse_line_players(line_string: str) -> list:
     return players
 
 
+# ── Stat Normalizer — helpers ────────────────────────────────
+
+def _norm_parse(val):
+    """Convert InStat cell values to Python-native types. '-' → None, '%' stripped."""
+    if val is None or val == '-' or val == '':
+        return None
+    if isinstance(val, str):
+        val = val.strip()
+        if val.endswith('%'):
+            try:
+                return float(val[:-1])
+            except Exception:
+                return None
+        if val == '-':
+            return None
+    try:
+        return float(val)
+    except Exception:
+        return val  # text fields (time strings, names)
+
+
+def _norm_header_match(row_dict: dict, target: str):
+    """Case-insensitive prefix match for InStat headers that may be truncated."""
+    target_lower = target.lower()
+    for key, val in row_dict.items():
+        if key.lower().startswith(target_lower) or target_lower.startswith(key.lower()):
+            return val
+    return None
+
+
+def _norm_get(row: dict, instat_col: str):
+    """Get a value from a row dict using case-insensitive key matching."""
+    col_lower = instat_col.lower()
+    for key, val in row.items():
+        if key.lower() == col_lower:
+            return val
+    # Prefix match for truncated headers
+    for key, val in row.items():
+        if key.lower().startswith(col_lower) or col_lower.startswith(key.lower()):
+            return val
+    return None
+
+
+def _norm_detect_file_type(filename: str, sheet_name: str = "") -> dict:
+    """Detect InStat file type from filename and sheet name."""
+    fn = filename.lower()
+    if "skaters" in fn and any(lg in fn for lg in ["greater ontario", "gojhl", "league"]):
+        return {"type": "league_skater", "subtype": None}
+    if "teams" in fn and any(lg in fn for lg in ["greater ontario", "gojhl", "league"]):
+        return {"type": "league_team", "subtype": None}
+    if "goalies" in fn and any(lg in fn for lg in ["greater ontario", "gojhl", "league"]):
+        return {"type": "goalie", "subtype": "league"}
+    if "skaters" in fn:
+        return {"type": "skater", "subtype": None}
+    if "goalies" in fn:
+        return {"type": "goalie", "subtype": None}
+    if "lines" in fn:
+        subtype_map = {
+            "forwards lines": "forwards",
+            "defencemen lines": "defence",
+            "power players lines": "pp",
+            "penalty killers lines": "pk",
+            "basic lines": "basic",
+        }
+        subtype = next((v for k, v in subtype_map.items() if k in sheet_name.lower()), "basic")
+        return {"type": "lines", "subtype": subtype}
+    if "games" in fn:
+        import re
+        match = re.search(r'games\s*-\s*(.+?)[\s,_]+\d{2}-\w+-\d{4}', fn)
+        if match:
+            name_part = match.group(1).replace('_', ' ').replace('-', ' ').strip()
+            word_count = len(name_part.split())
+            return {"type": "player_game_log" if word_count >= 2 else "team_game_log", "subtype": None}
+        return {"type": "team_game_log", "subtype": None}
+    return {"type": "unknown", "subtype": None}
+
+
+def _norm_upsert_player(conn, org_id: str, player_data: dict) -> str:
+    """Get or create a player in instat_players. Returns player_id."""
+    player_name = player_data.get("player_name", "").strip()
+    if not player_name:
+        return None
+
+    existing = conn.execute(
+        "SELECT id FROM instat_players WHERE org_id = ? AND player_name = ?",
+        (org_id, player_name)
+    ).fetchone()
+
+    if existing:
+        player_id = existing[0]
+        conn.execute("""
+            UPDATE instat_players SET
+                jersey_number = COALESCE(?, jersey_number),
+                position = COALESCE(?, position),
+                handedness = COALESCE(?, handedness),
+                dob = COALESCE(?, dob),
+                height_cm = COALESCE(?, height_cm),
+                weight_kg = COALESCE(?, weight_kg),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            player_data.get("jersey_number"),
+            player_data.get("position"),
+            player_data.get("handedness"),
+            player_data.get("dob"),
+            player_data.get("height_cm"),
+            player_data.get("weight_kg"),
+            player_id
+        ))
+        return player_id
+    else:
+        player_id = gen_id()
+        conn.execute("""
+            INSERT INTO instat_players (id, org_id, player_name, jersey_number, position,
+                handedness, dob, height_cm, weight_kg)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            player_id, org_id,
+            player_name,
+            player_data.get("jersey_number"),
+            player_data.get("position"),
+            player_data.get("handedness"),
+            player_data.get("dob"),
+            player_data.get("height_cm"),
+            player_data.get("weight_kg"),
+        ))
+        return player_id
+
+
+def _norm_toi_to_minutes(toi_str) -> float:
+    """Parse TOI string (HH:MM:SS or MM:SS) to decimal minutes."""
+    if not toi_str or toi_str == '-':
+        return None
+    toi_str = str(toi_str).strip()
+    parts = toi_str.split(":")
+    try:
+        if len(parts) == 3:
+            return int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60.0
+        elif len(parts) == 2:
+            return int(parts[0]) + int(parts[1]) / 60.0
+        return float(toi_str)
+    except (ValueError, TypeError):
+        return None
+
+
+# ── Stat Normalizer — column mappings ────────────────────────
+
+NORM_SKATER_MAP = {
+    "Player": "player_name",
+    "Shirt number": "jersey_number",
+    "Position": "position",
+    "Active hand": "handedness",
+    "Date of birth": "dob",
+    "Height": "height_cm",
+    "Weight": "weight_kg",
+    "Team": "team_name",
+    "Games played": "gp",
+    "Time on ice": "toi_total",
+    "Goals": "goals",
+    "First assist": "primary_assists",
+    "Second assist": "secondary_assists",
+    "Points": "points",
+    "+/-": "plus_minus",
+    "Penalties": "penalties",
+    "Penalties drawn": "penalties_drawn",
+    "Hits": "hits",
+    "Hits against": "hits_against",
+    "Blocked shots": "blocked_shots",
+    "Error leading to goal": "error_leading_goal",
+    "Shots": "shots_total",
+    "Shots on goal": "shots_on_goal",
+    "% shots on goal": "shot_pct",
+    "Inner slot shots - total": "inner_slot_shots",
+    "Inner slot shots - scored": "inner_slot_goals",
+    "Inner slot shots, %": "inner_slot_pct",
+    "Outer slot shots - total": "outer_slot_shots",
+    "Outer slot shots, %": "outer_slot_pct",
+    "Scoring chances - total": "scoring_chances",
+    "Scoring Chances, %": "scoring_chance_pct",
+    "Passes to the slot": "passes_to_slot",
+    "1-on-1 shots": "one_on_one_shots",
+    "1-on-1 goals": "one_on_one_goals",
+    "xG (Expected goals)": "xg",
+    "xG per shot": "xg_per_shot",
+    "Net xG (xG player on": "net_xg",
+    "Team xG when on ice": "team_xg_on",
+    "Opponent's xG when on ice": "opp_xg_on",
+    "xG conversion": "xg_conversion",
+    "CORSI for, %": "corsi_pct",
+    "CORSI+": "corsi_for",
+    "CORSI-": "corsi_against",
+    "Fenwick for, %": "fenwick_pct",
+    "Faceoffs": "fo_total",
+    "Faceoffs won": "fo_won",
+    "Faceoffs won, %": "fo_pct",
+    "Faceoffs won in DZ, %": "fo_dz_pct",
+    "Faceoffs won in OZ, %": "fo_oz_pct",
+    "Faceoffs won in NZ, %": "fo_nz_pct",
+    "Puck battles": "battles_total",
+    "Puck battles won": "battles_won",
+    "Puck battles won, %": "battles_pct",
+    "Puck battles in DZ": "battles_dz",
+    "Puck battles in OZ": "battles_oz",
+    "Puck battles in NZ": "battles_nz",
+    "Entries": "entries_total",
+    "Entries via stickhandling": "entries_carry",
+    "Entries via dump in": "entries_dump",
+    "Entries via pass": "entries_pass",
+    "Breakouts": "breakouts_total",
+    "Breakouts via stickhandling": "breakouts_carry",
+    "Breakouts via dump out": "breakouts_dump",
+    "Puck retrievals after shots": "puck_retrievals",
+    "EV DZ retrievals": "ev_dz_retrievals",
+    "EV OZ retrievals": "ev_oz_retrievals",
+    "Takeaways": "takeaways",
+    "Takeaways in DZ": "takeaways_dz",
+    "Puck losses": "puck_losses",
+    "Puck losses in DZ": "puck_losses_dz",
+    "Passes": "passes_total",
+    "Accurate passes": "passes_accurate",
+    "Accurate passes, %": "pass_pct",
+    "OZ possession": "oz_possession",
+    "DZ possession": "dz_possession",
+    "Puck touches": "puck_touches",
+    "Puck control time": "puck_control_time",
+    "Power play": "pp_appearances",
+    "Successful power play": "pp_goals",
+    "Power play time": "pp_toi",
+    "Penalty killing": "pk_appearances",
+    "Short-handed time": "pk_toi",
+    "Short-handed shots": "sh_goals",
+    "Dekes": "dekes_total",
+    "Dekes successful, %": "dekes_pct",
+}
+
+NORM_GOALIE_MAP = {
+    "Player": "player_name",
+    "Shirt number": "jersey_number",
+    "Games played": "gp",
+    "Time on ice": "toi_total",
+    "Goals against": "goals_against",
+    "Shots on goal": "shots_faced",
+    "Saves": "saves",
+    "Saves, %": "sv_pct",
+    "xG conceded": "xg_conceded",
+    "xG per shot taken": "xg_per_shot",
+    "Scoring chances - total": "scoring_chances_faced",
+    "Scoring chance saves": "sc_saves",
+    "Scoring chance saves, %": "sc_sv_pct",
+    "Shootout saves": "shootout_saves",
+    "Shootouts": "shootout_faced",
+    "Accurate passes, %": "passes_accurate_pct",
+}
+
+NORM_LINES_MAP = {
+    "Line": "line_players",
+    "Numbers of shifts": "shifts",
+    "Time on ice": "toi",
+    "Goals": "goals_for",
+    "Opponent's goals": "goals_against",
+    "Plus/Minus": "plus_minus",
+    "Shots": "shots_for",
+    "Shots on goal": "shots_on_goal_for",
+    "Opponent shots total": "shots_against",
+    "Shots on goal against": "sog_against",
+    "CORSI": "corsi",
+    "CORSI+": "corsi_for",
+    "CORSI-": "corsi_against",
+    "Power play time": "pp_time",
+    "Successful power play": "pp_goals",
+    "Short-handed time": "pk_time",
+}
+
+NORM_TEAM_GAME_MAP = {
+    "Date": "game_date",
+    "Opponent": "opponent",
+    "Score": "score",
+    "Goals": "goals",
+    "Penalties": "penalties",
+    "Penalties drawn": "penalties_drawn",
+    "Faceoffs won, %": "fo_pct",
+    "Hits": "hits",
+    "Shots": "shots",
+    "Shots on goal": "shots_on_goal",
+    "CORSI%": "corsi_pct",
+    "xG (Expected goals)": "xg",
+    "Opponent's xG": "opp_xg",
+    "Net xG (xG - Opponent's xG)": "net_xg",
+    "Power play, %": "pp_pct",
+    "Short-handed, %": "pk_pct",
+    "Power play": "pp_attempts",
+    "Successful power play": "pp_goals",
+    "Short-handed": "pk_attempts",
+    "Entries": "entries",
+    "Entries via stickhandling": "entries_carry",
+}
+
+NORM_LEAGUE_TEAM_MAP = {
+    "Team": "team_name",
+    "Goals": "goals",
+    "Faceoffs won, %": "fo_pct",
+    "Hits": "hits",
+    "Shots": "shots",
+    "Shots on goal": "shots_on_goal",
+    "CORSI%": "corsi_pct",
+    "xG (Expected goals)": "xg",
+    "Opponent's xG": "opp_xg",
+    "Net xG (xG - Opponent's xG)": "net_xg",
+    "xG conversion": "xg_conversion",
+    "Power play, %": "pp_pct",
+    "Short-handed, %": "pk_pct",
+    "Power play": "pp_attempts",
+    "Successful power play": "pp_goals",
+    "Entries": "entries",
+    "Entries via stickhandling": "entries_carry",
+    "Puck battles": "battles_total",
+    "Puck battles won, %": "battles_pct",
+    "Passes to the slot": "passes_to_slot",
+    "Accurate passes, %": "accurate_pass_pct",
+}
+
+
+def _norm_map_row(row_dict: dict, mapping: dict) -> dict:
+    """Map an InStat row to ProspectX fields using a mapping dict."""
+    result = {}
+    for instat_col, px_field in mapping.items():
+        val = _norm_get(row_dict, instat_col)
+        if val is not None:
+            result[px_field] = _norm_parse(val)
+        else:
+            result[px_field] = None
+    return result
+
+
+# ── Stat Normalizer — process functions ──────────────────────
+
+def _norm_process_skater(conn, org_id, season, row_dict, unmapped):
+    """Process a skater row into instat_player_stats."""
+    mapped = _norm_map_row(row_dict, NORM_SKATER_MAP)
+    player_name = row_dict.get("Player", "").strip() if row_dict.get("Player") else ""
+    if not player_name or player_name == '-':
+        return "skipped"
+
+    # Upsert player identity
+    player_data = {
+        "player_name": player_name,
+        "jersey_number": str(int(mapped["jersey_number"])) if mapped.get("jersey_number") and mapped["jersey_number"] is not None else None,
+        "position": row_dict.get("Position", "").strip() if row_dict.get("Position") else None,
+        "handedness": row_dict.get("Active hand", "").strip() if row_dict.get("Active hand") else None,
+        "dob": row_dict.get("Date of birth", "").strip() if row_dict.get("Date of birth") else None,
+        "height_cm": _norm_parse(row_dict.get("Height")),
+        "weight_kg": _norm_parse(row_dict.get("Weight")),
+    }
+    player_id = _norm_upsert_player(conn, org_id, player_data)
+    if not player_id:
+        return "skipped"
+
+    # Compute derived fields
+    gp = _norm_parse(row_dict.get("Games played"))
+    goals = mapped.get("goals")
+    if gp and goals and float(gp) > 0:
+        mapped["ppg"] = round(float(goals) / float(gp), 3)
+    toi_str = row_dict.get("Time on ice")
+    if toi_str and gp and float(gp) > 0:
+        toi_mins = _norm_toi_to_minutes(toi_str)
+        if toi_mins is not None:
+            mapped["toi_per_game"] = round(toi_mins / float(gp), 2)
+    iss = mapped.get("inner_slot_shots")
+    isg = mapped.get("inner_slot_goals")
+    if iss and isg and float(iss) > 0 and mapped.get("inner_slot_pct") is None:
+        mapped["inner_slot_pct"] = round(float(isg) / float(iss) * 100, 1)
+    ec = mapped.get("entries_carry")
+    et = mapped.get("entries_total")
+    if ec and et and float(et) > 0:
+        mapped["entry_success_rate"] = round(float(ec) / float(et), 3)
+
+    # Check existing
+    existing = conn.execute(
+        "SELECT id FROM instat_player_stats WHERE player_id = ? AND season = ?",
+        (player_id, season)
+    ).fetchone()
+    was_update = existing is not None
+
+    # Remove identity fields from mapped
+    stat_fields = {k: v for k, v in mapped.items() if k not in (
+        "player_name", "jersey_number", "position", "handedness", "dob",
+        "height_cm", "weight_kg", "team_name"
+    )}
+
+    row_id = existing[0] if existing else gen_id()
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_player_stats (
+            id, player_id, org_id, season, uploaded_at,
+            gp, toi_total, toi_per_game,
+            goals, primary_assists, secondary_assists, points, ppg,
+            plus_minus, penalties, penalties_drawn,
+            hits, hits_against, blocked_shots, error_leading_goal,
+            shots_total, shots_on_goal, shot_pct,
+            inner_slot_shots, inner_slot_goals, inner_slot_pct,
+            outer_slot_shots, outer_slot_pct,
+            scoring_chances, scoring_chance_pct,
+            passes_to_slot, one_on_one_shots, one_on_one_goals,
+            xg, xg_per_shot, net_xg, team_xg_on, opp_xg_on,
+            xg_conversion, corsi_pct, corsi_for, corsi_against,
+            fenwick_pct, pdo,
+            fo_total, fo_won, fo_pct,
+            fo_dz_pct, fo_oz_pct, fo_nz_pct,
+            battles_total, battles_won, battles_pct,
+            battles_dz, battles_oz, battles_nz,
+            entries_total, entries_carry, entries_dump, entries_pass,
+            entry_success_rate,
+            breakouts_total, breakouts_carry, breakouts_dump,
+            puck_retrievals, ev_dz_retrievals, ev_oz_retrievals,
+            takeaways, takeaways_dz, puck_losses, puck_losses_dz,
+            passes_total, passes_accurate, pass_pct,
+            oz_possession, dz_possession, puck_touches, puck_control_time,
+            pp_appearances, pp_goals, pp_toi,
+            pk_appearances, pk_toi, sh_goals,
+            dekes_total, dekes_pct
+        ) VALUES (
+            ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?
+        )
+    """, (
+        row_id, player_id, org_id, season, now_iso(),
+        stat_fields.get("gp"), stat_fields.get("toi_total"), stat_fields.get("toi_per_game"),
+        stat_fields.get("goals"), stat_fields.get("primary_assists"), stat_fields.get("secondary_assists"), stat_fields.get("points"), stat_fields.get("ppg"),
+        stat_fields.get("plus_minus"), stat_fields.get("penalties"), stat_fields.get("penalties_drawn"),
+        stat_fields.get("hits"), stat_fields.get("hits_against"), stat_fields.get("blocked_shots"), stat_fields.get("error_leading_goal"),
+        stat_fields.get("shots_total"), stat_fields.get("shots_on_goal"), stat_fields.get("shot_pct"),
+        stat_fields.get("inner_slot_shots"), stat_fields.get("inner_slot_goals"), stat_fields.get("inner_slot_pct"),
+        stat_fields.get("outer_slot_shots"), stat_fields.get("outer_slot_pct"),
+        stat_fields.get("scoring_chances"), stat_fields.get("scoring_chance_pct"),
+        stat_fields.get("passes_to_slot"), stat_fields.get("one_on_one_shots"), stat_fields.get("one_on_one_goals"),
+        stat_fields.get("xg"), stat_fields.get("xg_per_shot"), stat_fields.get("net_xg"), stat_fields.get("team_xg_on"), stat_fields.get("opp_xg_on"),
+        stat_fields.get("xg_conversion"), stat_fields.get("corsi_pct"), stat_fields.get("corsi_for"), stat_fields.get("corsi_against"),
+        stat_fields.get("fenwick_pct"), stat_fields.get("pdo"),
+        stat_fields.get("fo_total"), stat_fields.get("fo_won"), stat_fields.get("fo_pct"),
+        stat_fields.get("fo_dz_pct"), stat_fields.get("fo_oz_pct"), stat_fields.get("fo_nz_pct"),
+        stat_fields.get("battles_total"), stat_fields.get("battles_won"), stat_fields.get("battles_pct"),
+        stat_fields.get("battles_dz"), stat_fields.get("battles_oz"), stat_fields.get("battles_nz"),
+        stat_fields.get("entries_total"), stat_fields.get("entries_carry"), stat_fields.get("entries_dump"), stat_fields.get("entries_pass"),
+        stat_fields.get("entry_success_rate"),
+        stat_fields.get("breakouts_total"), stat_fields.get("breakouts_carry"), stat_fields.get("breakouts_dump"),
+        stat_fields.get("puck_retrievals"), stat_fields.get("ev_dz_retrievals"), stat_fields.get("ev_oz_retrievals"),
+        stat_fields.get("takeaways"), stat_fields.get("takeaways_dz"), stat_fields.get("puck_losses"), stat_fields.get("puck_losses_dz"),
+        stat_fields.get("passes_total"), stat_fields.get("passes_accurate"), stat_fields.get("pass_pct"),
+        stat_fields.get("oz_possession"), stat_fields.get("dz_possession"), stat_fields.get("puck_touches"), stat_fields.get("puck_control_time"),
+        stat_fields.get("pp_appearances"), stat_fields.get("pp_goals"), stat_fields.get("pp_toi"),
+        stat_fields.get("pk_appearances"), stat_fields.get("pk_toi"), stat_fields.get("sh_goals"),
+        stat_fields.get("dekes_total"), stat_fields.get("dekes_pct"),
+    ))
+    return "updated" if was_update else "inserted"
+
+
+def _norm_process_goalie(conn, org_id, season, row_dict, unmapped):
+    """Process a goalie row into instat_goalie_stats."""
+    mapped = _norm_map_row(row_dict, NORM_GOALIE_MAP)
+    player_name = row_dict.get("Player", "").strip() if row_dict.get("Player") else ""
+    if not player_name or player_name == '-':
+        return "skipped"
+
+    player_data = {
+        "player_name": player_name,
+        "jersey_number": str(int(mapped["jersey_number"])) if mapped.get("jersey_number") and mapped["jersey_number"] is not None else None,
+        "position": "G",
+    }
+    player_id = _norm_upsert_player(conn, org_id, player_data)
+    if not player_id:
+        return "skipped"
+
+    # Compute gsax: saves - (shots_faced - xg_conceded)
+    saves_val = mapped.get("saves")
+    sf_val = mapped.get("shots_faced")
+    xgc_val = mapped.get("xg_conceded")
+    gsax = None
+    if saves_val is not None and sf_val is not None and xgc_val is not None:
+        try:
+            gsax = round(float(saves_val) - (float(sf_val) - float(xgc_val)), 2)
+        except (ValueError, TypeError):
+            pass
+
+    existing = conn.execute(
+        "SELECT id FROM instat_goalie_stats WHERE player_id = ? AND season = ?",
+        (player_id, season)
+    ).fetchone()
+    was_update = existing is not None
+    row_id = existing[0] if existing else gen_id()
+
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_goalie_stats (
+            id, player_id, org_id, season, uploaded_at,
+            gp, toi_total,
+            goals_against, shots_faced, saves, sv_pct,
+            xg_conceded, xg_per_shot, gsax,
+            sv_pct_high_danger,
+            scoring_chances_faced, sc_saves, sc_sv_pct,
+            shootout_saves, shootout_faced, passes_accurate_pct
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        row_id, player_id, org_id, season, now_iso(),
+        mapped.get("gp"), mapped.get("toi_total"),
+        mapped.get("goals_against"), mapped.get("shots_faced"), mapped.get("saves"), mapped.get("sv_pct"),
+        mapped.get("xg_conceded"), mapped.get("xg_per_shot"), gsax,
+        mapped.get("sv_pct_high_danger"),
+        mapped.get("scoring_chances_faced"), mapped.get("sc_saves"), mapped.get("sc_sv_pct"),
+        mapped.get("shootout_saves"), mapped.get("shootout_faced"), mapped.get("passes_accurate_pct"),
+    ))
+    return "updated" if was_update else "inserted"
+
+
+def _norm_process_line(conn, org_id, season, line_type, row_dict, unmapped):
+    """Process a line combination row into instat_line_stats."""
+    mapped = _norm_map_row(row_dict, NORM_LINES_MAP)
+    line_players = row_dict.get("Line", "").strip() if row_dict.get("Line") else ""
+    if not line_players or line_players == '-':
+        return "skipped"
+
+    existing = conn.execute(
+        "SELECT id FROM instat_line_stats WHERE org_id = ? AND line_players = ? AND line_type = ? AND season = ?",
+        (org_id, line_players, line_type, season)
+    ).fetchone()
+    was_update = existing is not None
+    row_id = existing[0] if existing else gen_id()
+
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_line_stats (
+            id, org_id, line_players, line_type, season, uploaded_at,
+            shifts, toi, goals_for, goals_against, plus_minus,
+            shots_for, shots_on_goal_for, shots_against, sog_against,
+            corsi, corsi_for, corsi_against,
+            pp_time, pp_goals, pk_time
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        row_id, org_id, line_players, line_type, season, now_iso(),
+        mapped.get("shifts"), mapped.get("toi"), mapped.get("goals_for"), mapped.get("goals_against"), mapped.get("plus_minus"),
+        mapped.get("shots_for"), mapped.get("shots_on_goal_for"), mapped.get("shots_against"), mapped.get("sog_against"),
+        mapped.get("corsi"), mapped.get("corsi_for"), mapped.get("corsi_against"),
+        mapped.get("pp_time"), mapped.get("pp_goals"), mapped.get("pk_time"),
+    ))
+    return "updated" if was_update else "inserted"
+
+
+def _norm_process_team_game(conn, org_id, season, row_dict, unmapped):
+    """Process a team game log row into instat_team_game_log."""
+    mapped = _norm_map_row(row_dict, NORM_TEAM_GAME_MAP)
+    game_date = row_dict.get("Date", "").strip() if row_dict.get("Date") else ""
+    opponent = row_dict.get("Opponent", "").strip() if row_dict.get("Opponent") else ""
+    if not game_date or not opponent or game_date == '-':
+        return "skipped"
+    # Skip "Average" summary rows
+    if "average" in opponent.lower():
+        return "skipped"
+
+    existing = conn.execute(
+        "SELECT id FROM instat_team_game_log WHERE org_id = ? AND game_date = ? AND opponent = ?",
+        (org_id, game_date, opponent)
+    ).fetchone()
+    was_update = existing is not None
+    row_id = existing[0] if existing else gen_id()
+
+    # Handle pk_goals_against — may not be directly in the map
+    pk_goals_against = None  # Not always available in InStat export
+
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_team_game_log (
+            id, org_id, game_date, opponent, score,
+            goals, penalties, penalties_drawn,
+            fo_pct, hits,
+            shots, shots_on_goal, corsi_pct,
+            xg, opp_xg, net_xg,
+            pp_pct, pk_pct,
+            pp_attempts, pp_goals,
+            pk_attempts, pk_goals_against,
+            entries, entries_carry,
+            season, uploaded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        row_id, org_id, game_date, opponent, mapped.get("score"),
+        mapped.get("goals"), mapped.get("penalties"), mapped.get("penalties_drawn"),
+        mapped.get("fo_pct"), mapped.get("hits"),
+        mapped.get("shots"), mapped.get("shots_on_goal"), mapped.get("corsi_pct"),
+        mapped.get("xg"), mapped.get("opp_xg"), mapped.get("net_xg"),
+        mapped.get("pp_pct"), mapped.get("pk_pct"),
+        mapped.get("pp_attempts"), mapped.get("pp_goals"),
+        mapped.get("pk_attempts"), pk_goals_against,
+        mapped.get("entries"), mapped.get("entries_carry"),
+        season, now_iso(),
+    ))
+    return "updated" if was_update else "inserted"
+
+
+def _norm_process_player_game(conn, org_id, season, row_dict, filename, unmapped):
+    """Process a player game log row into instat_player_game_log."""
+    # Extract player name from filename: "Games - Ewan McChesney, 07-Feb-2026.xlsx"
+    import re
+    match = re.search(r'[Gg]ames\s*-\s*(.+?)[\s,_]+\d{2}-\w+-\d{4}', filename)
+    player_name = match.group(1).replace('_', ' ').strip() if match else ""
+    if not player_name:
+        return "skipped"
+
+    game_date = row_dict.get("Date", "").strip() if row_dict.get("Date") else ""
+    opponent = row_dict.get("Opponent", "").strip() if row_dict.get("Opponent") else ""
+    if not game_date or not opponent or game_date == '-':
+        return "skipped"
+    if "average" in opponent.lower():
+        return "skipped"
+
+    player_id = _norm_upsert_player(conn, org_id, {"player_name": player_name})
+    if not player_id:
+        return "skipped"
+
+    # Map using skater mapping for per-game stats
+    mapped = _norm_map_row(row_dict, NORM_SKATER_MAP)
+
+    existing = conn.execute(
+        "SELECT id FROM instat_player_game_log WHERE player_id = ? AND game_date = ? AND opponent = ?",
+        (player_id, game_date, opponent)
+    ).fetchone()
+    was_update = existing is not None
+    row_id = existing[0] if existing else gen_id()
+
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_player_game_log (
+            id, player_id, org_id, game_date, opponent, score,
+            shifts, toi,
+            goals, primary_assists, secondary_assists, points,
+            plus_minus, shots, shots_on_goal,
+            xg, net_xg, corsi_pct,
+            fo_total, fo_won, fo_pct,
+            fo_dz_pct, fo_oz_pct, fo_nz_pct,
+            battles_total, battles_won, battles_pct,
+            inner_slot_shots, inner_slot_goals,
+            entries_total, entries_carry,
+            passes_to_slot, puck_retrievals,
+            pp_appearances, pp_toi,
+            pk_appearances, pk_toi,
+            hits, blocked_shots, error_leading_goal,
+            season, uploaded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        row_id, player_id, org_id, game_date, opponent, mapped.get("score"),
+        _norm_parse(row_dict.get("All shifts")), mapped.get("toi_total"),
+        mapped.get("goals"), mapped.get("primary_assists"), mapped.get("secondary_assists"), mapped.get("points"),
+        mapped.get("plus_minus"), mapped.get("shots_total"), mapped.get("shots_on_goal"),
+        mapped.get("xg"), mapped.get("net_xg"), mapped.get("corsi_pct"),
+        mapped.get("fo_total"), mapped.get("fo_won"), mapped.get("fo_pct"),
+        mapped.get("fo_dz_pct"), mapped.get("fo_oz_pct"), mapped.get("fo_nz_pct"),
+        mapped.get("battles_total"), mapped.get("battles_won"), mapped.get("battles_pct"),
+        mapped.get("inner_slot_shots"), mapped.get("inner_slot_goals"),
+        mapped.get("entries_total"), mapped.get("entries_carry"),
+        mapped.get("passes_to_slot"), mapped.get("puck_retrievals"),
+        mapped.get("pp_appearances"), mapped.get("pp_toi"),
+        mapped.get("pk_appearances"), mapped.get("pk_toi"),
+        mapped.get("hits"), mapped.get("blocked_shots"), mapped.get("error_leading_goal"),
+        season, now_iso(),
+    ))
+    return "updated" if was_update else "inserted"
+
+
+def _norm_process_league_skater(conn, league_name, season, row_dict, unmapped):
+    """Process a league-wide skater row into instat_league_skater_stats."""
+    mapped = _norm_map_row(row_dict, NORM_SKATER_MAP)
+    player_name = row_dict.get("Player", "").strip() if row_dict.get("Player") else ""
+    team_name = row_dict.get("Team", "").strip() if row_dict.get("Team") else ""
+    if not player_name or player_name == '-':
+        return "skipped"
+
+    # Compute derived
+    gp = _norm_parse(row_dict.get("Games played"))
+    goals = mapped.get("goals")
+    ppg = None
+    if gp and goals and float(gp) > 0:
+        ppg = round(float(goals) / float(gp), 3)
+    toi_str = row_dict.get("Time on ice")
+    toi_per_game = None
+    if toi_str and gp and float(gp) > 0:
+        toi_mins = _norm_toi_to_minutes(toi_str)
+        if toi_mins is not None:
+            toi_per_game = round(toi_mins / float(gp), 2)
+    ec = mapped.get("entries_carry")
+    et = mapped.get("entries_total")
+    entry_success_rate = None
+    if ec and et and float(et) > 0:
+        entry_success_rate = round(float(ec) / float(et), 3)
+
+    existing = conn.execute(
+        "SELECT id FROM instat_league_skater_stats WHERE league_name = ? AND player_name = ? AND team_name = ? AND season = ?",
+        (league_name, player_name, team_name, season)
+    ).fetchone()
+    was_update = existing is not None
+    row_id = existing[0] if existing else gen_id()
+
+    jersey = str(int(mapped["jersey_number"])) if mapped.get("jersey_number") and mapped["jersey_number"] is not None else None
+
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_league_skater_stats (
+            id, league_name, team_name, player_name,
+            jersey_number, position, handedness, dob, height_cm, weight_kg,
+            season, uploaded_at,
+            gp, toi_total, toi_per_game,
+            goals, primary_assists, secondary_assists, points, ppg,
+            plus_minus, hits, error_leading_goal,
+            shots_total, shots_on_goal,
+            inner_slot_shots, inner_slot_goals, inner_slot_pct,
+            outer_slot_shots, outer_slot_pct,
+            scoring_chances, scoring_chance_pct,
+            passes_to_slot,
+            xg, net_xg, team_xg_on, opp_xg_on,
+            xg_conversion, corsi_pct, fenwick_pct,
+            fo_total, fo_pct, fo_dz_pct, fo_oz_pct, fo_nz_pct,
+            battles_total, battles_won, battles_pct,
+            entries_total, entries_carry, entry_success_rate,
+            puck_retrievals, takeaways, puck_losses,
+            pp_appearances, pp_goals, pp_toi,
+            pk_appearances, pk_toi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        row_id, league_name, team_name, player_name,
+        jersey, mapped.get("position"), mapped.get("handedness"), mapped.get("dob"), mapped.get("height_cm"), mapped.get("weight_kg"),
+        season, now_iso(),
+        mapped.get("gp"), mapped.get("toi_total"), toi_per_game,
+        mapped.get("goals"), mapped.get("primary_assists"), mapped.get("secondary_assists"), mapped.get("points"), ppg,
+        mapped.get("plus_minus"), mapped.get("hits"), mapped.get("error_leading_goal"),
+        mapped.get("shots_total"), mapped.get("shots_on_goal"),
+        mapped.get("inner_slot_shots"), mapped.get("inner_slot_goals"), mapped.get("inner_slot_pct"),
+        mapped.get("outer_slot_shots"), mapped.get("outer_slot_pct"),
+        mapped.get("scoring_chances"), mapped.get("scoring_chance_pct"),
+        mapped.get("passes_to_slot"),
+        mapped.get("xg"), mapped.get("net_xg"), mapped.get("team_xg_on"), mapped.get("opp_xg_on"),
+        mapped.get("xg_conversion"), mapped.get("corsi_pct"), mapped.get("fenwick_pct"),
+        mapped.get("fo_total"), mapped.get("fo_pct"), mapped.get("fo_dz_pct"), mapped.get("fo_oz_pct"), mapped.get("fo_nz_pct"),
+        mapped.get("battles_total"), mapped.get("battles_won"), mapped.get("battles_pct"),
+        mapped.get("entries_total"), mapped.get("entries_carry"), entry_success_rate,
+        mapped.get("puck_retrievals"), mapped.get("takeaways"), mapped.get("puck_losses"),
+        mapped.get("pp_appearances"), mapped.get("pp_goals"), mapped.get("pp_toi"),
+        mapped.get("pk_appearances"), mapped.get("pk_toi"),
+    ))
+    return "updated" if was_update else "inserted"
+
+
+def _norm_process_league_team(conn, league_name, season, row_dict, unmapped):
+    """Process a league-wide team row into instat_league_team_stats."""
+    mapped = _norm_map_row(row_dict, NORM_LEAGUE_TEAM_MAP)
+    team_name = row_dict.get("Team", "").strip() if row_dict.get("Team") else ""
+    if not team_name or team_name == '-':
+        return "skipped"
+
+    # Compute derived entry_success_rate
+    ec = mapped.get("entries_carry")
+    et = mapped.get("entries")
+    entry_success_rate = None
+    if ec and et and float(et) > 0:
+        entry_success_rate = round(float(ec) / float(et), 3)
+
+    existing = conn.execute(
+        "SELECT id FROM instat_league_team_stats WHERE league_name = ? AND team_name = ? AND season = ?",
+        (league_name, team_name, season)
+    ).fetchone()
+    was_update = existing is not None
+    row_id = existing[0] if existing else gen_id()
+
+    conn.execute("""
+        INSERT OR REPLACE INTO instat_league_team_stats (
+            id, league_name, team_name, season, uploaded_at,
+            goals, fo_pct, hits,
+            shots, shots_on_goal, corsi_pct,
+            xg, opp_xg, net_xg, xg_conversion,
+            pp_pct, pk_pct,
+            pp_attempts, pp_goals,
+            pk_attempts,
+            entries, entries_carry, entry_success_rate,
+            battles_total, battles_pct,
+            passes_to_slot, accurate_pass_pct
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        row_id, league_name, team_name, season, now_iso(),
+        mapped.get("goals"), mapped.get("fo_pct"), mapped.get("hits"),
+        mapped.get("shots"), mapped.get("shots_on_goal"), mapped.get("corsi_pct"),
+        mapped.get("xg"), mapped.get("opp_xg"), mapped.get("net_xg"), mapped.get("xg_conversion"),
+        mapped.get("pp_pct"), mapped.get("pk_pct"),
+        mapped.get("pp_attempts"), mapped.get("pp_goals"),
+        mapped.get("pk_attempts"),
+        mapped.get("entries"), mapped.get("entries_carry"), entry_success_rate,
+        mapped.get("battles_total"), mapped.get("battles_pct"),
+        mapped.get("passes_to_slot"), mapped.get("accurate_pass_pct"),
+    ))
+    return "updated" if was_update else "inserted"
+
+
 # ── Stat CRUD (edit / delete / deduplicate) ──────────────────
 
 class StatUpdateRequest(BaseModel):
@@ -9861,6 +10877,261 @@ async def ingest_stats(
         "inserted": inserted,
         "errors": errors[:10],
     }
+
+
+# ── Stat Normalizer — upload + read endpoints ────────────────
+
+@app.post("/stats/upload")
+async def upload_stats(
+    file: UploadFile = File(...),
+    season: str = "2025-26",
+    league_name: str = "GOJHL",
+    token_data: dict = Depends(_require_admin)
+):
+    """
+    Unified stat normalizer endpoint. Accepts InStat Excel exports,
+    auto-detects file type, maps to ProspectX standard schema.
+    """
+    org_id = token_data["org_id"]
+
+    fname = file.filename or ""
+    if not any(fname.lower().endswith(ext) for ext in (".xlsx", ".xls", ".xlsm")):
+        raise HTTPException(status_code=400, detail="File must be .xlsx or .xls")
+
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+    ws = wb.active
+    sheet_name = ws.title if ws else ""
+
+    file_info = _norm_detect_file_type(fname, sheet_name)
+    if file_info["type"] == "unknown":
+        raise HTTPException(status_code=400, detail="Could not detect file type from filename")
+
+    headers = [str(cell.value).strip() if cell.value else "" for cell in ws[1]]
+    rows = list(ws.iter_rows(min_row=2, values_only=True))
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    unmapped = set()
+    preview = []
+
+    conn = get_db()
+
+    for row_idx, row in enumerate(rows):
+        row_dict = {}
+        for i in range(len(headers)):
+            if i < len(row):
+                val = row[i]
+                row_dict[headers[i]] = str(val).strip() if val is not None else ""
+            else:
+                row_dict[headers[i]] = ""
+
+        if not any(v for v in row_dict.values()):
+            skipped += 1
+            continue
+
+        try:
+            if file_info["type"] == "skater":
+                result = _norm_process_skater(conn, org_id, season, row_dict, unmapped)
+            elif file_info["type"] == "goalie":
+                if file_info.get("subtype") == "league":
+                    result = _norm_process_league_skater(conn, league_name, season, row_dict, unmapped)
+                else:
+                    result = _norm_process_goalie(conn, org_id, season, row_dict, unmapped)
+            elif file_info["type"] == "lines":
+                result = _norm_process_line(conn, org_id, season, file_info["subtype"] or "basic", row_dict, unmapped)
+            elif file_info["type"] == "team_game_log":
+                result = _norm_process_team_game(conn, org_id, season, row_dict, unmapped)
+            elif file_info["type"] == "player_game_log":
+                result = _norm_process_player_game(conn, org_id, season, row_dict, fname, unmapped)
+            elif file_info["type"] == "league_skater":
+                result = _norm_process_league_skater(conn, league_name, season, row_dict, unmapped)
+            elif file_info["type"] == "league_team":
+                result = _norm_process_league_team(conn, league_name, season, row_dict, unmapped)
+            else:
+                skipped += 1
+                continue
+        except Exception as e:
+            logger.warning("Normalizer row %d error: %s", row_idx + 1, str(e))
+            skipped += 1
+            continue
+
+        if result == "inserted":
+            inserted += 1
+        elif result == "updated":
+            updated += 1
+        elif result == "skipped":
+            skipped += 1
+
+        if row_idx < 3:
+            preview.append({"row": row_idx + 1, "player": row_dict.get("Player", "—")})
+
+    conn.commit()
+    conn.close()
+    wb.close()
+
+    return {
+        "file_type": file_info["type"],
+        "subtype": file_info.get("subtype"),
+        "inserted": inserted,
+        "updated": updated,
+        "skipped": skipped,
+        "unmapped_columns": sorted(list(unmapped)),
+        "preview": preview,
+    }
+
+
+@app.get("/stats/norm/players")
+async def list_norm_players(
+    player_name: Optional[str] = Query(None),
+    token_data: dict = Depends(verify_token),
+):
+    """List all instat_players with latest stats for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        if player_name:
+            players = conn.execute(
+                "SELECT * FROM instat_players WHERE org_id = ? AND LOWER(player_name) LIKE LOWER(?)",
+                (org_id, f"%{player_name}%")
+            ).fetchall()
+        else:
+            players = conn.execute(
+                "SELECT * FROM instat_players WHERE org_id = ?", (org_id,)
+            ).fetchall()
+
+        result = []
+        for p in players:
+            pd = dict(p)
+            # Get latest season stats
+            stat = conn.execute(
+                "SELECT gp, ppg, uploaded_at FROM instat_player_stats WHERE player_id = ? ORDER BY uploaded_at DESC LIMIT 1",
+                (pd["id"],)
+            ).fetchone()
+            if stat:
+                pd["gp"] = stat["gp"]
+                pd["ppg"] = stat["ppg"]
+                pd["uploaded_at"] = stat["uploaded_at"]
+            result.append(pd)
+        return {"players": result}
+    finally:
+        conn.close()
+
+
+@app.get("/stats/norm/players/{player_name}")
+async def get_norm_player_stats(player_name: str, token_data: dict = Depends(verify_token)):
+    """Get full normalized stat row + game log for a player."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        player = conn.execute(
+            "SELECT * FROM instat_players WHERE org_id = ? AND player_name = ?",
+            (org_id, player_name)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail=f"Player '{player_name}' not found")
+
+        pid = player["id"]
+        season_stats = conn.execute(
+            "SELECT * FROM instat_player_stats WHERE player_id = ? ORDER BY season DESC",
+            (pid,)
+        ).fetchall()
+        game_log = conn.execute(
+            "SELECT * FROM instat_player_game_log WHERE player_id = ? ORDER BY game_date DESC",
+            (pid,)
+        ).fetchall()
+
+        return {
+            "player": dict(player),
+            "season_stats": [dict(r) for r in season_stats],
+            "game_log": [dict(r) for r in game_log],
+        }
+    finally:
+        conn.close()
+
+
+@app.delete("/stats/norm/players/{player_name}")
+async def delete_norm_player(player_name: str, token_data: dict = Depends(_require_admin)):
+    """Delete player + all associated stats from instat tables."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        player = conn.execute(
+            "SELECT id FROM instat_players WHERE org_id = ? AND player_name = ?",
+            (org_id, player_name)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail=f"Player '{player_name}' not found")
+
+        pid = player["id"]
+        conn.execute("DELETE FROM instat_player_game_log WHERE player_id = ?", (pid,))
+        conn.execute("DELETE FROM instat_player_stats WHERE player_id = ?", (pid,))
+        conn.execute("DELETE FROM instat_goalie_stats WHERE player_id = ?", (pid,))
+        conn.execute("DELETE FROM instat_players WHERE id = ?", (pid,))
+        conn.commit()
+        return {"deleted": True, "player_name": player_name}
+    finally:
+        conn.close()
+
+
+@app.delete("/stats/norm/players/{player_name}/season/{season}")
+async def delete_norm_player_season(player_name: str, season: str, token_data: dict = Depends(_require_admin)):
+    """Delete only the season stat row — preserves player identity and game log."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        player = conn.execute(
+            "SELECT id FROM instat_players WHERE org_id = ? AND player_name = ?",
+            (org_id, player_name)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail=f"Player '{player_name}' not found")
+
+        pid = player["id"]
+        conn.execute("DELETE FROM instat_player_stats WHERE player_id = ? AND season = ?", (pid, season))
+        conn.execute("DELETE FROM instat_goalie_stats WHERE player_id = ? AND season = ?", (pid, season))
+        conn.commit()
+        return {"deleted": True, "player_name": player_name, "season": season}
+    finally:
+        conn.close()
+
+
+@app.get("/stats/league/{league_name}/percentiles/{player_name}")
+async def get_league_percentiles(league_name: str, player_name: str, token_data: dict = Depends(verify_token)):
+    """Compute player percentile rank vs all players in instat_league_skater_stats."""
+    conn = get_db()
+    try:
+        player = conn.execute(
+            "SELECT * FROM instat_league_skater_stats WHERE league_name = ? AND player_name = ?",
+            (league_name, player_name)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail=f"Player '{player_name}' not found in league '{league_name}'")
+
+        season = player["season"]
+        all_players = conn.execute(
+            "SELECT * FROM instat_league_skater_stats WHERE league_name = ? AND season = ?",
+            (league_name, season)
+        ).fetchall()
+
+        total = len(all_players)
+        if total <= 1:
+            return {"player_name": player_name, "league": league_name, "percentiles": {}}
+
+        pct_fields = ["ppg", "corsi_pct", "net_xg", "inner_slot_pct", "fo_pct", "battles_pct", "entries_carry"]
+        percentiles = {}
+        for field in pct_fields:
+            player_val = player[field]
+            if player_val is None:
+                percentiles[field] = None
+                continue
+            count_below = sum(1 for p in all_players if p[field] is not None and float(p[field]) < float(player_val))
+            percentiles[field] = round(count_below / total * 100)
+
+        return {"player_name": player_name, "league": league_name, "percentiles": percentiles}
+    finally:
+        conn.close()
 
 
 # ============================================================
