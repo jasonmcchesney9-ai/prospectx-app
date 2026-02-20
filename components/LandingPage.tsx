@@ -229,18 +229,30 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <a
-              href="#faq"
-              className="hidden sm:inline text-sm text-white/50 hover:text-white transition-colors"
-            >
-              FAQ
-            </a>
-            <a
-              href="#pricing"
+            <Link
+              href="/pricing"
               className="hidden sm:inline text-sm text-white/50 hover:text-white transition-colors"
             >
               Pricing
-            </a>
+            </Link>
+            <Link
+              href="/about"
+              className="hidden sm:inline text-sm text-white/50 hover:text-white transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              href="/faq"
+              className="hidden sm:inline text-sm text-white/50 hover:text-white transition-colors"
+            >
+              FAQ
+            </Link>
+            <Link
+              href="/contact"
+              className="hidden sm:inline text-sm text-white/50 hover:text-white transition-colors"
+            >
+              Contact
+            </Link>
             <Link
               href="/login"
               className="text-sm text-white/70 hover:text-white transition-colors px-3 py-1.5"
