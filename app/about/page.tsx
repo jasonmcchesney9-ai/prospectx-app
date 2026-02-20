@@ -14,6 +14,7 @@ import {
   Building2,
 } from "lucide-react";
 import MarketingLayout from "@/components/MarketingLayout";
+import PXIBadge from "@/components/PXIBadge";
 
 const ROLES = [
   {
@@ -130,8 +131,8 @@ export default function AboutPage() {
       <section className="py-20 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal/10 border border-teal/20 mb-4">
-              <Brain size={12} className="text-teal" />
+            <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-teal/10 border border-teal/20 mb-4">
+              <PXIBadge size={28} variant="dark" showDot={true} />
               <span className="text-xs font-oswald uppercase tracking-widest text-teal">
                 Meet PXI
               </span>
