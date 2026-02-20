@@ -924,6 +924,14 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   // Phase 2 templates
   pre_game_intel: "Pre-Game Intel Brief",
   player_guide_prep_college: "Prep/College Player Guide",
+  // Phase 3 — Elite Profile
+  elite_profile: "Elite Player Profile",
+  // Addendum 2
+  forward_operating_profile: "Forward Operating Profile",
+  defense_operating_profile: "Defenseman Operating Profile",
+  bench_card: "Bench Card",
+  bias_controlled_eval: "Bias-Controlled Evaluation",
+  agent_projection: "Agent Projection Report",
 };
 
 // ── Report Categories: Player vs Team ──────────────────────────
@@ -943,6 +951,12 @@ export const PLAYER_REPORT_TYPES = [
   "indices_dashboard",
   "player_projection",
   "player_guide_prep_college",
+  "elite_profile",
+  "forward_operating_profile",
+  "defense_operating_profile",
+  "bench_card",
+  "bias_controlled_eval",
+  "agent_projection",
 ] as const;
 
 export const TEAM_REPORT_TYPES = [
@@ -958,6 +972,52 @@ export const TEAM_REPORT_TYPES = [
   "free_agent_market",
   "pre_game_intel",
 ] as const;
+
+// ── Report Categories (6 groups for report type selector) ──────
+export const REPORT_CATEGORIES: { key: string; label: string; description: string; accent: string; types: string[] }[] = [
+  {
+    key: "scouting",
+    label: "Scouting & Advancement",
+    description: "Player evaluation, draft analysis, and projection reports.",
+    accent: "teal",
+    types: ["pro_skater", "unified_prospect", "goalie", "draft_comparative", "elite_profile", "bias_controlled_eval", "agent_projection"],
+  },
+  {
+    key: "gameday",
+    label: "Game-Day Operations",
+    description: "Pre-game intel, opponent scouting, and in-game deployment tools.",
+    accent: "orange",
+    types: ["game_decision", "opponent_gameplan", "pre_game_intel", "forward_operating_profile", "defense_operating_profile", "bench_card"],
+  },
+  {
+    key: "development",
+    label: "Player Development",
+    description: "Development roadmaps, season tracking, and family communication.",
+    accent: "teal",
+    types: ["development_roadmap", "season_progress", "player_projection", "player_guide_prep_college", "indices_dashboard"],
+  },
+  {
+    key: "team_strategy",
+    label: "Team Strategy",
+    description: "Team systems, line optimization, special teams, and series planning.",
+    accent: "orange",
+    types: ["team_identity", "practice_plan", "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem"],
+  },
+  {
+    key: "communication",
+    label: "Communication",
+    description: "Reports for families, agents, and external stakeholders.",
+    accent: "teal",
+    types: ["family_card", "agent_pack"],
+  },
+  {
+    key: "risk",
+    label: "Risk Management",
+    description: "Trade analysis, market intelligence, and organizational planning.",
+    accent: "orange",
+    types: ["trade_target", "operations", "free_agent_market", "season_intelligence", "league_benchmarks", "season_projection"],
+  },
+];
 
 // ── Prospect Grading Scale ─────────────────────────────────────
 // Used in Pro/Amateur Skater, Unified Prospect, and other scouting reports.

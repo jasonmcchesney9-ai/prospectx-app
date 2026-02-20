@@ -16,7 +16,7 @@ import type {
   ReportStatusResponse,
   TeamReference,
 } from "@/types/api";
-import { REPORT_TYPE_LABELS, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES, DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS } from "@/types/api";
+import { REPORT_TYPE_LABELS, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES, REPORT_CATEGORIES, DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS } from "@/types/api";
 import { getUser } from "@/lib/auth";
 import UpgradeModal from "@/components/UpgradeModal";
 import ReportLoadingView from "@/components/ReportLoadingView";
@@ -36,10 +36,10 @@ const AUDIENCES: { key: Audience; label: string }[] = [
 ];
 
 const AUDIENCE_TEMPLATES: Record<Exclude<Audience, "all">, string[]> = {
-  scout: ["pro_skater", "unified_prospect", "goalie", "draft_comparative", "season_intelligence"],
-  coach: ["game_decision", "opponent_gameplan", "practice_plan", "playoff_series", "line_chemistry", "st_optimization", "team_identity", "pre_game_intel"],
-  gm: ["trade_target", "goalie_tandem", "free_agent_market", "operations", "season_projection"],
-  agent: ["agent_pack", "development_roadmap", "player_guide_prep_college"],
+  scout: ["pro_skater", "unified_prospect", "goalie", "draft_comparative", "season_intelligence", "elite_profile", "bias_controlled_eval"],
+  coach: ["game_decision", "opponent_gameplan", "practice_plan", "playoff_series", "line_chemistry", "st_optimization", "team_identity", "pre_game_intel", "forward_operating_profile", "defense_operating_profile", "bench_card"],
+  gm: ["trade_target", "goalie_tandem", "free_agent_market", "operations", "season_projection", "forward_operating_profile", "defense_operating_profile"],
+  agent: ["agent_pack", "development_roadmap", "player_guide_prep_college", "agent_projection"],
   parent: ["family_card", "development_roadmap", "player_guide_prep_college"],
 };
 
@@ -178,7 +178,9 @@ function GenerateReportContent() {
     .filter((p) => {
       if (!playerSearch) return true;
       const q = playerSearch.toLowerCase();
+      const fullName = `${p.first_name} ${p.last_name}`.toLowerCase();
       return (
+        fullName.includes(q) ||
         p.first_name.toLowerCase().includes(q) ||
         p.last_name.toLowerCase().includes(q) ||
         (p.current_team || "").toLowerCase().includes(q)
@@ -191,11 +193,13 @@ function GenerateReportContent() {
         return ln !== 0 ? ln : a.first_name.localeCompare(b.first_name);
       }
       const q = playerSearch.toLowerCase();
-      // Score: exact first name start = 0 (best), last name start = 1, contains = 2
+      // Score: full name match = 0 (best), first name start = 1, last name start = 2, contains = 3
       const score = (p: Player) => {
-        if (p.first_name.toLowerCase().startsWith(q)) return 0;
-        if (p.last_name.toLowerCase().startsWith(q)) return 1;
-        return 2;
+        const fullName = `${p.first_name} ${p.last_name}`.toLowerCase();
+        if (fullName.startsWith(q)) return 0;
+        if (p.first_name.toLowerCase().startsWith(q)) return 1;
+        if (p.last_name.toLowerCase().startsWith(q)) return 2;
+        return 3;
       };
       const sa = score(a), sb = score(b);
       if (sa !== sb) return sa - sb;
@@ -519,26 +523,24 @@ function GenerateReportContent() {
               </div>
             </div>
 
-            {/* Report Type Selection — Player Reports */}
-            {reportTypes.some((type) =>
-              (PLAYER_REPORT_TYPES as readonly string[]).includes(type) &&
-              isTypeInAudience(type, audience)
-            ) && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-5 w-1 rounded-full bg-teal" />
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
-                    Player Reports
-                  </h3>
-                </div>
-                <p className="text-[11px] text-muted/60 mb-3">Individual player evaluation, scouting, and development reports.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {reportTypes
-                    .filter((type) =>
-                      (PLAYER_REPORT_TYPES as readonly string[]).includes(type) &&
-                      isTypeInAudience(type, audience)
-                    )
-                    .map((type) => {
+            {/* Report Type Selection — 6 Categories */}
+            {REPORT_CATEGORIES.map((cat) => {
+              const catTypes = reportTypes.filter(
+                (type) => cat.types.includes(type) && isTypeInAudience(type, audience)
+              );
+              if (catTypes.length === 0) return null;
+              const accentIsTeal = cat.accent === "teal";
+              return (
+                <div key={cat.key}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`h-5 w-1 rounded-full ${accentIsTeal ? "bg-teal" : "bg-orange"}`} />
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
+                      {cat.label}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-muted/60 mb-3">{cat.description}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {catTypes.map((type) => {
                       const tmpl = templates.find((t) => t.report_type === type);
                       const isSelected = selectedType === type;
                       const recommended = isRecommended(type, audience);
@@ -550,7 +552,9 @@ function GenerateReportContent() {
                           disabled={isGenerating}
                           className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
                             isSelected
-                              ? "border-teal bg-teal/10 ring-1 ring-teal/30"
+                              ? accentIsTeal
+                                ? "border-teal bg-teal/10 ring-1 ring-teal/30"
+                                : "border-orange bg-orange/10 ring-1 ring-orange/30"
                               : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
                           }`}
                         >
@@ -561,13 +565,15 @@ function GenerateReportContent() {
                             </span>
                           )}
                           <span className={`text-sm font-semibold block ${
-                            isSelected ? "text-teal" : "text-navy"
+                            isSelected ? (accentIsTeal ? "text-teal" : "text-orange") : "text-navy"
                           } ${recommended ? "pr-24" : ""}`}>
                             {REPORT_TYPE_LABELS[type] || type}
                           </span>
                           {tmpl?.description && (
                             <span className={`text-xs mt-1 block leading-relaxed ${
-                              isSelected ? "text-teal/70 line-clamp-3" : "text-muted/70 line-clamp-2"
+                              isSelected
+                                ? accentIsTeal ? "text-teal/70 line-clamp-3" : "text-orange/70 line-clamp-3"
+                                : "text-muted/70 line-clamp-2"
                             }`}>
                               {tmpl.description}
                             </span>
@@ -575,69 +581,10 @@ function GenerateReportContent() {
                         </button>
                       );
                     })}
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {/* Report Type Selection — Team Reports */}
-            {reportTypes.some((type) =>
-              (TEAM_REPORT_TYPES as readonly string[]).includes(type) &&
-              isTypeInAudience(type, audience)
-            ) && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-5 w-1 rounded-full bg-orange" />
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">
-                    Team Reports
-                  </h3>
-                </div>
-                <p className="text-[11px] text-muted/60 mb-3">Team strategy, identity, game-planning, and lineup optimization reports. Select a team below.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {reportTypes
-                    .filter((type) =>
-                      (TEAM_REPORT_TYPES as readonly string[]).includes(type) &&
-                      isTypeInAudience(type, audience)
-                    )
-                    .map((type) => {
-                      const tmpl = templates.find((t) => t.report_type === type);
-                      const isSelected = selectedType === type;
-                      const recommended = isRecommended(type, audience);
-                      return (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setSelectedType(type)}
-                          disabled={isGenerating}
-                          className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
-                            isSelected
-                              ? "border-orange bg-orange/10 ring-1 ring-orange/30"
-                              : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
-                          }`}
-                        >
-                          {recommended && (
-                            <span className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange/15 text-orange text-[9px] font-bold uppercase tracking-wider">
-                              <Star size={9} className="fill-orange" />
-                              Recommended
-                            </span>
-                          )}
-                          <span className={`text-sm font-semibold block ${
-                            isSelected ? "text-orange" : "text-navy"
-                          } ${recommended ? "pr-24" : ""}`}>
-                            {REPORT_TYPE_LABELS[type] || type}
-                          </span>
-                          {tmpl?.description && (
-                            <span className={`text-xs mt-1 block leading-relaxed ${
-                              isSelected ? "text-orange/70 line-clamp-3" : "text-muted/70 line-clamp-2"
-                            }`}>
-                              {tmpl.description}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
+              );
+            })}
 
             {/* No templates for this audience */}
             {reportTypes.length === 0 && (
