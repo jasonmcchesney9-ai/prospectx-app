@@ -710,6 +710,58 @@ NOTES: ADD dimension, don't replace finishing instinct. Frame as "becoming harde
 '''
 
 # ─────────────────────────────────────────────────────────
+# K4) PARENT_ACTION_PLANS — parent-facing action plans
+# ─────────────────────────────────────────────────────────
+PARENT_ACTION_PLANS = '''
+DEVELOPMENT ACTION PLANS — PARENT-FACING VERSION
+==================================================
+For each development priority, use this parent-friendly format.
+NO metrics, NO drill specifics. Focus on what parents can see and support.
+
+Format for each priority:
+
+WHAT WE'RE WORKING ON: [Plain-language name]
+WHAT THIS MEANS: [One paragraph, plain language, no jargon]
+WHAT YOU'LL SEE AT GAMES: [2-3 things to watch for]
+HOW TO SUPPORT AT HOME: [1-3 practical suggestions]
+WHAT TO ASK YOUR PLAYER: [1-2 conversation starters]
+
+REFERENCE EXAMPLES:
+
+Priority — Faceoffs:
+WHAT WE'RE WORKING ON: Winning more puck battles at the start of plays (faceoffs)
+WHAT THIS MEANS: When the referee drops the puck, your player is winning about half of those battles right now. At higher levels, centers need to win a little more often — especially in their own end. He's working on the timing and technique.
+WHAT YOU'LL SEE AT GAMES: Watch the puck drop at center ice or in the defensive zone. You'll see him testing different hand positions and timing. Inconsistency is normal when learning a new technique.
+HOW TO SUPPORT AT HOME: Ask how faceoffs felt tonight — not if he won, but if his technique felt right.
+WHAT TO ASK YOUR PLAYER: "Did you try the new technique on any draws tonight? What felt different?"
+
+Priority — Transition Game:
+WHAT WE'RE WORKING ON: Carrying the puck through the middle of the ice with confidence
+WHAT THIS MEANS: Your player is great with the puck in the offensive zone. What he's developing now is carrying through the neutral zone with speed instead of chipping it to the boards. It's harder and riskier, but creates better opportunities.
+WHAT YOU'LL SEE AT GAMES: Watch when he receives a pass at center ice. Is he attacking the middle lane with speed, or chipping to the corner? The goal is more of the former.
+WHAT TO ASK YOUR PLAYER: "Did you feel confident carrying through the middle tonight? Any times you wanted to but held back?"
+
+Priority — Puck Battles:
+WHAT WE'RE WORKING ON: Winning more 50/50 battles along the boards
+WHAT THIS MEANS: Hockey has a lot of moments where two players fight for the puck along the boards. Getting that win rate up makes him much harder to play against — especially in playoffs when the game gets more physical.
+WHAT YOU'LL SEE AT GAMES: Watch the board battles. Is he engaging, using his body and stick together?
+HOW TO SUPPORT AT HOME: This takes time and physical development. Make sure he's eating and sleeping well — physical development happens in recovery.
+WHAT TO ASK YOUR PLAYER: "How did you feel in the battles tonight? Any ones you're proud of?"
+
+Priority — Physical Presence:
+WHAT WE'RE WORKING ON: Using his body more confidently in contact situations
+WHAT THIS MEANS: Your player is a skill player who wins through technique and hockey sense. At higher levels he needs to finish his checks and be willing to bump opponents off pucks. It's about being present, not aggressive.
+WHAT YOU'LL SEE AT GAMES: Watch the forecheck. Is he arriving on puck carriers and making contact? Or circling away? We want engagement, not big hits.
+WHAT TO ASK YOUR PLAYER: "Did you feel like you were making your presence felt on the forecheck tonight?"
+
+Priority — Creating for Teammates:
+WHAT WE'RE WORKING ON: Passing to open teammates in scoring areas more often
+WHAT THIS MEANS: Your player is a great finisher. What he's adding is the ability to find teammates in good scoring spots when defenders are focused on him. This makes the whole line better.
+WHAT YOU'LL SEE AT GAMES: Watch what he does below the goal line or in the corner. Is he looking for a teammate in the slot, or going to the net himself? Both are good — we want him reading both options.
+WHAT TO ASK YOUR PLAYER: "Did you have any moments tonight where you saw a teammate open and got them the puck? How did that feel?"
+'''
+
+# ─────────────────────────────────────────────────────────
 # L) CONVERSATION_RULES — Bench Talk memory and context
 # ─────────────────────────────────────────────────────────
 CONVERSATION_RULES = """═══ CONVERSATION MEMORY ═══
