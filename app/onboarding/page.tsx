@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import Link from "next/link";
+import { Check, Loader2, ArrowRight, LogIn } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser, setUser } from "@/lib/auth";
@@ -210,13 +211,22 @@ function OnboardingWizard() {
           <span className="text-teal">Prospect</span>
           <span className="text-orange">X</span>
         </h1>
-        <button
-          onClick={handleSkipAll}
-          className="text-white/40 hover:text-white/70 text-xs font-oswald uppercase tracking-wider flex items-center gap-1 transition-colors"
-        >
-          <X size={14} />
-          Skip Setup
-        </button>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/login"
+            className="text-white/50 hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+          >
+            <LogIn size={13} />
+            Already have an account? <span className="text-teal font-semibold">Sign In</span>
+          </Link>
+          <button
+            onClick={handleSkipAll}
+            className="px-4 py-1.5 border border-white/20 rounded-lg text-white/60 hover:text-white hover:border-white/40 text-xs font-oswald uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+          >
+            <ArrowRight size={13} />
+            Skip to Dashboard
+          </button>
+        </div>
       </div>
 
       {/* Progress Bar */}
