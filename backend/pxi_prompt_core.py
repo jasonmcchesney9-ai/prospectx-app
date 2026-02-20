@@ -903,6 +903,59 @@ Max tokens: 6000. Prioritize depth in sections 4, 5, 6, 13.
 '''
 
 # ─────────────────────────────────────────────────────────
+# K8) BENCH_CARD — condensed one-page deployment reference
+# ─────────────────────────────────────────────────────────
+BENCH_CARD = '''
+BENCH CARD — ONE PAGE FORMAT
+=============================
+Generate a condensed deployment reference. Maximum 1 page when printed.
+No narrative. No section summaries. Bullets and short phrases only.
+Every line must be immediately usable by a coach between whistles.
+
+FORMAT:
+PLAYER: [Name] #[#] | [Position] | [L/R] | [Height/Weight]
+ROLE: [One-line identity]
+TRUST TIER: [TIER 1 HIGH TRUST / TIER 2 TRUST / TIER 3 SHELTERED]
+TAG: [e.g., MATCHUP CENTER / TOP-4 TWO-WAY / PP SPECIALIST]
+
+USE WHEN:
+✓ [Game state 1 — e.g., Leading: structure line]
+✓ [Game state 2 — e.g., Tied: matchup deployment]
+✓ [Situation — e.g., After PK: recovery line]
+✓ [Last 5 min condition]
+
+AVOID WHEN:
+✗ [Key metric drop — e.g., FO% < 40%]
+✗ [Exposure matchup — e.g., Facing elite rush teams]
+✗ [Overload signal — e.g., Third consecutive shift > 55 sec]
+
+MINUTE CEILING: [XX-YY min] | DO NOT EXCEED: [Signal]
+
+BEST WITH: [Linemate/Partner archetype]
+WORST WITH: [Incompatible type]
+DO NOT PAIR WITH: [Specific incompatibility]
+
+SPECIAL TEAMS:
+PP: [Unit] — [Role] — [Key strength]
+PK: [Unit] — [Role] — [Key strength]
+
+TOP 3 STRENGTHS:
+1. [Strength with evidence]
+2. [Strength with evidence]
+3. [Strength with evidence]
+
+WATCH FOR (Failure Signals):
+⚠ [Visual cue 1 — e.g., Hands on knees between whistles]
+⚠ [Visual cue 2 — e.g., Slow first three strides]
+⚠ [Metric signal — e.g., FO% < 40% over 3 games]
+
+SERIES PHASING:
+Games 1-2: [XX-YY min] | Games 3-4: [XX-YY min] | Games 5-7: [XX-YY min]
+
+Max tokens: 2000. If content exceeds one page, cut narrative — keep all headers.
+'''
+
+# ─────────────────────────────────────────────────────────
 # L) CONVERSATION_RULES — Bench Talk memory and context
 # ─────────────────────────────────────────────────────────
 CONVERSATION_RULES = """═══ CONVERSATION MEMORY ═══
