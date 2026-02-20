@@ -436,6 +436,10 @@ MODE_TEMPLATE_WIRING = {
     "in_season_projections":     {"primary": "analyst", "secondary": "coach"},
     # Addendum 4 — Playoff Series Prep
     "playoff_series_prep":       {"primary": "coach",   "secondary": "gm"},
+    # Addendum 6 — Full-Team Coaching, Personnel Suggestion, Role Adjustment
+    "full_team_coaching":        {"primary": "coach",   "secondary": "analyst"},
+    "personnel_suggestion":      {"primary": "coach",   "secondary": "analyst"},
+    "role_adjustment":           {"primary": "coach",   "secondary": "analyst"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -587,6 +591,23 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "SERIES_ADJUSTMENT_MATRIX", "FATIGUE_AND_OVERLOAD_MONITORING",
         "OPPONENT_ADJUSTMENT_EXPECTATIONS", "SERIES_WIN_CONDITIONS",
         "SERIES_STAFF_CUES",
+    ],
+    # Addendum 6
+    "full_team_coaching": [
+        "PURPOSE_AND_METHOD", "TEAM_IDENTITY_CURRENT_REALITY",
+        "COMPETITIVE_EFFECTIVENESS_SNAPSHOT", "POSITION_GROUP_SUMMARIES",
+        "INTEGRATED_ROLE_ARCHITECTURE", "MINUTE_CEILINGS_GAME_STATE",
+        "SEGMENT_THEMES", "PRIORITY_COACHING_ACTIONS", "STAFF_ALIGNMENT",
+    ],
+    "personnel_suggestion": [
+        "ROSTER_OVERVIEW", "DEPLOYMENT_GAP_ANALYSIS", "LINE_PAIR_SUGGESTIONS",
+        "SPECIAL_TEAMS_SUGGESTIONS", "ROSTER_MANAGEMENT", "RISK_FLAGS",
+        "IMPLEMENTATION_PRIORITY",
+    ],
+    "role_adjustment": [
+        "CURRENT_ROLE_SUMMARY", "PERFORMANCE_VS_EXPECTATIONS",
+        "ROLE_ADJUSTMENT_RECOMMENDATION", "IMPLEMENTATION_PLAN",
+        "LINEMATE_PARTNER_IMPLICATIONS", "TIMELINE_REASSESSMENT",
     ],
 }
 
@@ -1548,6 +1569,213 @@ and adjustments logged. Version and date each regeneration.
 Generate all 11 sections in order.
 Max tokens: 10000. This is the longest report in the system.
 Prioritize depth in sections 2, 3, 6, 7, 9.
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-4) FULL_TEAM_COACHING — 9-section segment-based team review
+# ─────────────────────────────────────────────────────────
+FULL_TEAM_COACHING = '''
+FULL-TEAM COACHING REPORT — STAFF TEMPLATE
+============================================
+Audience: coach_gm (internal staff only)
+Purpose: Segment-based team review. Mirrors how NHL staffs review
+team play in blocks. Generate before major series or at segment breaks.
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth] | Segment: [segment]
+Team: [team_name] | Date Range: [from-to] | Games Covered: [X GP]
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+SECTION 1 — PURPOSE & METHOD:
+State the segment being reviewed. State what this report covers and why.
+Identify primary data sources and any notable gaps.
+
+SECTION 2 — IDENTITY VS INTENTION GAP:
+This is the most important section. Be direct.
+Where identity matches intention: evidence-based, specific.
+Where behavior drifts under stress: name the drift clearly.
+Example: 'Under pressure, Line 3 abandons structure and chases.
+This is a coaching priority, not a personnel issue.'
+
+SECTION 3 — CEI FORWARD RANKING:
+If data_depth = advanced: rank by CEI score, highest to lowest.
+If data_depth = intermediate: rank by points/game + deployment difficulty.
+If data_depth = basic: rank by points/game only. Note substitution.
+For each player: [#/Name] — [one-line: role + why ranking is justified]
+Classify each as: SPINE PIECE / WEAPON / DEPTH/ENERGY
+
+SECTION 4 — POSITION GROUPS:
+Generate all three subsections (4.1 Forwards, 4.2 Defense, 4.3 Goaltending) in order.
+Coaching priorities must be concrete — not 'improve skating'
+but 'reduce blue-line turnovers by centers on DZ breakouts.'
+
+SECTION 5 — ROLE ARCHITECTURE:
+Pull from Player Operating Profiles if available in context.
+If not available: derive from TOI, usage patterns, deployment data.
+Every named player must appear in exactly one tier.
+
+SECTION 6 — MINUTE CEILINGS & GAME STATE:
+TOI targets by line/pair for each game state (tied, leading, trailing).
+Flag any player consistently exceeding ceiling.
+
+SECTION 7 — KEY COUNTERFACTUALS:
+These are staff-level honest assessments. Not excuses. Not blame.
+Format: 'If [specific deployment/usage change], then [likely outcome].'
+Example: 'If we had shortened bench 5 minutes earlier in 3rd periods,
+we likely flip 2-3 of the 7 one-goal losses this segment.'
+
+SECTION 8 — PRIORITY COACHING ACTIONS:
+Ranked list of 3-5 actionable coaching priorities for the next segment.
+Each must be specific, measurable, and tied to data from this report.
+
+SECTION 9 — ALIGNMENT CHECKLIST:
+Generate the four checklist items as explicit checkmark / X / PARTIAL items
+based on internal consistency of the report itself.
+If the report shows disagreement in data (e.g., two players both
+classified as Trust Spine but with conflicting usage), flag as PARTIAL.
+Items: Identity alignment, Role clarity, Deployment efficiency, Staff consensus.
+
+SEGMENT ADAPTATION:
+First 20 GP: Focus on identity establishment, early trends, role clarity.
+Mid-season: Focus on identity drift, fatigue patterns, adjustment needs.
+Full season: Comprehensive review, all themes, playoff readiness.
+Playoffs: Focus on series-specific identity, trust compression, Series Plan feed.
+
+DATA DEPTH ADAPTATION:
+basic -> Counting stats only. No possession metrics. Qualitative identity.
+intermediate -> Add zone starts, shot attempts, basic ST effectiveness.
+advanced -> Full CEI, CF%, xG, micro-stats. Complete quantitative profile.
+
+FEEDS INTO: Playoff Series Prep (Section 2 series thesis),
+Opponent Game Plan (Section 3 opponent identity), Team Identity report.
+
+Generate all 9 sections in order.
+Max tokens: 10000. Prioritize depth in sections 2, 5, 7, 8.
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-5) PERSONNEL_SUGGESTION — 7-section roster optimization
+# ─────────────────────────────────────────────────────────
+PERSONNEL_SUGGESTION = '''
+PERSONNEL SUGGESTION REPORT
+============================
+Audience: coach_gm
+Purpose: Data-driven roster and lineup optimization recommendations.
+Every suggestion must be tied to a specific metric or deployment pattern.
+No opinion-based recommendations without data evidence.
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth]
+Team: [team_name] | Report Date: [date]
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+SECTION 1 — ROSTER OVERVIEW:
+Current roster composition. Depth chart summary.
+Cap/roster limit status (if applicable at level).
+
+SECTION 2 — DEPLOYMENT GAP ANALYSIS:
+Compare current deployment to Trust Tier expectations:
+OVERDEPLOYED: player logging > tier ceiling consistently
+UNDERDEPLOYED: player capable of more based on CEI/production
+MISCAST: player in wrong role for their data profile
+Be specific: '[Player X] is logging 19 min/game as a Tier 2 Trust player.
+Ceiling is 17 min. This is overuse — production drops suggest fatigue.'
+
+SECTION 3 — LINE/PAIR SUGGESTIONS:
+Format each suggestion as:
+CURRENT: [Line as currently deployed]
+PROPOSED: [Suggested change]
+RATIONALE: [2-3 data-backed bullets]
+EXPECTED IMPACT: [What improves and why]
+
+SECTION 4 — SPECIAL TEAMS SUGGESTIONS:
+PP and PK unit recommendations with data rationale.
+Format same as Section 3.
+
+SECTION 5 — ROSTER MANAGEMENT:
+Roster management suggestions cover deployment and role only.
+Do not advise on contract terms, eligibility windows, or
+impermissible contact rules. Always note: 'Verify eligibility
+and contact rules with league office before acting.'
+
+SECTION 6 — RISK FLAGS:
+What could go wrong with suggested changes.
+Adjustment periods, chemistry risks, confidence impacts.
+
+SECTION 7 — IMPLEMENTATION PRIORITY:
+HIGH: Change now, clear data support, low disruption risk
+MEDIUM: Change soon, data supports it, some adjustment period needed
+LOW: Monitor, data is directional but not conclusive
+
+Generate all 7 sections. Max tokens: 6000.
+Prioritize depth in sections 2, 3, 7.
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-6) ROLE_ADJUSTMENT — 6-section player deployment change
+# ─────────────────────────────────────────────────────────
+ROLE_ADJUSTMENT = '''
+ROLE ADJUSTMENT REPORT — SINGLE PLAYER
+========================================
+Audience: coach_gm
+Purpose: Player-specific deployment change recommendation.
+Answers: should this player's role change, and exactly how?
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth]
+Player: [name] #[number] | Position: [pos] | Team: [team]
+Current Trust Tier: [tier] | Current TOI: [X min/game]
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+SECTION 1 — CURRENT ROLE SUMMARY:
+Current role, deployment, and expectations.
+How this player is being used today.
+
+SECTION 2 — PERFORMANCE VS EXPECTATIONS:
+Data comparison: what was expected vs what is happening.
+Use specific metrics appropriate to data_depth level.
+
+SECTION 3 — RECOMMENDATION:
+Choose exactly one:
+MAINTAIN: Current role is appropriate, no change needed
+EXPAND: Player capable of more — specific expansion (TOI, zone starts, ST)
+CONTRACT: Player overdeployed — specific reduction with rationale
+CHANGE: Different role entirely — current role wrong for data profile
+
+For EXPAND/CONTRACT/CHANGE: state the new role precisely.
+Not 'use him less' but 'reduce from 19 to 16 min/game, shift
+from DZ-heavy to balanced zone starts, remove from PP2.'
+
+SECTION 4 — IMPLEMENTATION PLAN:
+Be specific about timing:
+IMMEDIATE: change starts next game
+GRADUAL: change over 3-5 games to allow adjustment
+TRIAL: test for X games, assess, then commit or rollback
+
+Include specific deployment changes: new linemates, new zone starts,
+new special teams assignment (or removal).
+
+SECTION 5 — LINEMATE/PARTNER IMPLICATIONS:
+How does this role change affect the players around them?
+Who benefits? Who needs adjustment? Any cascading changes?
+
+SECTION 6 — TIMELINE & REASSESSMENT:
+State exactly: 'Reassess after [X] games.'
+State exactly which metrics confirm success.
+State exactly which metrics trigger rollback.
+Example: 'Reassess after 5 games. Success: CF% improves to 52%+,
+production maintained. Rollback trigger: CF% stays below 48%
+or production drops more than 30% from baseline.'
+
+Generate all 6 sections. Max tokens: 4000.
+This is a focused, actionable report — brevity is appropriate.
+Prioritize depth in sections 3, 4, 6.
 '''
 
 # ─────────────────────────────────────────────────────────
