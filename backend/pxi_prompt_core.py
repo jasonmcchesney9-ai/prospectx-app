@@ -477,13 +477,16 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "WHERE_WE_CRACK", "PLAYOFF_READINESS_SCORECARD",
         "PLAYER_IDENTITY_CARDS", "BENCH_LEVEL_REMINDERS",
         "WHAT_THIS_MEANS_FOR", "IDENTITY_TRACKING_METRICS", "REVISION_HISTORY",
+        "SYSTEM_TACTICS", "COACHING_LAWS",
     ],
     "opponent_gameplan": [
-        "DATA_COVERAGE_AND_CONFIDENCE", "OPPONENT_IDENTITY",
-        "HOME_TEAM_IDENTITY_TONIGHT", "PLAYER_ARCHETYPES",
-        "TACTICAL_BREAKDOWN", "SPECIAL_TEAMS_AND_GOALTENDING",
-        "LINE_ROLES_AND_MATCHUPS", "PERIOD_PLAN",
-        "GAME_STATE_TOI_TARGETS", "WIN_CONDITIONS", "BENCH_CUES",
+        "GAME_CONTEXT_AND_OBJECTIVE", "OUR_IDENTITY_TONIGHT",
+        "OPPONENT_IDENTITY_SNAPSHOT", "LINEUP_AND_DEPLOYMENT_MAP",
+        "SPECIAL_SITUATIONS", "MATCHUP_MAP", "GAME_STATE_PLAN",
+        "PHASE_TACTICS_ES", "PHASE_TACTICS_ST",
+        "KEY_PLAYER_CARDS", "PERIOD_PLAN",
+        "SUCCESS_AND_FAILURE_INDICATORS", "IF_THEN_ADJUSTMENT_TRIGGERS",
+        "BENCH_CARD",
     ],
     "agent_pack": [
         "PLAYER_PROFILE", "STATISTICAL_CASE", "MARKET_POSITION",
@@ -540,13 +543,13 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "ACADEMIC_ATHLETIC_BALANCE", "EXPOSURE_STRATEGY", "DEVELOPMENT_TIMELINE",
         "RECRUITING_REALITY_CHECK", "PARENT_ACTION_ITEMS",
     ],
-    # Phase 3 — Elite Profile (16 sections)
+    # Phase 3 → Addendum 7 — Elite Profile V2 (9 sections)
     "elite_profile": [
-        "HEADER_BLOCK", "EXECUTIVE_SUMMARY", "CORE_METRICS_TABLE", "CEI_COMPOSITE_SCORE",
-        "CORSI_POSSESSION_PROFILE", "EXPECTED_GOALS_PROFILE", "COACH_LENS_DEPLOYMENT_SHEET",
-        "ROLE_IDENTITY_CLASSIFICATION", "SPECIAL_TEAMS_IMPACT", "MICRO_STAT_IMPACT_MODEL",
-        "PLAYER_DNA_PROFILE", "LEAGUE_PROJECTION_MODEL", "DEVELOPMENT_PRIORITY_MAP",
-        "DEVELOPMENT_ACTION_PLANS", "SEASON_TREND_ANALYSIS", "FINAL_COACH_DECISION_BLOCK",
+        "EXECUTIVE_IDENTITY_AND_SUMMARY", "PRODUCTION_USAGE_AND_IMPACT",
+        "TOOLS_AND_TRANSLATION_TRAITS", "ROLE_USAGE_FIT",
+        "GAME_STATE_AND_SERIES_USAGE", "DEVELOPMENT_PRIORITIES_AND_KPIS",
+        "RISK_COUNTERFACTUALS_AND_ROLE_FLOOR", "PATHWAY_AND_TEAM_FIT",
+        "STAFF_ACTION_CHECKLIST",
     ],
     # Addendum 2 — Operating Profiles (13 sections each)
     "forward_operating_profile": [
@@ -583,14 +586,13 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "ROLE_AND_DEPLOYMENT_TRENDS", "ADVANCEMENT_READINESS_UPDATE",
         "NEXT_10_GAMES_PROJECTION",
     ],
-    # Addendum 4
+    # Addendum 4 → Addendum 7 V2
     "playoff_series_prep": [
-        "DATA_COVERAGE_AND_SERIES_CONFIDENCE", "SERIES_IDENTITY_AND_THESIS",
-        "CORE_SERIES_PRINCIPLES", "MATCHUP_AND_TOI_STRATEGY",
-        "GAME_1_PLAN", "GAMES_2_7_ADJUSTMENT_GRID",
-        "SERIES_ADJUSTMENT_MATRIX", "FATIGUE_AND_OVERLOAD_MONITORING",
-        "OPPONENT_ADJUSTMENT_EXPECTATIONS", "SERIES_WIN_CONDITIONS",
-        "SERIES_STAFF_CUES",
+        "SERIES_CONTEXT_AND_OBJECTIVE", "IDENTITY_CLASH_OVER_SERIES",
+        "MATCHUP_ARCHITECTURE", "SERIES_GAME_STATE_AND_BENCH_PHILOSOPHY",
+        "TACTICAL_THEMES_BY_PHASE", "PLAYER_ROLE_TIERS_FOR_SERIES",
+        "SERIES_PHASING_PLAN", "ADJUSTMENT_FRAMEWORK_ACROSS_GAMES",
+        "SERIES_WIN_CONDITIONS_AND_RED_FLAGS", "SERIES_BENCH_CARD",
     ],
     # Addendum 6
     "full_team_coaching": [
@@ -751,9 +753,9 @@ Do not use PXI output as the sole basis for financial or contractual decisions."
 }
 
 # ─────────────────────────────────────────────────────────
-# K2) ELITE_PROFILE_SECTIONS — 16-section Elite Player Profile
+# K2) ELITE_PROFILE_V1 — 16-section Elite Player Profile (original)
 # ─────────────────────────────────────────────────────────
-ELITE_PROFILE_SECTIONS = '''
+ELITE_PROFILE_V1 = '''
 ELITE PLAYER PROFILE — REQUIRED SECTIONS
 =========================================
 Generate ALL 16 sections in order. No section may be omitted.
@@ -801,6 +803,121 @@ CEI TIER CLASSIFICATIONS:
 Below 50 = 3 NOT YET READY / DEVELOPMENTAL
 
 If data unavailable for any dimension: note [DATA NOT AVAILABLE], calculate from available dimensions, state which are missing and impact on score.
+'''
+
+# Backward compatibility alias — main.py imports ELITE_PROFILE_SECTIONS
+ELITE_PROFILE_SECTIONS = ELITE_PROFILE_V1
+
+# ─────────────────────────────────────────────────────────
+# K2b) ELITE_PROFILE_V2 — 9-section Staff Mode v2
+# ─────────────────────────────────────────────────────────
+ELITE_PROFILE_V2 = '''
+ELITE PLAYER PROFILE — STAFF MODE v2
+======================================
+Purpose: Top of player report pyramid. All other player modes derive
+from this Staff document. This is the source of truth for deployment,
+development, and projection decisions.
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth]
+Player: [name] #[number] | Position: [pos] | Team: [team]
+Age: [age] | GP: [gp] | Current Trust Tier: [tier]
+
+SECTION 1 — EXECUTIVE IDENTITY & SUMMARY:
+One-line identity REQUIRED — role, value, deployment truth.
+Archetype + Trust Tier classification.
+Playoff Reliability: High / Moderate / Context-Dependent with justification.
+Overuse Risk: Low / Moderate / High — name what breaks first.
+  Not 'performance drops' but 'decision-making and gap control
+  degrade after 18+ matchup minutes.'
+Current role: line, ST assignment, matchup slot.
+Headline Takeaways: 3-5 bullets.
+
+SECTION 2 — PRODUCTION, USAGE & IMPACT:
+GP/G/A/P/+/-/PIM. TOI bands by game state.
+Deployment truth: where he actually plays vs where he's listed.
+Key on-ice metrics appropriate to data_depth level.
+Usage truth: 3-5 bullets on what the numbers actually mean.
+League translation projections per target league (if applicable).
+
+SECTION 3 — TOOLS & TRANSLATION TRAITS:
+37-77 scale REQUIRED:
+  37=Below-Average | 47=Average | 57=Above-Average | 67=Plus | 77=Elite
+Rate: Cognition/Detail, Skating/Physical, Puck Skills/Offense.
+Every grade needs 1-2 evidence bullets.
+xG vs actual goals for shot quality grade.
+Role-specific tool summary: which tools scale up, which cap level,
+realistic best role based on tool profile.
+
+SECTION 4 — ROLE USAGE FIT:
+Line archetype and chemistry requirements.
+Ideal linemates (by archetype, not just name).
+Avoid pairings (who breaks his game).
+PP fit: unit, role, TOI profile.
+PK fit: current capability, projection.
+Matchup guidance: who he can handle, who he cannot.
+Next-league deployment recommendation.
+
+SECTION 5 — GAME-STATE & SERIES USAGE:
+Optimal TOI band + soft ceiling (name what erodes first above ceiling).
+Series phasing — specific rules per phase:
+  Games 1-2: [usage, matchup approach, information gathering]
+  Games 3-4: [adjustment, minute changes]
+  Games 5-6: [leverage rules]
+  Game 7: [trust compression rules]
+Game-state table format:
+  LEADING: [usage | what he protects | what to avoid]
+  TIED: [matchup assumptions | FO usage | zone start rules]
+  TRAILING: [offensive ceiling | who must be with him | risk tolerance]
+Linemate/pairing dependency: who he needs on ice with him.
+
+SECTION 6 — DEVELOPMENT PRIORITIES & KPIs:
+Top 3-4 development priorities. For each:
+  Current Grade: [37-77 scale]
+  Why It Matters: 1-2 sentences
+  How to Train: summary approach
+  Staff KPIs: 1-2 trackable numbers
+  Status: Progressing / Stalled / Regressing
+End with DO NOT TOUCH strengths: 2-3 identity anchors that staff
+must protect. These are non-negotiable — do not try to change them.
+
+SECTION 7 — RISK, COUNTERFACTUALS & ROLE FLOOR:
+Key risks: 3-5 bullets with likelihood assessment.
+Mitigation plan for each risk.
+Realistic Floor: stated in role terms only.
+  Example: '4th line energy player with PK utility.'
+Realistic Ceiling: MUST be conditional.
+  Format: 'IF [specific threshold met] THEN [ceiling role].'
+  Never state ceiling as guaranteed. Never fantasy outcomes.
+
+SECTION 8 — PATHWAY & TEAM FIT:
+Next 1-3 year developmental path.
+Year 1: league, role, P/GP range, ideal org-type.
+Year 2-3: conditional on Year 1 outcomes.
+Ideal systems: which tactical structures maximize this player.
+System mismatch: which structures hurt this player and why.
+Passport/import/eligibility notes where relevant.
+
+SECTION 9 — STAFF ACTION CHECKLIST:
+Deployment rules: 3-6 specific, actionable bullets.
+  Not 'manage his minutes' but 'cap at 17 min/game, never
+  consecutive DZ starts, protect from top-line matchups after 15 min.'
+Development support responsibilities: what staff must provide.
+Re-evaluation triggers: 2-3 numeric thresholds that trigger
+  path revision if crossed.
+  Example: 'If CF% drops below 46% over 10 GP, reassess matchup role.'
+  Example: 'If P/GP drops below 0.4 for 15 GP, reassess offensive deployment.'
+
+LEVEL ADAPTATION:
+U16/basic: Simplified metrics, usage tiers, qualitative tools assessment.
+Junior/advanced: Full TOI, CORSI, xG, micro-stats.
+Pro/NHL: Complete analytics, contract context, peer comparisons.
+
+Generate all 9 sections in order.
+Max tokens: 12000. Prioritize depth in sections 1, 5, 7, 9.
 '''
 
 # ─────────────────────────────────────────────────────────
@@ -1267,8 +1384,31 @@ Section 15 (Revision History) must be updated when:
 FEEDS INTO: Opponent Game Plan (Section 2 opponent identity),
 Playoff Series Prep (Section 2 series thesis)
 
-Generate all sections appropriate to perspective.
-Max tokens: 10000. Prioritize depth in sections 2, 5, 6, 9, 10.
+SECTION 16 — SYSTEM TACTICS (internal) / EXPLOIT LEVERS (external):
+INTERNAL: Connect identity to system. Every tactical choice traces to identity.
+  Forecheck: default scheme + personnel-based switch rules
+    (driver/stabilizer on ice changes pressure level)
+  NZ: preferred structure + triggers to adjust based on score/time/personnel
+  DZ: coverage tuned to D/center profile + net-front rules
+    How much switching vs staying home
+  ST: PP design built around actual weapons, PK patterns built around stabilizers
+EXTERNAL: 5-10 precise exploit levers.
+  Format: [Trigger] -> [Action] -> [Expected result]
+  Each must be specific enough to write on a bench card.
+  Example: 'When their D1 carries wide → force inside with F1 → they default
+  to rim which our strong-side D wins 70% of retrievals.'
+
+SECTION 17 — COACHING LAWS (internal only — OMIT for external perspective):
+3-6 non-negotiable archetype-based deployment rules.
+Format: '[Archetype] players are never/always [specific deployment rule].'
+These survive when the game plan breaks down. They appear on every Bench Card.
+Examples:
+  'Finisher-type players are never deployed on heavy DZ-start matchup lines.'
+  'Stabilizer-type players are always on ice post-goal-against to reset structure.'
+  'Primary puck-moving D are protected from repeated heavy forecheck shifts in playoffs.'
+
+Generate all sections appropriate to perspective (17 for internal, 16 for external).
+Max tokens: 10000. Prioritize depth in sections 2, 5, 6, 9, 10, 16.
 '''
 
 # ─────────────────────────────────────────────────────────
@@ -1467,7 +1607,127 @@ Prioritize depth in sections 2, 4, 7, 8, 10.
 '''
 
 # ─────────────────────────────────────────────────────────
-# L-3) PLAYOFF_SERIES_PREP — 11-section war room template
+# L-2b) OPPONENT_GAME_PLAN_V3 — 12+BC section staff mode v3
+# ─────────────────────────────────────────────────────────
+OPPONENT_GAME_PLAN_V3 = '''
+SINGLE-GAME TACTICAL PLAN — STAFF MODE v3
+============================================
+Audience: coach_gm (staff-only). Do not soften language.
+Purpose: Complete pre-game tactical brief with source mapping,
+player cards, PK template, and bench card derivative.
+Max tokens: 10000. Prioritize sections 5, 6, 9, 12.
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+SOURCE MAPPING: Pull each section from its designated source.
+Sections 2,6,7,8,10 → Our Team Identity (internal)
+Sections 3,5 → Opponent Team Identity (external)
+Sections 4,4.2,9 → Lineup + Operating Binder
+Section 1 → Schedule/context
+Sections 11,12 → All sources combined
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth] | Audience: coach_gm
+Home Team: [home_team] | Opponent: [opponent]
+Game Context: [regular season / playoff / must-win / back-to-back]
+
+SECTION 1 — GAME CONTEXT & OBJECTIVE:
+Game objective in 1-2 sentences. Context: standings, schedule position,
+series state, fatigue/rest considerations.
+
+SECTION 2 — OUR IDENTITY TONIGHT:
+3-5 bullets from Team Identity internal.
+Offense anchors. Defense anchors. Special teams anchors.
+One-line identity: 'We are a _____ team tonight.'
+
+SECTION 3 — OPPONENT IDENTITY SNAPSHOT:
+3-5 bullets from opponent external Team Identity.
+Primary identity battle in 1-2 sentences.
+Mis-scout traps: what they are NOT.
+
+SECTION 4 — LINEUP & DEPLOYMENT MAP:
+Forward lines, D pairs, goalie plan.
+Hard matchups (who MUST see who, who must AVOID).
+Shift length guidance by line.
+
+SECTION 4.2 — SPECIAL SITUATIONS:
+After Goals For: Momentum line (instinct/tempo) vs Structure line
+  (stabilizer/reset). Specify both options + when each applies
+  (score context, time context).
+After Goals Against: spine/stabilizer center always next shift.
+  Weapon/finisher never on DZ FO immediately after GA.
+TV Timeouts: specify deployment by game-state (tied/leading/trailing).
+
+SECTION 5 — MATCHUP MAP:
+Lines vs opponent archetypes. D pairs vs their lines.
+FO-side rules. Zone start preferences.
+
+SECTION 6 — GAME-STATE PLAN:
+Leading / Tied (early vs late) / Trailing deployment rules.
+TOI allocations that shift based on score.
+
+SECTION 7 — PHASE TACTICS — EVEN STRENGTH:
+Forecheck vs their exits. NZ structure + triggers.
+DZ coverage vs their specific threats.
+
+SECTION 8 — PHASE TACTICS — SPECIAL TEAMS:
+PP entry + structure + set plays.
+PK ADJUSTMENTS (parts 8a-8f):
+  8a — Opponent PP Snapshot: formation, primary threats (name/number),
+    entry pattern, known tendencies.
+  8b — Our Baseline PK Plan: shape, pressure level, matchup rules
+    (F1-F2, D anchor, FO), priority denial.
+  8c — In-Game Adjustment Triggers: If/Then rules for clean zone entries,
+    flank looks, bumper touches — specific bench-usable responses.
+  8d — Personnel & Usage Adjustments: who scales up if PK struggles,
+    who is removed + what failure removes them, minute ceilings.
+  8e — Clear & Recover Rules: glass-and-out vs middle chip by pressure
+    level, change rules.
+  8f — Between-Game Notes (Series): track goals-against source,
+    planned next-game change if PP% against exceeds threshold.
+ST win conditions.
+
+SECTION 9 — KEY PLAYER CARDS:
+4-8 players. Format for each:
+  [Name #XX] — [Position]
+  Role Tonight: [deviation from baseline if any]
+  Minute Band: [X-Y min]
+  Must Be On: [specific situations]
+  Hold Back: [specific situations]
+  Matchup: [seek / avoid]
+
+SECTION 10 — PERIOD PLAN:
+1st period: objectives + deployment emphasis.
+2nd period: changes + tactical emphasis.
+3rd period: game-state branching (tied/leading/trailing).
+
+SECTION 11 — SUCCESS & FAILURE INDICATORS:
+4-8 success outputs (measurable, trackable from bench).
+4-8 early warning signals (what tells us the plan is failing).
+
+SECTION 12 — IF/THEN ADJUSTMENT TRIGGERS:
+Format: 'If [observable bench condition], then [specific 30-second action].'
+Minimum 5. Maximum 10. Cover all domains: matchups, systems, ST, overuse.
+Must be actionable within 30 seconds from the bench.
+
+BENCH CARD — after Section 12:
+Label: 'BENCH CARD — [Team] vs [Opponent] [Date]'
+Parts A-F in order. No new logic — condense from sections above.
+Part A: Game objective + identity reminders (from Sections 1-2)
+Part B: Matchup rules (from Sections 4-5)
+Part C: Game-state grid — 3 columns (Leading/Tied/Trailing) x 4 rows
+  (Lines, D, ST, Bench). 1-3 bullets per cell only.
+Part D: Key player deployment checklist — [ ] format for checkable items
+Part E: Period emphasis (from Section 10)
+Part F: If/Then triggers — top 5 from Section 12
+Max 400-600 tokens total for Bench Card.
+
+Generate all 12 sections + Bench Card in order.
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-3) PLAYOFF_SERIES_PREP — 11-section war room template (V1)
 # ─────────────────────────────────────────────────────────
 PLAYOFF_SERIES_PREP = '''
 PLAYOFF SERIES PREP — STAFF TEMPLATE
@@ -1569,6 +1829,119 @@ and adjustments logged. Version and date each regeneration.
 Generate all 11 sections in order.
 Max tokens: 10000. This is the longest report in the system.
 Prioritize depth in sections 2, 3, 6, 7, 9.
+'''
+
+# ─────────────────────────────────────────────────────────
+# L-3b) PLAYOFF_SERIES_PREP_V2 — 9+BC section staff mode v2
+# ─────────────────────────────────────────────────────────
+PLAYOFF_SERIES_PREP_V2 = '''
+PLAYOFF SERIES PREP — STAFF MODE v2
+=====================================
+Audience: coach_gm (staff-only). This is the war room document.
+Purpose: Series-level strategy with game phasing, player role evolution,
+pre-built adjustment framework, and integrated PK template.
+Max tokens: 12000. Prioritize sections 2, 6, 7, 8.
+
+SECTION SUMMARY RULE:
+Every section begins with 1-2 sentences synthesizing the key finding.
+
+SOURCE MAPPING:
+Sections 2,4 → Our Team Identity (internal)
+Section 2 also uses → Opponent Team Identity
+Sections 3,5 → Opponent archetypes + our game-state rules
+Section 6 → Operating Binder + trust tiers
+Section 7 → Both identities + aggregated Game Plans
+Section 8 → Operating Binder + opponent plan + prior game results
+Section 9 → Both identities + Series Prep V1
+
+REQUIRED HEADER:
+Level: [level] | Data Depth: [data_depth] | Audience: coach_gm
+Home Team: [home_team] | Opponent: [opponent]
+Series Format: [Best-of-3 / 5 / 7]
+Series Context: [Round, seedings, rivalry, travel, rest/fatigue]
+
+SECTION 1 — SERIES CONTEXT & OBJECTIVE:
+Matchup, format, home/away order, rest/fatigue considerations.
+One-line series objective.
+
+SECTION 2 — IDENTITY CLASH OVER A SERIES:
+State what does NOT change for us game to game (3-5 bullets).
+These are our series identity anchors.
+State what does NOT change for them game to game (3-5 bullets).
+These are their series identity anchors.
+Then: how does this clash resolve over 5-7 games?
+This is the series thesis. Every section traces back to it.
+
+SECTION 3 — MATCHUP ARCHITECTURE:
+Default matchup plan (who gets their top line, DZ starts).
+Backup matchup plans (if primary fails or injury forces change).
+Home vs road usage differences.
+
+SECTION 4 — SERIES GAME-STATE & BENCH PHILOSOPHY:
+How ice time and bench shortening differ from regular season.
+Leading/tied/trailing rules specific to:
+  Games 1-2 (conservative, evaluate)
+  Games 3-4 (first adjustments)
+  Games 5-7 (leverage only, no fairness)
+
+SECTION 5 — TACTICAL THEMES BY PHASE (ES + ST):
+ES themes for whole series: forecheck, NZ, DZ approach.
+PP/PK themes for the series.
+PK ADJUSTMENTS (subsection 5a-5f):
+  5a — Opponent PP Snapshot: formation, threats, entry, tendencies.
+  5b — Our Baseline PK Plan: shape, pressure, matchup rules, priority denial.
+  5c — In-Game Adjustment Triggers: If/Then for clean entries,
+    flank looks, bumper touches.
+  5d — Personnel & Usage: who scales up, who scales down, minute ceilings.
+  5e — Clear & Recover: glass-and-out vs middle chip rules.
+  5f — Between-Game Notes: track goals-against source, planned
+    next-game change if PP% against exceeds threshold.
+    This part is especially important for series context.
+
+SECTION 6 — PLAYER ROLE TIERS FOR THE SERIES:
+Trust/Leverage: can grow from 15 to 18+ min as series tightens.
+  State exactly when the scale-up triggers (score, game number, fatigue).
+Conditional Weapons: define GREEN and RED situations for each.
+  GREEN: OZ draw, post-TV timeout, power play — deploy freely.
+  RED: leading late, DZ FO, physical opponent shift — hold back.
+  State both explicitly for each weapon player.
+Depth/Situational: role shrinks or narrows by Game 5-7.
+  State what they do and what they stop doing.
+
+SECTION 7 — SERIES PHASING PLAN:
+Phase 1 (Games 1-2): What are we learning? What are we hiding?
+  Conservative leverage. Test primary matchup. Note PP/PK reads.
+  Information gathering priorities.
+Phase 2 (Games 3-4): First major adjustment. Bench compression begins.
+  What changes based on what we learned in Phase 1?
+Phase 3 (Games 5-7): Leverage rules only. Emotional control notes.
+  Trust players only in high-leverage situations. No fairness.
+  State exactly who gets more, who gets less, who disappears.
+
+SECTION 8 — ADJUSTMENT FRAMEWORK ACROSS GAMES:
+Pre-defined between-game If/Then rules format:
+  'If [metric/observation after Game X], then [specific change for Game X+1].'
+Cover: PP%, PK%, matchup CF%, specific player fatigue signals.
+Video/analytics focus: name exactly what staff is tracking between games
+  to drive adjustments.
+
+SECTION 9 — SERIES WIN CONDITIONS & RED FLAGS:
+4-6 series-level win conditions (matchup success, ST, style control).
+  Must be measurable and trackable game-to-game.
+4-6 red flags (their minutes growth, our discipline breakdown,
+  structural cracks that indicate the series is slipping).
+
+SERIES BENCH CARD — after Section 9:
+Series-level cues only. Not game-specific.
+Part A: Series objective + identity anchor reminders
+Part B: Matchup rules (who sees who, never-vs rules)
+Part C: Phase grid (Phase 1/2/3 bench philosophy)
+Part D: ST themes checkboxes — [ ] format
+Part E: Trust player minute rules
+Part F: Series win conditions + red flag triggers
+Max 400-600 tokens total for Series Bench Card.
+
+Generate all 9 sections + Series Bench Card in order.
 '''
 
 # ─────────────────────────────────────────────────────────
