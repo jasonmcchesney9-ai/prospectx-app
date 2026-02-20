@@ -80,6 +80,7 @@ from pxi_prompt_core import (
     ELITE_PROFILE_SECTIONS,
     DEVELOPMENT_ACTION_PLANS,
     PARENT_ACTION_PLANS,
+    GLOBAL_CONTEXT_SCHEMA,
     TRUST_TIER_SYSTEM,
     FORWARD_OPERATING_PROFILE,
     DEFENSE_OPERATING_PROFILE,
@@ -5219,6 +5220,9 @@ class ReportGenerateRequest(BaseModel):
     template_id: Optional[str] = None
     data_scope: Optional[Dict[str, Any]] = None
     mode: Optional[str] = None  # PXI mode override (scout, coach, analyst, etc.)
+    level: Optional[str] = "Junior"       # U14/U16/U18/Junior/Pro/NHL
+    data_depth: Optional[str] = "basic"   # basic/intermediate/advanced
+    audience: Optional[str] = "coach_gm"  # coach_gm/scout/agent/parent/player
 
 class ReportResponse(BaseModel):
     model_config = {"extra": "ignore"}
@@ -11816,6 +11820,9 @@ Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, 
                 template_prompt=tpl_prompt if tpl_prompt and len(tpl_prompt) > 200 else None,
                 template_name=report_type_name,
                 report_type=request.report_type,
+                level=request.level,
+                data_depth=request.data_depth,
+                audience=request.audience,
             )
 
             # ── Report-type-specific prompt enhancements ──
@@ -17052,7 +17059,8 @@ def _pt_start_report(params: dict, org_id: str, user_id: str) -> tuple[dict, dic
         conn.close()
 
 
-def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, player_id: str, report_type: str, title: str):
+def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, player_id: str, report_type: str, title: str,
+                                    level: str = "Junior", data_depth: str = "basic", audience: str = "coach_gm"):
     """Background thread: generate a report using Claude API.
     Uses the same logic as the /reports/generate endpoint."""
     conn = get_db()
@@ -17229,6 +17237,9 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
             template_prompt=bg_tpl_prompt if bg_tpl_prompt and len(bg_tpl_prompt) > 200 else None,
             template_name=report_type_name,
             report_type=report_type,
+            level=level,
+            data_depth=data_depth,
+            audience=audience,
         )
 
         # ── Build input data ──
