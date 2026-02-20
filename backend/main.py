@@ -100,6 +100,8 @@ from pxi_prompt_core import (
     FULL_TEAM_COACHING,
     PERSONNEL_SUGGESTION,
     ROLE_ADJUSTMENT,
+    PRACTICE_PLAN,
+    PLAYER_SEASON_ROADMAP,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -867,6 +869,8 @@ TEMPLATE_CATEGORIES = {
     "full_team_coaching":        ("Team Analytics", "System Analysis"),
     "personnel_suggestion":      ("Team Analytics", "System Analysis"),
     "role_adjustment":           ("Player Analytics", "Projections & Development"),
+    # Addendum 8
+    "player_season_roadmap":     ("Player Analytics", "Projections & Development"),
 }
 
 
@@ -2506,6 +2510,9 @@ def seed_new_templates():
         ("Role Adjustment Report", "role_adjustment",
          "Player Analytics", "Projections & Development",
          "Player-specific deployment change recommendation with MAINTAIN/EXPAND/CONTRACT/CHANGE verdict, implementation plan, and reassessment criteria."),
+        ("Player Season Roadmap", "player_season_roadmap",
+         "Player Analytics", "Projections & Development",
+         "Unified season development report with identity, strengths, development priorities, phase plan, practice/game integration, and measurable checkpoints."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -10336,7 +10343,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep", "full_team_coaching", "personnel_suggestion", "role_adjustment")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep", "full_team_coaching", "personnel_suggestion", "role_adjustment", "player_season_roadmap")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -10394,7 +10401,8 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
 
     has_grade = bool(re.search(r'Overall\s*Grade[:\s]*[A-D][+-]?', output_text, re.IGNORECASE))
     report_types_without_grade = ("practice_plan", "team_identity", "opponent_gameplan", "game_decision",
-                                   "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem")
+                                   "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem",
+                                   "player_season_roadmap")
     if not has_grade and report_type not in report_types_without_grade:
         warnings.append("SOFT: No Overall Grade found in report")
 
@@ -12179,6 +12187,8 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                 "defense_operating_profile": 6000,
                 "in_season_projections": 6000,
                 "personnel_suggestion": 6000,
+                "player_season_roadmap": 6000,
+                "practice_plan": 4000,
                 "role_adjustment": 4000,
                 "bench_card": 2000,
             }
@@ -17585,6 +17595,8 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
             "defense_operating_profile": 6000,
             "in_season_projections": 6000,
             "personnel_suggestion": 6000,
+            "player_season_roadmap": 6000,
+            "practice_plan": 4000,
             "role_adjustment": 4000,
             "bench_card": 2000,
         }
