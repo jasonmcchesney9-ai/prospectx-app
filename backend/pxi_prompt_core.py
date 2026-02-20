@@ -919,6 +919,7 @@ def build_report_system_prompt(
     base_prompt: str,
     template_prompt: Optional[str] = None,
     template_name: str = "",
+    report_type: Optional[str] = None,
 ) -> str:
     """Assemble a report system prompt in the spec-required injection order.
 
@@ -929,6 +930,7 @@ def build_report_system_prompt(
     4. base_prompt (the existing report generation prompt)
     5. template_prompt (from DB, if rich enough)
     6. compliance disclaimer (if mode requires it)
+    7. (optional) ELITE_PROFILE_SECTIONS + action plans (if report_type matches)
     """
     parts = [IMMUTABLE_GUARDRAILS]
 
@@ -953,6 +955,18 @@ def build_report_system_prompt(
     if mode in COMPLIANCE_DISCLAIMERS:
         parts.append(COMPLIANCE_DISCLAIMERS[mode])
 
+    # Report-type-specific action plan injection
+    if report_type == "elite_profile":
+        # Elite Profile: full 16-section template + CEI + coach action plans
+        parts.append(ELITE_PROFILE_SECTIONS)
+        parts.append(DEVELOPMENT_ACTION_PLANS)
+    elif report_type in ("pro_skater", "development_roadmap", "player_guide_prep_college"):
+        # Coach-facing action plans (top 3-5 priorities)
+        parts.append(DEVELOPMENT_ACTION_PLANS)
+    elif report_type == "family_card":
+        # Parent-facing action plans (plain language, no metrics)
+        parts.append(PARENT_ACTION_PLANS)
+
     return "\n\n".join(parts)
 
 
@@ -963,6 +977,7 @@ def build_system_prompt(
     mode: str,
     tool: Optional[str] = None,
     player_age: Optional[int] = None,
+    report_type: Optional[str] = None,
 ) -> str:
     """Assemble a general-purpose system prompt for Bench Talk and non-report use.
 
@@ -975,6 +990,7 @@ def build_system_prompt(
     6. (optional) BROADCAST_SUB_PROMPTS[tool] — if broadcast mode + tool specified
     7. (optional) AGE_GATES[tier] — if skill_coach mode + player_age provided
     8. (optional) COMPLIANCE_DISCLAIMERS[mode] — if mode has compliance needs
+    9. (optional) Action plan constants — if report_type matches
     """
     parts = [IMMUTABLE_GUARDRAILS]
 
@@ -1006,5 +1022,14 @@ def build_system_prompt(
     # Compliance disclaimers
     if mode in COMPLIANCE_DISCLAIMERS:
         parts.append(COMPLIANCE_DISCLAIMERS[mode])
+
+    # Report-type-specific action plan injection
+    if report_type == "elite_profile":
+        parts.append(ELITE_PROFILE_SECTIONS)
+        parts.append(DEVELOPMENT_ACTION_PLANS)
+    elif report_type in ("pro_skater", "development_roadmap", "player_guide_prep_college"):
+        parts.append(DEVELOPMENT_ACTION_PLANS)
+    elif report_type == "family_card":
+        parts.append(PARENT_ACTION_PLANS)
 
     return "\n\n".join(parts)
