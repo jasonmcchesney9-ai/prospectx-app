@@ -570,7 +570,7 @@ app.add_middleware(
     allow_origin_regex=(
         r"https://prospectx-app(-[a-z0-9]+)?(-[a-z0-9]+)?\.vercel\.app"
         if (_is_deployed or ENVIRONMENT != "development")
-        else r"https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?"
+        else r"^(https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?)$"
     ),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -7451,9 +7451,15 @@ async def upload_team_logo(team_id: str, file: UploadFile = File(...), token_dat
         conn.close()
         raise HTTPException(status_code=404, detail="Team not found")
 
+    # P0-1: MIME type validation — whitelist image types only
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed_types:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Invalid image type. Allowed: JPEG, PNG, WebP")
+
     fname = (file.filename or "logo.png").lower()
     ext = fname.rsplit(".", 1)[-1] if "." in fname else "png"
-    if ext not in ("jpg", "jpeg", "png", "gif", "webp", "svg"):
+    if ext not in ("jpg", "jpeg", "png", "webp"):
         conn.close()
         raise HTTPException(status_code=400, detail="Invalid image type")
 
