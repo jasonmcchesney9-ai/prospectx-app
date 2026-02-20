@@ -10,7 +10,9 @@ const api = axios.create({
 
 // Attach JWT and set Content-Type appropriately
 api.interceptors.request.use((config) => {
-  const token = getToken();
+  // Check for impersonation token first (sessionStorage, short-lived)
+  const impersonateToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("impersonate_token") : null;
+  const token = impersonateToken || getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

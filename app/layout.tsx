@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import BenchTalkProvider from "@/components/BenchTalkProvider";
 import BenchTalkDrawer from "@/components/BenchTalkDrawer";
 import ContentWrapper from "@/components/ContentWrapper";
+import ImpersonateBanner from "@/components/admin/ImpersonateBanner";
 
 export const metadata: Metadata = {
   title: "ProspectX Intelligence",
@@ -27,6 +28,7 @@ export default function RootLayout({
             error: { iconTheme: { primary: "#F36F21", secondary: "#fff" } },
           }}
         />
+        <ImpersonateBanner />
         <BenchTalkProvider>
           <ContentWrapper>{children}</ContentWrapper>
           <BenchTalkDrawer />
