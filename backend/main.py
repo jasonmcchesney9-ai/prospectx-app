@@ -93,6 +93,9 @@ from pxi_prompt_core import (
     OPPONENT_GAME_PLAN_V1,
     OPPONENT_GAME_PLAN_V2,
     PLAYOFF_SERIES_PREP,
+    FULL_TEAM_COACHING,
+    PERSONNEL_SUGGESTION,
+    ROLE_ADJUSTMENT,
     build_report_system_prompt,
     resolve_mode,
 )
@@ -856,6 +859,10 @@ TEMPLATE_CATEGORIES = {
     "in_season_projections":     ("Player Analytics", "Projections & Development"),
     # Addendum 4
     "playoff_series_prep":       ("Competitive Intelligence", "Opponent Analysis"),
+    # Addendum 6
+    "full_team_coaching":        ("Team Analytics", "System Analysis"),
+    "personnel_suggestion":      ("Team Analytics", "System Analysis"),
+    "role_adjustment":           ("Player Analytics", "Projections & Development"),
 }
 
 
@@ -2462,6 +2469,15 @@ def seed_new_templates():
         ("Playoff Series Prep", "playoff_series_prep",
          "Competitive Intelligence", "Opponent Analysis",
          "Series-level strategy with game-by-game adjustment grid, fatigue monitoring, pre-built counters, and series-wide bench cues. The war room document."),
+        ("Full-Team Coaching Report", "full_team_coaching",
+         "Team Analytics", "System Analysis",
+         "Segment-based team review with identity gap analysis, CEI forward ranking, position group summaries, role architecture, minute ceilings, and priority coaching actions."),
+        ("Personnel Suggestion Report", "personnel_suggestion",
+         "Team Analytics", "System Analysis",
+         "Data-driven roster optimization with deployment gap analysis, line/pair suggestions, special teams changes, risk flags, and prioritized implementation."),
+        ("Role Adjustment Report", "role_adjustment",
+         "Player Analytics", "Projections & Development",
+         "Player-specific deployment change recommendation with MAINTAIN/EXPAND/CONTRACT/CHANGE verdict, implementation plan, and reassessment criteria."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -10050,7 +10066,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
         needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep", "full_team_coaching", "personnel_suggestion", "role_adjustment")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -11885,12 +11901,15 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                 "elite_profile": 10000,
                 "team_identity": 10000,
                 "playoff_series_prep": 10000,
+                "full_team_coaching": 10000,
                 "bias_controlled_eval": 8000,
                 "agent_projection": 8000,
                 "opponent_gameplan": 8000,
                 "forward_operating_profile": 6000,
                 "defense_operating_profile": 6000,
                 "in_season_projections": 6000,
+                "personnel_suggestion": 6000,
+                "role_adjustment": 4000,
                 "bench_card": 2000,
             }
             max_tokens = _type_tokens.get(request.report_type, 10000 if drill_list else 8000)
@@ -17288,12 +17307,15 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
             "elite_profile": 10000,
             "team_identity": 10000,
             "playoff_series_prep": 10000,
+            "full_team_coaching": 10000,
             "bias_controlled_eval": 8000,
             "agent_projection": 8000,
             "opponent_gameplan": 8000,
             "forward_operating_profile": 6000,
             "defense_operating_profile": 6000,
             "in_season_projections": 6000,
+            "personnel_suggestion": 6000,
+            "role_adjustment": 4000,
             "bench_card": 2000,
         }
         _bg_max_tokens = _bg_type_tokens.get(report_type, 8000)
