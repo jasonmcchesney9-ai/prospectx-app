@@ -18479,31 +18479,61 @@ async def send_bench_talk_message(
             if block.type == "text":
                 assistant_text += block.text
             elif block.type == "tool_use":
-                tool_result, entity_refs = await _execute_bench_talk_tool(block.name, block.input, org_id, user_id)
-                referenced_players.update(entity_refs.get("player_ids", []))
-                referenced_reports.update(entity_refs.get("report_ids", []))
+                try:
+                    tool_result, entity_refs = await _execute_bench_talk_tool(block.name, block.input, org_id, user_id)
+                    referenced_players.update(entity_refs.get("player_ids", []))
+                    referenced_reports.update(entity_refs.get("report_ids", []))
+                except Exception as tool_err:
+                    logger.warning("Bench Talk tool %s failed: %s", block.name, tool_err)
+                    tool_result = {"error": f"Tool '{block.name}' encountered an error: {str(tool_err)}"}
                 tool_results_for_api.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
                     "content": json.dumps(tool_result, default=str),
                 })
 
-        # If tools were called, send results back for final response
-        if tool_results_for_api:
+        # If tools were called, send results back for final response (up to 3 rounds)
+        max_tool_rounds = 3
+        tool_round = 0
+        while tool_results_for_api and tool_round < max_tool_rounds:
+            tool_round += 1
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results_for_api})
 
-            final_response = client.messages.create(
+            follow_up = client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=4096,
                 system=system_prompt,
                 messages=messages,
+                tools=BENCH_TALK_TOOLS,
             )
+            tokens_used += follow_up.usage.input_tokens + follow_up.usage.output_tokens
 
-            assistant_text = "".join(
-                b.text for b in final_response.content if b.type == "text"
-            )
-            tokens_used += final_response.usage.input_tokens + final_response.usage.output_tokens
+            # Collect text and check for more tool calls
+            assistant_text = ""
+            tool_results_for_api = []
+            for block in follow_up.content:
+                if block.type == "text":
+                    assistant_text += block.text
+                elif block.type == "tool_use":
+                    try:
+                        tool_result, entity_refs = await _execute_bench_talk_tool(block.name, block.input, org_id, user_id)
+                        referenced_players.update(entity_refs.get("player_ids", []))
+                        referenced_reports.update(entity_refs.get("report_ids", []))
+                    except Exception as tool_err:
+                        logger.warning("Bench Talk tool %s failed (round %d): %s", block.name, tool_round, tool_err)
+                        tool_result = {"error": f"Tool '{block.name}' encountered an error: {str(tool_err)}"}
+                    tool_results_for_api.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps(tool_result, default=str),
+                    })
+            response = follow_up  # for next iteration's content reference
+
+        # Guard against empty response (tool-use-only replies with no final text)
+        if not assistant_text.strip():
+            logger.warning("Bench Talk produced empty response for conversation %s — using fallback", conversation_id)
+            assistant_text = "I found some information but wasn't able to form a complete response. Could you try rephrasing your question?"
 
         # Save assistant message
         asst_msg_id = gen_id()
