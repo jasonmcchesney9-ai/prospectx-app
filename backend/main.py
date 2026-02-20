@@ -46,6 +46,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 try:
     from rink_diagrams import generate_drill_diagram
 except ImportError:
@@ -500,53 +503,90 @@ app = FastAPI(
     openapi_url="/openapi.json" if _show_docs else None,
 )
 
-# ── Rate Limiting ─────────────────────────────────
-# Per-IP rate limits applied via middleware (no endpoint signature changes needed)
-_RATE_LIMIT_WINDOW = 60  # seconds
-_RATE_LIMITS = {
-    "auth": 10,       # /auth/* — 10 requests/minute per IP
-    "data": 60,       # /players, /reports, /scout-notes — 60/min
-    "hockeytech": 30, # /hockeytech/* — 30/min
-    "default": 120,   # everything else — 120/min
-}
-_rate_limit_store: Dict[str, Dict[str, Any]] = {}
+# ── Rate Limiting (slowapi + per-user middleware) ─────────
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP from x-forwarded-for or direct connection."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
-def _get_rate_category(path: str) -> str:
-    if path.startswith("/auth/"):
-        return "auth"
-    if path.startswith(("/players", "/reports", "/scout-notes", "/stats/")):
-        return "data"
-    if path.startswith("/hockeytech/"):
-        return "hockeytech"
-    return "default"
+def _get_user_or_ip(request: Request) -> str:
+    """Key function: use user_id from JWT if available, else IP."""
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            token = auth_header.split(" ", 1)[1]
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            return f"user:{payload.get('user_id', 'unknown')}"
+        except Exception:
+            pass
+    return _get_client_ip(request)
+
+# slowapi — handles auth endpoints + global default
+limiter = Limiter(key_func=_get_client_ip, default_limits=["120/minute"])
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+
+# Per-user rate limits for authenticated endpoints (applied via middleware)
+# These use user_id from JWT for accurate per-user limiting
+_USER_RATE_LIMITS: Dict[str, int] = {
+    "/reports/generate": 10,               # 10/min per user
+    "/bench-talk/conversations/*/messages": 10,  # 10/min per user
+}
+_HOCKEYTECH_RATE_LIMIT = 30  # 30/min per user for all /hockeytech/* endpoints
+_user_rate_store: Dict[str, Dict[str, Any]] = {}
+_USER_RATE_WINDOW = 60  # seconds
 
 @app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
+async def per_user_rate_limit_middleware(request: Request, call_next):
+    """Per-user rate limiting for authenticated endpoints."""
     if request.method == "OPTIONS":
         return await call_next(request)
-    client_ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-                  or (request.client.host if request.client else "unknown"))
-    category = _get_rate_category(request.url.path)
-    limit = _RATE_LIMITS[category]
-    key = f"{client_ip}:{category}"
+
+    path = request.url.path
+    limit = None
+
+    # Check exact path matches
+    if path == "/reports/generate" and request.method == "POST":
+        limit = _USER_RATE_LIMITS["/reports/generate"]
+    elif path.startswith("/bench-talk/conversations/") and path.endswith("/messages") and request.method == "POST":
+        limit = _USER_RATE_LIMITS["/bench-talk/conversations/*/messages"]
+    elif path.startswith("/hockeytech/"):
+        limit = _HOCKEYTECH_RATE_LIMIT
+
+    if limit is None:
+        return await call_next(request)
+
+    # Extract user identity
+    identity = _get_user_or_ip(request)
+    key = f"{identity}:{path}" if not path.startswith("/hockeytech/") else f"{identity}:hockeytech"
     now = time.time()
-    entry = _rate_limit_store.get(key)
-    if entry and now - entry["window_start"] < _RATE_LIMIT_WINDOW:
+
+    entry = _user_rate_store.get(key)
+    if entry and now - entry["window_start"] < _USER_RATE_WINDOW:
         entry["count"] += 1
         if entry["count"] > limit:
             return JSONResponse(
                 status_code=429,
-                content={"detail": f"Rate limit exceeded. Max {limit} requests per minute for {category} endpoints."},
+                content={"detail": f"Rate limit exceeded. Max {limit} requests per minute."},
             )
     else:
-        _rate_limit_store[key] = {"window_start": now, "count": 1}
-    # Periodically clean stale entries (every 100 requests)
-    if len(_rate_limit_store) > 1000:
-        cutoff = now - _RATE_LIMIT_WINDOW * 2
-        _rate_limit_store.clear()
+        _user_rate_store[key] = {"window_start": now, "count": 1}
+
+    # Periodic cleanup
+    if len(_user_rate_store) > 5000:
+        _user_rate_store.clear()
+
     response = await call_next(request)
     response.headers["X-RateLimit-Limit"] = str(limit)
-    remaining = max(0, limit - _rate_limit_store.get(key, {}).get("count", 0))
+    remaining = max(0, limit - _user_rate_store.get(key, {}).get("count", 0))
     response.headers["X-RateLimit-Remaining"] = str(remaining)
     return response
 
@@ -5384,7 +5424,8 @@ def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(s
 # ============================================================
 
 @app.post("/auth/register", response_model=TokenResponse)
-async def register(req: RegisterRequest):
+@limiter.limit("3/minute", key_func=get_remote_address)
+async def register(request: Request, req: RegisterRequest):
     conn = get_db()
     existing = conn.execute("SELECT id FROM users WHERE email = ?", (req.email.lower().strip(),)).fetchone()
     if existing:
@@ -5431,7 +5472,8 @@ async def register(req: RegisterRequest):
 
 
 @app.post("/auth/login", response_model=TokenResponse)
-async def login(req: LoginRequest):
+@limiter.limit("5/minute", key_func=get_remote_address)
+async def login(request: Request, req: LoginRequest):
     conn = get_db()
     row = conn.execute("SELECT * FROM users WHERE email = ?", (req.email.lower().strip(),)).fetchone()
     conn.close()

@@ -26,3 +26,5 @@ python-docx==1.1.2
 matplotlib==3.10.0
 # Calendar feed parsing
 icalendar==6.1.2
+# Rate limiting
+slowapi==0.1.9
