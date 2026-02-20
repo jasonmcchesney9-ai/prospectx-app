@@ -216,7 +216,7 @@ export default function PricingPage() {
                 <h2 className="font-oswald text-xl font-bold text-navy text-center mb-8 uppercase tracking-wider">
                   Individual Plans
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto pt-4">
                   {INDIVIDUAL_KEYS.map((key) => {
                     const tier = tiers[key];
                     if (!tier) return null;
@@ -228,7 +228,7 @@ export default function PricingPage() {
                     return (
                       <div
                         key={key}
-                        className={`relative flex flex-col rounded-2xl border-2 ${meta.borderColor} bg-gradient-to-b ${meta.bgGradient} p-6 shadow-sm hover:shadow-lg transition-shadow ${
+                        className={`relative overflow-visible flex flex-col rounded-2xl border-2 ${meta.borderColor} bg-gradient-to-b ${meta.bgGradient} p-6 shadow-sm hover:shadow-lg transition-shadow ${
                           meta.popular ? "ring-2 ring-orange/20" : ""
                         }`}
                       >
@@ -364,7 +364,7 @@ export default function PricingPage() {
                 <p className="text-center text-sm text-muted mb-8 max-w-xl mx-auto">
                   For teams, programs, and enterprises. Every seat gets Pro-level access with shared scouting data.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto pt-4">
                   {ORG_KEYS.map((key) => {
                     const tier = tiers[key];
                     if (!tier) return null;
@@ -377,7 +377,7 @@ export default function PricingPage() {
                     return (
                       <div
                         key={key}
-                        className={`relative flex flex-col rounded-2xl border-2 ${meta.borderColor} bg-gradient-to-b ${meta.bgGradient} p-6 shadow-sm hover:shadow-lg transition-shadow`}
+                        className={`relative overflow-visible flex flex-col rounded-2xl border-2 ${meta.borderColor} bg-gradient-to-b ${meta.bgGradient} p-6 shadow-sm hover:shadow-lg transition-shadow`}
                       >
                         {/* Founders badge for Team/Program */}
                         {foundersPrice && foundersPrice > 0 && (
