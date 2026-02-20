@@ -2366,9 +2366,8 @@ Perspective: {resolved_perspective}
 
     # Report-type-specific action plan injection
     if report_type == "elite_profile":
-        # Elite Profile: full 16-section template + CEI + coach action plans
-        parts.append(ELITE_PROFILE_SECTIONS)
-        parts.append(DEVELOPMENT_ACTION_PLANS)
+        # Addendum 7 — Elite Profile V2 (self-contained 9-section Staff Mode)
+        parts.append(ELITE_PROFILE_V2)
     elif report_type in ("pro_skater", "development_roadmap", "player_guide_prep_college"):
         # Coach-facing action plans (top 3-5 priorities)
         parts.append(DEVELOPMENT_ACTION_PLANS)
@@ -2394,11 +2393,11 @@ Perspective: {resolved_perspective}
         parts.append(TEAM_IDENTITY_V2)
     elif report_type == "in_season_projections":
         parts.append(IN_SEASON_PROJECTIONS)
-    # Addendum 4 — Opponent Game Plan V2 + Playoff Series Prep
+    # Addendum 4 → Addendum 7 V3/V2
     elif report_type == "opponent_gameplan":
-        parts.append(OPPONENT_GAME_PLAN_V2)
+        parts.append(OPPONENT_GAME_PLAN_V3)
     elif report_type == "playoff_series_prep":
-        parts.append(PLAYOFF_SERIES_PREP)
+        parts.append(PLAYOFF_SERIES_PREP_V2)
     # Addendum 6 — Full-Team Coaching + Personnel Suggestion + Role Adjustment
     elif report_type == "full_team_coaching":
         parts.append(FULL_TEAM_COACHING)
@@ -2484,8 +2483,8 @@ Perspective: {resolved_perspective}
 
     # Report-type-specific action plan injection
     if report_type == "elite_profile":
-        parts.append(ELITE_PROFILE_SECTIONS)
-        parts.append(DEVELOPMENT_ACTION_PLANS)
+        # Addendum 7 — Elite Profile V2 (self-contained 9-section Staff Mode)
+        parts.append(ELITE_PROFILE_V2)
     elif report_type in ("pro_skater", "development_roadmap", "player_guide_prep_college"):
         parts.append(DEVELOPMENT_ACTION_PLANS)
     elif report_type == "family_card":
@@ -2509,11 +2508,11 @@ Perspective: {resolved_perspective}
         parts.append(TEAM_IDENTITY_V2)
     elif report_type == "in_season_projections":
         parts.append(IN_SEASON_PROJECTIONS)
-    # Addendum 4 — Opponent Game Plan V2 + Playoff Series Prep
+    # Addendum 4 → Addendum 7 V3/V2
     elif report_type == "opponent_gameplan":
-        parts.append(OPPONENT_GAME_PLAN_V2)
+        parts.append(OPPONENT_GAME_PLAN_V3)
     elif report_type == "playoff_series_prep":
-        parts.append(PLAYOFF_SERIES_PREP)
+        parts.append(PLAYOFF_SERIES_PREP_V2)
     # Addendum 6 — Full-Team Coaching + Personnel Suggestion + Role Adjustment
     elif report_type == "full_team_coaching":
         parts.append(FULL_TEAM_COACHING)
