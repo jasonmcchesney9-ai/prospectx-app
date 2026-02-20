@@ -18,6 +18,69 @@ VALID_MODES = {
 }
 
 # ─────────────────────────────────────────────────────────
+# A0) GLOBAL_CONTEXT_SCHEMA — universal report scaling
+# ─────────────────────────────────────────────────────────
+GLOBAL_CONTEXT_SCHEMA = '''
+GLOBAL CONTEXT SCHEMA — READ BEFORE GENERATING ANY REPORT
+==========================================================
+Every report in this system uses the same global context schema.
+Read level, data_depth, and audience from the input before generating anything.
+
+REQUIRED HEADER (include at top of every report):
+Level: [level value]  |  Data Depth: [data_depth value]  |  Audience: [audience value]
+
+LEVEL — controls age/league context and projection framing:
+U14    → Age 13-14, Minor hockey, project to U16/U18, no contact emphasis
+U16    → Age 15-16, Midget/AAA, project to U18/Junior, moderate contact
+U18    → Age 17-18, Midget AAA/OJHL, project to Junior A/NCAA/OHL
+Junior → Age 17-21, OJHL/OHL/USHL, project to OHL/NCAA/Pro
+Pro    → Age 20+, AHL/ECHL/Euro, project to NHL/sustained pro career
+NHL    → Elite level, compare to NHL peers, no development framing
+
+DATA_DEPTH — controls which metrics and sections to attempt:
+basic        → Boxscore only (GP/G/A/P/+/-/PIM/TOI)
+               NO CORSI, NO xG, NO micro-stats, NO CEI
+               Use Simplified Role Grade (A/B/C/D) instead of CEI
+intermediate → Basic + shots, FO%, zone starts, PP/PK stats
+               NO CORSI%, NO xG, NO CEI
+               Use qualitative possession description
+advanced     → Full tracking data available
+               All sections available including CEI, CORSI, xG, micro-stats
+
+CRITICAL DATA DEPTH RULE:
+NEVER attempt a metric not available at the specified data_depth.
+If a section requires unavailable data: include the header, then write:
+'[metric name] requires [data_depth] data. Currently unavailable.
+ To unlock: [specific action — InStat import / manual entry / upgrade data]'
+NEVER invent, estimate, or approximate unavailable metrics.
+
+AUDIENCE — controls tone, language, and framing:
+coach_gm → Direct, tactical, staff-only language, full hockey terminology
+scout    → Analytical, opinionated, source tags required, conservative projection
+agent    → Professional, pathway-focused, compliance disclaimer required
+parent   → Plain language, no jargon, warm and honest, growth framing
+player   → Direct, motivating, first-person where appropriate, actionable
+
+SAME STRUCTURE FOR ALL LEVELS:
+Use the same report template regardless of level.
+Only depth, metrics, and language adapt.
+A U14 report has the same sections as a Junior report —
+but U14 has simpler metrics, simpler language, and development framing.
+
+PROJECTION FRAMING BY LEVEL:
+U14/U16 → 'developing toward...' / 'building the foundation for...'
+U18/Junior → 'projecting to...' / 'advancement triggers include...'
+Pro/NHL → 'NHL readiness...' / 'comparable to...' / 'market value...'
+
+PHYSICAL BENCHMARKS BY LEVEL:
+U14 → Fundamental skills, skating, puck handling. No contact metrics.
+U16 → Speed, skill, introduce systems. Moderate contact expected.
+U18 → Position-specific, full systems, contact tolerance developing.
+Junior → Pro-ready habits, full physical engagement expected.
+Pro/NHL → Peak physical, contact is baseline not a development area.
+'''
+
+# ─────────────────────────────────────────────────────────
 # A) IMMUTABLE_GUARDRAILS — universal rules, every prompt
 # ─────────────────────────────────────────────────────────
 IMMUTABLE_GUARDRAILS = """YOU ARE: PXI (ProspectX Intelligence), a hockey operations analysis system.
@@ -1197,19 +1260,35 @@ def build_report_system_prompt(
     template_prompt: Optional[str] = None,
     template_name: str = "",
     report_type: Optional[str] = None,
+    level: Optional[str] = None,
+    data_depth: Optional[str] = None,
+    audience: Optional[str] = None,
 ) -> str:
     """Assemble a report system prompt in the spec-required injection order.
 
     Injection order (do not change):
-    1. IMMUTABLE_GUARDRAILS
-    2. EVIDENCE_DISCIPLINE
-    3. PXI_MODE_BLOCKS[mode]
-    4. base_prompt (the existing report generation prompt)
-    5. template_prompt (from DB, if rich enough)
-    6. compliance disclaimer (if mode requires it)
-    7. (optional) ELITE_PROFILE_SECTIONS + action plans (if report_type matches)
+    1. GLOBAL_CONTEXT_SCHEMA + resolved context values
+    2. IMMUTABLE_GUARDRAILS
+    3. EVIDENCE_DISCIPLINE
+    4. PXI_MODE_BLOCKS[mode]
+    5. base_prompt (the existing report generation prompt)
+    6. template_prompt (from DB, if rich enough)
+    7. compliance disclaimer (if mode requires it)
+    8. (optional) report-type-specific constants (Addenda 1+2)
     """
-    parts = [IMMUTABLE_GUARDRAILS]
+    # Build context header with resolved values (Addendum 3)
+    resolved_level = level or "Junior"
+    resolved_depth = data_depth or "basic"
+    resolved_audience = audience or "coach_gm"
+
+    context_header = GLOBAL_CONTEXT_SCHEMA + f"""
+RESOLVED CONTEXT FOR THIS REPORT:
+Level: {resolved_level}
+Data Depth: {resolved_depth}
+Audience: {resolved_audience}
+"""
+
+    parts = [context_header, IMMUTABLE_GUARDRAILS]
 
     # Evidence discipline (new in v2)
     parts.append(EVIDENCE_DISCIPLINE)
@@ -1269,21 +1348,37 @@ def build_system_prompt(
     tool: Optional[str] = None,
     player_age: Optional[int] = None,
     report_type: Optional[str] = None,
+    level: Optional[str] = None,
+    data_depth: Optional[str] = None,
+    audience: Optional[str] = None,
 ) -> str:
     """Assemble a general-purpose system prompt for Bench Talk and non-report use.
 
     Injection order:
-    1. IMMUTABLE_GUARDRAILS
-    2. EVIDENCE_DISCIPLINE
-    3. PXI_MODE_BLOCKS[mode]
-    4. CONVERSATION_RULES
-    5. HANDOFF_RULES
-    6. (optional) BROADCAST_SUB_PROMPTS[tool] — if broadcast mode + tool specified
-    7. (optional) AGE_GATES[tier] — if skill_coach mode + player_age provided
-    8. (optional) COMPLIANCE_DISCLAIMERS[mode] — if mode has compliance needs
-    9. (optional) Action plan constants — if report_type matches
+    1. GLOBAL_CONTEXT_SCHEMA + resolved context values
+    2. IMMUTABLE_GUARDRAILS
+    3. EVIDENCE_DISCIPLINE
+    4. PXI_MODE_BLOCKS[mode]
+    5. CONVERSATION_RULES
+    6. HANDOFF_RULES
+    7. (optional) BROADCAST_SUB_PROMPTS[tool] — if broadcast mode + tool specified
+    8. (optional) AGE_GATES[tier] — if skill_coach mode + player_age provided
+    9. (optional) COMPLIANCE_DISCLAIMERS[mode] — if mode has compliance needs
+    10. (optional) Action plan constants — if report_type matches
     """
-    parts = [IMMUTABLE_GUARDRAILS]
+    # Build context header with resolved values (Addendum 3)
+    resolved_level = level or "Junior"
+    resolved_depth = data_depth or "basic"
+    resolved_audience = audience or "coach_gm"
+
+    context_header = GLOBAL_CONTEXT_SCHEMA + f"""
+RESOLVED CONTEXT FOR THIS REPORT:
+Level: {resolved_level}
+Data Depth: {resolved_depth}
+Audience: {resolved_audience}
+"""
+
+    parts = [context_header, IMMUTABLE_GUARDRAILS]
 
     # Evidence discipline
     parts.append(EVIDENCE_DISCIPLINE)
