@@ -2554,6 +2554,11 @@ Perspective: {resolved_perspective}
         parts.append(PERSONNEL_SUGGESTION)
     elif report_type == "role_adjustment":
         parts.append(ROLE_ADJUSTMENT)
+    # Addendum 8 — Practice Plan + Player Season Roadmap
+    elif report_type == "practice_plan":
+        parts.append(PRACTICE_PLAN)
+    elif report_type == "player_season_roadmap":
+        parts.append(PLAYER_SEASON_ROADMAP)
 
     return "\n\n".join(parts)
 
@@ -2669,5 +2674,10 @@ Perspective: {resolved_perspective}
         parts.append(PERSONNEL_SUGGESTION)
     elif report_type == "role_adjustment":
         parts.append(ROLE_ADJUSTMENT)
+    # Addendum 8 — Practice Plan + Player Season Roadmap
+    elif report_type == "practice_plan":
+        parts.append(PRACTICE_PLAN)
+    elif report_type == "player_season_roadmap":
+        parts.append(PLAYER_SEASON_ROADMAP)
 
     return "\n\n".join(parts)
