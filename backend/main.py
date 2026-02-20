@@ -5906,9 +5906,15 @@ async def upgrade_subscription(req: SubscriptionUpgradeRequest, token_data: dict
 # ============================================================
 
 def _require_admin(token_data: dict):
-    """Raise 403 if the user is not an admin."""
-    if token_data.get("role") != "admin":
+    """Raise 403 if the user is not an admin or superadmin."""
+    if token_data.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _require_superadmin(token_data: dict):
+    """Raise 403 if the user is not a superadmin."""
+    if token_data.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin access required")
 
 
 @app.get("/admin/users")
