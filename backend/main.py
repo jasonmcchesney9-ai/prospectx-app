@@ -78,6 +78,8 @@ from pxi_prompt_core import (
     EVIDENCE_DISCIPLINE,
     BROADCAST_SUB_PROMPTS,
     ELITE_PROFILE_SECTIONS,
+    ELITE_PROFILE_V1,
+    ELITE_PROFILE_V2,
     DEVELOPMENT_ACTION_PLANS,
     PARENT_ACTION_PLANS,
     GLOBAL_CONTEXT_SCHEMA,
@@ -92,7 +94,9 @@ from pxi_prompt_core import (
     IN_SEASON_PROJECTIONS,
     OPPONENT_GAME_PLAN_V1,
     OPPONENT_GAME_PLAN_V2,
+    OPPONENT_GAME_PLAN_V3,
     PLAYOFF_SERIES_PREP,
+    PLAYOFF_SERIES_PREP_V2,
     FULL_TEAM_COACHING,
     PERSONNEL_SUGGESTION,
     ROLE_ADJUSTMENT,
@@ -11898,13 +11902,13 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
 
             # Per-report-type token limits
             _type_tokens = {
-                "elite_profile": 10000,
+                "elite_profile": 12000,
+                "playoff_series_prep": 12000,
                 "team_identity": 10000,
-                "playoff_series_prep": 10000,
+                "opponent_gameplan": 10000,
                 "full_team_coaching": 10000,
                 "bias_controlled_eval": 8000,
                 "agent_projection": 8000,
-                "opponent_gameplan": 8000,
                 "forward_operating_profile": 6000,
                 "defense_operating_profile": 6000,
                 "in_season_projections": 6000,
@@ -17304,13 +17308,13 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
         user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         _bg_type_tokens = {
-            "elite_profile": 10000,
+            "elite_profile": 12000,
+            "playoff_series_prep": 12000,
             "team_identity": 10000,
-            "playoff_series_prep": 10000,
+            "opponent_gameplan": 10000,
             "full_team_coaching": 10000,
             "bias_controlled_eval": 8000,
             "agent_projection": 8000,
-            "opponent_gameplan": 8000,
             "forward_operating_profile": 6000,
             "defense_operating_profile": 6000,
             "in_season_projections": 6000,
