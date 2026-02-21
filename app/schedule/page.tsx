@@ -9,6 +9,12 @@ import {
   Globe,
   Database,
   Loader2,
+  ChevronDown,
+  Check,
+  Download,
+  Link2,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -16,10 +22,9 @@ import CalendarGrid from "@/components/calendar/CalendarGrid";
 import EventPopover from "@/components/calendar/EventPopover";
 import UpcomingList from "@/components/calendar/UpcomingList";
 import FeedConnectModal from "@/components/calendar/FeedConnectModal";
-import ConnectedFeeds from "@/components/calendar/ConnectedFeeds";
 import AddEventModal from "@/components/calendar/AddEventModal";
 import api from "@/lib/api";
-import { getUser } from "@/lib/auth";
+import { getUser, getToken } from "@/lib/auth";
 import type { CalendarEvent, CalendarFeed, Team } from "@/types/api";
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "@/types/api";
 
@@ -56,6 +61,30 @@ const PLATFORMS = [
     icon: Database,
     helpText:
       "Contact your association admin for the calendar feed URL. Spordle feeds are typically set up by the league admin.",
+  },
+  {
+    provider: "GOOGLE_CALENDAR",
+    name: "Google Calendar",
+    color: "#4285F4",
+    icon: Globe,
+    helpText:
+      "Go to Google Calendar → Other calendars (+) → From URL → Paste your iCal URL.",
+  },
+  {
+    provider: "APPLE_ICAL",
+    name: "Apple Calendar",
+    color: "#333333",
+    icon: Smartphone,
+    helpText:
+      "Go to Calendar app → File → New Calendar Subscription → Paste your iCal URL.",
+  },
+  {
+    provider: "OUTLOOK",
+    name: "Outlook / Office 365",
+    color: "#0078D4",
+    icon: Monitor,
+    helpText:
+      "Go to Outlook Calendar → Add calendar → Subscribe from web → Paste your iCal URL.",
   },
 ];
 
@@ -99,6 +128,7 @@ export default function SchedulePage() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [connectPlatform, setConnectPlatform] = useState<typeof PLATFORMS[0] | null>(null);
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
+  const [showConnectDropdown, setShowConnectDropdown] = useState(false);
 
   // ── Computed month range ───────────────────────────────────
   const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-01`;
@@ -232,62 +262,115 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          {canEdit && (
-            <button
-              onClick={() => { setEditingEvent(null); setShowAddEvent(true); }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all"
-            >
-              <Plus size={14} /> Add Event
-            </button>
-          )}
-        </div>
+          <div className="flex items-center gap-2">
+            {/* Connect Calendar dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowConnectDropdown(!showConnectDropdown)}
+                className="flex items-center gap-2 px-4 py-2.5 border border-border text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-gray-50 transition-all text-navy"
+              >
+                <Link2 size={14} />
+                Connect Calendar
+                <ChevronDown size={12} className={`transition-transform ${showConnectDropdown ? "rotate-180" : ""}`} />
+              </button>
 
-        {/* ── Platform Integrations ────────────────────────── */}
-        <div className="bg-white rounded-xl border border-border p-4 mb-4">
-          <h3 className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider mb-3">
-            Platform Integrations
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-            {PLATFORMS.map((p) => {
-              const Icon = p.icon;
-              const isConnected = connectedProviders.has(p.provider);
-              return (
-                <button
-                  key={p.provider}
-                  onClick={() => setConnectPlatform(p)}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all hover:shadow-sm ${
-                    isConnected
-                      ? "border-green-200 bg-green-50/50"
-                      : "border-border hover:border-teal/30"
-                  }`}
-                >
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: p.color + "15" }}
-                  >
-                    <Icon size={18} style={{ color: p.color }} />
+              {showConnectDropdown && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowConnectDropdown(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-40 py-1 max-h-[400px] overflow-y-auto">
+                    <div className="px-3 py-2 border-b border-border/50">
+                      <p className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider">Import from Platform</p>
+                    </div>
+                    {PLATFORMS.map((p) => {
+                      const Icon = p.icon;
+                      const isConnected = connectedProviders.has(p.provider);
+                      return (
+                        <button
+                          key={p.provider}
+                          onClick={() => { setConnectPlatform(p); setShowConnectDropdown(false); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div
+                            className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: p.color + "15" }}
+                          >
+                            <Icon size={14} style={{ color: p.color }} />
+                          </div>
+                          <span className="text-sm font-medium text-navy flex-1">{p.name}</span>
+                          {isConnected ? (
+                            <Check size={14} className="text-green-600 shrink-0" />
+                          ) : (
+                            <span className="text-[10px] text-teal font-oswald uppercase tracking-wider">Connect</span>
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    <div className="border-t border-border/50 mt-1 pt-1">
+                      <div className="px-3 py-2">
+                        <p className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider">Export</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          setShowConnectDropdown(false);
+                          try {
+                            const token = getToken();
+                            const baseUrl = api.defaults.baseURL || "";
+                            const teamParam = teamFilter ? `?team_id=${teamFilter}` : "";
+                            const url = `${baseUrl}/api/calendar/export.ics${teamParam}`;
+                            const resp = await fetch(url, {
+                              headers: { Authorization: `Bearer ${token}` },
+                            });
+                            if (!resp.ok) throw new Error("Export failed");
+                            const blob = await resp.blob();
+                            const a = document.createElement("a");
+                            a.href = URL.createObjectURL(blob);
+                            a.download = "prospectx-schedule.ics";
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                          } catch {
+                            console.error("iCal export failed");
+                          }
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                      >
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 bg-teal/10">
+                          <Download size={14} className="text-teal" />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-navy block">Export as iCal</span>
+                          <span className="text-[10px] text-muted">Subscribe from any calendar app</span>
+                        </div>
+                      </button>
+                    </div>
+
+                    {feeds.length > 0 && (
+                      <div className="border-t border-border/50 mt-1 pt-1 px-3 py-2">
+                        <p className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider mb-1">
+                          Active Feeds ({feeds.length})
+                        </p>
+                        {feeds.map((f) => (
+                          <div key={f.id} className="flex items-center gap-2 py-1 text-xs text-navy/70">
+                            <Check size={10} className="text-green-500" />
+                            <span className="truncate">{f.label || f.provider}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span className="text-xs font-semibold text-navy">{p.name}</span>
-                  {isConnected ? (
-                    <span className="text-[9px] text-green-600 font-medium">Connected ✓</span>
-                  ) : (
-                    <span className="text-[9px] text-teal font-medium">Connect</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                </>
+              )}
+            </div>
 
-          {/* Connected Feeds */}
-          <ConnectedFeeds
-            feeds={feeds}
-            onFeedRemoved={handleFeedRemoved}
-            onFeedSynced={() => {
-              // Re-fetch feeds and events
-              api.get<CalendarFeed[]>("/api/calendar/feeds").then(({ data }) => setFeeds(data || [])).catch(() => {});
-              loadEvents();
-            }}
-          />
+            {canEdit && (
+              <button
+                onClick={() => { setEditingEvent(null); setShowAddEvent(true); }}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all"
+              >
+                <Plus size={14} /> Add Event
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Filters ─────────────────────────────────────── */}

@@ -23261,6 +23261,65 @@ async def delete_calendar_feed(
     return {"detail": "Feed and associated events deleted"}
 
 
+@app.get("/api/calendar/export.ics")
+async def export_calendar_ics(
+    team_id: str = "",
+    token_data: dict = Depends(verify_token),
+):
+    """Export org/team events as an iCal (.ics) file."""
+    from icalendar import Calendar as ICalendar, Event as ICalEvent
+    from datetime import datetime as _dt
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    sql = """
+        SELECT id, title, description, start_time, end_time, timezone,
+               location, type, league_name, opponent_name, is_home
+        FROM events
+        WHERE org_id = ?
+    """
+    params: list = [org_id]
+    if team_id:
+        sql += " AND team_id = ?"
+        params.append(team_id)
+    sql += " ORDER BY start_time ASC"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+
+    cal = ICalendar()
+    cal.add("prodid", "-//ProspectX Intelligence//EN")
+    cal.add("version", "2.0")
+    cal.add("x-wr-calname", "ProspectX Schedule")
+
+    for r in rows:
+        ev = ICalEvent()
+        ev.add("uid", f"{r['id']}@prospectx.com")
+        ev.add("summary", r["title"] or "Event")
+        if r["description"]:
+            ev.add("description", r["description"])
+        if r["location"]:
+            ev.add("location", r["location"])
+        try:
+            ev.add("dtstart", _dt.fromisoformat(r["start_time"].replace("Z", "+00:00")))
+        except Exception:
+            continue
+        if r["end_time"]:
+            try:
+                ev.add("dtend", _dt.fromisoformat(r["end_time"].replace("Z", "+00:00")))
+            except Exception:
+                pass
+        ev.add("categories", [r["type"] or "OTHER"])
+        cal.add_component(ev)
+
+    from fastapi.responses import Response
+    return Response(
+        content=cal.to_ical(),
+        media_type="text/calendar",
+        headers={"Content-Disposition": "attachment; filename=prospectx-schedule.ics"},
+    )
+
+
 # ============================================================
 # MESSAGING + PARENTAL APPROVAL
 # ============================================================
