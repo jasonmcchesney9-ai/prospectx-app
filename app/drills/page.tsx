@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, PlusCircle, ChevronDown, ChevronUp, Clock, Users, Flame, Snowflake, Upload } from "lucide-react";
+import { Search, PlusCircle, ChevronDown, ChevronUp, Clock, Users, Flame, Snowflake, Upload, Zap } from "lucide-react";
+import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -72,6 +73,13 @@ export default function DrillsPage() {
               <p className="text-xs text-muted mt-0.5">{drills.length} drill{drills.length !== 1 ? "s" : ""}</p>
             )}
           </div>
+          <Link
+            href="/practice-plans/generate"
+            className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-xs font-oswald uppercase tracking-wider rounded-full hover:bg-orange/90 transition-colors whitespace-nowrap"
+          >
+            <Zap size={14} />
+            Generate Practice Plan
+          </Link>
         </div>
 
         {/* Filters */}

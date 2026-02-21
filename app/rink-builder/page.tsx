@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useRef } from "react";
-import { Save, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame } from "lucide-react";
+import { Save, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -152,6 +152,13 @@ export default function RinkBuilderPage() {
             <h1 className="text-2xl font-bold text-navy">Rink Builder</h1>
             <p className="text-xs text-muted mt-0.5">Draw plays, formations, and drill diagrams — then save to your Drill Library</p>
           </div>
+          <Link
+            href="/practice-plans/generate"
+            className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-xs font-oswald uppercase tracking-wider rounded-full hover:bg-orange/90 transition-colors whitespace-nowrap"
+          >
+            <Zap size={14} />
+            Generate Practice Plan
+          </Link>
         </div>
 
         {/* Success Banner */}

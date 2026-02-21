@@ -35,21 +35,113 @@ function MarkerPreview({ letter, color }: { letter: string; color: string }) {
 
 // ── Arrow preview (inline SVG) ───────────────────────────────
 
-function ArrowPreview({ dashed }: { dashed: boolean }) {
+function ArrowPreview({ dashed, color }: { dashed: boolean; color?: string }) {
+  const c = color || RINK_COLORS.NAVY;
+  const id = `tb-arr-${dashed ? "d" : "s"}-${c.replace("#", "")}`;
   return (
     <svg width={20} height={14} viewBox="0 0 20 14">
       <defs>
-        <marker id={`tb-arr-${dashed ? "d" : "s"}`} markerWidth={6} markerHeight={4} refX={6} refY={2} orient="auto">
-          <polygon points="0 0, 6 2, 0 4" fill={RINK_COLORS.NAVY} />
+        <marker id={id} markerWidth={6} markerHeight={4} refX={6} refY={2} orient="auto">
+          <polygon points="0 0, 6 2, 0 4" fill={c} />
         </marker>
       </defs>
       <line
         x1={2} y1={7} x2={14} y2={7}
-        stroke={RINK_COLORS.NAVY}
+        stroke={c}
         strokeWidth={1.5}
         strokeDasharray={dashed ? "3,2" : undefined}
-        markerEnd={`url(#tb-arr-${dashed ? "d" : "s"})`}
+        markerEnd={`url(#${id})`}
       />
+    </svg>
+  );
+}
+
+// ── Skate+puck preview ──────────────────────────────────────
+
+function SkatePuckPreview() {
+  return (
+    <svg width={20} height={14} viewBox="0 0 20 14">
+      <defs>
+        <marker id="tb-arr-sp" markerWidth={6} markerHeight={4} refX={6} refY={2} orient="auto">
+          <polygon points="0 0, 6 2, 0 4" fill={RINK_COLORS.TEAL} />
+        </marker>
+      </defs>
+      <line x1={2} y1={7} x2={12} y2={7} stroke={RINK_COLORS.TEAL} strokeWidth={1.5} markerEnd="url(#tb-arr-sp)" />
+      <circle cx={16} cy={7} r={2.5} fill="#111" stroke="white" strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+// ── Backward preview ────────────────────────────────────────
+
+function BackwardPreview({ withPuck }: { withPuck?: boolean }) {
+  return (
+    <svg width={20} height={14} viewBox="0 0 20 14">
+      <defs>
+        <marker id={`tb-arr-bk${withPuck ? "p" : ""}`} markerWidth={6} markerHeight={4} refX={6} refY={2} orient="auto">
+          <polygon points="0 0, 6 2, 0 4" fill={RINK_COLORS.BACKWARD} />
+        </marker>
+      </defs>
+      <line x1={2} y1={7} x2={withPuck ? 12 : 14} y2={7} stroke={RINK_COLORS.BACKWARD} strokeWidth={1.5} strokeDasharray="4,2" markerEnd={`url(#tb-arr-bk${withPuck ? "p" : ""})`} />
+      {withPuck && <circle cx={16} cy={7} r={2.5} fill="#111" stroke="white" strokeWidth={0.5} />}
+    </svg>
+  );
+}
+
+// ── Shot preview ────────────────────────────────────────────
+
+function ShotPreview() {
+  return (
+    <svg width={20} height={14} viewBox="0 0 20 14">
+      <defs>
+        <marker id="tb-arr-shot" markerWidth={6} markerHeight={4} refX={6} refY={2} orient="auto">
+          <polygon points="0 0, 6 2, 0 4" fill={RINK_COLORS.SHOT_RED} />
+        </marker>
+      </defs>
+      <line x1={2} y1={7} x2={14} y2={7} stroke={RINK_COLORS.SHOT_RED} strokeWidth={2.5} markerEnd="url(#tb-arr-shot)" />
+    </svg>
+  );
+}
+
+// ── Lateral preview ─────────────────────────────────────────
+
+function LateralPreview() {
+  return (
+    <svg width={20} height={14} viewBox="0 0 20 14">
+      <polyline points="2,7 6,3 10,11 14,3 18,7" fill="none" stroke={RINK_COLORS.TEAL} strokeWidth={1.5} strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ── Freehand preview ────────────────────────────────────────
+
+function FreehandPreview() {
+  return (
+    <svg width={18} height={14} viewBox="0 0 18 14">
+      <path d="M 2 10 Q 6 2 10 8 Q 14 14 16 4" fill="none" stroke={RINK_COLORS.TEAL} strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── Pylon preview ───────────────────────────────────────────
+
+function PylonPreview() {
+  return (
+    <svg width={14} height={16} viewBox="0 0 14 16">
+      <polygon points="7,2 2,14 12,14" fill={RINK_COLORS.PYLON_ORANGE} stroke="white" strokeWidth={0.8} />
+    </svg>
+  );
+}
+
+// ── Net preview ─────────────────────────────────────────────
+
+function NetPreview() {
+  return (
+    <svg width={16} height={14} viewBox="0 0 16 14">
+      <rect x={2} y={3} width={12} height={8} rx={1.5} fill="white" stroke={RINK_COLORS.NAVY} strokeWidth={1.2} />
+      <line x1={6} y1={3} x2={6} y2={11} stroke={RINK_COLORS.NAVY} strokeWidth={0.4} opacity={0.4} />
+      <line x1={10} y1={3} x2={10} y2={11} stroke={RINK_COLORS.NAVY} strokeWidth={0.4} opacity={0.4} />
+      <line x1={2} y1={7} x2={14} y2={7} stroke={RINK_COLORS.NAVY} strokeWidth={0.4} opacity={0.4} />
     </svg>
   );
 }
@@ -159,58 +251,81 @@ export default function RinkToolbar({
       {/* ── Divider ── */}
       <div className="w-px h-7 bg-border mx-1" />
 
-      {/* ── Tool Buttons ── */}
-      <ToolBtn active={toolMode === "select"} onClick={() => onToolModeChange("select")} label="Select" title="Select & Move (V)">
-        <MousePointer2 size={14} />
-      </ToolBtn>
-
+      {/* ── Players ── */}
       <ToolBtn active={toolMode === "marker_X"} onClick={() => onToolModeChange("marker_X")} label="Fwd" title="Forward Marker (X)">
         <MarkerPreview letter="X" color={MARKER_COLORS.X} />
       </ToolBtn>
-
       <ToolBtn active={toolMode === "marker_O"} onClick={() => onToolModeChange("marker_O")} label="Def" title="Defense Marker (O)">
         <MarkerPreview letter="O" color={MARKER_COLORS.O} />
       </ToolBtn>
-
       <ToolBtn active={toolMode === "marker_G"} onClick={() => onToolModeChange("marker_G")} label="Goalie" title="Goalie Marker (G)">
         <MarkerPreview letter="G" color={MARKER_COLORS.G} />
       </ToolBtn>
-
       <ToolBtn active={toolMode === "marker_C"} onClick={() => onToolModeChange("marker_C")} label="Cone" title="Cone Marker (C)">
         <MarkerPreview letter="C" color={MARKER_COLORS.C} />
       </ToolBtn>
 
-      {/* ── Divider ── */}
       <div className="w-px h-7 bg-border mx-1" />
 
-      <ToolBtn active={toolMode === "arrow_solid"} onClick={() => onToolModeChange("arrow_solid")} label="Move" title="Skating Path (solid arrow)">
-        <ArrowPreview dashed={false} />
+      {/* ── Lines & Movement ── */}
+      <ToolBtn active={toolMode === "arrow_solid"} onClick={() => onToolModeChange("arrow_solid")} label="Skate" title="Skating Path (solid arrow)">
+        <ArrowPreview dashed={false} color={RINK_COLORS.TEAL} />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "arrow_skate_puck"} onClick={() => onToolModeChange("arrow_skate_puck")} label="Sk+Pk" title="Skate with Puck">
+        <SkatePuckPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "arrow_backward"} onClick={() => onToolModeChange("arrow_backward")} label="Back" title="Skate Backwards">
+        <BackwardPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "arrow_backward_puck"} onClick={() => onToolModeChange("arrow_backward_puck")} label="Bk+Pk" title="Skate Backwards with Puck">
+        <BackwardPreview withPuck />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "freehand"} onClick={() => onToolModeChange("freehand")} label="Free" title="Freehand Skate Line (click + drag)">
+        <FreehandPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "arrow_lateral"} onClick={() => onToolModeChange("arrow_lateral")} label="Lateral" title="Lateral Skating (zigzag)">
+        <LateralPreview />
       </ToolBtn>
 
-      <ToolBtn active={toolMode === "arrow_dashed"} onClick={() => onToolModeChange("arrow_dashed")} label="Pass" title="Pass / Puck Movement (dashed arrow)">
-        <ArrowPreview dashed={true} />
+      <div className="w-px h-7 bg-border mx-1" />
+
+      {/* ── Passing & Shooting ── */}
+      <ToolBtn active={toolMode === "arrow_pass"} onClick={() => onToolModeChange("arrow_pass")} label="Pass" title="Pass (blue arrow)">
+        <ArrowPreview dashed={true} color={RINK_COLORS.PASS_BLUE} />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "arrow_shot"} onClick={() => onToolModeChange("arrow_shot")} label="Shot" title="Shot (red bold arrow)">
+        <ShotPreview />
       </ToolBtn>
 
+      <div className="w-px h-7 bg-border mx-1" />
+
+      {/* ── Objects ── */}
       <ToolBtn active={toolMode === "puck"} onClick={() => onToolModeChange("puck")} label="Puck" title="Place Puck">
         <PuckPreview />
       </ToolBtn>
+      <ToolBtn active={toolMode === "pylon"} onClick={() => onToolModeChange("pylon")} label="Pylon" title="Place Pylon (orange cone)">
+        <PylonPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "net"} onClick={() => onToolModeChange("net")} label="Net" title="Place Net">
+        <NetPreview />
+      </ToolBtn>
 
+      <div className="w-px h-7 bg-border mx-1" />
+
+      {/* ── Editing ── */}
+      <ToolBtn active={toolMode === "select"} onClick={() => onToolModeChange("select")} label="Select" title="Select & Move">
+        <MousePointer2 size={14} />
+      </ToolBtn>
       <ToolBtn active={toolMode === "eraser"} onClick={() => onToolModeChange("eraser")} label="Erase" title="Eraser — click element to remove">
         <Eraser size={14} />
       </ToolBtn>
 
-      {/* ── Divider ── */}
-      <div className="w-px h-7 bg-border mx-1" />
-
-      {/* ── Actions ── */}
       <ActionBtn onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Undo2 size={16} />
       </ActionBtn>
-
       <ActionBtn onClick={onClear} title="Clear All">
         <Trash2 size={16} />
       </ActionBtn>
-
       {selectedElement && (
         <ActionBtn onClick={onDeleteSelected} title="Delete Selected">
           <XIcon size={16} />
@@ -224,7 +339,6 @@ export default function RinkToolbar({
       <ActionBtn onClick={onExportSvg} title="Download SVG">
         <Download size={16} />
       </ActionBtn>
-
       <ActionBtn onClick={onExportPng} title="Download PNG">
         <Image size={16} />
       </ActionBtn>

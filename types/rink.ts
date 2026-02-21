@@ -9,6 +9,15 @@ export type MarkerType = "X" | "O" | "G" | "C";
 
 export type ArrowStyle = "solid" | "dashed";
 
+export type ArrowVariant =
+  | "skate"
+  | "skate_puck"
+  | "backward"
+  | "backward_puck"
+  | "pass"
+  | "shot"
+  | "lateral";
+
 export type ToolMode =
   | "select"
   | "marker_X"
@@ -17,7 +26,16 @@ export type ToolMode =
   | "marker_C"
   | "arrow_solid"
   | "arrow_dashed"
+  | "arrow_skate_puck"
+  | "arrow_backward"
+  | "arrow_backward_puck"
+  | "arrow_pass"
+  | "arrow_shot"
+  | "arrow_lateral"
   | "puck"
+  | "pylon"
+  | "net"
+  | "freehand"
   | "eraser";
 
 // ── Element Types ────────────────────────────────────────────
@@ -40,6 +58,8 @@ export interface RinkArrow {
   y2: number;
   style: ArrowStyle;
   color: string;
+  variant?: ArrowVariant;
+  strokeWidth?: number;
 }
 
 export interface RinkPuck {
@@ -49,7 +69,29 @@ export interface RinkPuck {
   y: number;
 }
 
-export type RinkElement = RinkMarker | RinkArrow | RinkPuck;
+export interface RinkPylon {
+  id: string;
+  type: "pylon";
+  x: number;
+  y: number;
+}
+
+export interface RinkNet {
+  id: string;
+  type: "net";
+  x: number;
+  y: number;
+}
+
+export interface RinkFreehandLine {
+  id: string;
+  type: "freehand";
+  points: { x: number; y: number }[];
+  color: string;
+  arrowEnd: boolean;
+}
+
+export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine;
 
 // ── Diagram Data (serializable to JSON) ──────────────────────
 
@@ -73,6 +115,10 @@ export const RINK_COLORS = {
   CREASE_FILL: "#B8D4E8",
   BOARD_STROKE: "#0F2A3D",
   CONE: "#888888",
+  PASS_BLUE: "#2563EB",
+  SHOT_RED: "#DC2626",
+  BACKWARD: "#7C3AED",
+  PYLON_ORANGE: "#F97316",
 } as const;
 
 export const MARKER_COLORS: Record<MarkerType, string> = {

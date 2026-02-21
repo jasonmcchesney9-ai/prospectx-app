@@ -27,7 +27,7 @@ function FullRink({ w = 600, h = 280 }: { w?: number; h?: number }) {
       <line x1={Math.floor(w * 0.67)} y1={2} x2={Math.floor(w * 0.67)} y2={h - 2} stroke={BLUE_LINE} strokeWidth={2} />
       {/* Center circle */}
       <circle cx={cx} cy={cy} r={30} fill="none" stroke={CIRCLE_COLOR} strokeWidth={1.5} />
-      <circle cx={cx} cy={cy} r={3} fill={CIRCLE_COLOR} />
+      <image href="/logo.png" x={cx - 18} y={cy - 18} width={36} height={36} opacity={0.35} style={{ pointerEvents: "none" }} />
       {/* Face-off dots */}
       <circle cx={Math.floor(w * 0.22)} cy={Math.floor(h * 0.32)} r={3} fill={CIRCLE_COLOR} />
       <circle cx={Math.floor(w * 0.22)} cy={Math.floor(h * 0.68)} r={3} fill={CIRCLE_COLOR} />

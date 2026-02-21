@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import RinkSvgBackground from "./RinkSvgBackground";
-import { MarkerElement, ArrowElement, PuckElement } from "./RinkElements";
+import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement } from "./RinkElements";
 import RinkToolbar from "./RinkToolbar";
 import {
   RINK_COLORS,
@@ -21,6 +21,10 @@ import {
   type RinkDiagramData,
   type ToolMode,
   type MarkerType,
+  type RinkPylon,
+  type RinkNet,
+  type RinkFreehandLine,
+  type ArrowVariant,
 } from "@/types/rink";
 
 // ── Props ────────────────────────────────────────────────────
@@ -60,10 +64,24 @@ function hitTest(
   py: number,
   el: RinkElement
 ): number {
-  if (el.type === "marker" || el.type === "puck") {
+  if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net") {
     const dx = px - el.x;
     const dy = py - el.y;
     return Math.sqrt(dx * dx + dy * dy);
+  }
+  if (el.type === "freehand") {
+    let minDist = Infinity;
+    for (let i = 0; i < el.points.length - 1; i++) {
+      const p1 = el.points[i], p2 = el.points[i + 1];
+      const sdx = p2.x - p1.x, sdy = p2.y - p1.y;
+      const lenSq = sdx * sdx + sdy * sdy;
+      if (lenSq === 0) { minDist = Math.min(minDist, Math.sqrt((px - p1.x) ** 2 + (py - p1.y) ** 2)); continue; }
+      let t = ((px - p1.x) * sdx + (py - p1.y) * sdy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const cx = p1.x + t * sdx, cy = p1.y + t * sdy;
+      minDist = Math.min(minDist, Math.sqrt((px - cx) ** 2 + (py - cy) ** 2));
+    }
+    return minDist;
   }
   if (el.type === "arrow") {
     // Distance from point to line segment
@@ -261,8 +279,39 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         return;
       }
 
-      // ── Arrow: two-click ──
-      if (toolMode === "arrow_solid" || toolMode === "arrow_dashed") {
+      // ── Place Pylon ──
+      if (toolMode === "pylon") {
+        pushHistory();
+        const pylon: RinkPylon = { id: uid(), type: "pylon", x: pt.x, y: pt.y };
+        const next = [...elements, pylon];
+        setElements(next);
+        notifyChange(next, rinkType);
+        return;
+      }
+
+      // ── Place Net ──
+      if (toolMode === "net") {
+        pushHistory();
+        const netEl: RinkNet = { id: uid(), type: "net", x: pt.x, y: pt.y };
+        const next = [...elements, netEl];
+        setElements(next);
+        notifyChange(next, rinkType);
+        return;
+      }
+
+      // ── Arrow: two-click (all arrow variants) ──
+      const arrowToolConfig: Record<string, { style: "solid" | "dashed"; color: string; variant: ArrowVariant; strokeWidth?: number }> = {
+        arrow_solid:         { style: "solid",  color: RINK_COLORS.TEAL,      variant: "skate" },
+        arrow_dashed:        { style: "dashed", color: RINK_COLORS.NAVY,      variant: "pass" },
+        arrow_skate_puck:    { style: "solid",  color: RINK_COLORS.TEAL,      variant: "skate_puck" },
+        arrow_backward:      { style: "dashed", color: RINK_COLORS.BACKWARD,  variant: "backward" },
+        arrow_backward_puck: { style: "dashed", color: RINK_COLORS.BACKWARD,  variant: "backward_puck" },
+        arrow_pass:          { style: "dashed", color: RINK_COLORS.PASS_BLUE, variant: "pass" },
+        arrow_shot:          { style: "solid",  color: RINK_COLORS.SHOT_RED,  variant: "shot", strokeWidth: 3.5 },
+        arrow_lateral:       { style: "solid",  color: RINK_COLORS.TEAL,      variant: "lateral" },
+      };
+      if (toolMode in arrowToolConfig) {
+        const cfg = arrowToolConfig[toolMode];
         if (!arrowStart) {
           setArrowStart({ x: pt.x, y: pt.y });
         } else {
@@ -274,8 +323,10 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             y1: arrowStart.y,
             x2: pt.x,
             y2: pt.y,
-            style: toolMode === "arrow_dashed" ? "dashed" : "solid",
-            color: toolMode === "arrow_dashed" ? RINK_COLORS.NAVY : RINK_COLORS.TEAL,
+            style: cfg.style,
+            color: cfg.color,
+            variant: cfg.variant,
+            strokeWidth: cfg.strokeWidth,
           };
           const next = [...elements, arrow];
           setElements(next);
@@ -307,12 +358,16 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         setElements((prev) =>
           prev.map((el) => {
             if (el.id !== dragState.id) return el;
-            if (el.type === "marker" || el.type === "puck") {
-              return { ...el, x: (snap as RinkMarker | RinkPuck).x + dx, y: (snap as RinkMarker | RinkPuck).y + dy };
+            if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net") {
+              return { ...el, x: (snap as RinkMarker | RinkPuck | RinkPylon | RinkNet).x + dx, y: (snap as RinkMarker | RinkPuck | RinkPylon | RinkNet).y + dy };
             }
             if (el.type === "arrow") {
               const s = snap as RinkArrow;
               return { ...el, x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy };
+            }
+            if (el.type === "freehand") {
+              const s = snap as RinkFreehandLine;
+              return { ...el, points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy })) };
             }
             return el;
           })
@@ -445,6 +500,9 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const arrows = elements.filter((el): el is RinkArrow => el.type === "arrow");
   const pucks = elements.filter((el): el is RinkPuck => el.type === "puck");
   const markers = elements.filter((el): el is RinkMarker => el.type === "marker");
+  const pylons = elements.filter((el): el is RinkPylon => el.type === "pylon");
+  const nets = elements.filter((el): el is RinkNet => el.type === "net");
+  const freehandLines = elements.filter((el): el is RinkFreehandLine => el.type === "freehand");
 
   // Cursor style based on tool
   const cursorMap: Record<ToolMode, string> = {
@@ -455,7 +513,16 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     marker_C: "crosshair",
     arrow_solid: "crosshair",
     arrow_dashed: "crosshair",
+    arrow_skate_puck: "crosshair",
+    arrow_backward: "crosshair",
+    arrow_backward_puck: "crosshair",
+    arrow_pass: "crosshair",
+    arrow_shot: "crosshair",
+    arrow_lateral: "crosshair",
     puck: "crosshair",
+    pylon: "crosshair",
+    net: "crosshair",
+    freehand: "crosshair",
     eraser: "pointer",
   };
 
@@ -510,7 +577,19 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             ))}
           </g>
 
-          {/* Layer 3: Pucks */}
+          {/* Layer 3: Freehand Lines */}
+          <g>
+            {freehandLines.map((fl) => (
+              <FreehandLineElement
+                key={fl.id}
+                line={fl}
+                selected={fl.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(fl, e)}
+              />
+            ))}
+          </g>
+
+          {/* Layer 4: Pucks */}
           <g>
             {pucks.map((puck) => (
               <PuckElement
@@ -522,7 +601,31 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             ))}
           </g>
 
-          {/* Layer 4: Markers */}
+          {/* Layer 5: Pylons */}
+          <g>
+            {pylons.map((pylon) => (
+              <PylonElement
+                key={pylon.id}
+                pylon={pylon}
+                selected={pylon.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(pylon, e)}
+              />
+            ))}
+          </g>
+
+          {/* Layer 6: Nets */}
+          <g>
+            {nets.map((netEl) => (
+              <NetElement
+                key={netEl.id}
+                net={netEl}
+                selected={netEl.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(netEl, e)}
+              />
+            ))}
+          </g>
+
+          {/* Layer 7: Markers */}
           <g>
             {markers.map((marker) => (
               <MarkerElement
@@ -534,20 +637,32 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             ))}
           </g>
 
-          {/* Layer 5: Arrow preview (drawing in progress) */}
-          {arrowStart && mousePos && (
-            <line
-              x1={arrowStart.x}
-              y1={arrowStart.y}
-              x2={mousePos.x}
-              y2={mousePos.y}
-              stroke={toolMode === "arrow_dashed" ? RINK_COLORS.NAVY : RINK_COLORS.TEAL}
-              strokeWidth={2}
-              strokeDasharray="4,4"
-              opacity={0.5}
-              style={{ pointerEvents: "none" }}
-            />
-          )}
+          {/* Arrow preview (drawing in progress) */}
+          {arrowStart && mousePos && (() => {
+            const previewColorMap: Record<string, string> = {
+              arrow_solid: RINK_COLORS.TEAL,
+              arrow_dashed: RINK_COLORS.NAVY,
+              arrow_skate_puck: RINK_COLORS.TEAL,
+              arrow_backward: RINK_COLORS.BACKWARD,
+              arrow_backward_puck: RINK_COLORS.BACKWARD,
+              arrow_pass: RINK_COLORS.PASS_BLUE,
+              arrow_shot: RINK_COLORS.SHOT_RED,
+              arrow_lateral: RINK_COLORS.TEAL,
+            };
+            return (
+              <line
+                x1={arrowStart.x}
+                y1={arrowStart.y}
+                x2={mousePos.x}
+                y2={mousePos.y}
+                stroke={previewColorMap[toolMode] || RINK_COLORS.TEAL}
+                strokeWidth={2}
+                strokeDasharray="4,4"
+                opacity={0.5}
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          })()}
         </svg>
       </div>
 
