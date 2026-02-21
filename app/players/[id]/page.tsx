@@ -36,6 +36,10 @@ import {
   Download,
   ClipboardCheck,
   ExternalLink,
+  Loader2,
+  Plus,
+  History,
+  Sparkles,
 } from "lucide-react";
 import {
   RadarChart,
@@ -55,10 +59,10 @@ import { formatLeague } from "@/lib/leagues";
 import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
-type Tab = "profile" | "stats" | "notes" | "reports";
+type Tab = "profile" | "stats" | "notes" | "reports" | "development";
 type StatsSubView = "current" | "progression" | "gamelog";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -158,6 +162,17 @@ export default function PlayerDetailPage() {
   const [notePrivate, setNotePrivate] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+
+  // Development Plans
+  const [devPlan, setDevPlan] = useState<DevelopmentPlan | null>(null);
+  const [devPlanVersions, setDevPlanVersions] = useState<DevelopmentPlan[]>([]);
+  const [loadingDevPlan, setLoadingDevPlan] = useState(false);
+  const [generatingDevPlan, setGeneratingDevPlan] = useState(false);
+  const [editingDevSection, setEditingDevSection] = useState<number | null>(null);
+  const [editDevContent, setEditDevContent] = useState("");
+  const [editDevTitle, setEditDevTitle] = useState("");
+  const [savingDevPlan, setSavingDevPlan] = useState(false);
+  const [showDevVersions, setShowDevVersions] = useState(false);
 
   const loadNotes = useCallback(async () => {
     try {
@@ -427,6 +442,13 @@ export default function PlayerDetailPage() {
           setPendingCorrections(corrRes.data.filter((c: PlayerCorrection) => c.status === "pending").length);
         } catch { /* Non-critical */ }
 
+        // Load development plans (non-blocking)
+        try {
+          const plansRes = await api.get<DevelopmentPlan[]>(`/players/${playerId}/development-plans`);
+          setDevPlanVersions(plansRes.data);
+          if (plansRes.data.length > 0) setDevPlan(plansRes.data[0]); // latest version first
+        } catch { /* Non-critical */ }
+
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
           const match = sysRes.value.data.find(
@@ -650,6 +672,7 @@ export default function PlayerDetailPage() {
             { key: "stats" as Tab, label: "Stats", count: stats.length },
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
+            { key: "development" as Tab, label: "Development", count: devPlanVersions.length || null },
           ]).map(({ key, label, count }) => (
             <button
               key={key}
@@ -2063,6 +2086,230 @@ export default function PlayerDetailPage() {
                 {reports.map((r) => (
                   <ReportCard key={r.id} report={r} />
                 ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Development Tab */}
+        {activeTab === "development" && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-navy">Development Plan</h2>
+              <div className="flex gap-2">
+                {devPlanVersions.length > 1 && (
+                  <button
+                    onClick={() => setShowDevVersions(!showDevVersions)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-gray-50 text-muted"
+                  >
+                    <History size={14} />
+                    v{devPlan?.version || 1} of {devPlanVersions.length}
+                  </button>
+                )}
+                <button
+                  onClick={async () => {
+                    setGeneratingDevPlan(true);
+                    try {
+                      const { data } = await api.post<DevelopmentPlan>(`/players/${playerId}/development-plans/generate`);
+                      setDevPlan(data);
+                      setDevPlanVersions((prev) => [data, ...prev]);
+                      toast.success("Development plan generated!");
+                    } catch {
+                      toast.error("Failed to generate plan");
+                    } finally {
+                      setGeneratingDevPlan(false);
+                    }
+                  }}
+                  disabled={generatingDevPlan}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                >
+                  {generatingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {devPlan ? "New Version" : "Generate Plan"}
+                </button>
+              </div>
+            </div>
+
+            {/* Version History Dropdown */}
+            {showDevVersions && devPlanVersions.length > 1 && (
+              <div className="bg-white rounded-xl border border-border p-3 space-y-1">
+                <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Version History</p>
+                {devPlanVersions.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => { setDevPlan(v); setShowDevVersions(false); }}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between ${
+                      v.id === devPlan?.id ? "bg-teal/10 text-teal" : "hover:bg-gray-50 text-navy"
+                    }`}
+                  >
+                    <span>v{v.version} — {v.created_by_name}</span>
+                    <span className="text-xs text-muted">{new Date(v.created_at).toLocaleDateString()}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!devPlan && !loadingDevPlan && !generatingDevPlan && (
+              <div className="text-center py-12 bg-white rounded-xl border border-border">
+                <TrendingUp size={32} className="mx-auto text-muted/40 mb-3" />
+                <p className="text-muted text-sm mb-3">No development plan yet for this player.</p>
+                <p className="text-muted/60 text-xs mb-4">Click &quot;Generate Plan&quot; to create an AI-powered development roadmap.</p>
+              </div>
+            )}
+
+            {loadingDevPlan && (
+              <div className="text-center py-12 bg-white rounded-xl border border-border">
+                <Loader2 size={24} className="mx-auto text-teal animate-spin mb-2" />
+                <p className="text-sm text-muted">Loading development plan...</p>
+              </div>
+            )}
+
+            {devPlan && (
+              <div className="space-y-4">
+                {/* Plan Header */}
+                <div className="bg-white rounded-xl border border-border p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base font-oswald uppercase tracking-wider text-navy">{devPlan.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                        devPlan.status === "active" ? "bg-green-100 text-green-700" :
+                        devPlan.status === "superseded" ? "bg-yellow-100 text-yellow-700" :
+                        "bg-gray-100 text-gray-700"
+                      }`}>
+                        {devPlan.status}
+                      </span>
+                      <span className="text-xs text-muted">v{devPlan.version}</span>
+                    </div>
+                  </div>
+                  {devPlan.summary && (
+                    <p className="text-sm text-muted leading-relaxed">{devPlan.summary}</p>
+                  )}
+                  <div className="flex items-center gap-4 mt-2 text-xs text-muted/60">
+                    <span>Season: {devPlan.season}</span>
+                    <span>Type: {devPlan.plan_type.replace("_", " ")}</span>
+                    <span>By: {devPlan.created_by_name}</span>
+                    <span>{new Date(devPlan.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                {/* Plan Sections */}
+                {devPlan.sections.map((section: DevelopmentPlanSection, idx: number) => (
+                  <div key={idx} className="bg-white rounded-xl border border-border overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${
+                          section.priority === "critical" ? "bg-red-500" :
+                          section.priority === "high" ? "bg-orange-500" :
+                          section.priority === "medium" ? "bg-yellow-500" :
+                          section.priority === "low" ? "bg-blue-500" :
+                          "bg-gray-400"
+                        }`} />
+                        {editingDevSection === idx ? (
+                          <input
+                            value={editDevTitle}
+                            onChange={(e) => setEditDevTitle(e.target.value)}
+                            className="text-sm font-semibold text-navy bg-transparent border-b border-teal/30 outline-none px-1 py-0.5 w-full"
+                          />
+                        ) : (
+                          <h4 className="text-sm font-semibold text-navy">{section.title}</h4>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {editingDevSection === idx ? (
+                          <>
+                            <button
+                              onClick={async () => {
+                                setSavingDevPlan(true);
+                                try {
+                                  const updated = [...devPlan.sections];
+                                  updated[idx] = { ...updated[idx], title: editDevTitle, content: editDevContent };
+                                  const { data } = await api.put<DevelopmentPlan>(`/development-plans/${devPlan.id}`, {
+                                    sections: updated,
+                                  });
+                                  setDevPlan(data);
+                                  setDevPlanVersions((prev) => [data, ...prev.filter((v) => v.id !== devPlan.id)]);
+                                  setEditingDevSection(null);
+                                  toast.success(`Saved as v${data.version}`);
+                                } catch {
+                                  toast.error("Failed to save");
+                                } finally {
+                                  setSavingDevPlan(false);
+                                }
+                              }}
+                              disabled={savingDevPlan}
+                              className="p-1 text-teal hover:bg-teal/10 rounded"
+                            >
+                              {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            </button>
+                            <button
+                              onClick={() => setEditingDevSection(null)}
+                              className="p-1 text-muted hover:bg-gray-100 rounded"
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingDevSection(idx);
+                              setEditDevContent(section.content);
+                              setEditDevTitle(section.title);
+                            }}
+                            className="p-1 text-muted hover:bg-gray-100 rounded"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-4 py-3">
+                      {editingDevSection === idx ? (
+                        <textarea
+                          value={editDevContent}
+                          onChange={(e) => setEditDevContent(e.target.value)}
+                          rows={8}
+                          className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 font-mono leading-relaxed resize-y"
+                        />
+                      ) : (
+                        <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">
+                          {section.content}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Add Section Button */}
+                <button
+                  onClick={async () => {
+                    const newSection: DevelopmentPlanSection = {
+                      title: "New Section",
+                      content: "Add your development notes here...",
+                      priority: "medium",
+                    };
+                    setSavingDevPlan(true);
+                    try {
+                      const updated = [...devPlan.sections, newSection];
+                      const { data } = await api.put<DevelopmentPlan>(`/development-plans/${devPlan.id}`, {
+                        sections: updated,
+                      });
+                      setDevPlan(data);
+                      setDevPlanVersions((prev) => [data, ...prev.filter((v) => v.id !== devPlan.id)]);
+                      setEditingDevSection(data.sections.length - 1);
+                      setEditDevTitle(newSection.title);
+                      setEditDevContent(newSection.content);
+                      toast.success("Section added");
+                    } catch {
+                      toast.error("Failed to add section");
+                    } finally {
+                      setSavingDevPlan(false);
+                    }
+                  }}
+                  disabled={savingDevPlan}
+                  className="w-full py-3 border border-dashed border-border rounded-xl text-sm text-muted hover:border-teal/40 hover:text-teal flex items-center justify-center gap-1"
+                >
+                  <Plus size={14} />
+                  Add Section
+                </button>
               </div>
             )}
           </section>

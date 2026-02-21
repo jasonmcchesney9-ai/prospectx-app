@@ -2724,3 +2724,67 @@ export interface ContactRequest {
   requested_at: string;
   resolved_at?: string;
 }
+
+// ── Development Plans ──────────────────────────────────────
+
+export interface DevelopmentPlanSection {
+  title: string;
+  content: string;
+  priority: 'critical' | 'high' | 'medium' | 'low' | 'info';
+}
+
+export interface DevelopmentPlan {
+  id: string;
+  player_id: string;
+  org_id?: string;
+  version: number;
+  title: string;
+  status: 'active' | 'superseded' | 'archived';
+  season: string;
+  created_by: string;
+  created_by_name: string;
+  plan_type: 'in_season' | 'off_season' | 'full_year';
+  sections: DevelopmentPlanSection[];
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlayerStatSnapshot {
+  id: string;
+  player_id: string;
+  snapshot_date: string;
+  snapshot_type: 'weekly' | 'monthly' | 'season_end' | 'manual';
+  gp: number;
+  goals: number;
+  assists: number;
+  points: number;
+  ppg: number;
+  plus_minus?: number;
+  pim?: number;
+  goals_per_game?: number;
+  assists_per_game?: number;
+  shots_per_game?: number;
+  grade_overall?: string;
+  grade_offensive?: string;
+  grade_defensive?: string;
+  grade_skating?: string;
+  grade_hockey_iq?: string;
+  grade_compete?: string;
+  archetype?: string;
+}
+
+export interface DevelopmentCurveData {
+  player_id: string;
+  snapshots: PlayerStatSnapshot[];
+  game_log: {
+    game_date: string;
+    opponent: string;
+    goals: number;
+    assists: number;
+    points: number;
+    plus_minus: number;
+    shots: number;
+    toi_seconds: number;
+  }[];
+}
