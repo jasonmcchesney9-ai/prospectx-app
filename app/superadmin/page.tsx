@@ -22,6 +22,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { getUser } from "@/lib/auth";
+import { extractApiError } from "@/lib/api";
 import {
   getOrgs,
   getOrgUsers,
@@ -215,8 +216,7 @@ function OrgListPanel({
         const data = await getOrgs();
         setOrgs(data.orgs);
       } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load orgs";
-        setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+        setError(extractApiError(err, "Failed to load orgs"));
       } finally {
         setLoading(false);
       }
@@ -350,8 +350,7 @@ function OrgDetailPanel({
         const data = await getOrgUsers(orgId!);
         setUsers(data);
       } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load users";
-        setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+        setError(extractApiError(err, "Failed to load users"));
       } finally {
         setLoading(false);
       }
@@ -384,8 +383,7 @@ function OrgDetailPanel({
       setTimeout(() => setSuccessMsg(""), 4000);
       loadInvites();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to send invite";
-      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+      setError(extractApiError(err, "Failed to send invite"));
       setTimeout(() => setError(""), 4000);
     } finally {
       setInviteSending(false);
@@ -400,8 +398,7 @@ function OrgDetailPanel({
       setSuccessMsg("Invite revoked");
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to revoke";
-      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+      setError(extractApiError(err, "Failed to revoke"));
       setTimeout(() => setError(""), 3000);
     } finally {
       setRevokingId(null);
@@ -419,8 +416,7 @@ function OrgDetailPanel({
       );
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to update tier";
-      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+      setError(extractApiError(err, "Failed to update tier"));
       setTimeout(() => setError(""), 3000);
     } finally {
       setUpdatingTier(null);
@@ -442,8 +438,7 @@ function OrgDetailPanel({
       // Open dashboard in new tab
       window.open("/", "_blank");
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to impersonate";
-      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+      setError(extractApiError(err, "Failed to impersonate"));
       setTimeout(() => setError(""), 3000);
     } finally {
       setImpersonating(null);

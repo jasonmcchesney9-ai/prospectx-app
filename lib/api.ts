@@ -60,4 +60,51 @@ export function hasRealImage(url: string | null | undefined): boolean {
   return true;
 }
 
+/**
+ * Extract a human-readable error message from an Axios error or unknown thrown value.
+ * Handles FastAPI 422 validation errors (Pydantic v2 format: detail is array of {type, loc, msg, input}),
+ * standard FastAPI errors (detail is a string), and generic JS errors.
+ * Always returns a plain string safe for rendering in JSX.
+ */
+export function extractApiError(err: unknown, fallback = "Something went wrong"): string {
+  if (!err) return fallback;
+
+  // Axios error with response
+  const resp = (err as { response?: { data?: { detail?: unknown }; status?: number } })?.response;
+  if (resp?.data?.detail !== undefined) {
+    const detail = resp.data.detail;
+    // String detail (most common)
+    if (typeof detail === "string") return detail;
+    // Pydantic v2 validation errors: array of {type, loc, msg, input}
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((e: { msg?: string; loc?: (string | number)[] }) => {
+          const field = e.loc ? e.loc.filter((l) => l !== "body").join(".") : "";
+          return field ? `${field}: ${e.msg || "invalid"}` : (e.msg || "invalid");
+        })
+        .join("; ");
+      return messages || fallback;
+    }
+    // Object detail (single validation error)
+    if (typeof detail === "object" && detail !== null) {
+      const d = detail as { msg?: string };
+      if (d.msg) return d.msg;
+      try { return JSON.stringify(detail); } catch { return fallback; }
+    }
+  }
+
+  // Axios error with status but no detail
+  if (resp?.status) {
+    return `Request failed (${resp.status})`;
+  }
+
+  // Standard Error object
+  if (err instanceof Error) return err.message;
+
+  // Last resort
+  if (typeof err === "string") return err;
+
+  return fallback;
+}
+
 export default api;
