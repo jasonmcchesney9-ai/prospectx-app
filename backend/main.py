@@ -4913,7 +4913,10 @@ def generate_missing_diagrams():
 
 
 def _seed_superadmin_user():
-    """Create the superadmin user on first run if they don't exist."""
+    """Create the superadmin user on first run if they don't exist.
+
+    NOTE: This runs before gen_id() is defined, so we use uuid.uuid4() directly.
+    """
     conn = get_db()
     try:
         existing = conn.execute(
@@ -4924,15 +4927,15 @@ def _seed_superadmin_user():
 
         logger.info("Seeding superadmin user: jason@prospectx.com")
 
-        # Create org first
-        org_id = gen_id()
+        # Create org first (gen_id not available yet, use uuid directly)
+        org_id = str(uuid.uuid4())
         conn.execute(
             "INSERT INTO organizations (id, name) VALUES (?, ?)",
             (org_id, "ProspectX HQ")
         )
 
         # Create superadmin user
-        user_id = gen_id()
+        user_id = str(uuid.uuid4())
         password_hash = pwd_context.hash("testpass123"[:72])
         conn.execute(
             "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, "
