@@ -99,6 +99,40 @@ function hitTest(
   return Infinity;
 }
 
+// Chaikin's corner-cutting algorithm for smooth curves
+function chaikinSmooth(points: { x: number; y: number }[], iterations = 2): { x: number; y: number }[] {
+  if (points.length < 3) return points;
+  let result = [...points];
+  for (let iter = 0; iter < iterations; iter++) {
+    const smoothed: { x: number; y: number }[] = [result[0]];
+    for (let i = 0; i < result.length - 1; i++) {
+      const p0 = result[i], p1 = result[i + 1];
+      smoothed.push({ x: 0.75 * p0.x + 0.25 * p1.x, y: 0.75 * p0.y + 0.25 * p1.y });
+      smoothed.push({ x: 0.25 * p0.x + 0.75 * p1.x, y: 0.25 * p0.y + 0.75 * p1.y });
+    }
+    smoothed.push(result[result.length - 1]);
+    result = smoothed;
+  }
+  return result;
+}
+
+// Decimate points to avoid huge arrays from fast mouse movement
+function decimatePoints(points: { x: number; y: number }[], minDist = 4): { x: number; y: number }[] {
+  if (points.length < 2) return points;
+  const result = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = result[result.length - 1];
+    const dx = points[i].x - prev.x, dy = points[i].y - prev.y;
+    if (dx * dx + dy * dy >= minDist * minDist) {
+      result.push(points[i]);
+    }
+  }
+  if (result[result.length - 1] !== points[points.length - 1]) {
+    result.push(points[points.length - 1]);
+  }
+  return result;
+}
+
 // Find nearest element within threshold
 function findElement(px: number, py: number, elements: RinkElement[], threshold = 20): RinkElement | null {
   let best: RinkElement | null = null;
@@ -138,6 +172,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<{ id: string; startX: number; startY: number; elSnapshot: RinkElement } | null>(null);
   const [history, setHistory] = useState<RinkElement[][]>([]);
+  const [freehandPoints, setFreehandPoints] = useState<{ x: number; y: number }[]>([]);
+  const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const dims = RINK_DIMENSIONS[rinkType];
@@ -217,6 +253,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       if (e.key === "Escape") {
         setArrowStart(null);
         setSelectedId(null);
+        setIsDrawingFreehand(false);
+        setFreehandPoints([]);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
@@ -276,6 +314,13 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         const next = [...elements, puck];
         setElements(next);
         notifyChange(next, rinkType);
+        return;
+      }
+
+      // ── Freehand: start drawing ──
+      if (toolMode === "freehand") {
+        setIsDrawingFreehand(true);
+        setFreehandPoints([{ x: pt.x, y: pt.y }]);
         return;
       }
 
@@ -344,6 +389,11 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       if (!svgRef.current) return;
       const pt = svgPoint(e, svgRef.current);
 
+      // Freehand drawing
+      if (isDrawingFreehand && toolMode === "freehand") {
+        setFreehandPoints((prev) => [...prev, { x: pt.x, y: pt.y }]);
+      }
+
       // Arrow preview
       if (arrowStart) {
         setMousePos(pt);
@@ -374,10 +424,34 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         );
       }
     },
-    [arrowStart, dragState, toolMode]
+    [arrowStart, dragState, toolMode, isDrawingFreehand]
   );
 
   const handleSvgMouseUp = useCallback(() => {
+    // Finalize freehand line
+    if (isDrawingFreehand && freehandPoints.length >= 2) {
+      pushHistory();
+      const decimated = decimatePoints(freehandPoints);
+      const smoothed = chaikinSmooth(decimated, 2);
+      const freehand: RinkFreehandLine = {
+        id: uid(),
+        type: "freehand",
+        points: smoothed,
+        color: RINK_COLORS.TEAL,
+        arrowEnd: true,
+      };
+      const next = [...elements, freehand];
+      setElements(next);
+      notifyChange(next, rinkType);
+      setIsDrawingFreehand(false);
+      setFreehandPoints([]);
+      return;
+    }
+    if (isDrawingFreehand) {
+      setIsDrawingFreehand(false);
+      setFreehandPoints([]);
+    }
+
     if (dragState) {
       // Commit drag — push history was called at start? No, we need to push before the drag started
       // Actually we do it here — record the pre-drag state
@@ -394,7 +468,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       notifyChange(elements, rinkType);
       setDragState(null);
     }
-  }, [dragState, elements, rinkType, notifyChange]);
+  }, [dragState, elements, rinkType, notifyChange, isDrawingFreehand, freehandPoints, pushHistory]);
 
   // ── Element mouse down (prevents SVG handler from also firing) ──
   const handleElementMouseDown = useCallback(
@@ -663,8 +737,29 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
               />
             );
           })()}
+
+          {/* Freehand preview (drawing in progress) */}
+          {isDrawingFreehand && freehandPoints.length >= 2 && (
+            <polyline
+              points={freehandPoints.map(p => `${p.x},${p.y}`).join(" ")}
+              fill="none"
+              stroke={RINK_COLORS.TEAL}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.5}
+              style={{ pointerEvents: "none" }}
+            />
+          )}
         </svg>
       </div>
+
+      {/* Drawing hints */}
+      {isDrawingFreehand && (
+        <p className="text-center text-[10px] text-muted font-oswald uppercase tracking-wider mt-2">
+          Drawing... release mouse to finish
+        </p>
+      )}
 
       {/* Arrow drawing hint */}
       {arrowStart && (
