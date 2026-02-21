@@ -15740,16 +15740,24 @@ async def admin_restore_db(
                 results[sheet_name] = {"table": table, "rows": 0, "note": "no matching columns"}
                 continue
 
+            # Auto-inject org_id if the table requires it and it's missing from the XLSX
+            inject_org_id = "org_id" in db_cols and "org_id" not in valid_cols
+            if inject_org_id:
+                valid_cols.append("org_id")
+
             placeholders = ", ".join(["?"] * len(valid_cols))
             col_list = ", ".join(valid_cols)
             sql = f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})"
 
+            org_id = token_data.get("org_id", "")
             batch = []
             for row in rows[1:]:
                 vals = tuple(row[i] for i in valid_indices)
                 # Skip completely empty rows
                 if all(v is None for v in vals):
                     continue
+                if inject_org_id:
+                    vals = vals + (org_id,)
                 batch.append(vals)
 
             if batch:
