@@ -15740,8 +15740,10 @@ async def admin_restore_db(
                 results[sheet_name] = {"table": table, "rows": 0, "note": "no matching columns"}
                 continue
 
-            # Auto-inject org_id if the table requires it and it's missing from the XLSX
+            # Auto-inject org_id: add column if missing, or fill nulls if present
+            org_id = token_data.get("org_id", "")
             inject_org_id = "org_id" in db_cols and "org_id" not in valid_cols
+            org_id_col_idx = valid_cols.index("org_id") if "org_id" in valid_cols else -1
             if inject_org_id:
                 valid_cols.append("org_id")
 
@@ -15749,16 +15751,18 @@ async def admin_restore_db(
             col_list = ", ".join(valid_cols)
             sql = f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})"
 
-            org_id = token_data.get("org_id", "")
             batch = []
             for row in rows[1:]:
-                vals = tuple(row[i] for i in valid_indices)
+                vals = list(row[i] for i in valid_indices)
                 # Skip completely empty rows
                 if all(v is None for v in vals):
                     continue
+                # Fill null org_id values with authenticated user's org
+                if org_id_col_idx >= 0 and not vals[org_id_col_idx]:
+                    vals[org_id_col_idx] = org_id
                 if inject_org_id:
-                    vals = vals + (org_id,)
-                batch.append(vals)
+                    vals.append(org_id)
+                batch.append(tuple(vals))
 
             if batch:
                 conn.executemany(sql, batch)
