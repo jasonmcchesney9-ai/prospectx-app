@@ -19,6 +19,7 @@ import {
   FileText,
   UserCheck,
   Mail,
+  ArrowLeft,
 } from "lucide-react";
 import api from "@/lib/api";
 import { getUser, setUser } from "@/lib/auth";
@@ -182,6 +183,13 @@ export default function PricingPage() {
       <div className="min-h-screen bg-white">
         {/* Header */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-4">
+
+          {user && (
+            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-navy/60 hover:text-navy transition-colors mb-4">
+              <ArrowLeft size={14} />
+              Dashboard
+            </Link>
+          )}
 
           <div className="text-center mb-12">
             {/* Season 1 Pricing badge */}

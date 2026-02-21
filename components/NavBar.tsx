@@ -444,7 +444,7 @@ export default function NavBar() {
         <div className="absolute left-1/2 -translate-x-1/2">
           <button
             onClick={toggleBenchTalk}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-oswald font-bold uppercase tracking-wider transition-colors ${
+            className={`flex items-center gap-2 px-10 py-1.5 rounded-lg text-sm font-oswald font-bold uppercase tracking-wider transition-colors ${
               benchTalkOpen
                 ? "bg-orange/20 text-orange"
                 : "text-orange hover:bg-orange/10"

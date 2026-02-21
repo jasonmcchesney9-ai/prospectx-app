@@ -44,7 +44,7 @@ export default function HomePage() {
     setAuthed(isAuth);
     if (isAuth) {
       const user = getUser();
-      if (user && !user.onboarding_completed) {
+      if (user && !user.onboarding_completed && !user.org_id) {
         router.push("/onboarding");
       }
     }
