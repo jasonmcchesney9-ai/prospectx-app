@@ -4912,6 +4912,42 @@ def generate_missing_diagrams():
         logger.info("Generated %d drill diagrams", count)
 
 
+def _seed_superadmin_user():
+    """Create the superadmin user on first run if they don't exist."""
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM users WHERE email = 'jason@prospectx.com'"
+        ).fetchone()
+        if existing:
+            return  # User already exists, migration handles role upgrade
+
+        logger.info("Seeding superadmin user: jason@prospectx.com")
+
+        # Create org first
+        org_id = gen_id()
+        conn.execute(
+            "INSERT INTO organizations (id, name) VALUES (?, ?)",
+            (org_id, "ProspectX HQ")
+        )
+
+        # Create superadmin user
+        user_id = gen_id()
+        password_hash = pwd_context.hash("testpass123"[:72])
+        conn.execute(
+            "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, "
+            "role, hockey_role, subscription_tier, email_verified) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'superadmin', 'gm', 'enterprise', 1)",
+            (user_id, org_id, "jason@prospectx.com", password_hash, "Jason", "McChesney")
+        )
+        conn.commit()
+        logger.info("Superadmin user seeded: jason@prospectx.com (org: ProspectX HQ)")
+    except Exception as e:
+        logger.warning("Superadmin seed note: %s", e)
+    finally:
+        conn.close()
+
+
 # Run on import
 init_db()
 seed_templates()
@@ -4926,6 +4962,7 @@ seed_drills_v2()
 seed_drills_pxi()
 generate_missing_diagrams()
 seed_glossary_v2()
+_seed_superadmin_user()
 
 
 # ── Auto-backup thread ──────────────────────────────────────────────
