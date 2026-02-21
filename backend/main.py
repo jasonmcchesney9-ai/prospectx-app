@@ -15554,6 +15554,124 @@ async def create_server_backup(token_data: dict = Depends(verify_token)):
     return {"detail": f"Backup created: {backup_name}", "size_mb": size_mb, "file": backup_name}
 
 
+@app.post("/admin/restore")
+async def admin_restore_db(
+    file: UploadFile = File(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Restore DB tables from a ProspectX XLSX export. Admin/superadmin only.
+
+    Each sheet name maps to a DB table. Row 1 = column headers.
+    Uses INSERT OR REPLACE — existing rows with matching PKs are overwritten.
+    A server-side backup is created automatically before any changes.
+    """
+    _require_admin(token_data)
+
+    fname = (file.filename or "").lower()
+    if not fname.endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="File must be .xlsx")
+
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:  # 50 MB limit
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+
+    # ── Safety: create backup before modifying anything ──
+    backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    ts = now_iso()[:19].replace(":", "-")
+    backup_name = f"prospectx_pre_restore_{ts}.db"
+    backup_path = os.path.join(backup_dir, backup_name)
+    shutil.copy2(DB_FILE, backup_path)
+    logger.info("Pre-restore backup created: %s", backup_name)
+
+    SHEET_MAP = {
+        "players": "players",
+        "player_stats": "player_stats",
+        "teams": "teams",
+        "games": "games",
+        "goalie_stats": "goalie_stats",
+        "line_combinations": "line_combinations",
+        "lines": "line_combinations",
+        "player_game_stats": "player_game_stats",
+        "player_gamelogs": "player_game_stats",
+        "scout_notes": "scout_notes",
+        "reports": "reports",
+        "player_intelligence": "player_intelligence",
+        "player_corrections": "player_corrections",
+        "game_plans": "game_plans",
+        "series_plans": "series_plans",
+    }
+
+    wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
+    results = {}
+    skipped_sheets = []
+    total_rows = 0
+
+    with safe_db() as conn:
+        for sheet_name in wb.sheetnames:
+            table = SHEET_MAP.get(sheet_name.lower().strip())
+            if not table:
+                skipped_sheets.append(sheet_name)
+                continue
+
+            ws = wb[sheet_name]
+            rows = list(ws.iter_rows(values_only=True))
+            if len(rows) < 2:
+                results[sheet_name] = {"table": table, "rows": 0, "note": "empty or header-only"}
+                continue
+
+            # Row 1 = headers
+            raw_headers = [str(h).strip() if h else "" for h in rows[0]]
+
+            # Validate against actual DB columns
+            db_cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            valid_indices = []
+            valid_cols = []
+            unmapped = []
+            for i, h in enumerate(raw_headers):
+                if h and h in db_cols:
+                    valid_indices.append(i)
+                    valid_cols.append(h)
+                elif h:
+                    unmapped.append(h)
+
+            if not valid_cols:
+                results[sheet_name] = {"table": table, "rows": 0, "note": "no matching columns"}
+                continue
+
+            placeholders = ", ".join(["?"] * len(valid_cols))
+            col_list = ", ".join(valid_cols)
+            sql = f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})"
+
+            batch = []
+            for row in rows[1:]:
+                vals = tuple(row[i] for i in valid_indices)
+                # Skip completely empty rows
+                if all(v is None for v in vals):
+                    continue
+                batch.append(vals)
+
+            if batch:
+                conn.executemany(sql, batch)
+
+            total_rows += len(batch)
+            sheet_result = {"table": table, "rows": len(batch), "columns": len(valid_cols)}
+            if unmapped:
+                sheet_result["unmapped_columns"] = unmapped
+            results[sheet_name] = sheet_result
+
+    wb.close()
+    logger.info("DB restore complete: %d total rows across %d sheets", total_rows, len(results))
+
+    return {
+        "status": "restored",
+        "backup": backup_name,
+        "total_rows": total_rows,
+        "sheets": results,
+        "skipped_sheets": skipped_sheets,
+    }
+
+
 # ============================================================
 # ANALYTICS
 # ============================================================
