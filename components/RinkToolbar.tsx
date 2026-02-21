@@ -3,7 +3,7 @@
 // Tool selection, rink type, actions (undo, clear, export)
 // ============================================================
 
-import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle } from "lucide-react";
+import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2 } from "lucide-react";
 import { RINK_COLORS, MARKER_COLORS, RINK_LABELS, type RinkType, type ToolMode, type RinkElement } from "@/types/rink";
 
 interface RinkToolbarProps {
@@ -21,6 +21,8 @@ interface RinkToolbarProps {
   selectedElement: RinkElement | null;
   onDeleteSelected: () => void;
   onToggleHelp?: () => void;
+  onExportGif?: () => void;
+  exportingGif?: boolean;
 }
 
 // ── Mini marker preview (inline SVG) ─────────────────────────
@@ -232,6 +234,8 @@ export default function RinkToolbar({
   selectedElement,
   onDeleteSelected,
   onToggleHelp,
+  onExportGif,
+  exportingGif,
 }: RinkToolbarProps) {
   const rinkTypes: RinkType[] = ["full", "half", "quarter"];
 
@@ -353,6 +357,11 @@ export default function RinkToolbar({
       <ActionBtn onClick={onExportPng} title="Download PNG">
         <Image size={16} />
       </ActionBtn>
+      {onExportGif && (
+        <ActionBtn onClick={onExportGif} disabled={exportingGif} title="Export Animated GIF">
+          {exportingGif ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />}
+        </ActionBtn>
+      )}
       {onToggleHelp && (
         <>
           <div className="w-px h-7 bg-border mx-1" />

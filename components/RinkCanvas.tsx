@@ -152,6 +152,7 @@ function findElement(px: number, py: number, elements: RinkElement[], threshold 
 export interface RinkCanvasHandle {
   getSvgString: () => string;
   getDiagramData: () => RinkDiagramData;
+  exportGif: () => Promise<void>;
 }
 
 // ── Main Component ───────────────────────────────────────────
@@ -177,6 +178,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [redoStack, setRedoStack] = useState<RinkElement[][]>([]);
   const [freehandPoints, setFreehandPoints] = useState<{ x: number; y: number }[]>([]);
   const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
+  const [exportingGif, setExportingGif] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const dims = RINK_DIMENSIONS[rinkType];
@@ -658,6 +660,189 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     img.src = url;
   }, [dims]);
 
+  // ── Export GIF (animated drill diagram) ────────────────────
+
+  const exportGif = useCallback(async () => {
+    if (!svgRef.current || elements.length === 0) return;
+    setExportingGif(true);
+
+    try {
+      // Dynamic import of gifenc (no TS types)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const gifenc = require("gifenc");
+      const { GIFEncoder, quantize, applyPalette } = gifenc;
+
+      const scale = 2;
+      const w = dims.w;
+      const h = dims.h;
+      const cw = w * scale;
+      const ch = h * scale;
+
+      const totalFrames = 30;
+      const frameDelay = 100; // ms per frame
+      const holdDelay = 500; // ms for final frame
+
+      // Create offscreen canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext("2d")!;
+
+      // Helper: render SVG with a subset of elements to canvas
+      async function renderFrame(elementCount: number): Promise<ImageData> {
+        // Clone SVG and filter to only show elements[0..elementCount-1]
+        const svgClone = svgRef.current!.cloneNode(true) as SVGSVGElement;
+
+        // Get all g layers (layers 2-7 contain elements)
+        // Layer indices in the SVG: 0=style, 1=background, 2=arrows, 3=freehand, 4=pucks, 5=pylons, 6=nets, 7=markers, 8+=previews
+        const childNodes = Array.from(svgClone.children);
+
+        // Build a set of element IDs to show
+        const visibleIds = new Set(elements.slice(0, elementCount).map((el) => el.id));
+
+        // For each g layer (element containers), hide elements not in visible set
+        for (const child of childNodes) {
+          if (child.tagName === "g") {
+            const layerChildren = Array.from(child.children);
+            for (const elNode of layerChildren) {
+              // Each element rendering component wraps in a g with data or we check by position
+              // Since we can't easily match by ID in the cloned DOM, we'll use a simpler approach:
+              // Hide all layer children beyond what we want
+            }
+          }
+        }
+
+        // Simpler approach: rebuild SVG string with only the desired elements
+        // Get the serialized base SVG (background only, no elements/previews)
+        const serializer = new XMLSerializer();
+
+        // Remove all element layers and previews from clone, keep only style + background
+        const toRemove: Element[] = [];
+        let layerIdx = 0;
+        for (const child of Array.from(svgClone.children)) {
+          if (child.tagName === "style" || layerIdx === 0) {
+            // Keep style
+            if (child.tagName !== "style") layerIdx++;
+            continue;
+          }
+          if (child.tagName === "g" && layerIdx <= 1) {
+            // This is the RinkSvgBackground wrapper (first g after style)
+            layerIdx++;
+            continue;
+          }
+          toRemove.push(child);
+          layerIdx++;
+        }
+        toRemove.forEach((n) => n.remove());
+
+        // Now we have just the background SVG. We need to add element layers back for visible elements.
+        // Instead of complex SVG manipulation, let's use a 2-pass approach:
+        // Pass 1: Render the full SVG (all elements visible)
+        // Pass 2: For each frame, render full SVG and mask
+
+        // Actually, simplest reliable approach: render the FULL SVG to get the base,
+        // then for each frame, render SVG with visibility controlled by re-serializing
+
+        // Let's use the most reliable method: full SVG re-render per frame
+        const fullSvg = svgRef.current!;
+
+        // Store original element opacities — we'll manipulate the live DOM briefly
+        // Instead, clone and modify each frame
+        const frameClone = fullSvg.cloneNode(true) as SVGSVGElement;
+
+        // Find all element groups in the cloned SVG and hide those beyond elementCount
+        // The element layers are g[2] through g[7] in the SVG children
+        // Each layer contains rendered elements in order
+        const gLayers = Array.from(frameClone.querySelectorAll(":scope > g"));
+        let elementIndex = 0;
+
+        // Map elements to their layer type for visibility control
+        const elementOrder = elements.map((el) => el.type);
+
+        // For each element layer group, check its children
+        for (const gLayer of gLayers) {
+          const layerChildren = Array.from(gLayer.children);
+          for (const child of layerChildren) {
+            if (elementIndex >= elementCount) {
+              // Hide this element
+              (child as SVGElement).setAttribute("opacity", "0");
+            }
+            elementIndex++;
+          }
+        }
+
+        // Remove any preview elements (arrow preview, freehand preview)
+        const lines = frameClone.querySelectorAll("line[style*='pointer-events: none']");
+        lines.forEach((l) => l.remove());
+        const polylines = frameClone.querySelectorAll("polyline[style*='pointer-events: none']");
+        polylines.forEach((p) => p.remove());
+
+        // Serialize to data URL
+        const svgStr = serializer.serializeToString(frameClone);
+        const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+        const svgUrl = URL.createObjectURL(svgBlob);
+
+        return new Promise<ImageData>((resolve) => {
+          const img = new window.Image();
+          img.onload = () => {
+            ctx.clearRect(0, 0, cw, ch);
+            ctx.drawImage(img, 0, 0, cw, ch);
+            URL.revokeObjectURL(svgUrl);
+            resolve(ctx.getImageData(0, 0, cw, ch));
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(svgUrl);
+            // Fallback: white frame
+            ctx.fillStyle = "#F0F4F8";
+            ctx.fillRect(0, 0, cw, ch);
+            resolve(ctx.getImageData(0, 0, cw, ch));
+          };
+          img.src = svgUrl;
+        });
+      }
+
+      // Create GIF encoder
+      const gif = GIFEncoder();
+
+      // Generate frames
+      for (let frame = 0; frame < totalFrames; frame++) {
+        // Distribute elements across frames proportionally
+        const elementCount = frame === 0
+          ? 0 // First frame: background only
+          : Math.min(elements.length, Math.ceil((frame / (totalFrames - 1)) * elements.length));
+
+        const imageData = await renderFrame(elementCount);
+        const { data: rgba } = imageData;
+
+        // Quantize to 256 colors
+        const palette = quantize(rgba, 256);
+        const index = applyPalette(rgba, palette);
+
+        const isLastFrame = frame === totalFrames - 1;
+        gif.writeFrame(index, cw, ch, {
+          palette,
+          delay: isLastFrame ? holdDelay : frameDelay,
+          repeat: 0, // Loop forever
+        });
+      }
+
+      gif.finish();
+
+      // Download
+      const gifBlob = new Blob([gif.bytes()], { type: "image/gif" });
+      const gifUrl = URL.createObjectURL(gifBlob);
+      const a = document.createElement("a");
+      a.href = gifUrl;
+      a.download = "rink_diagram.gif";
+      a.click();
+      URL.revokeObjectURL(gifUrl);
+    } catch (err) {
+      console.error("GIF export failed:", err);
+    } finally {
+      setExportingGif(false);
+    }
+  }, [dims, elements]);
+
   // ── Get SVG string for saving ──
   const getSvgString = useCallback((): string => {
     if (!svgRef.current) return "";
@@ -674,7 +859,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   useImperativeHandle(ref, () => ({
     getSvgString,
     getDiagramData,
-  }), [getSvgString, getDiagramData]);
+    exportGif,
+  }), [getSvgString, getDiagramData, exportGif]);
 
   // ── Expose save handler ──
   const handleSave = useCallback(() => {
@@ -734,6 +920,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             selectedElement={selectedElement}
             onDeleteSelected={handleDeleteSelected}
             onToggleHelp={onToggleHelp}
+            onExportGif={exportGif}
+            exportingGif={exportingGif}
           />
         </div>
       )}
