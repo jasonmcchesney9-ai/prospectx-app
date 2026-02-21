@@ -13,6 +13,11 @@ import {
   UserCog,
   FileText,
   Calendar,
+  Mail,
+  UserPlus,
+  XCircle,
+  Copy,
+  Clock,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -24,8 +29,11 @@ import {
   updateUserTier,
   impersonateUser,
   getStats,
+  getOrgInvites,
+  createOrgInvite,
+  revokeInvite,
 } from "@/lib/superadmin-api";
-import type { SuperadminOrg, SuperadminStats, SuperadminUser } from "@/types/api";
+import type { SuperadminOrg, SuperadminStats, SuperadminUser, OrgInvite } from "@/types/api";
 
 // ── Shared Helpers ──────────────────────────────────────
 
@@ -322,6 +330,13 @@ function OrgDetailPanel({
   const [updatingTier, setUpdatingTier] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
   const [impersonating, setImpersonating] = useState<string | null>(null);
+  // Invite state
+  const [invites, setInvites] = useState<OrgInvite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("scout");
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgId) {
@@ -343,6 +358,55 @@ function OrgDetailPanel({
     }
     load();
   }, [orgId]);
+
+  // Load invites when org changes
+  useEffect(() => {
+    if (!orgId) {
+      setInvites([]);
+      return;
+    }
+    getOrgInvites(orgId).then(setInvites).catch(() => setInvites([]));
+  }, [orgId]);
+
+  const loadInvites = () => {
+    if (orgId) getOrgInvites(orgId).then(setInvites).catch(() => {});
+  };
+
+  const handleSendInvite = async () => {
+    if (!inviteEmail.trim() || !orgId) return;
+    setInviteSending(true);
+    setInviteUrl(null);
+    try {
+      const result = await createOrgInvite(inviteEmail.trim(), inviteRole, orgId);
+      setInviteUrl(result.invite_url);
+      setInviteEmail("");
+      setSuccessMsg(`Invite sent to ${inviteEmail.trim()}`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+      loadInvites();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to send invite";
+      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+      setTimeout(() => setError(""), 4000);
+    } finally {
+      setInviteSending(false);
+    }
+  };
+
+  const handleRevoke = async (inviteId: string) => {
+    setRevokingId(inviteId);
+    try {
+      await revokeInvite(inviteId);
+      loadInvites();
+      setSuccessMsg("Invite revoked");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to revoke";
+      setError(typeof msg === "string" ? msg : JSON.stringify(msg));
+      setTimeout(() => setError(""), 3000);
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   const handleTierChange = async (userId: string, newTier: string) => {
     setUpdatingTier(userId);
@@ -542,6 +606,121 @@ function OrgDetailPanel({
         </div>
         {users.length === 0 && (
           <div className="text-center py-8 text-muted text-sm">No users in this organization</div>
+        )}
+      </div>
+
+      {/* ── Invite Panel ── */}
+      <div className="mt-6 bg-white rounded-xl border border-teal/20 p-5">
+        <h4 className="text-sm font-semibold text-navy uppercase tracking-wider mb-4 flex items-center gap-2">
+          <Mail size={14} className="text-teal" />
+          Invite Users
+          <span className="ml-auto text-[10px] font-normal text-muted normal-case tracking-normal">
+            {users.length} user{users.length !== 1 ? "s" : ""} + {invites.filter((i) => i.status === "pending").length} pending
+          </span>
+        </h4>
+
+        {/* Invite Form */}
+        <div className="flex items-end gap-3 mb-4">
+          <div className="flex-1">
+            <label className="block text-[10px] font-semibold text-navy uppercase tracking-wider mb-1">Email</label>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="newuser@team.com"
+              className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm focus:ring-2 focus:ring-teal/30 focus:border-teal outline-none"
+            />
+          </div>
+          <div className="w-32">
+            <label className="block text-[10px] font-semibold text-navy uppercase tracking-wider mb-1">Role</label>
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value)}
+              className="w-full px-2 py-2 border border-teal/20 rounded-lg text-sm focus:ring-2 focus:ring-teal/30 focus:border-teal outline-none"
+            >
+              <option value="scout">Scout</option>
+              <option value="coach">Coach</option>
+              <option value="gm">GM</option>
+              <option value="parent">Parent</option>
+              <option value="player">Player</option>
+              <option value="broadcaster">Broadcaster</option>
+              <option value="agent">Agent</option>
+            </select>
+          </div>
+          <button
+            onClick={handleSendInvite}
+            disabled={inviteSending || !inviteEmail.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 bg-teal text-white rounded-lg text-sm font-semibold hover:bg-teal/90 transition-colors disabled:opacity-50"
+          >
+            {inviteSending ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+            Invite
+          </button>
+        </div>
+
+        {/* Invite URL Copy */}
+        {inviteUrl && (
+          <div className="bg-teal/5 border border-teal/20 rounded-lg px-4 py-3 mb-4 flex items-center gap-3">
+            <span className="text-xs text-navy font-mono flex-1 truncate">{inviteUrl}</span>
+            <button
+              onClick={() => { navigator.clipboard.writeText(inviteUrl); setSuccessMsg("Link copied!"); setTimeout(() => setSuccessMsg(""), 2000); }}
+              className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-teal border border-teal/30 rounded-lg hover:bg-teal/10 transition-colors shrink-0"
+            >
+              <Copy size={10} />
+              Copy
+            </button>
+          </div>
+        )}
+
+        {/* Pending Invites */}
+        {invites.filter((i) => i.status === "pending").length > 0 && (
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold text-navy uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Clock size={10} className="text-orange" />
+              Pending Invites
+            </p>
+            <div className="space-y-1.5">
+              {invites
+                .filter((i) => i.status === "pending")
+                .map((inv) => (
+                  <div key={inv.id} className="flex items-center gap-3 px-3 py-2 bg-orange/5 rounded-lg border border-orange/10">
+                    <span className="text-sm text-navy flex-1">{inv.email}</span>
+                    {roleBadge(inv.hockey_role)}
+                    <span className="text-[10px] text-muted">
+                      expires {formatDate(inv.expires_at)}
+                    </span>
+                    <button
+                      onClick={() => handleRevoke(inv.id)}
+                      disabled={revokingId === inv.id}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      {revokingId === inv.id ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />}
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Accepted Invites */}
+        {invites.filter((i) => i.status === "accepted").length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-navy uppercase tracking-wider mb-2 flex items-center gap-1">
+              <CheckCircle2 size={10} className="text-green-500" />
+              Accepted
+            </p>
+            <div className="space-y-1">
+              {invites
+                .filter((i) => i.status === "accepted")
+                .map((inv) => (
+                  <div key={inv.id} className="flex items-center gap-3 px-3 py-1.5 text-sm text-muted">
+                    <span className="flex-1">{inv.email}</span>
+                    {roleBadge(inv.hockey_role)}
+                    <span className="text-[10px]">joined {formatDate(inv.accepted_at)}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

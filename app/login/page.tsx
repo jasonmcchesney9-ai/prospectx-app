@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { setToken, setUser } from "@/lib/auth";
@@ -21,22 +21,63 @@ function LoginForm() {
   const [orgName, setOrgName] = useState("");
   const [hockeyRole, setHockeyRole] = useState("scout");
 
+  // Invite detection
+  const inviteParam = searchParams.get("invite");
+  const [inviteToken, setInviteToken] = useState<string | null>(inviteParam);
+  const [inviteData, setInviteData] = useState<{ org_name: string; email: string; hockey_role: string } | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(!!inviteParam);
+
+  useEffect(() => {
+    if (!inviteParam) return;
+    setInviteLoading(true);
+    setMode("register");
+    api
+      .get(`/org/invite/${inviteParam}/validate`)
+      .then(({ data }) => {
+        if (data.valid) {
+          setInviteToken(inviteParam);
+          setInviteData({ org_name: data.org_name, email: data.email, hockey_role: data.hockey_role });
+          setEmail(data.email);
+          setHockeyRole(data.hockey_role);
+        } else {
+          setError(data.reason || "This invite link is no longer valid.");
+          setInviteToken(null);
+        }
+      })
+      .catch(() => {
+        setError("Could not validate invite link.");
+        setInviteToken(null);
+      })
+      .finally(() => setInviteLoading(false));
+  }, [inviteParam]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-      const body =
-        mode === "login"
-          ? { email, password }
-          : { email, password, first_name: firstName, last_name: lastName, org_name: orgName, org_type: "team", hockey_role: hockeyRole };
-
-      const { data } = await api.post<TokenResponse>(endpoint, body);
+      let data: TokenResponse;
+      if (inviteToken && mode === "register") {
+        // Accept invite — join existing org
+        const res = await api.post<TokenResponse>(`/org/invite/${inviteToken}/accept`, {
+          email, password, first_name: firstName, last_name: lastName,
+        });
+        data = res.data;
+      } else {
+        const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
+        const body =
+          mode === "login"
+            ? { email, password }
+            : { email, password, first_name: firstName, last_name: lastName, org_name: orgName, org_type: "team", hockey_role: hockeyRole };
+        const res = await api.post<TokenResponse>(endpoint, body);
+        data = res.data;
+      }
       setToken(data.access_token);
       setUser(data.user);
-      if (mode === "register") {
+      if (inviteToken) {
+        router.push("/"); // Skip onboarding for invite joins
+      } else if (mode === "register") {
         router.push("/onboarding");
       } else {
         router.push("/");
@@ -67,8 +108,23 @@ function LoginForm() {
         {/* Card */}
         <div className="bg-white rounded-xl shadow-xl p-8">
           <h2 className="font-oswald text-xl font-semibold text-navy mb-6">
-            {mode === "login" ? "Sign In" : "Create Account"}
+            {inviteData ? "Join Organization" : mode === "login" ? "Sign In" : "Create Account"}
           </h2>
+
+          {inviteLoading && (
+            <div className="text-center py-4 text-sm text-muted">Validating invite...</div>
+          )}
+
+          {inviteData && (
+            <div className="bg-teal/10 border border-teal/30 rounded-lg px-4 py-3 mb-4">
+              <p className="text-sm text-navy font-semibold">
+                You&apos;ve been invited to join <span className="text-teal">{inviteData.org_name}</span>
+              </p>
+              <p className="text-xs text-muted mt-0.5">
+                Complete registration below to accept the invitation.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "register" && (
@@ -99,47 +155,51 @@ function LoginForm() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">
-                    Organization Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={orgName}
-                    onChange={(e) => setOrgName(e.target.value)}
-                    placeholder="e.g., Chatham Maroons"
-                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">
-                    Your Role in Hockey
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {[
-                      { value: "scout", label: "Scout", icon: "🔍" },
-                      { value: "gm", label: "GM", icon: "📋" },
-                      { value: "coach", label: "Coach", icon: "📣" },
-                      { value: "player", label: "Player", icon: "🏒" },
-                      { value: "parent", label: "Parent", icon: "👨‍👩‍👦" },
-                    ].map((r) => (
-                      <button
-                        key={r.value}
-                        type="button"
-                        onClick={() => setHockeyRole(r.value)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                          hockeyRole === r.value
-                            ? "border-teal bg-teal/10 text-teal ring-1 ring-teal/30"
-                            : "border-teal/20 text-muted hover:border-teal/40 hover:text-navy"
-                        }`}
-                      >
-                        <span>{r.icon}</span>
-                        <span className="font-oswald text-xs uppercase tracking-wider">{r.label}</span>
-                      </button>
-                    ))}
+                {!inviteData && (
+                  <div>
+                    <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">
+                      Organization Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      placeholder="e.g., Chatham Maroons"
+                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
+                    />
                   </div>
-                </div>
+                )}
+                {!inviteData && (
+                  <div>
+                    <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">
+                      Your Role in Hockey
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {[
+                        { value: "scout", label: "Scout", icon: "🔍" },
+                        { value: "gm", label: "GM", icon: "📋" },
+                        { value: "coach", label: "Coach", icon: "📣" },
+                        { value: "player", label: "Player", icon: "🏒" },
+                        { value: "parent", label: "Parent", icon: "👨‍👩‍👦" },
+                      ].map((r) => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          onClick={() => setHockeyRole(r.value)}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                            hockeyRole === r.value
+                              ? "border-teal bg-teal/10 text-teal ring-1 ring-teal/30"
+                              : "border-teal/20 text-muted hover:border-teal/40 hover:text-navy"
+                          }`}
+                        >
+                          <span>{r.icon}</span>
+                          <span className="font-oswald text-xs uppercase tracking-wider">{r.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -152,7 +212,8 @@ function LoginForm() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
+                readOnly={!!inviteData}
+                className={`w-full px-3 py-2 border border-teal/20 rounded-lg text-sm ${inviteData ? "bg-gray-50 text-muted cursor-not-allowed" : ""}`}
                 placeholder="you@team.com"
               />
             </div>
@@ -184,12 +245,15 @@ function LoginForm() {
             >
               {loading
                 ? "Please wait..."
-                : mode === "login"
-                  ? "Sign In"
-                  : "Create Account"}
+                : inviteData
+                  ? "Join Organization"
+                  : mode === "login"
+                    ? "Sign In"
+                    : "Create Account"}
             </button>
           </form>
 
+          {!inviteData && (
           <div className="mt-6 text-center">
             <button
               onClick={() => {
@@ -203,6 +267,7 @@ function LoginForm() {
                 : "Already have an account? Sign In"}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

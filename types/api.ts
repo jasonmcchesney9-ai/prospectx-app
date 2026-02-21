@@ -2248,6 +2248,21 @@ export interface SuperadminUser {
   monthly_bench_talks_used: number;
 }
 
+// ── Org Invites ──────────────────────────────────────────────
+export interface OrgInvite {
+  id: string;
+  org_id: string;
+  invited_by: string;
+  email: string;
+  hockey_role: string;
+  role: string;
+  token: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+}
+
 // ── Game State (Broadcast) ───────────────────────────────────
 export type GameState = "pre_game" | "live" | "intermission" | "post_game";
 

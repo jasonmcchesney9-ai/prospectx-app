@@ -2165,6 +2165,26 @@ def init_db():
     """)
     conn.commit()
 
+    # ── Table: org_invites ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS org_invites (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            invited_by TEXT NOT NULL,
+            email TEXT NOT NULL,
+            hockey_role TEXT DEFAULT 'scout',
+            role TEXT DEFAULT 'scout',
+            token TEXT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            accepted_at TEXT,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (invited_by) REFERENCES users(id)
+        )
+    """)
+    conn.commit()
+
     # ── Stat Normalizer tables (instat_ prefix) ─────────────────
 
     conn.execute("""
@@ -6549,6 +6569,269 @@ async def superadmin_platform_stats(token_data: dict = Depends(verify_token)):
         ).fetchone()[0]
 
         return stats
+    finally:
+        conn.close()
+
+
+# ============================================================
+# ORG INVITE ENDPOINTS
+# ============================================================
+
+class InviteRequest(BaseModel):
+    email: str
+    hockey_role: str = "scout"
+    role: str = "scout"
+    org_id: Optional[str] = None  # superadmin can specify target org
+
+
+class InviteAcceptRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=8)
+    first_name: str
+    last_name: str
+
+
+@app.post("/org/invite")
+async def create_org_invite(req: InviteRequest, token_data: dict = Depends(verify_token)):
+    """Create an invite link for a user to join an org. Admin or superadmin only."""
+    _require_admin(token_data)
+
+    # Superadmin can invite into any org; admin always uses own org
+    org_id = req.org_id if (token_data.get("role") == "superadmin" and req.org_id) else token_data["org_id"]
+
+    conn = get_db()
+    try:
+        # Verify org exists
+        org = conn.execute("SELECT id, name FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        # Check seat limit
+        user_count = conn.execute("SELECT COUNT(*) FROM users WHERE org_id = ?", (org_id,)).fetchone()[0]
+        pending_count = conn.execute(
+            "SELECT COUNT(*) FROM org_invites WHERE org_id = ? AND status = 'pending'", (org_id,)
+        ).fetchone()[0]
+
+        # Get highest tier in org for seat limit
+        tier_row = conn.execute(
+            "SELECT subscription_tier FROM users WHERE org_id = ? ORDER BY CASE "
+            "WHEN subscription_tier = 'enterprise' THEN 9 "
+            "WHEN subscription_tier = 'program_org' THEN 8 "
+            "WHEN subscription_tier = 'team_org' THEN 7 "
+            "WHEN subscription_tier = 'elite' THEN 6 "
+            "WHEN subscription_tier = 'pro' THEN 5 "
+            "WHEN subscription_tier = 'scout' THEN 4 "
+            "WHEN subscription_tier = 'parent' THEN 3 "
+            "ELSE 1 END DESC LIMIT 1",
+            (org_id,)
+        ).fetchone()
+        highest_tier = tier_row["subscription_tier"] if tier_row else "rookie"
+        max_seats = SUBSCRIPTION_TIERS.get(highest_tier, {}).get("max_seats", 1)
+
+        if max_seats != -1 and (user_count + pending_count) >= max_seats:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Seat limit reached ({user_count} users + {pending_count} pending invites, max {max_seats})"
+            )
+
+        # Check email not already in this org
+        existing = conn.execute(
+            "SELECT id FROM users WHERE org_id = ? AND email = ?",
+            (org_id, req.email.lower().strip())
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail="User with this email is already in this organization")
+
+        # Check no pending invite for same email+org
+        dup_invite = conn.execute(
+            "SELECT id FROM org_invites WHERE org_id = ? AND email = ? AND status = 'pending'",
+            (org_id, req.email.lower().strip())
+        ).fetchone()
+        if dup_invite:
+            raise HTTPException(status_code=400, detail="A pending invite already exists for this email")
+
+        # Generate invite
+        invite_id = gen_id()
+        invite_token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+
+        conn.execute(
+            "INSERT INTO org_invites (id, org_id, invited_by, email, hockey_role, role, token, status, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+            (invite_id, org_id, token_data["user_id"], req.email.lower().strip(),
+             req.hockey_role, req.role, invite_token, expires_at)
+        )
+        conn.commit()
+
+        invite_url = f"{FRONTEND_URL}/login?mode=register&invite={invite_token}"
+        logger.info("Org invite created: %s -> %s (org: %s)", token_data["user_id"], req.email, org_id)
+
+        return {
+            "invite_id": invite_id,
+            "invite_url": invite_url,
+            "expires_at": expires_at,
+            "email_sent": False,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/org/invites")
+async def list_org_invites(org_id: Optional[str] = None, token_data: dict = Depends(verify_token)):
+    """List invites for the caller's org (or specified org for superadmin)."""
+    _require_admin(token_data)
+
+    target_org = org_id if (token_data.get("role") == "superadmin" and org_id) else token_data["org_id"]
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM org_invites WHERE org_id = ? ORDER BY created_at DESC",
+            (target_org,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/org/invite/{invite_id}")
+async def revoke_org_invite(invite_id: str, token_data: dict = Depends(verify_token)):
+    """Revoke a pending invite. Admin or superadmin only."""
+    _require_admin(token_data)
+
+    conn = get_db()
+    try:
+        invite = conn.execute("SELECT * FROM org_invites WHERE id = ?", (invite_id,)).fetchone()
+        if not invite:
+            raise HTTPException(status_code=404, detail="Invite not found")
+
+        # Admin can only revoke own org's invites; superadmin can revoke any
+        if token_data.get("role") != "superadmin" and invite["org_id"] != token_data["org_id"]:
+            raise HTTPException(status_code=403, detail="Cannot revoke invites from other organizations")
+
+        if invite["status"] != "pending":
+            raise HTTPException(status_code=400, detail=f"Invite is already {invite['status']}")
+
+        conn.execute(
+            "UPDATE org_invites SET status = 'revoked' WHERE id = ?", (invite_id,)
+        )
+        conn.commit()
+        return {"revoked": True, "invite_id": invite_id}
+    finally:
+        conn.close()
+
+
+@app.get("/org/invite/{token}/validate")
+async def validate_org_invite(token: str):
+    """Public endpoint — validate an invite token and return org info."""
+    conn = get_db()
+    try:
+        invite = conn.execute(
+            "SELECT i.*, o.name as org_name FROM org_invites i "
+            "JOIN organizations o ON o.id = i.org_id "
+            "WHERE i.token = ?",
+            (token,)
+        ).fetchone()
+
+        if not invite:
+            return {"valid": False, "reason": "Invite not found"}
+
+        if invite["status"] != "pending":
+            return {"valid": False, "reason": f"Invite is {invite['status']}"}
+
+        # Check expiry
+        expires_at = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            return {"valid": False, "reason": "Invite has expired"}
+
+        return {
+            "valid": True,
+            "org_name": invite["org_name"],
+            "email": invite["email"],
+            "hockey_role": invite["hockey_role"],
+            "expires_at": invite["expires_at"],
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/org/invite/{token}/accept", response_model=TokenResponse)
+async def accept_org_invite(token: str, req: InviteAcceptRequest):
+    """Public endpoint — accept an invite and create user in the org."""
+    conn = get_db()
+    try:
+        invite = conn.execute(
+            "SELECT * FROM org_invites WHERE token = ?", (token,)
+        ).fetchone()
+
+        if not invite:
+            raise HTTPException(status_code=404, detail="Invite not found")
+
+        if invite["status"] != "pending":
+            raise HTTPException(status_code=400, detail=f"Invite is {invite['status']}")
+
+        # Check expiry
+        expires_at = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            raise HTTPException(status_code=400, detail="Invite has expired")
+
+        # Validate email matches
+        if req.email.lower().strip() != invite["email"].lower().strip():
+            raise HTTPException(status_code=400, detail="Email does not match the invite")
+
+        # Check email not already registered
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (req.email.lower().strip(),)).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        # Get org's highest tier for the new user
+        tier_row = conn.execute(
+            "SELECT subscription_tier FROM users WHERE org_id = ? ORDER BY CASE "
+            "WHEN subscription_tier = 'enterprise' THEN 9 "
+            "WHEN subscription_tier = 'program_org' THEN 8 "
+            "WHEN subscription_tier = 'team_org' THEN 7 "
+            "WHEN subscription_tier = 'elite' THEN 6 "
+            "WHEN subscription_tier = 'pro' THEN 5 "
+            "WHEN subscription_tier = 'scout' THEN 4 "
+            "WHEN subscription_tier = 'parent' THEN 3 "
+            "ELSE 1 END DESC LIMIT 1",
+            (invite["org_id"],)
+        ).fetchone()
+        user_tier = tier_row["subscription_tier"] if tier_row else "rookie"
+
+        # Create user in the invite's org
+        user_id = gen_id()
+        password_hash = pwd_context.hash(req.password[:72])
+        hockey_role = invite["hockey_role"] if invite["hockey_role"] in (
+            "scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent"
+        ) else "scout"
+
+        conn.execute(
+            "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role, "
+            "subscription_tier, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+            (user_id, invite["org_id"], req.email.lower().strip(), password_hash,
+             req.first_name, req.last_name, invite["role"], hockey_role, user_tier)
+        )
+
+        # Mark invite as accepted
+        conn.execute(
+            "UPDATE org_invites SET status = 'accepted', accepted_at = ? WHERE id = ?",
+            (now_iso(), invite["id"])
+        )
+        conn.commit()
+
+        user = UserOut(
+            id=user_id, org_id=invite["org_id"], email=req.email.lower().strip(),
+            first_name=req.first_name, last_name=req.last_name, role=invite["role"],
+            hockey_role=hockey_role, subscription_tier=user_tier,
+            monthly_reports_used=0, monthly_bench_talks_used=0,
+            email_verified=True,
+            onboarding_completed=False, onboarding_step=0,
+        )
+        jwt_token = create_token(user_id, invite["org_id"], invite["role"])
+
+        logger.info("Invite accepted: %s joined org %s", req.email, invite["org_id"])
+        return TokenResponse(access_token=jwt_token, user=user)
     finally:
         conn.close()
 
