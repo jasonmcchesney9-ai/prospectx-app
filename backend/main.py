@@ -11457,6 +11457,106 @@ async def get_league_percentiles(league_name: str, player_name: str, token_data:
         conn.close()
 
 
+# ── League Player Search (InStat discovery) ─────────────────
+
+@app.get("/league-players/search")
+async def league_player_search(
+    q: str = Query(..., min_length=2, max_length=100),
+    position: Optional[str] = None,
+    league: Optional[str] = None,
+    season: Optional[str] = None,
+    limit: int = Query(default=25, ge=1, le=100),
+    token_data: dict = Depends(verify_token),
+):
+    """Search instat_league_skater_stats by player name. Any authenticated user."""
+    conn = get_db()
+    try:
+        where = ["player_name LIKE ?"]
+        params: list = [f"%{q}%"]
+        if position:
+            where.append("position = ?")
+            params.append(position)
+        if league:
+            where.append("LOWER(league_name) = LOWER(?)")
+            params.append(league)
+        if season:
+            where.append("season = ?")
+            params.append(season)
+        params.append(limit)
+        sql = f"""
+            SELECT id, player_name, team_name, league_name, position, dob, season,
+                   jersey_number, handedness, height_cm, weight_kg,
+                   gp, goals,
+                   COALESCE(primary_assists, 0) + COALESCE(secondary_assists, 0) AS assists,
+                   points, ppg, plus_minus, shots_on_goal, xg
+            FROM instat_league_skater_stats
+            WHERE {' AND '.join(where)}
+            ORDER BY points DESC, goals DESC
+            LIMIT ?
+        """
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+class LeaguePlayerAddRequest(BaseModel):
+    league_player_id: str
+
+
+@app.post("/league-players/add")
+async def league_player_add(body: LeaguePlayerAddRequest, token_data: dict = Depends(verify_token)):
+    """Add a player from instat_league_skater_stats to the org roster. Admin only."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM instat_league_skater_stats WHERE id = ?",
+            (body.league_player_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="League player record not found")
+        row = dict(row)
+        full_name = (row.get("player_name") or "").strip()
+        parts = full_name.rsplit(" ", 1)
+        first_name = parts[0] if len(parts) > 1 else full_name
+        last_name = parts[1] if len(parts) > 1 else ""
+        # Duplicate check
+        existing = conn.execute(
+            """SELECT id FROM players
+               WHERE org_id = ? AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)
+               AND (is_deleted = 0 OR is_deleted IS NULL)""",
+            (org_id, first_name, last_name),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Player '{full_name}' already exists in your roster")
+        player_id = gen_id()
+        pos = row.get("position") or "F"
+        shoots = row.get("handedness")
+        if shoots and shoots.upper() in ("LEFT", "L"):
+            shoots = "L"
+        elif shoots and shoots.upper() in ("RIGHT", "R"):
+            shoots = "R"
+        else:
+            shoots = None
+        conn.execute(
+            """INSERT INTO players (id, org_id, first_name, last_name, position, dob,
+               height_cm, weight_kg, shoots, current_team, current_league, jersey_number, created_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (player_id, org_id, first_name, last_name, pos,
+             row.get("dob"), row.get("height_cm"), row.get("weight_kg"),
+             shoots, row.get("team_name"), row.get("league_name"),
+             row.get("jersey_number"), user_id, now_iso()),
+        )
+        conn.commit()
+        logger.info("League player added to roster: %s → %s (org %s)", full_name, player_id, org_id)
+        return {"status": "created", "player_id": player_id, "player_name": full_name}
+    finally:
+        conn.close()
+
+
 # ============================================================
 # TEAM ENDPOINTS
 # ============================================================

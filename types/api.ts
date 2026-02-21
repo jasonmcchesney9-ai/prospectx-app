@@ -2263,6 +2263,30 @@ export interface OrgInvite {
   accepted_at: string | null;
 }
 
+// ── League Player Search (InStat discovery) ─────────────────
+
+export interface LeaguePlayerResult {
+  id: string;
+  player_name: string;
+  team_name: string;
+  league_name: string;
+  position: string | null;
+  dob: string | null;
+  season: string;
+  jersey_number: string | null;
+  handedness: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  gp: number | null;
+  goals: number | null;
+  assists: number | null;
+  points: number | null;
+  ppg: number | null;
+  plus_minus: number | null;
+  shots_on_goal: number | null;
+  xg: number | null;
+}
+
 // ── Bench Card V2 Context Payload (Addendum 9) ──────────────
 
 export interface BenchCardLineUsage {

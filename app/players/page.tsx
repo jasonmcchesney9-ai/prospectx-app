@@ -5,14 +5,15 @@ import Link from "next/link";
 import {
   Search, PlusCircle, Filter, ChevronDown, ChevronUp, X, Settings,
   LayoutGrid, List, Save, Bookmark, Download, ArrowUpDown,
-  Activity, Brain, Ruler, Pin, PinOff,
+  Activity, Brain, Ruler, Pin, PinOff, UserPlus, Loader2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import VisualPlayerCard from "@/components/VisualPlayerCard";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import { formatLeague } from "@/lib/leagues";
-import type { Player, PlayerFilterOptions, PlayerCardData, SavedSearch } from "@/types/api";
+import type { Player, PlayerFilterOptions, PlayerCardData, SavedSearch, LeaguePlayerResult } from "@/types/api";
 import { AGE_GROUP_LABELS, LEAGUE_TIER_LABELS, COMMITMENT_STATUS_COLORS } from "@/types/api";
 
 const POSITIONS = ["", "C", "LW", "RW", "F", "LD", "RD", "D", "G"];
@@ -96,6 +97,207 @@ function NumberInput({
   );
 }
 
+// ── League Player Search component ─────────────────────
+function LeaguePlayerSearch() {
+  const user = getUser();
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
+  const [query, setQuery] = useState("");
+  const [positionFilter, setPositionFilter] = useState("");
+  const [leagueInput, setLeagueInput] = useState("");
+  const [seasonInput, setSeasonInput] = useState("");
+  const [results, setResults] = useState<LeaguePlayerResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [addMsg, setAddMsg] = useState("");
+
+  // Debounced search
+  useEffect(() => {
+    if (query.length < 2) {
+      setResults([]);
+      setSearchError("");
+      return;
+    }
+    setSearching(true);
+    setSearchError("");
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q: query });
+        if (positionFilter) params.set("position", positionFilter);
+        if (leagueInput) params.set("league", leagueInput);
+        if (seasonInput) params.set("season", seasonInput);
+        const { data } = await api.get<LeaguePlayerResult[]>(`/league-players/search?${params}`);
+        setResults(data);
+      } catch (err: unknown) {
+        setSearchError(extractApiError(err, "Search failed"));
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, positionFilter, leagueInput, seasonInput]);
+
+  const handleAdd = async (player: LeaguePlayerResult) => {
+    setAddingId(player.id);
+    setAddMsg("");
+    try {
+      const { data } = await api.post("/league-players/add", { league_player_id: player.id });
+      setAddedIds((prev) => new Set(prev).add(player.id));
+      setAddMsg(`Added ${data.player_name} to your roster`);
+    } catch (err: unknown) {
+      setAddMsg(extractApiError(err, "Failed to add player"));
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  return (
+    <div>
+      {/* Search input + optional filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-3">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            type="text"
+            placeholder="Search league players by name (min 2 chars)..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={positionFilter}
+            onChange={(e) => setPositionFilter(e.target.value)}
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
+          >
+            <option value="">All Positions</option>
+            {POSITIONS.filter(Boolean).map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="League..."
+            value={leagueInput}
+            onChange={(e) => setLeagueInput(e.target.value)}
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white w-[120px]"
+          />
+          <input
+            type="text"
+            placeholder="Season..."
+            value={seasonInput}
+            onChange={(e) => setSeasonInput(e.target.value)}
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white w-[120px]"
+          />
+        </div>
+      </div>
+
+      {/* Status messages */}
+      {addMsg && (
+        <div className={`mb-3 px-4 py-2 rounded-lg text-sm ${
+          addMsg.startsWith("Added") ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-700"
+        }`}>
+          {addMsg}
+        </div>
+      )}
+      {searchError && (
+        <div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">{searchError}</div>
+      )}
+
+      {/* Results */}
+      {searching && (
+        <div className="text-center py-12 text-muted text-sm flex items-center justify-center gap-2">
+          <Loader2 size={16} className="animate-spin" /> Searching league data...
+        </div>
+      )}
+
+      {!searching && query.length >= 2 && results.length === 0 && !searchError && (
+        <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
+          <p className="text-muted text-sm">No league players found matching &ldquo;{query}&rdquo;</p>
+        </div>
+      )}
+
+      {!searching && query.length < 2 && (
+        <div className="text-center py-12 bg-white rounded-xl border border-teal/20">
+          <p className="text-muted text-sm">Type at least 2 characters to search league player data</p>
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-navy/[0.03] border-b border-teal/20">
+                  <th className="px-4 py-3 text-left font-oswald text-xs uppercase tracking-wider text-muted">Player</th>
+                  <th className="px-4 py-3 text-left font-oswald text-xs uppercase tracking-wider text-muted">Team</th>
+                  <th className="px-4 py-3 text-left font-oswald text-xs uppercase tracking-wider text-muted">League</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">POS</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">DOB</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">GP</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">G</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">A</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">P</th>
+                  <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">PPG</th>
+                  {isAdmin && (
+                    <th className="px-4 py-3 text-center font-oswald text-xs uppercase tracking-wider text-muted">Action</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={r.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
+                    <td className="px-4 py-3 font-semibold text-navy">{r.player_name}</td>
+                    <td className="px-4 py-3 text-muted">{r.team_name || "\u2014"}</td>
+                    <td className="px-4 py-3 text-muted">{r.league_name || "\u2014"}</td>
+                    <td className="px-4 py-3 text-center">
+                      {r.position ? (
+                        <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-teal/10 text-teal font-oswald">
+                          {r.position}
+                        </span>
+                      ) : "\u2014"}
+                    </td>
+                    <td className="px-4 py-3 text-center text-muted tabular-nums text-xs">{r.dob || "\u2014"}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{r.gp ?? "\u2014"}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{r.goals ?? "\u2014"}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{r.assists ?? "\u2014"}</td>
+                    <td className="px-4 py-3 text-center tabular-nums font-semibold">{r.points ?? "\u2014"}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{r.ppg != null ? Number(r.ppg).toFixed(2) : "\u2014"}</td>
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-center">
+                        {addedIds.has(r.id) ? (
+                          <span className="text-xs text-green-600 font-oswald uppercase">Added</span>
+                        ) : (
+                          <button
+                            onClick={() => handleAdd(r)}
+                            disabled={addingId === r.id}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 disabled:opacity-40 transition-colors mx-auto"
+                          >
+                            {addingId === r.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <UserPlus size={12} />
+                            )}
+                            Add
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PlayersPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [cardData, setCardData] = useState<PlayerCardData[]>([]);
@@ -107,6 +309,7 @@ export default function PlayersPage() {
   const [teamFilter, setTeamFilter] = useState("");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [tab, setTab] = useState<"roster" | "league">("roster");
 
   // ── Pinned players ──
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
@@ -478,6 +681,27 @@ export default function PlayersPage() {
           </div>
         </div>
 
+        {/* ── Tab Toggle ────────────────────────────────── */}
+        <div className="flex gap-1 mb-4">
+          <button
+            onClick={() => setTab("roster")}
+            className={`px-4 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-full border transition-colors ${
+              tab === "roster" ? "bg-teal/10 border-teal/30 text-teal" : "border-border text-muted hover:text-navy"
+            }`}
+          >
+            My Players
+          </button>
+          <button
+            onClick={() => setTab("league")}
+            className={`px-4 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-full border transition-colors ${
+              tab === "league" ? "bg-teal/10 border-teal/30 text-teal" : "border-border text-muted hover:text-navy"
+            }`}
+          >
+            League Search
+          </button>
+        </div>
+
+        {tab === "roster" && (<>
         {/* ── Saved Searches Chips ─────────────────────── */}
         {savedSearches.length > 0 && (
           <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1">
@@ -1002,6 +1226,10 @@ export default function PlayersPage() {
             </div>
           </div>
         )}
+        </>)}
+
+        {/* ── League Search Tab ───────────────────────────────── */}
+        {tab === "league" && <LeaguePlayerSearch />}
       </main>
     </ProtectedRoute>
   );
