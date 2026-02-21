@@ -15765,7 +15765,12 @@ async def admin_restore_db(
                 batch.append(tuple(vals))
 
             if batch:
-                conn.executemany(sql, batch)
+                try:
+                    conn.executemany(sql, batch)
+                except Exception as e:
+                    logger.warning("Restore sheet '%s' failed: %s", sheet_name, e)
+                    results[sheet_name] = {"table": table, "rows": 0, "error": str(e)}
+                    continue
 
             total_rows += len(batch)
             sheet_result = {"table": table, "rows": len(batch), "columns": len(valid_cols)}
