@@ -301,19 +301,19 @@ export default function LandingPage() {
             Analyze players within YOUR forecheck, YOUR structure, YOUR identity.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
+          <div className="flex flex-col items-center gap-3 mt-10">
+            <Link
+              href="/onboarding"
+              className="flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
+            >
+              Get Started for Free <ArrowRight size={16} />
+            </Link>
             <Link
               href="/login"
-              className="flex items-center gap-2 px-8 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors text-sm"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
-              Start Free Trial <ArrowRight size={16} />
+              Sign In
             </Link>
-            <a
-              href="mailto:jason@prospectx.ai?subject=ProspectX Demo Request"
-              className="flex items-center gap-2 px-8 py-3 bg-white/5 border border-white/10 text-white/80 font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-white/10 transition-colors text-sm"
-            >
-              Book a Demo
-            </a>
           </div>
 
           {/* Privacy badge */}
@@ -511,11 +511,19 @@ export default function LandingPage() {
               Try Bench Talk free — no credit card required.
             </p>
             <Link
-              href="/login?mode=register"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors text-sm"
+              href="/onboarding"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
             >
-              Start Free Trial <ArrowRight size={16} />
+              Get Started for Free <ArrowRight size={16} />
             </Link>
+            <div className="mt-3">
+              <Link
+                href="/login"
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                Sign In
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -689,19 +697,19 @@ export default function LandingPage() {
             No commitment. No credit card.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col items-center gap-3">
+            <Link
+              href="/onboarding"
+              className="flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
+            >
+              Get Started for Free <ArrowRight size={16} />
+            </Link>
             <Link
               href="/login"
-              className="flex items-center gap-2 px-8 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors text-sm"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
             >
-              Start Free Trial <ArrowRight size={16} />
+              Sign In
             </Link>
-            <a
-              href="mailto:jason@prospectx.ai?subject=ProspectX Demo Request"
-              className="text-sm text-white/50 hover:text-white transition-colors"
-            >
-              or email jason@prospectx.ai
-            </a>
           </div>
         </div>
       </section>
