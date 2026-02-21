@@ -29,4 +29,4 @@ icalendar==6.1.2
 # Rate limiting
 slowapi==0.1.9
 # Transactional email
-resend==2.5.0
+resend==2.5.1
