@@ -2383,8 +2383,10 @@ def init_db():
             battles_total REAL, battles_pct REAL,
             passes_to_slot REAL, accurate_pass_pct REAL,
             UNIQUE(league_name, team_name, season)
-        );
+        )
+    """)
 
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS development_plans (
             id TEXT PRIMARY KEY,
             player_id TEXT NOT NULL,
@@ -2401,10 +2403,12 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (player_id) REFERENCES players(id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_devplans_player ON development_plans(player_id, version);
-        CREATE INDEX IF NOT EXISTS idx_devplans_org ON development_plans(org_id);
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_player ON development_plans(player_id, version)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_org ON development_plans(org_id)")
 
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS player_stat_snapshots (
             id TEXT PRIMARY KEY,
             player_id TEXT NOT NULL,
@@ -2431,10 +2435,11 @@ def init_db():
             report_quality_score REAL,
             org_id TEXT,
             created_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_snapshots_player ON player_stat_snapshots(player_id, snapshot_date);
-        CREATE INDEX IF NOT EXISTS idx_snapshots_date ON player_stat_snapshots(snapshot_date)
+        )
     """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_player ON player_stat_snapshots(player_id, snapshot_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_date ON player_stat_snapshots(snapshot_date)")
+
     conn.commit()
 
     conn.close()
