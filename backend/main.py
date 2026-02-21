@@ -15702,6 +15702,7 @@ async def admin_restore_db(
         "series_plans": "series_plans",
     }
 
+    import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
     results = {}
     skipped_sheets = []
