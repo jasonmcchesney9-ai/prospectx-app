@@ -162,6 +162,7 @@ const BROADCAST_ITEMS: NavItem[] = [
 // Import items (PRO only)
 const IMPORT_ITEMS: NavItem[] = [
   { href: "/instat", label: "Import Stats (XLSX)", icon: BarChart3 },
+  { href: "/imports", label: "Stat Normalizer", icon: Upload },
   { href: "/players/import", label: "Import Players (CSV)", icon: UserPlus },
   { href: "/corrections", label: "Review Corrections", icon: CheckSquare },
   { href: "/my-data", label: "My Data", icon: Database },
