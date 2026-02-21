@@ -84,7 +84,7 @@ const FAQ_SECTIONS = [
     items: [
       {
         q: "How much does ProspectX cost?",
-        a: "ProspectX starts free with the Rookie tier (browse players, live stats, Bench Talk). Individual plans: Parent $10/mo, Scout $25/mo, Pro $49/mo (unlimited reports + all features), Elite $99/mo (Auto-Scout + API access). Organization plans: Team $249/mo (10 seats), Program $599/mo (30 seats), Enterprise (custom). Annual billing saves ~17%. All plans are month-to-month with no long-term commitment.",
+        a: "ProspectX starts free with the Rookie tier (browse players, league stats, Bench Talk). Individual plans: Parent $10/mo, Scout $25/mo, Pro $49/mo (unlimited reports + all features), Elite $99/mo (Auto-Scout + API access). Organization plans: Team $249/mo (10 seats), Program $599/mo (30 seats), Enterprise (custom). Annual billing saves ~17%. All plans are month-to-month with no long-term commitment.",
       },
       {
         q: "Can I try ProspectX for free?",
@@ -554,7 +554,7 @@ export default function LandingPage() {
                 <span className="text-3xl font-oswald font-bold text-white">Free</span>
               </div>
               <ul className="space-y-2">
-                {["Browse player profiles", "Live Stats & Data", "5 Bench Talk messages/day", "Basic search"].map((item) => (
+                {["Browse player profiles", "League Data Sync", "5 Bench Talk messages/day", "Basic search"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-xs text-white/50">
                     <CheckCircle2 size={12} className="text-teal shrink-0" />
                     {item}

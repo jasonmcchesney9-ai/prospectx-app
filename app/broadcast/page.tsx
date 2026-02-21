@@ -61,7 +61,7 @@ const DEFAULT_CENTER_TOOLS: ToolCardState[] = [
   { id: "talk_tracks", title: "Talk Tracks", icon: Mic, pinned: false, collapsed: false, loading: false, generatedAt: null },
   { id: "storyline_timeline", title: "Storyline Timeline", icon: Clock, pinned: false, collapsed: false, loading: false, generatedAt: null },
   { id: "pxi_insights", title: "PXI Insights", icon: Sparkles, pinned: false, collapsed: false, loading: false, generatedAt: null },
-  { id: "stat_cards", title: "Live Stat Cards", icon: BarChart3, pinned: false, collapsed: false, loading: false, generatedAt: null },
+  { id: "stat_cards", title: "Stat Cards", icon: BarChart3, pinned: false, collapsed: false, loading: false, generatedAt: null },
   { id: "graphics_suggestions", title: "Graphics Suggestions", icon: Camera, pinned: false, collapsed: false, loading: false, generatedAt: null },
 ];
 
@@ -122,6 +122,9 @@ export default function BroadcastPage() {
   const [centerTools, setCenterTools] = useState<ToolCardState[]>(DEFAULT_CENTER_TOOLS);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
+
+  // Data freshness
+  const [statsAsOf, setStatsAsOf] = useState<string | null>(null);
 
   // Tool content
   const [spottingBoard, setSpottingBoard] = useState<SpottingBoardData | null>(null);
@@ -289,6 +292,7 @@ export default function BroadcastPage() {
         { timeout: 180000 }
       );
 
+      if (data.stats_as_of) setStatsAsOf(data.stats_as_of);
       if (data.spotting_board) setSpottingBoard(data.spotting_board);
       if (data.talk_tracks) {
         setTalkTracks(data.talk_tracks);
@@ -527,6 +531,27 @@ export default function BroadcastPage() {
         {error && (
           <div className="mt-2 bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-red-700 text-xs">
             {error}
+          </div>
+        )}
+
+        {/* Data freshness indicator */}
+        {statsAsOf && (
+          <div className="mt-2 flex items-center gap-2 text-[10px] text-muted">
+            {(() => {
+              const ts = new Date(statsAsOf);
+              const now = new Date();
+              const diffMs = now.getTime() - ts.getTime();
+              const diffDays = diffMs / (1000 * 60 * 60 * 24);
+              const dot = diffDays <= 2 ? "bg-green-500" : diffDays <= 7 ? "bg-teal" : "bg-amber-500";
+              const label = ts.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+              return (
+                <>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${dot}`} />
+                  <span>Stats as of {label}</span>
+                  {diffDays > 7 && <span className="text-amber-600 font-medium">&middot; Sync may be needed</span>}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

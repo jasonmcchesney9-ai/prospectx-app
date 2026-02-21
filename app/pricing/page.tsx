@@ -56,7 +56,7 @@ const FEATURE_MATRIX: FeatureCategory[] = [
     name: "PLAYER & DATA ACCESS",
     features: [
       { label: "Browse player profiles", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
-      { label: "Live Stats & Data", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
+      { label: "League Data Sync", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
       { label: "Elite Prospects link", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
       { label: "Basic search (name, team)", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
       { label: "Search with ratings/stats", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },

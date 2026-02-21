@@ -1687,7 +1687,25 @@ export default function PlayerDetailPage() {
             {statsSubView === "current" && (
               <>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-semibold text-navy">Season Stats</h2>
+                  <div>
+                    <h2 className="text-lg font-semibold text-navy">Season Stats</h2>
+                    {stats.length > 0 && stats[0]?.created_at && (
+                      <p className="text-[10px] text-muted/50 flex items-center gap-1.5 mt-0.5">
+                        {(() => {
+                          const ts = new Date(stats[0].created_at);
+                          const diffDays = (Date.now() - ts.getTime()) / (1000 * 60 * 60 * 24);
+                          const dot = diffDays <= 2 ? "bg-green-500" : diffDays <= 7 ? "bg-teal" : "bg-amber-500";
+                          return (
+                            <>
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full ${dot}`} />
+                              Last updated {ts.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              {diffDays > 7 && <span className="text-amber-600 font-medium ml-1">&middot; Sync may be needed</span>}
+                            </>
+                          );
+                        })()}
+                      </p>
+                    )}
+                  </div>
                   <div className="text-right">
                     <input
                       type="file"

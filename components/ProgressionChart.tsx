@@ -42,7 +42,7 @@ export default function ProgressionChart({ data }: Props) {
       <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
         <BarChart3 size={32} className="mx-auto text-muted/30 mb-2" />
         <p className="text-sm text-muted">No progression data available.</p>
-        <p className="text-xs text-muted/60 mt-1">Sync stats from Live Stats & Data to see season-over-season trends.</p>
+        <p className="text-xs text-muted/60 mt-1">Sync stats from league data to see season-over-season trends.</p>
       </div>
     );
   }

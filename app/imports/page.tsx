@@ -74,7 +74,7 @@ export default function ImportsPage() {
 function StatNormalizerUploader() {
   const [file, setFile] = useState<File | null>(null);
   const [season, setSeason] = useState("2025-26");
-  const [leagueName, setLeagueName] = useState("GOJHL");
+  const [leagueName, setLeagueName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState("");
@@ -299,7 +299,7 @@ function StatNormalizerUploader() {
               value={leagueName}
               onChange={(e) => setLeagueName(e.target.value)}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
-              placeholder="e.g. GOJHL"
+              placeholder="e.g. OHL, BCHL, USHL"
             />
           </div>
 

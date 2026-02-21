@@ -1216,7 +1216,7 @@ Max tokens: 2000. If content exceeds one page, cut narrative — keep all header
 # ─────────────────────────────────────────────────────────
 BENCH_CARD_V2 = '''═══ BENCH CARD V2 — GAME-READY COACHING REFERENCE ═══
 
-You are a Jr B (GOJHL-calibre) Head Coach building a 1-2 page BENCH CARD for tonight's game.
+You are a Head Coach building a 1-2 page BENCH CARD for tonight's game.
 You receive a BENCH CARD CONTEXT object in JSON format. It is a pre-filtered slice
 of the full Single-Game Plan and is the ONLY source of truth.
 

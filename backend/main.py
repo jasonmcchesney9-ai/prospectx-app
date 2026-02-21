@@ -12780,7 +12780,7 @@ async def ingest_stats(
 async def upload_stats(
     file: UploadFile = File(...),
     season: str = "2025-26",
-    league_name: str = "GOJHL",
+    league_name: str = "",
     token_data: dict = Depends(_require_admin)
 ):
     """
@@ -17350,6 +17350,13 @@ async def admin_restore_db(
 
     # Column aliasing: XLSX header -> DB column name (per target table)
     COLUMN_ALIASES = {
+        "players": {
+            "player_name": "first_name",  # handled specially via _split_player_name
+        },
+        "player_stats": {
+            "team": "team_name",
+            "current_team": "team_name",
+        },
         "games": {
             "date": "game_date",
         },
@@ -17374,12 +17381,39 @@ async def admin_restore_db(
         },
     }
 
+    # Columns that should be packed into the extended_stats JSON blob
+    # instead of being silently dropped.  Keys = target table.
+    EXTENDED_STATS_COLS: dict[str, set[str]] = {
+        "player_stats": {
+            "league", "xG_Expected_goals", "xG_per_shot", "CORSI",
+            "CORSI_for_pct", "Fenwick_for_pct", "Scoring_chances___total",
+            "Hits", "Hits_against", "Takeaways", "Puck_losses", "Passes",
+            "Accurate_passes_pct", "Faceoffs_won_pct",
+        },
+        "games": {
+            "opponent", "home_away", "result", "score", "goals_for",
+            "shots_on_goal", "xg", "corsi_pct", "faceoffs_won_pct",
+        },
+        "goalie_stats": {
+            "jersey_number", "current_team", "position",
+            "gsax", "xg_per_shot", "sc_saves_pct",
+        },
+        "player_game_stats": {
+            "player_name", "score", "shifts", "a1", "a2", "sog", "hits",
+            "blocked_shots", "faceoffs", "faceoffs_won", "pp_shots",
+            "xg", "xg_per_shot", "net_xg", "corsi", "corsi_pct",
+            "puck_battles", "puck_battles_won", "takeaways", "puck_losses",
+            "passes", "accurate_passes_pct", "scoring_chances", "source_file",
+        },
+    }
+
     # Default values for NOT NULL columns that may be absent from XLSX
     COLUMN_DEFAULTS = {
-        "games": {"league": "GOJHL", "season": "2025-26"},
+        "player_stats": {"season": "2025-26", "stat_type": "season"},
+        "games": {"season": "2025-26"},
         "line_combinations": {"season": "2025-26"},
-        "goalie_stats": {},
-        "player_game_stats": {},
+        "goalie_stats": {"season": "2025-26", "stat_type": "season"},
+        "player_game_stats": {"season": "2025-26"},
     }
 
     def _toi_to_seconds(toi_val):
@@ -17421,6 +17455,35 @@ async def admin_restore_db(
                 return rows2[0][0]
         return rows[0][0] if rows else None
 
+    def _split_player_name(name_val):
+        """Split 'First Last' into (first_name, last_name)."""
+        if not name_val:
+            return None, None
+        parts = str(name_val).strip().split(None, 1)
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        return parts[0], ""
+
+    def _fix_date(val, season="2025-26"):
+        """Normalize date values: DD/MM -> YYYY-MM-DD using season context."""
+        if not val or str(val).strip() == "":
+            return None
+        s = str(val).strip()
+        # Already YYYY-MM-DD
+        if len(s) >= 8 and s[4] == "-":
+            return s
+        # DD/MM format — infer year from season
+        parts = s.split("/")
+        if len(parts) == 2:
+            try:
+                day, month = int(parts[0]), int(parts[1])
+                start_year = int(season.split("-")[0])
+                year = start_year + 1 if month < 8 else start_year
+                return f"{year}-{month:02d}-{day:02d}"
+            except (ValueError, IndexError):
+                return s
+        return s
+
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
     results = {}
@@ -17454,22 +17517,52 @@ async def admin_restore_db(
             unmapped = []
             # Track original headers for player_id resolution
             header_idx_map = {h: i for i, h in enumerate(raw_headers)}
+
+            # Identify columns that should be packed into extended_stats JSON
+            ext_stat_set = EXTENDED_STATS_COLS.get(table, set())
+            ext_stat_indices = []   # (xlsx_col_index, raw_header_name)
+
+            # Handle player_name -> first_name + last_name split for players table
+            has_player_name_split = False
+            player_name_idx = -1
+            if table == "players" and "player_name" in header_idx_map and "first_name" not in header_idx_map:
+                player_name_idx = header_idx_map["player_name"]
+                has_player_name_split = True
+                # Add first_name and last_name as valid columns
+                if "first_name" in db_cols and "first_name" not in valid_cols:
+                    valid_cols.append("first_name")
+                if "last_name" in db_cols and "last_name" not in valid_cols:
+                    valid_cols.append("last_name")
+
             for i, h in enumerate(aliased_headers):
                 if h and h in db_cols:
                     valid_indices.append(i)
                     valid_cols.append(h)
+                elif raw_headers[i] and raw_headers[i] in ext_stat_set:
+                    ext_stat_indices.append((i, raw_headers[i]))
                 elif raw_headers[i]:
                     unmapped.append(raw_headers[i])
+
+            # If we have extended_stats columns to pack, add the extended_stats column
+            pack_extended = len(ext_stat_indices) > 0 and "extended_stats" in db_cols
+            if pack_extended and "extended_stats" not in valid_cols:
+                valid_cols.append("extended_stats")
 
             # Check if player_id needs resolution (goalie_stats, player_game_stats)
             needs_player_id = ("player_id" in db_cols
                                and "player_id" not in valid_cols
                                and "first_name" in header_idx_map
                                and "last_name" in header_idx_map)
+            # Also resolve player_id from player_name for player_game_stats
+            needs_player_name_resolve = (table == "player_game_stats"
+                                         and "player_id" in db_cols
+                                         and "player_id" not in valid_cols
+                                         and "player_name" in header_idx_map)
+            pname_idx = header_idx_map.get("player_name", -1)
             fn_idx = header_idx_map.get("first_name", -1)
             ln_idx = header_idx_map.get("last_name", -1)
             team_idx = header_idx_map.get("current_team", header_idx_map.get("team", -1))
-            if needs_player_id:
+            if needs_player_id or needs_player_name_resolve:
                 valid_cols.append("player_id")
 
             if not valid_cols:
@@ -17493,6 +17586,8 @@ async def admin_restore_db(
 
             # Identify toi_seconds column index for MM:SS conversion
             toi_col_idx = valid_cols.index("toi_seconds") if "toi_seconds" in valid_cols else -1
+            # Identify game_date column index for DD/MM -> YYYY-MM-DD conversion
+            date_col_idx = valid_cols.index("game_date") if "game_date" in valid_cols else -1
 
             placeholders = ", ".join(["?"] * len(valid_cols))
             col_list = ", ".join(valid_cols)
@@ -17501,17 +17596,44 @@ async def admin_restore_db(
             batch = []
             skipped_no_player = 0
             for row in rows[1:]:
-                vals = list(row[i] for i in valid_indices)
+                # Handle player_name split for players table
+                if has_player_name_split:
+                    fn, ln = _split_player_name(row[player_name_idx] if player_name_idx >= 0 else None)
+                    vals = [fn, ln]  # first_name, last_name prepended
+                    vals.extend(row[i] for i in valid_indices)
+                else:
+                    vals = list(row[i] for i in valid_indices)
                 # Skip completely empty rows
                 if all(v is None for v in vals):
                     continue
                 # Convert toi MM:SS to seconds
                 if toi_col_idx >= 0 and toi_col_idx < len(vals):
                     vals[toi_col_idx] = _toi_to_seconds(vals[toi_col_idx])
+                # Convert DD/MM dates to YYYY-MM-DD
+                if date_col_idx >= 0 and date_col_idx < len(vals):
+                    vals[date_col_idx] = _fix_date(vals[date_col_idx])
+                # Pack extended_stats JSON blob from unmapped analytics columns
+                if pack_extended:
+                    ext = {}
+                    for ei, ename in ext_stat_indices:
+                        v = row[ei]
+                        if v is not None and v != "":
+                            ext[ename] = v
+                    vals.append(json.dumps(ext) if ext else None)
                 # Resolve player_id from first_name + last_name
                 if needs_player_id:
                     fn = row[fn_idx] if fn_idx >= 0 else None
                     ln = row[ln_idx] if ln_idx >= 0 else None
+                    tm = row[team_idx] if team_idx >= 0 else None
+                    pid = _resolve_player_id(conn, fn, ln, org_id, tm)
+                    if not pid:
+                        skipped_no_player += 1
+                        continue
+                    vals.append(pid)
+                # Resolve player_id from player_name (player_game_stats)
+                elif needs_player_name_resolve:
+                    pn = row[pname_idx] if pname_idx >= 0 else None
+                    fn, ln = _split_player_name(pn)
                     tm = row[team_idx] if team_idx >= 0 else None
                     pid = _resolve_player_id(conn, fn, ln, org_id, tm)
                     if not pid:
@@ -17528,20 +17650,25 @@ async def admin_restore_db(
                     vals.append(inject_defaults[col])
                 batch.append(tuple(vals))
 
+            # Insert row-by-row so individual bad rows don't kill the whole sheet
+            inserted = 0
+            skipped_errors = 0
             if batch:
-                try:
-                    conn.executemany(sql, batch)
-                except Exception as e:
-                    logger.warning("Restore sheet '%s' failed: %s", sheet_name, e)
-                    results[sheet_name] = {"table": table, "rows": 0, "error": str(e)}
-                    continue
+                for row_vals in batch:
+                    try:
+                        conn.execute(sql, row_vals)
+                        inserted += 1
+                    except Exception:
+                        skipped_errors += 1
 
-            total_rows += len(batch)
-            sheet_result = {"table": table, "rows": len(batch), "columns": len(valid_cols)}
+            total_rows += inserted
+            sheet_result = {"table": table, "rows": inserted, "columns": len(valid_cols)}
             if unmapped:
                 sheet_result["unmapped_columns"] = unmapped
             if skipped_no_player > 0:
                 sheet_result["skipped_no_player_match"] = skipped_no_player
+            if skipped_errors > 0:
+                sheet_result["skipped_errors"] = skipped_errors
             results[sheet_name] = sheet_result
 
     wb.close()
@@ -17797,7 +17924,7 @@ async def generate_development_plan(player_id: str, token_data: dict = Depends(v
     player_name = f"{player[0]} {player[1]}"
     position = player[2] or "Forward"
     team = player[3] or "Unknown"
-    league = player[4] or "GOJHL"
+    league = player[4] or "Unknown"
 
     # Get latest stats
     stats = conn.execute("""
@@ -21147,8 +21274,7 @@ BENCH_TALK_TOOLS = [
             "properties": {
                 "league": {
                     "type": "string",
-                    "default": "gojhl",
-                    "description": "League code (gojhl, ohl, ojhl)"
+                    "description": "League code (e.g. ohl, gojhl, ojhl, whl, qmjhl, bchl)"
                 },
                 "team_name": {
                     "type": "string",
@@ -22227,8 +22353,19 @@ def _pt_get_team_context(params: dict, org_id: str) -> tuple[dict, dict]:
 
 
 async def _pt_get_game_context(params: dict, org_id: str) -> tuple[dict, dict]:
-    """Get live standings, upcoming games, and recent scores from HockeyTech."""
-    league = params.get("league", "gojhl")
+    """Get league standings, upcoming games, and recent scores from HockeyTech."""
+    league = params.get("league")
+    if not league:
+        # Try to infer from org's preferred league
+        conn = get_db()
+        try:
+            user_row = conn.execute(
+                "SELECT preferred_league FROM users WHERE org_id = ? AND preferred_league IS NOT NULL LIMIT 1",
+                (org_id,)
+            ).fetchone()
+            league = user_row["preferred_league"] if user_row else "ohl"
+        finally:
+            conn.close()
     team_name = params.get("team_name")
 
     try:
@@ -25389,8 +25526,9 @@ async def get_unread_count(token_data: dict = Depends(verify_token)):
 # ============================================================
 
 
-def _gather_broadcast_data(team_name: str, org_id: str, conn) -> list:
-    """Gather roster with latest season stats for broadcast endpoints."""
+def _gather_broadcast_data(team_name: str, org_id: str, conn) -> dict:
+    """Gather roster with latest season stats for broadcast endpoints.
+    Returns {"players": [...], "stats_as_of": "ISO date or None"}."""
     decoded = team_name.replace("%20", " ")
     rows = conn.execute(
         """SELECT * FROM players
@@ -25400,8 +25538,10 @@ def _gather_broadcast_data(team_name: str, org_id: str, conn) -> list:
         (org_id, decoded),
     ).fetchall()
     result = []
+    player_ids = []
     for r in rows:
         p = _player_from_row(r)
+        player_ids.append(p["id"])
         stats_row = conn.execute(
             "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
             (p["id"],),
@@ -25424,7 +25564,17 @@ def _gather_broadcast_data(team_name: str, org_id: str, conn) -> list:
             "weight_kg": p.get("weight_kg"),
             "stats": stats,
         })
-    return result
+    # Determine data freshness from player_stats created_at
+    stats_as_of = None
+    if player_ids:
+        placeholders = ",".join("?" * len(player_ids))
+        freshness_row = conn.execute(
+            f"SELECT MAX(created_at) as latest FROM player_stats WHERE player_id IN ({placeholders})",
+            player_ids,
+        ).fetchone()
+        if freshness_row and freshness_row["latest"]:
+            stats_as_of = freshness_row["latest"]
+    return {"players": result, "stats_as_of": stats_as_of}
 
 
 def _strip_json_fences(text: str) -> str:
@@ -25458,9 +25608,15 @@ async def broadcast_generate_all(
         raise HTTPException(status_code=400, detail="Invalid mode. Must be 'broadcast' or 'producer'.")
 
     conn = get_db()
-    home_data = _gather_broadcast_data(body.home_team, org_id, conn)
-    away_data = _gather_broadcast_data(body.away_team, org_id, conn)
+    home_bundle = _gather_broadcast_data(body.home_team, org_id, conn)
+    away_bundle = _gather_broadcast_data(body.away_team, org_id, conn)
     conn.close()
+    home_data = home_bundle["players"]
+    away_data = away_bundle["players"]
+    # Determine overall stats freshness (latest of both teams)
+    _home_ts = home_bundle.get("stats_as_of")
+    _away_ts = away_bundle.get("stats_as_of")
+    stats_as_of = max(filter(None, [_home_ts, _away_ts]), default=None)
 
     client = get_anthropic_client()
     if not client:
@@ -25546,6 +25702,7 @@ For pronunciation, provide only if the name is non-obvious; otherwise null."""
         raw_text = message.content[0].text.strip()
         raw_text = _strip_json_fences(raw_text)
         result = json.loads(raw_text)
+        result["stats_as_of"] = stats_as_of
         return result
     except json.JSONDecodeError as e:
         logger.error("Broadcast generate-all: JSON parse error: %s | raw: %s", str(e), raw_text[:500] if 'raw_text' in dir() else "N/A")
@@ -25630,9 +25787,11 @@ async def broadcast_generate_tool(
         raise HTTPException(status_code=400, detail="Invalid mode. Must be 'broadcast' or 'producer'.")
 
     conn = get_db()
-    home_data = _gather_broadcast_data(body.home_team, org_id, conn)
-    away_data = _gather_broadcast_data(body.away_team, org_id, conn)
+    home_bundle = _gather_broadcast_data(body.home_team, org_id, conn)
+    away_bundle = _gather_broadcast_data(body.away_team, org_id, conn)
     conn.close()
+    home_data = home_bundle["players"]
+    away_data = away_bundle["players"]
 
     client = get_anthropic_client()
     if not client:
@@ -25729,9 +25888,11 @@ async def broadcast_post_game(
         raise HTTPException(status_code=400, detail="Invalid mode. Must be 'broadcast' or 'producer'.")
 
     conn = get_db()
-    home_data = _gather_broadcast_data(body.home_team, org_id, conn)
-    away_data = _gather_broadcast_data(body.away_team, org_id, conn)
+    home_bundle = _gather_broadcast_data(body.home_team, org_id, conn)
+    away_bundle = _gather_broadcast_data(body.away_team, org_id, conn)
     conn.close()
+    home_data = home_bundle["players"]
+    away_data = away_bundle["players"]
 
     client = get_anthropic_client()
     if not client:

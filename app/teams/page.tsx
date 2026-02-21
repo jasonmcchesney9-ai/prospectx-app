@@ -645,7 +645,7 @@ function TeamCard({ team, onSync, syncing }: { team: TeamSummary; onSync: (t: Te
             onClick={() => onSync(team)}
             disabled={syncing}
             className="flex items-center gap-1 px-2 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-[10px] font-semibold hover:bg-teal/20 transition-colors disabled:opacity-50 shrink-0"
-            title="Sync roster from Live Stats & Data"
+            title="Sync roster from league data"
           >
             {syncing ? (
               <Loader2 size={11} className="animate-spin" />

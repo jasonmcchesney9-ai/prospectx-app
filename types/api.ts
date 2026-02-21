@@ -2422,7 +2422,7 @@ export type GameState = "pre_game" | "live" | "intermission" | "post_game";
 
 export const GAME_STATE_LABELS: Record<GameState, string> = {
   pre_game: "Pre-Game",
-  live: "Live",
+  live: "In-Game",
   intermission: "Intermission",
   post_game: "Post-Game",
 };
@@ -2580,7 +2580,7 @@ export interface TalkTrack {
   stat_hook: string;
 }
 
-// ── Live Stat Cards ─────────────────────────────────────────
+// ── Stat Cards ──────────────────────────────────────────────
 export interface StatCard {
   card_type: string;
   headline_stat: string;

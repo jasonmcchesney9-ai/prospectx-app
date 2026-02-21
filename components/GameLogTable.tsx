@@ -36,7 +36,7 @@ export default function GameLogTable({ data, onPageChange, currentOffset = 0, pa
       <div className="bg-white rounded-xl border border-teal/20 p-6 text-center">
         <Calendar size={32} className="mx-auto text-muted/30 mb-2" />
         <p className="text-sm text-muted">No game-by-game data available.</p>
-        <p className="text-xs text-muted/60 mt-1">Sync game logs from Live Stats & Data to see per-game stats.</p>
+        <p className="text-xs text-muted/60 mt-1">Sync game logs from league data to see per-game stats.</p>
       </div>
     );
   }

@@ -122,7 +122,7 @@ export default function StepLeagueTeam({
         Select Your League & Team
       </h2>
       <p className="text-sm text-muted mb-5">
-        Choose your primary league and team. This sets up your dashboard with live data.
+        Choose your primary league and team. This sets up your dashboard with synced data.
       </p>
 
       {showManual ? (
@@ -131,7 +131,7 @@ export default function StepLeagueTeam({
           {leagueError && (
             <div className="flex items-center gap-2 text-sm text-orange bg-orange/5 px-3 py-2 rounded-lg">
               <AlertCircle size={16} />
-              <span>Live league data unavailable. Enter your team manually.</span>
+              <span>League data unavailable. Enter your team manually.</span>
             </div>
           )}
           <div>

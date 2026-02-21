@@ -124,7 +124,7 @@ function ProView({
         Import Your Roster
       </h2>
       <p className="text-sm text-muted mb-5">
-        Pull in your team&apos;s roster and stats from the live data feed.
+        Pull in your team&apos;s roster and stats from the league data sync.
       </p>
 
       <div className="flex flex-col items-center py-6">
