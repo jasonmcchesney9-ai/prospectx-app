@@ -2263,6 +2263,74 @@ export interface OrgInvite {
   accepted_at: string | null;
 }
 
+// ── Bench Card V2 Context Payload (Addendum 9) ──────────────
+
+export interface BenchCardLineUsage {
+  lineId: string;
+  label: string;
+  players: string;
+  roleTag: string;
+  primaryMatchup: string;
+  shiftLengthSecondsBand: string;
+  ozoneUsage: string;
+  dzoneUsage: string;
+  specialNotes?: string;
+}
+
+export interface BenchCardDPairUsage {
+  pairId: string;
+  label: string;
+  players: string;
+  roleTag: string;
+  usageNotes: string;
+  specialNotes?: string;
+}
+
+export interface BenchCardSpecialTeamsUnit {
+  unitId: string;
+  players: string;
+  roleTag: string;
+  keyFocus: string[];
+}
+
+export interface BenchCardPKMiniBlock {
+  opponentPPSnapshot: string;
+  ourPKShape: string;
+  denyFocus: string[];
+  ifThenTriggers: {
+    trigger: string;
+    action: string;
+  }[];
+}
+
+export interface BenchCardWinConditionBox {
+  winConditions: string[];
+  failureTriggers: string[];
+}
+
+export interface BenchCardSpecialTeams {
+  ppUnits: BenchCardSpecialTeamsUnit[];
+  pkUnits: BenchCardSpecialTeamsUnit[];
+  pkBenchBlock: BenchCardPKMiniBlock;
+}
+
+export interface BenchCardContextPayload {
+  gameMeta: {
+    gameId: string;
+    date: string;
+    venue: string;
+    opponentName: string;
+    objectiveOneLiner: string;
+  };
+  goaliePlan: { starter: string; backup?: string; pullRule: string };
+  forwardLines: BenchCardLineUsage[];
+  defencePairs: BenchCardDPairUsage[];
+  specialTeams: BenchCardSpecialTeams;
+  universalBenchRules: string[];
+  keyPlayerUsageReminders: string[];
+  winConditionBox: BenchCardWinConditionBox;
+}
+
 // ── Game State (Broadcast) ───────────────────────────────────
 export type GameState = "pre_game" | "live" | "intermission" | "post_game";
 

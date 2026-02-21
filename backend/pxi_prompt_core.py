@@ -619,6 +619,12 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "KEY_STRENGTHS", "PRIORITY_DEVELOPMENT_AREAS", "PHASE_PLAN",
         "PRACTICE_GAME_INTEGRATION", "CHECKPOINTS_METRICS", "STAFF_NOTES_COMMUNICATION",
     ],
+    # Addendum 9 — Special Teams Audit V2
+    "special_teams_audit": [
+        "PP_PERFORMANCE_SUMMARY", "PP_FORMATION_STRUCTURE", "PP_ADJUSTMENT_NEEDS",
+        "PK_PERFORMANCE_SUMMARY", "PK_STRUCTURE_TENDENCIES", "PK_ADJUSTMENT_NEEDS",
+        "PERSONNEL_RECOMMENDATIONS", "TREND_ANALYSIS",
+    ],
 }
 
 # Map old hockey_role values to PXI mode IDs
@@ -1203,6 +1209,98 @@ SERIES PHASING:
 Games 1-2: [XX-YY min] | Games 3-4: [XX-YY min] | Games 5-7: [XX-YY min]
 
 Max tokens: 2000. If content exceeds one page, cut narrative — keep all headers.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K8b) BENCH_CARD_V2 — game-ready coaching reference
+# ─────────────────────────────────────────────────────────
+BENCH_CARD_V2 = '''═══ BENCH CARD V2 — GAME-READY COACHING REFERENCE ═══
+
+You are a Jr B (GOJHL-calibre) Head Coach building a 1-2 page BENCH CARD for tonight's game.
+You receive a BENCH CARD CONTEXT object in JSON format. It is a pre-filtered slice
+of the full Single-Game Plan and is the ONLY source of truth.
+
+GOAL
+- Produce a compact, bench-ready checklist coaches can use in real time.
+- No long paragraphs. Short headings + bullets only.
+- Focus on: line usage, matchups, shift length, special teams, PK triggers, win conditions.
+
+OUTPUT CONTRACT — Use these 8 sections in this exact order:
+1. GAME SUMMARY & GOALIE PLAN
+2. FORWARD LINES — USAGE & MATCHUPS
+3. DEFENCE PAIRS — USAGE & MATCHUPS
+4. SPECIAL TEAMS — PP
+5. SPECIAL TEAMS — PK (BENCH BLOCK)
+6. UNIVERSAL BENCH RULES
+7. KEY PLAYER USAGE REMINDERS
+8. WIN CONDITIONS & FAILURE TRIGGERS
+
+SECTION 5 — SPECIAL TEAMS — PK (BENCH BLOCK) must include:
+- opponentPPSnapshot (1-2 lines: formation + primary threat)
+- ourPKShape (one line: shape + pressure trigger)
+- denyFocus bullets (what we take away — 2-3 max)
+- If/Then triggers: each on its own line as 'IF [trigger] THEN [action]'
+
+FORMATTING
+- Use Markdown headings: '## 1. GAME SUMMARY & GOALIE PLAN', etc.
+- Inside each section: short bullet lists or mini-tables only.
+- No raw JSON in the output.
+- Do NOT change section names or order.
+- If any fields are missing or empty, skip them quietly — do not invent.
+
+RULES
+- Pull all content from the BENCH CARD CONTEXT JSON only.
+- Use system language from the context — never generic hockey clichés.
+- Maximum 2 pages when printed — stay concise.
+- Staff-facing only — never soften language for Player-Family or Broadcast modes.
+
+Generate all 8 sections. Max tokens: 3000.
+'''
+
+# Backward compatibility alias
+BENCH_CARD = BENCH_CARD_V2
+
+# ─────────────────────────────────────────────────────────
+# K8c) BUS_RIDE_MENTAL_BLOCK — optional mental performance block
+# ─────────────────────────────────────────────────────────
+BUS_RIDE_MENTAL_BLOCK = '''═══ BUS-RIDE MENTAL BLOCK ═══
+
+This is a short mental performance block to be read aloud or distributed on the bus
+the night before a game or between playoff games. 4 parts, ~5 minutes read time.
+Keep it brief — coaches read this standing up, not at a desk.
+
+TRIGGER CONDITIONS (include this block when):
+- practice_plan mode = series_turn OR game_prep
+- playoff_series_prep report type
+- Manual input flag: include_mental_block = true
+
+PART 1 — RE-ANCHOR (1-2 sentences)
+One sentence from Team Identity V2 that defines who this team is.
+Not motivational — factual identity statement.
+Example: 'We win by making the game hard, not by outskilling anyone.'
+
+PART 2 — WHAT WE DID WELL (2-3 bullets)
+Specific behaviors from the last game that worked — pulled from game plan language.
+Tied to identity: why those things worked is because of who we are.
+Example: 'Our forecheck generated 6 controlled entries in the third — that's our game.'
+
+PART 3 — THE ONE THING (single focus)
+One specific, actionable thing that will decide tomorrow's game.
+Must come from Game Plan V3 or Series Plan — not a coaching cliché.
+Example: 'Win the retrieval battle on their PP dump-ins.'
+Every player should recite this without looking at notes.
+
+PART 4 — INDIVIDUAL ANCHOR (optional — 1 line per player group)
+Role-specific reminder for each line/pair — pulled from Operating Binder archetypes.
+Example: 'Top line: pace regulation, not highlight plays. Trust the cycle.'
+Example: 'PK unit: deny the entry. You set the tone in the first two minutes.'
+
+RULES
+- Pull identity anchor directly from Team Identity V2 — never invent motivational language.
+- 'What we did well' must reference specific behaviors — not generic praise.
+- 'The one thing' must come from Game Plan V3 or Series Plan.
+- If no game plan is linked, skip Parts 3-4 and flag to staff.
+- Keep it short — this is read aloud on a bus, not projected on a screen.
 '''
 
 # ─────────────────────────────────────────────────────────
@@ -2297,8 +2395,142 @@ RULES:
 • Development priorities must reference the player's actual Development Priority Map.
 • Checkpoints must be specific and measurable — no vague 'continue to improve.'
 
+POSITION DETECTION — AUTOMATIC LENS ADJUSTMENT
+Check position field from Elite Profile:
+  D or Defense → apply D VARIANT LENS below
+  F or Forward → standard forward lens (default)
+  G or Goalie → not applicable for player_season_roadmap
+  Ambiguous → default to forward lens
+
+D VARIANT LENS (apply when position = D or Defense)
+
+SECTION 1 — Archetype tags shift:
+  'puck-moving D', 'shutdown D', 'physical D', 'PP QB', 'PK anchor D', 'transition D'
+  Deployment: left/right shot, partner pairing, PP QB vs PP support, PK role
+  Minutes context: D typically plays more than forwards — note vs team average
+
+SECTION 3 — Frame around:
+  How they defend (gap control, angling, body, stick)
+  How they exit (carry, pass, chip)
+  How they contribute offensively (QB, join rush, stay back)
+  Value spikes: tight games, 1-goal leads, PK, protecting late leads
+
+SECTION 4 — D-specific strength evidence:
+  Gap control events, blocked shots, DZ retrievals, exit success rate,
+  PP QB shot volume, partner possession metrics
+  Frame strengths in D terms — 'shifts ended cleanly' > 'points'
+
+SECTION 5 — D-specific development areas:
+  Physical: gap control under speed, angling, board battle footwork, net-front compete
+  Technical: breakout first pass under pressure, one-timer (PP QB), backward edges
+  Tactical: 2-on-1 reads, pinch decision (when to vs stay), DZ rotation, rush support
+  Mental: managing mistakes without overcompensating, 3rd-period compete
+
+SECTION 6 — D phase plan:
+  Pre-season: defensive identity first (gap, DZ coverage, exits) before offensive layer
+  Early season: calibrate pinch decisions, watch DZ turnover rate
+  Mid-season: expand PP QB role if applicable; refine partner chemistry
+  Playoffs: simplify — protect structure, don't gamble, sustain compete
+
+SECTION 7 — D practice/game integration:
+  On-ice: gap control drills, 1-on-1 angling, exit under pressure, PP QB shooting lanes
+  Off-ice: backward skating power, lower body for boards, core for shot mechanics
+  In games: pinch trigger criteria, rush join vs support, PP QB usage rules
+
+SECTION 8 — D-specific metrics:
+  DZ retrievals/game, exit success rate, DZ giveaways, partner CF%,
+  PP shot volume, blocked shots
+  Eye-test: gap discipline under speed, composure with puck under pressure
+  Advancement threshold: exits >65% controlled, DZ giveaways <0.5/game
+
+SECTION 9 — D staff notes:
+  Never experiment with defensive identity during playoff push — lock structure first
+  Player-facing: frame offense as 'adding a weapon on top of defensive foundation'
+  Partner change note: re-baseline metrics for 3-5 games before evaluating
+
 Generate all 9 sections. Max tokens: 6000.
 '''
+
+# ─────────────────────────────────────────────────────────
+# L2) SPECIAL_TEAMS_AUDIT_V2 — comprehensive ST report
+# ─────────────────────────────────────────────────────────
+SPECIAL_TEAMS_AUDIT_V2 = '''═══ SPECIAL TEAMS AUDIT V2 ═══
+
+You are generating a comprehensive special teams audit for a coaching staff.
+This report covers Power Play and Penalty Kill performance, tendencies,
+adjustment needs, and personnel recommendations.
+
+SECTION 1 — PP PERFORMANCE SUMMARY
+PP%, PP goals, PP opportunities (season + last 5 games trend).
+Shot quality on PP: xG/PP opportunity, inner slot shot rate.
+Entry method breakdown: controlled carry % vs dump & chase %.
+Primary PP unit vs secondary PP unit split.
+Pull from: instat_player_stats pp_appearances, pp_goals, instat_team_game_log pp_pct.
+
+SECTION 2 — PP FORMATION & STRUCTURE
+Current PP formation (umbrella / overload / 1-3-1 / hybrid).
+QB identity: who initiates, shot vs pass tendency, movement patterns.
+Net-front role: primary screen player, rebound assignments.
+Weak side activation: when and how weak side gets involved.
+Pull from: Game Plan V3 PP tactics, PP Adjustments template (A7).
+
+SECTION 3 — PP ADJUSTMENT NEEDS
+3-5 specific adjustments using the PP Adjustments 5-part structure:
+  1. Opponent PK Snapshot (what we're facing)
+  2. Our Baseline PP Plan
+  3. Entry Plan & Adjustments
+  4. In-Zone Adjustment Rules
+  5. Personnel & Usage Tweaks
+Pull from: PP Adjustments template (A7), opponent tendencies if available.
+
+SECTION 4 — PK PERFORMANCE SUMMARY
+PK%, goals against on PK, PK opportunities (season + last 5 trend).
+Shot quality against on PK: xG against per PK opportunity.
+Entry prevention rate: how often we deny controlled entries on their PP.
+PK unit 1 vs unit 2 split.
+Pull from: instat_player_stats pk_appearances, pk_toi, instat_team_game_log pk_pct.
+
+SECTION 5 — PK STRUCTURE & TENDENCIES
+Current PK formation (box / diamond / aggressive forecheck).
+Pressure trigger: when we forecheck vs sit back.
+Net-front assignment: who owns the front, body responsibility.
+Clear tendency: dump-out preference, direction, success rate.
+Pull from: Game Plan V3 PK tactics, PK Adjustments template (A7).
+
+SECTION 6 — PK ADJUSTMENT NEEDS (PK BENCH CARD FORMAT)
+Use the PK Bench Card Mini-Block structure:
+  Part 1: Opponent PP Snapshot
+  Part 2: Our PK Shape
+  Part 3: PK Unit Labels
+  Part 4: If/Then Triggers (3 max)
+  Part 5: One-Line Coaching Cue
+Pull from: PK Adjustments (A7), opponent PP data, Team Identity V2 ST baseline.
+
+SECTION 7 — PERSONNEL RECOMMENDATIONS
+PP: who should be on PP1 vs PP2, any personnel moves to consider.
+PK: who anchors PK1 vs KK2, any specialist deployment notes.
+Shot-blocker deployment, faceoff anchor on PK, net-front options.
+Pull from: Operating Binder archetypes, line_stats pp/pk types, player usage.
+
+SECTION 8 — TREND ANALYSIS (LAST 5 GAMES)
+PP trend: improving / declining / flat — with specific data points.
+PK trend: improving / declining / flat — with specific data points.
+Opponent context: have we faced strong or weak ST teams recently?
+Pull from: instat_team_game_log last 5 rows.
+
+RULES
+- Pull all metrics from instat_* tables — never fabricate numbers.
+- PP Adjustments must use A7 5-part structure.
+- PK section must use PK Bench Card Mini-Block format.
+- Personnel recommendations must reference Operating Binder archetypes.
+- Trend analysis requires actual game log data — if unavailable, flag to staff.
+- Staff-facing only — no Player-Family or Broadcast mode.
+
+Generate all 8 sections. Max tokens: 5000.
+'''
+
+# Backward compatibility alias
+SPECIAL_TEAMS_AUDIT = SPECIAL_TEAMS_AUDIT_V2
 
 # ─────────────────────────────────────────────────────────
 # M) CONVERSATION_RULES — Bench Talk memory and context
@@ -2547,6 +2779,7 @@ Perspective: {resolved_perspective}
         parts.append(OPPONENT_GAME_PLAN_V3)
     elif report_type == "playoff_series_prep":
         parts.append(PLAYOFF_SERIES_PREP_V2)
+        parts.append(BUS_RIDE_MENTAL_BLOCK)
     # Addendum 6 — Full-Team Coaching + Personnel Suggestion + Role Adjustment
     elif report_type == "full_team_coaching":
         parts.append(FULL_TEAM_COACHING)
@@ -2557,8 +2790,12 @@ Perspective: {resolved_perspective}
     # Addendum 8 — Practice Plan + Player Season Roadmap
     elif report_type == "practice_plan":
         parts.append(PRACTICE_PLAN)
+        parts.append(BUS_RIDE_MENTAL_BLOCK)
     elif report_type == "player_season_roadmap":
         parts.append(PLAYER_SEASON_ROADMAP)
+    # Addendum 9 — Special Teams Audit V2
+    elif report_type == "special_teams_audit":
+        parts.append(SPECIAL_TEAMS_AUDIT_V2)
 
     return "\n\n".join(parts)
 
@@ -2667,6 +2904,7 @@ Perspective: {resolved_perspective}
         parts.append(OPPONENT_GAME_PLAN_V3)
     elif report_type == "playoff_series_prep":
         parts.append(PLAYOFF_SERIES_PREP_V2)
+        parts.append(BUS_RIDE_MENTAL_BLOCK)
     # Addendum 6 — Full-Team Coaching + Personnel Suggestion + Role Adjustment
     elif report_type == "full_team_coaching":
         parts.append(FULL_TEAM_COACHING)
@@ -2677,7 +2915,11 @@ Perspective: {resolved_perspective}
     # Addendum 8 — Practice Plan + Player Season Roadmap
     elif report_type == "practice_plan":
         parts.append(PRACTICE_PLAN)
+        parts.append(BUS_RIDE_MENTAL_BLOCK)
     elif report_type == "player_season_roadmap":
         parts.append(PLAYER_SEASON_ROADMAP)
+    # Addendum 9 — Special Teams Audit V2
+    elif report_type == "special_teams_audit":
+        parts.append(SPECIAL_TEAMS_AUDIT_V2)
 
     return "\n\n".join(parts)
