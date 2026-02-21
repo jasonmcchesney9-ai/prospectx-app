@@ -142,6 +142,7 @@ if ENVIRONMENT != "development" and JWT_SECRET == _DEFAULT_JWT_SECRET:
     print("FATAL: JWT_SECRET is still the default value in '%s' environment. Set a strong JWT_SECRET env var." % ENVIRONMENT)
     sys.exit(1)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 
 # ── Subscription Tiers ─────────────────────────────────────
 SUBSCRIPTION_TIERS = {
@@ -6681,6 +6682,84 @@ class InviteAcceptRequest(BaseModel):
     last_name: str
 
 
+async def _send_invite_email(recipient_email: str, invite_url: str, org_name: str, invited_role: str) -> bool:
+    """Send an org invite email via Resend with branded HTML template."""
+    if not RESEND_API_KEY:
+        logger.info("RESEND_API_KEY not set — skipping email to %s", recipient_email)
+        return False
+    try:
+        import resend
+        resend.api_key = RESEND_API_KEY
+
+        html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#F0F4F8;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F0F4F8;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#0F2A3D;padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;font-size:28px;letter-spacing:2px;">
+              <span style="color:#18B3A6;">Prospect</span><span style="color:#F36F21;">X</span>
+            </h1>
+            <p style="margin:8px 0 0;color:#8BADC0;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Hockey Intelligence Platform</p>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:40px;">
+            <h2 style="color:#0F2A3D;font-size:22px;margin:0 0 16px;">You're Invited!</h2>
+            <p style="color:#4A5568;font-size:15px;line-height:1.6;margin:0 0 24px;">
+              You've been invited to join <strong style="color:#0F2A3D;">{org_name}</strong> on ProspectX
+              as a <strong style="color:#18B3A6;">{invited_role.replace('_', ' ').title()}</strong>.
+            </p>
+            <p style="color:#4A5568;font-size:15px;line-height:1.6;margin:0 0 32px;">
+              ProspectX is a decision-grade hockey intelligence platform used by GMs, scouts, coaches,
+              agents, and player development staff to analyze players, build reports, and manage hockey operations.
+            </p>
+            <!-- CTA Button -->
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr><td align="center">
+                <a href="{invite_url}" style="display:inline-block;background-color:#F36F21;color:#FFFFFF;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 48px;border-radius:8px;letter-spacing:0.5px;">
+                  Accept Invite
+                </a>
+              </td></tr>
+            </table>
+            <p style="color:#A0AEC0;font-size:12px;margin:24px 0 0;text-align:center;">
+              This invite expires in 7 days. If you didn't expect this, you can safely ignore it.
+            </p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#F7FAFC;padding:24px 40px;text-align:center;border-top:1px solid #E2EAF3;">
+            <p style="color:#A0AEC0;font-size:11px;margin:0;">
+              &copy; 2026 ProspectX Intelligence &middot; Hockey Operations Technology
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+        params: resend.Emails.SendParams = {
+            "from": "ProspectX <noreply@prospectx.com>",
+            "to": [recipient_email],
+            "subject": f"You're invited to join {org_name} on ProspectX",
+            "html": html_body,
+        }
+        resend.Emails.send(params)
+        logger.info("Invite email sent to %s via Resend", recipient_email)
+        return True
+    except Exception as e:
+        logger.warning("Failed to send invite email to %s: %s", recipient_email, e)
+        return False
+
+
 @app.post("/org/invite")
 async def create_org_invite(req: InviteRequest, token_data: dict = Depends(verify_token)):
     """Create an invite link for a user to join an org. Admin or superadmin only."""
@@ -6756,11 +6835,15 @@ async def create_org_invite(req: InviteRequest, token_data: dict = Depends(verif
         invite_url = f"{FRONTEND_URL}/login?mode=register&invite={invite_token}"
         logger.info("Org invite created: %s -> %s (org: %s)", token_data["user_id"], req.email, org_id)
 
+        # Send invite email via Resend
+        org_name = org["name"] if org else "ProspectX"
+        email_sent = await _send_invite_email(req.email.lower().strip(), invite_url, org_name, req.hockey_role)
+
         return {
             "invite_id": invite_id,
             "invite_url": invite_url,
             "expires_at": expires_at,
-            "email_sent": False,
+            "email_sent": email_sent,
         }
     finally:
         conn.close()
