@@ -218,6 +218,8 @@ export interface TeamReference {
   city: string | null;
   abbreviation: string | null;
   logo_url: string | null;
+  age_division: string | null;
+  country: string | null;
 }
 
 export interface PlayerStats {
@@ -1724,6 +1726,8 @@ export interface Drill {
   skill_focus: string | null;
   intensity: string;
   concept_id: string | null;
+  age_group: string | null;
+  country_framework: string | null;
   created_at: string;
 }
 
@@ -1865,6 +1869,62 @@ export const PRACTICE_FOCUS_LABELS: Record<string, string> = {
   compete_level: "Compete Level",
   transition: "Transition",
   battle_drills: "Battle Drills",
+};
+
+// ============================================================
+// Country Development Frameworks
+// ============================================================
+
+export const SUPPORTED_COUNTRIES = [
+  "Canada", "USA", "International", "Europe", "Sweden", "Finland", "UK",
+] as const;
+
+export const COUNTRY_FRAMEWORKS: Record<string, string> = {
+  Canada: "hockey_canada_ltpd",
+  USA: "usa_hockey_adm",
+  International: "iihf_ltad",
+  Europe: "iihf_ltad",
+  Sweden: "iihf_ltad",
+  Finland: "iihf_ltad",
+  UK: "iihf_ltad",
+};
+
+export const FRAMEWORK_LABELS: Record<string, string> = {
+  hockey_canada_ltpd: "Hockey Canada LTPD",
+  usa_hockey_adm: "USA Hockey ADM",
+  iihf_ltad: "IIHF Long-Term Athlete Development",
+};
+
+export const HC_DIVISIONS: Record<string, string> = {
+  timbits_u7: "Timbits U7 (6 & under)",
+  timbits_u9: "Timbits U9 (7-8)",
+  u11_atom: "U11 Atom (9-10)",
+  u13_peewee: "U13 Peewee (11-12)",
+  u15_bantam: "U15 Bantam (13-14)",
+  u18_midget: "U18 Midget (15-17)",
+};
+
+export const USA_DIVISIONS: Record<string, string> = {
+  "6u_mite": "6U Mite (6 & under)",
+  "8u_squirt": "8U Squirt (7-8)",
+  "10u_peewee": "10U Peewee (9-10)",
+  "12u_bantam": "12U Bantam (11-12)",
+  "14u_midget": "14U Midget (13-14)",
+  "16u": "16U (15-16)",
+  "18u": "18U (17-18)",
+};
+
+export const IIHF_DIVISIONS: Record<string, string> = {
+  learn_to_play: "Learn to Play (6 & under)",
+  learn_to_train: "Learn to Train (7-10)",
+  train_to_train: "Train to Train (11-14)",
+  train_to_compete: "Train to Compete (15-18)",
+};
+
+export const DRILL_FRAMEWORK_OPTIONS: Record<string, string> = {
+  hockey_canada_ltpd: "Hockey Canada LTPD",
+  usa_hockey_adm: "USA Hockey ADM",
+  iihf_ltad: "IIHF LTAD",
 };
 
 // ============================================================

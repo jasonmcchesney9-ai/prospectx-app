@@ -42,6 +42,7 @@ import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import { formatLeague } from "@/lib/leagues";
 import type { Player, RosterPlayer, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination, TeamGame, TeamIntelligence } from "@/types/api";
+import { SUPPORTED_COUNTRIES, COUNTRY_FRAMEWORKS, FRAMEWORK_LABELS, HC_DIVISIONS, USA_DIVISIONS, IIHF_DIVISIONS } from "@/types/api";
 
 type Tab = "roster" | "identity" | "lines" | "systems" | "reports" | "stats" | "games";
 
@@ -166,6 +167,31 @@ export default function TeamDetailPage() {
   const [rosterPosFilter, setRosterPosFilter] = useState<"all" | "forwards" | "defense" | "goalies">("all");
   const [rosterSort, setRosterSort] = useState<"name" | "pts" | "gp" | "youngest">("name");
 
+  // ── Development Framework State ───────────────────────────
+  const [teamCountry, setTeamCountry] = useState<string>("");
+  const [teamAgeDivision, setTeamAgeDivision] = useState<string>("");
+  const [savingFramework, setSavingFramework] = useState(false);
+
+  const getDivisionsForCountry = (country: string) => {
+    const fwKey = COUNTRY_FRAMEWORKS[country];
+    if (fwKey === "hockey_canada_ltpd") return HC_DIVISIONS;
+    if (fwKey === "usa_hockey_adm") return USA_DIVISIONS;
+    return IIHF_DIVISIONS;
+  };
+
+  const saveTeamFramework = async (updates: { country?: string; age_division?: string }) => {
+    if (!teamRef) return;
+    setSavingFramework(true);
+    try {
+      await api.put(`/teams/${teamRef.id}`, updates);
+      toast.success("Framework updated");
+    } catch {
+      toast.error("Failed to save framework");
+    } finally {
+      setSavingFramework(false);
+    }
+  };
+
   const loadData = useCallback(async () => {
     try {
       setError("");
@@ -200,7 +226,11 @@ export default function TeamDetailPage() {
         const match = refRes.value.data.find(
           (t: TeamReference) => t.name.toLowerCase() === teamName.toLowerCase()
         );
-        if (match) setTeamRef(match);
+        if (match) {
+          setTeamRef(match);
+          if (match.country) setTeamCountry(match.country);
+          if (match.age_division) setTeamAgeDivision(match.age_division);
+        }
       }
 
       // Load HockeyTech integration info (non-blocking)
@@ -898,6 +928,63 @@ export default function TeamDetailPage() {
         {/* ── Identity Tab ──────────────────────────────── */}
         {activeTab === "identity" && (
           <section className="space-y-4">
+            {/* Development Framework Settings */}
+            <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+              <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-teal/10 flex items-center gap-2">
+                <Shield size={16} className="text-teal" />
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">Development Framework</h3>
+                {savingFramework && <span className="text-[10px] text-teal animate-pulse">Saving...</span>}
+              </div>
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">Country</label>
+                  <select
+                    value={teamCountry}
+                    onChange={(e) => {
+                      const c = e.target.value;
+                      setTeamCountry(c);
+                      setTeamAgeDivision("");
+                      saveTeamFramework({ country: c, age_division: "" });
+                    }}
+                    className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white"
+                  >
+                    <option value="">Select Country...</option>
+                    {SUPPORTED_COUNTRIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1.5">Age Division</label>
+                  <select
+                    value={teamAgeDivision}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      setTeamAgeDivision(d);
+                      saveTeamFramework({ age_division: d });
+                    }}
+                    disabled={!teamCountry}
+                    className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white disabled:opacity-50"
+                  >
+                    <option value="">Select Division...</option>
+                    {teamCountry && Object.entries(getDivisionsForCountry(teamCountry)).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+                {teamCountry && (
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-muted/70">
+                      Framework: <span className="font-medium text-navy">{FRAMEWORK_LABELS[COUNTRY_FRAMEWORKS[teamCountry]] || "IIHF LTAD"}</span>
+                      {teamAgeDivision && (
+                        <> &middot; Practice plans will follow {teamCountry === "Canada" ? "Hockey Canada LTPD" : teamCountry === "USA" ? "USA Hockey ADM" : "IIHF"} guidelines for this division</>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {teamIntel && teamIntel.version > 0 ? (
               <>
                 {/* Header */}

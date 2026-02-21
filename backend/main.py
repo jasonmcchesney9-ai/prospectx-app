@@ -1934,6 +1934,29 @@ def init_db():
         conn.commit()
         logger.info("Migration: added practice_date column to practice_plans")
 
+    # ── Migration: Country framework columns on organizations ──
+    org_cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)").fetchall()}
+    for col_name, col_type in [
+        ("country", "TEXT DEFAULT 'Canada'"),
+        ("development_framework", "TEXT DEFAULT 'hockey_canada_ltpd'"),
+        ("framework_override", "INTEGER DEFAULT 0"),
+    ]:
+        if col_name not in org_cols:
+            conn.execute(f"ALTER TABLE organizations ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to organizations", col_name)
+
+    # ── Migration: Country/age_division columns on teams ──
+    teams_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(teams)").fetchall()}
+    for col_name, col_type in [
+        ("age_division", "TEXT"),
+        ("country", "TEXT"),
+    ]:
+        if col_name not in teams_cols2:
+            conn.execute(f"ALTER TABLE teams ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to teams", col_name)
+
     # ── Calendar & Schedule tables ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS events (
@@ -5005,6 +5028,92 @@ def _seed_superadmin_user():
         logger.warning("Superadmin seed note: %s", e)
     finally:
         conn.close()
+
+
+# ============================================================
+# COUNTRY DEVELOPMENT FRAMEWORKS
+# ============================================================
+
+SUPPORTED_FRAMEWORKS = {
+    "hockey_canada_ltpd": {
+        "country": "Canada",
+        "name": "Hockey Canada LTPD",
+        "divisions": {
+            "timbits_u7": {"label": "Timbits U7", "ages": "6 and under", "contact": "No body contact", "ice": "Cross-ice/half-ice only", "session_max": 30, "notes": "Fun and participation focus. Intro to skating and puck control. Maximum 30 min ice time. No standings or playoffs."},
+            "timbits_u9": {"label": "Timbits U9", "ages": "7-8", "contact": "No body contact", "ice": "Cross-ice games only", "session_max": 60, "notes": "Skill development stations. Small area games. No standings or playoffs. No body contact."},
+            "u11_atom": {"label": "U11 Atom", "ages": "9-10", "contact": "No body contact", "ice": "Half-ice to full-ice transition", "session_max": 75, "notes": "Introduction to systems. Skill-based practices. Equal ice time. No body contact."},
+            "u13_peewee": {"label": "U13 Peewee", "ages": "11-12", "contact": "Body contact introduced in AAA only (varies by province)", "ice": "Full-ice", "session_max": 90, "notes": "Systems introduced. Position-specific development. Full-ice play."},
+            "u15_bantam": {"label": "U15 Bantam", "ages": "13-14", "contact": "Body contact", "ice": "Full-ice", "session_max": 90, "notes": "Advanced systems. Power play and penalty kill. Increased practice intensity."},
+            "u18_midget": {"label": "U18 Midget", "ages": "15-17", "contact": "Full contact", "ice": "Full-ice", "session_max": 120, "notes": "Full systems. Pre-game skates. Advanced special teams. Near-adult practice structure."},
+        },
+    },
+    "usa_hockey_adm": {
+        "country": "USA",
+        "name": "USA Hockey ADM",
+        "divisions": {
+            "6u_mite": {"label": "6U Mite", "ages": "6 and under", "contact": "No body contact", "ice": "Cross-ice only, 3v3 or 4v4", "session_max": 30, "notes": "No goalies required. Fun and intro focus. Small area games only."},
+            "8u_squirt": {"label": "8U Squirt", "ages": "7-8", "contact": "No body contact", "ice": "Cross-ice games", "session_max": 60, "notes": "Stations and small area games. Skill development priority."},
+            "10u_peewee": {"label": "10U Peewee", "ages": "9-10", "contact": "No body contact", "ice": "Half-ice to full-ice", "session_max": 75, "notes": "Small area games emphasized. No slap shots."},
+            "12u_bantam": {"label": "12U Bantam", "ages": "11-12", "contact": "No body contact", "ice": "Full-ice", "session_max": 90, "notes": "Systems introduced. Equal ice time required."},
+            "14u_midget": {"label": "14U Midget", "ages": "13-14", "contact": "Body contact introduced", "ice": "Full-ice", "session_max": 90, "notes": "Advanced systems. Position-specific development."},
+            "16u": {"label": "16U", "ages": "15-16", "contact": "Full contact", "ice": "Full-ice", "session_max": 120, "notes": "Advanced systems. Specialized coaching."},
+            "18u": {"label": "18U", "ages": "17-18", "contact": "Full contact", "ice": "Full-ice", "session_max": 120, "notes": "Near-adult structure. College prep focus."},
+        },
+    },
+    "iihf_ltad": {
+        "country": "International",
+        "name": "IIHF Long-Term Athlete Development",
+        "divisions": {
+            "learn_to_play": {"label": "Learn to Play", "ages": "6 and under", "contact": "No contact", "ice": "Cross-ice", "session_max": 30, "notes": "FUNdamentals stage. Movement literacy and enjoyment."},
+            "learn_to_train": {"label": "Learn to Train", "ages": "7-10", "contact": "No contact", "ice": "Cross-ice to half-ice", "session_max": 60, "notes": "Skill acquisition window. Cross-ice to half-ice progression."},
+            "train_to_train": {"label": "Train to Train", "ages": "11-14", "contact": "Progressive introduction", "ice": "Full-ice", "session_max": 90, "notes": "Systems introduction. Progressive contact."},
+            "train_to_compete": {"label": "Train to Compete", "ages": "15-18", "contact": "Full contact", "ice": "Full-ice", "session_max": 120, "notes": "Full competitive play. Advanced tactics."},
+        },
+    },
+}
+
+COUNTRY_TO_FRAMEWORK = {
+    "Canada": "hockey_canada_ltpd",
+    "USA": "usa_hockey_adm",
+    "International": "iihf_ltad",
+    "Europe": "iihf_ltad",
+    "Sweden": "iihf_ltad",
+    "Finland": "iihf_ltad",
+    "UK": "iihf_ltad",
+}
+
+
+def framework_context(country: str, age_division: str = None, framework_key: str = None) -> str:
+    """Build development framework context string for practice plan AI prompts."""
+    fw_key = framework_key or COUNTRY_TO_FRAMEWORK.get(country, "iihf_ltad")
+    fw = SUPPORTED_FRAMEWORKS.get(fw_key)
+    if not fw:
+        return ""
+
+    lines = [f"DEVELOPMENT FRAMEWORK: {fw['name']} ({fw['country']})"]
+
+    if age_division and age_division in fw["divisions"]:
+        div = fw["divisions"][age_division]
+        lines.append(f"Division: {div['label']} (Ages {div['ages']})")
+        lines.append(f"Contact policy: {div['contact']}")
+        lines.append(f"Ice configuration: {div['ice']}")
+        lines.append(f"Maximum session length: {div['session_max']} minutes")
+        lines.append(f"Guidelines: {div['notes']}")
+        lines.append("")
+        lines.append("CRITICAL: Do NOT select drills that violate this framework's contact or ice configuration rules.")
+        lines.append(f"Do NOT exceed {div['session_max']} minutes total practice time.")
+        if "No" in div["contact"]:
+            lines.append("ABSOLUTELY NO checking, body contact, or battle drills that involve physical contact.")
+        if "Cross-ice" in div["ice"]:
+            lines.append("Use ONLY cross-ice or small-area drills. No full-ice drills.")
+        if "Half-ice" in div["ice"] and "full" not in div["ice"].lower():
+            lines.append("Prefer half-ice and cross-ice drills over full-ice drills.")
+    else:
+        lines.append("Available divisions:")
+        for div_key, div in fw["divisions"].items():
+            lines.append(f"  - {div['label']} ({div_key}): Ages {div['ages']}, {div['contact']}, {div['ice']}")
+
+    return "\n".join(lines)
 
 
 # Run on import
@@ -9631,6 +9740,21 @@ async def generate_practice_plan(body: PracticePlanGenerateRequest, token_data: 
     if ts_row:
         team_system = dict(ts_row)
 
+    # 1b. Gather framework context
+    org_row = conn.execute("SELECT country, development_framework FROM organizations WHERE id = ?", (org_id,)).fetchone()
+    org_country = org_row["country"] if org_row and org_row["country"] else "Canada"
+    org_framework = org_row["development_framework"] if org_row and org_row["development_framework"] else None
+    team_age_div = None
+    team_row_fw = conn.execute(
+        "SELECT age_division, country FROM teams WHERE (org_id = ? OR org_id = '__global__') AND LOWER(name) = LOWER(?)",
+        (org_id, body.team_name)
+    ).fetchone()
+    if team_row_fw:
+        team_age_div = team_row_fw["age_division"]
+        if team_row_fw["country"]:
+            org_country = team_row_fw["country"]
+    fw_context = framework_context(org_country, team_age_div, org_framework)
+
     # 2. Query matching drills
     drill_where = ["(org_id IS NULL OR org_id = ?)", "age_levels LIKE ?"]
     drill_params: list = [org_id, f'%"{body.age_level}"%']
@@ -9716,6 +9840,7 @@ ROSTER ({len(roster_summary)} players):
 {chr(10).join(roster_summary[:25]) if roster_summary else 'No roster data available'}
 
 {f"TEAM SYSTEM: Forecheck={team_system.get('forecheck','N/A')}, DZ={team_system.get('dz_structure','N/A')}, OZ={team_system.get('oz_setup','N/A')}, PP={team_system.get('pp_formation','N/A')}, PK={team_system.get('pk_formation','N/A')}" if team_system else "No team system configured"}
+{chr(10) + fw_context if fw_context else ''}
 
 AVAILABLE DRILLS:
 {json.dumps(available_drills, indent=1)}
@@ -12138,6 +12263,80 @@ async def create_team(body: TeamCreateRequest, token_data: dict = Depends(verify
         (team_id, org_id, body.name, body.league, body.city, body.abbreviation),
     )
     conn.commit()
+    row = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+# ============================================================
+# COUNTRY DEVELOPMENT FRAMEWORK ENDPOINTS
+# ============================================================
+
+@app.get("/frameworks")
+async def list_frameworks(token_data: dict = Depends(verify_token)):
+    """Return all supported country frameworks and their divisions."""
+    return {
+        "frameworks": SUPPORTED_FRAMEWORKS,
+        "country_to_framework": COUNTRY_TO_FRAMEWORK,
+    }
+
+
+class OrgUpdateRequest(BaseModel):
+    country: Optional[str] = None
+    development_framework: Optional[str] = None
+    framework_override: Optional[int] = None
+
+
+@app.put("/organizations/{org_id}")
+async def update_organization(org_id: str, body: OrgUpdateRequest, token_data: dict = Depends(verify_token)):
+    """Update organization settings (country, development framework)."""
+    if token_data["org_id"] != org_id:
+        raise HTTPException(status_code=403, detail="Cannot update another organization")
+    conn = get_db()
+    updates = []
+    params = []
+    for field, val in body.model_dump(exclude_unset=True).items():
+        updates.append(f"{field} = ?")
+        params.append(val)
+    if updates:
+        params.append(org_id)
+        conn.execute(f"UPDATE organizations SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+    row = conn.execute("SELECT * FROM organizations WHERE id = ?", (org_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return dict(row)
+
+
+class TeamUpdateRequest(BaseModel):
+    age_division: Optional[str] = None
+    country: Optional[str] = None
+    name: Optional[str] = None
+    league: Optional[str] = None
+    city: Optional[str] = None
+    abbreviation: Optional[str] = None
+
+
+@app.put("/teams/{team_id}")
+async def update_team(team_id: str, body: TeamUpdateRequest, token_data: dict = Depends(verify_token)):
+    """Update team settings (age_division, country, etc.)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    # Check both org-specific and global teams
+    existing = conn.execute("SELECT * FROM teams WHERE id = ? AND (org_id = ? OR org_id = '__global__')", (team_id, org_id)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Team not found or access denied")
+    updates = []
+    params = []
+    for field, val in body.model_dump(exclude_unset=True).items():
+        updates.append(f"{field} = ?")
+        params.append(val)
+    if updates:
+        params.append(team_id)
+        conn.execute(f"UPDATE teams SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
     row = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
     conn.close()
     return dict(row)
