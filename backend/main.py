@@ -15702,6 +15702,79 @@ async def admin_restore_db(
         "series_plans": "series_plans",
     }
 
+    # Column aliasing: XLSX header -> DB column name (per target table)
+    COLUMN_ALIASES = {
+        "games": {
+            "date": "game_date",
+        },
+        "line_combinations": {
+            "team": "team_name",
+            "line_players": "player_names",
+            "toi": "toi_seconds",
+            "goals": "goals_for",
+            "opp_goals": "goals_against",
+            "source_file": "data_source",
+        },
+        "goalie_stats": {
+            "toi": "toi_seconds",
+        },
+        "player_game_stats": {
+            "date": "game_date",
+            "toi": "toi_seconds",
+            "g": "goals",
+            "a": "assists",
+            "p": "points",
+            "source_file": "data_source",
+        },
+    }
+
+    # Default values for NOT NULL columns that may be absent from XLSX
+    COLUMN_DEFAULTS = {
+        "games": {"league": "GOJHL", "season": "2025-26"},
+        "line_combinations": {"season": "2025-26"},
+        "goalie_stats": {},
+        "player_game_stats": {},
+    }
+
+    def _toi_to_seconds(toi_val):
+        """Convert TOI string 'MM:SS' to integer seconds."""
+        if not toi_val or toi_val == "-":
+            return 0
+        s = str(toi_val).strip()
+        parts = s.split(":")
+        if len(parts) == 2:
+            try:
+                return int(parts[0]) * 60 + int(parts[1])
+            except (ValueError, TypeError):
+                return 0
+        try:
+            return int(float(s))
+        except (ValueError, TypeError):
+            return 0
+
+    def _resolve_player_id(conn, first_name, last_name, org_id, team=None):
+        """Look up player_id from first_name + last_name in the players table."""
+        if not first_name or not last_name:
+            return None
+        sql = """SELECT id FROM players
+                 WHERE first_name = ? AND last_name = ?
+                 AND (is_deleted = 0 OR is_deleted IS NULL)"""
+        params = [str(first_name).strip(), str(last_name).strip()]
+        if org_id:
+            sql += " AND org_id = ?"
+            params.append(org_id)
+        rows = conn.execute(sql, params).fetchall()
+        if len(rows) == 1:
+            return rows[0][0]
+        # If multiple matches and team is provided, narrow down
+        if len(rows) > 1 and team:
+            sql2 = sql + " AND current_team = ?"
+            params2 = params + [str(team).strip()]
+            rows2 = conn.execute(sql2, params2).fetchall()
+            if rows2:
+                return rows2[0][0]
+        return rows[0][0] if rows else None
+
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
     results = {}
@@ -15724,17 +15797,34 @@ async def admin_restore_db(
             # Row 1 = headers
             raw_headers = [str(h).strip() if h else "" for h in rows[0]]
 
+            # Apply column aliases for this table
+            aliases = COLUMN_ALIASES.get(table, {})
+            aliased_headers = [aliases.get(h, h) for h in raw_headers]
+
             # Validate against actual DB columns
             db_cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
             valid_indices = []
             valid_cols = []
             unmapped = []
-            for i, h in enumerate(raw_headers):
+            # Track original headers for player_id resolution
+            header_idx_map = {h: i for i, h in enumerate(raw_headers)}
+            for i, h in enumerate(aliased_headers):
                 if h and h in db_cols:
                     valid_indices.append(i)
                     valid_cols.append(h)
-                elif h:
-                    unmapped.append(h)
+                elif raw_headers[i]:
+                    unmapped.append(raw_headers[i])
+
+            # Check if player_id needs resolution (goalie_stats, player_game_stats)
+            needs_player_id = ("player_id" in db_cols
+                               and "player_id" not in valid_cols
+                               and "first_name" in header_idx_map
+                               and "last_name" in header_idx_map)
+            fn_idx = header_idx_map.get("first_name", -1)
+            ln_idx = header_idx_map.get("last_name", -1)
+            team_idx = header_idx_map.get("current_team", header_idx_map.get("team", -1))
+            if needs_player_id:
+                valid_cols.append("player_id")
 
             if not valid_cols:
                 results[sheet_name] = {"table": table, "rows": 0, "note": "no matching columns"}
@@ -15747,21 +15837,49 @@ async def admin_restore_db(
             if inject_org_id:
                 valid_cols.append("org_id")
 
+            # Inject default values for NOT NULL columns still missing
+            defaults = COLUMN_DEFAULTS.get(table, {})
+            inject_defaults = {}
+            for col, default_val in defaults.items():
+                if col in db_cols and col not in valid_cols:
+                    valid_cols.append(col)
+                    inject_defaults[col] = default_val
+
+            # Identify toi_seconds column index for MM:SS conversion
+            toi_col_idx = valid_cols.index("toi_seconds") if "toi_seconds" in valid_cols else -1
+
             placeholders = ", ".join(["?"] * len(valid_cols))
             col_list = ", ".join(valid_cols)
             sql = f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})"
 
             batch = []
+            skipped_no_player = 0
             for row in rows[1:]:
                 vals = list(row[i] for i in valid_indices)
                 # Skip completely empty rows
                 if all(v is None for v in vals):
                     continue
+                # Convert toi MM:SS to seconds
+                if toi_col_idx >= 0 and toi_col_idx < len(vals):
+                    vals[toi_col_idx] = _toi_to_seconds(vals[toi_col_idx])
+                # Resolve player_id from first_name + last_name
+                if needs_player_id:
+                    fn = row[fn_idx] if fn_idx >= 0 else None
+                    ln = row[ln_idx] if ln_idx >= 0 else None
+                    tm = row[team_idx] if team_idx >= 0 else None
+                    pid = _resolve_player_id(conn, fn, ln, org_id, tm)
+                    if not pid:
+                        skipped_no_player += 1
+                        continue
+                    vals.append(pid)
                 # Fill null org_id values with authenticated user's org
-                if org_id_col_idx >= 0 and not vals[org_id_col_idx]:
+                if org_id_col_idx >= 0 and org_id_col_idx < len(vals) and not vals[org_id_col_idx]:
                     vals[org_id_col_idx] = org_id
                 if inject_org_id:
                     vals.append(org_id)
+                # Append default values for NOT NULL columns
+                for col in inject_defaults:
+                    vals.append(inject_defaults[col])
                 batch.append(tuple(vals))
 
             if batch:
@@ -15776,6 +15894,8 @@ async def admin_restore_db(
             sheet_result = {"table": table, "rows": len(batch), "columns": len(valid_cols)}
             if unmapped:
                 sheet_result["unmapped_columns"] = unmapped
+            if skipped_no_player > 0:
+                sheet_result["skipped_no_player_match"] = skipped_no_player
             results[sheet_name] = sheet_result
 
     wb.close()
