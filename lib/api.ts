@@ -1,7 +1,12 @@
 import axios from "axios";
 import { getToken, removeToken } from "./auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const PRODUCTION_API = "https://prospectx-app-production-b918.up.railway.app";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? PRODUCTION_API
+    : "http://localhost:8000");
 
 const api = axios.create({
   baseURL: API_BASE,
