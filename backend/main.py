@@ -17518,8 +17518,17 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
         # ── Helper: find team row in DB using multiple name strategies ──
         team_name_synced = roster[0].get("team_name", "") if roster else ""
 
-        def _find_team_row_for_sync(conn_inner, names_to_try_inner, org_inner, cols="id"):
-            """Try multiple name strategies to find a team in the DB."""
+        def _find_team_row_for_sync(conn_inner, names_to_try_inner, org_inner, cols="id", ht_team_id=None):
+            """Try multiple strategies to find a team in the DB: HT ID, then name."""
+            # Strategy 1: Match by hockeytech_team_id (most reliable)
+            if ht_team_id:
+                row = conn_inner.execute(
+                    f"SELECT {cols} FROM teams WHERE hockeytech_team_id = ? AND org_id IN (?, '__global__')",
+                    (ht_team_id, org_inner)
+                ).fetchone()
+                if row:
+                    return row
+            # Strategy 2: Match by name (existing behavior)
             for try_name in names_to_try_inner:
                 if not try_name:
                     continue
@@ -17548,29 +17557,38 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     if ht_team.get("id") == team_id and ht_team.get("logo"):
                         ht_logo_url = ht_team["logo"]
                         # Check if this team exists in our DB and needs a logo
-                        team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url")
+                        team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url", ht_team_id=team_id)
                         if team_row:
-                            # Download the logo locally
-                            async with httpx.AsyncClient(timeout=10) as dl_client:
-                                img_resp = await dl_client.get(ht_logo_url)
-                                if img_resp.status_code == 200:
-                                    ext = "png" if "png" in ht_logo_url.lower() else "jpg"
-                                    logo_filename = f"team_{team_row['id']}_ht.{ext}"
-                                    logo_path = os.path.join(_IMAGES_DIR, logo_filename)
-                                    with open(logo_path, "wb") as f:
-                                        f.write(img_resp.content)
-                                    local_logo_url = f"/uploads/{logo_filename}"
-                                    conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
-                                                 (local_logo_url, team_row["id"]))
-                                    logo_synced = local_logo_url
-                                    logger.info("Synced team logo for %s from HockeyTech", team_name_synced)
+                            # Try downloading the logo locally first
+                            saved_url = None
+                            try:
+                                async with httpx.AsyncClient(timeout=10) as dl_client:
+                                    img_resp = await dl_client.get(ht_logo_url)
+                                    if img_resp.status_code == 200:
+                                        ext = "png" if "png" in ht_logo_url.lower() else "jpg"
+                                        logo_filename = f"team_{team_row['id']}_ht.{ext}"
+                                        logo_path = os.path.join(_IMAGES_DIR, logo_filename)
+                                        with open(logo_path, "wb") as f:
+                                            f.write(img_resp.content)
+                                        saved_url = f"/uploads/{logo_filename}"
+                            except Exception as dl_err:
+                                logger.warning("Logo download failed for %s, using CDN URL: %s", team_name_synced, dl_err)
+                            # Fall back to HockeyTech CDN URL if local download failed
+                            if not saved_url:
+                                saved_url = ht_logo_url
+                            conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
+                                         (saved_url, team_row["id"]))
+                            logo_synced = saved_url
+                            logger.info("Synced team logo for %s from HockeyTech", team_name_synced)
+                        else:
+                            logger.warning("Logo sync skipped for HT team %d — no matching team in DB (tried: %s)", team_id, names_to_try)
                         break
             except Exception as e:
                 logger.warning("Could not sync team logo for %s: %s", team_name_synced, e)
 
             # Store HockeyTech team_id and league on the teams table
             try:
-                team_row_ht = _find_team_row_for_sync(conn, names_to_try, org_id)
+                team_row_ht = _find_team_row_for_sync(conn, names_to_try, org_id, ht_team_id=team_id)
                 if team_row_ht:
                     conn.execute(
                         "UPDATE teams SET hockeytech_team_id = ?, hockeytech_league = ? WHERE id = ?",
