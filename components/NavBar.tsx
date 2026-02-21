@@ -153,6 +153,7 @@ const COACHING_ITEMS: NavItem[] = [
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
   { href: "/skills", label: "Skills Library", icon: Dumbbell },
+  { href: "/pro-analysis", label: "Pro Analysis", icon: Briefcase },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
 
