@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useRef } from "react";
-import { Save, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap } from "lucide-react";
+import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -48,6 +48,11 @@ export default function RinkBuilderPage() {
     intensity: "medium",
     players_needed: 0,
   });
+
+  const [showHelp, setShowHelp] = useState(false);
+  const [helpSection, setHelpSection] = useState<number | null>(null);
+  const [showSaveAs, setShowSaveAs] = useState(false);
+  const [saveAsName, setSaveAsName] = useState("");
 
   // Canvas ref for getting SVG + diagram data at save time
   const canvasRef = useRef<RinkCanvasHandle>(null);
@@ -142,6 +147,125 @@ export default function RinkBuilderPage() {
     }
   }
 
+  // ── Save As Copy (drill progression) ──
+  function openSaveAs() {
+    // Auto-generate next part name
+    const base = form.name.trim() || "Drill";
+    const partMatch = base.match(/\s*—\s*Part\s+([A-Z])$/i);
+    if (partMatch) {
+      const nextLetter = String.fromCharCode(partMatch[1].toUpperCase().charCodeAt(0) + 1);
+      setSaveAsName(base.replace(/\s*—\s*Part\s+[A-Z]$/i, ` — Part ${nextLetter}`));
+    } else {
+      setSaveAsName(`${base} — Part B`);
+    }
+    setShowSaveAs(true);
+  }
+
+  async function handleSaveAsCopy() {
+    if (!saveAsName.trim()) {
+      setSaveError("Drill name is required.");
+      return;
+    }
+    if (!canvasRef.current) {
+      setSaveError("Canvas not ready — try again.");
+      return;
+    }
+    const diagramData = canvasRef.current.getDiagramData();
+    const svgString = canvasRef.current.getSvgString();
+    if (diagramData.elements.length === 0) {
+      setSaveError("Draw something on the canvas first.");
+      return;
+    }
+
+    setSaving(true);
+    setSaveError("");
+    setSaveSuccess(null);
+
+    try {
+      const { data: drill } = await api.post("/drills", {
+        name: saveAsName.trim(),
+        category: form.category,
+        description: form.description.trim() || "Drill progression",
+        setup: form.setup.trim() || undefined,
+        coaching_points: form.coaching_points.trim() || undefined,
+        ice_surface: diagramData.rinkType,
+        duration_minutes: form.duration_minutes,
+        players_needed: form.players_needed || diagramData.elements.filter((e) => e.type === "marker").length,
+        intensity: form.intensity,
+        age_levels: ["U16_U18", "JUNIOR_COLLEGE_PRO"],
+        tags: ["custom-diagram", "rink-builder", "progression"],
+        diagram_data: diagramData,
+      });
+
+      if (svgString && drill.id) {
+        try {
+          await api.put(`/drills/${drill.id}/diagram/canvas`, {
+            diagram_data: diagramData,
+            svg_string: svgString,
+          });
+        } catch (err) {
+          console.warn("Diagram image save failed (drill still created):", err);
+        }
+      }
+
+      setSaveSuccess({ name: saveAsName, id: drill.id });
+      setShowSaveAs(false);
+      setTimeout(() => setSaveSuccess(null), 10000);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to save drill.";
+      setSaveError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Help panel data ──
+  const helpSections = [
+    {
+      title: "Drawing Smooth Lines",
+      content: "Use the Freehand tool (F key) to draw curves. Click and drag smoothly — the Chaikin algorithm auto-smooths your line. Release to finish.",
+    },
+    {
+      title: "Nudge Icons into Position",
+      content: "Select an element, then use arrow keys to nudge 2px at a time. Hold Shift+Arrow for 10px jumps.",
+    },
+    {
+      title: "Keyboard Shortcuts",
+      table: [
+        ["V", "Select / Move"],
+        ["E", "Eraser"],
+        ["F", "Freehand Draw"],
+        ["S", "Skate Path"],
+        ["W", "Skate with Puck"],
+        ["B", "Backward Skate"],
+        ["P", "Pass"],
+        ["H", "Shot"],
+        ["L", "Lateral Movement"],
+        ["1", "Forward Marker (X)"],
+        ["2", "Defense Marker (O)"],
+        ["3", "Goalie Marker (G)"],
+        ["4", "Cone Marker (C)"],
+        ["O", "Place Pylon"],
+        ["N", "Place Net"],
+        ["Ctrl+Z", "Undo"],
+        ["Ctrl+Y", "Redo"],
+        ["Arrow Keys", "Nudge 2px"],
+        ["Shift+Arrow", "Nudge 10px"],
+        ["Del/Backspace", "Delete Selected"],
+        ["Escape", "Deselect / Cancel"],
+        ["?", "Toggle Help Panel"],
+      ],
+    },
+    {
+      title: "Create Drill Progressions",
+      content: "Use Save As Copy to create Part A, Part B, Part C copies of a drill. Each part saves as a new drill with all elements duplicated. In the Drill Library, progressions are grouped together.",
+    },
+    {
+      title: "Add Icons to Description",
+      content: "In description and coaching points fields, type icon tokens like {F1} {D1} {puck} {pylon} to insert inline diagrams when viewed in the Drill Library.",
+    },
+  ];
+
   return (
     <ProtectedRoute>
       <NavBar />
@@ -185,6 +309,7 @@ export default function RinkBuilderPage() {
           onChange={handleDiagramChange}
           showToolbar={true}
           editable={true}
+          onToggleHelp={() => setShowHelp((prev) => !prev)}
         />
 
         {/* ── Drill Details Section ─────────────────────────────── */}
@@ -318,19 +443,29 @@ export default function RinkBuilderPage() {
               </div>
             )}
 
-            {/* Save Button */}
+            {/* Save Buttons */}
             <div className="flex items-center justify-between pt-2 border-t border-teal/10">
               <p className="text-[10px] text-muted">
                 Diagram + details are saved together to the Drill Library
               </p>
-              <button
-                onClick={handleSaveAsDrill}
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Save size={14} />
-                {saving ? "Saving..." : "Save to Drill Library"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={openSaveAs}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-teal/30 text-teal text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Copy size={14} />
+                  Save As Copy
+                </button>
+                <button
+                  onClick={handleSaveAsDrill}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save size={14} />
+                  {saving ? "Saving..." : "Save to Drill Library"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -349,6 +484,133 @@ export default function RinkBuilderPage() {
             </div>
           ))}
         </div>
+
+        {/* ── Help Panel (Slide-in) ─────────────────────────────── */}
+        {showHelp && (
+          <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowHelp(false)}>
+            <div className="absolute inset-0 bg-black/20" />
+            <div
+              className="relative w-full max-w-sm bg-white border-l border-border rounded-l-xl shadow-lg overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
+                <div className="flex items-center gap-2">
+                  <HelpCircle size={16} className="text-teal" />
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">Tips & Shortcuts</h3>
+                </div>
+                <button
+                  onClick={() => setShowHelp(false)}
+                  className="p-1 rounded-lg text-muted hover:bg-gray-100 hover:text-navy transition-colors"
+                >
+                  <XIcon size={16} />
+                </button>
+              </div>
+
+              {/* Accordion Sections */}
+              <div className="divide-y divide-border/50">
+                {helpSections.map((section, idx) => (
+                  <div key={idx}>
+                    <button
+                      onClick={() => setHelpSection(helpSection === idx ? null : idx)}
+                      className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-navy/[0.02] transition-colors"
+                    >
+                      <span className="text-xs font-oswald uppercase tracking-wider text-navy font-semibold flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-teal/10 text-teal flex items-center justify-center text-[10px] font-bold">{idx + 1}</span>
+                        {section.title}
+                      </span>
+                      {helpSection === idx ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
+                    </button>
+                    {helpSection === idx && (
+                      <div className="px-5 pb-4">
+                        {section.content && (
+                          <p className="text-xs text-navy/70 leading-relaxed">{section.content}</p>
+                        )}
+                        {section.table && (
+                          <div className="bg-navy/[0.02] rounded-lg border border-border/50 overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-border/50">
+                                  <th className="text-left px-3 py-1.5 font-oswald uppercase tracking-wider text-[10px] text-muted">Key</th>
+                                  <th className="text-left px-3 py-1.5 font-oswald uppercase tracking-wider text-[10px] text-muted">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {section.table.map(([key, action], i) => (
+                                  <tr key={i} className={i % 2 === 0 ? "" : "bg-navy/[0.02]"}>
+                                    <td className="px-3 py-1 font-mono text-teal font-semibold">{key}</td>
+                                    <td className="px-3 py-1 text-navy/70">{action}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Save As Copy Modal ──────────────────────────────────── */}
+        {showSaveAs && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowSaveAs(false)}>
+            <div className="absolute inset-0 bg-black/30" />
+            <div
+              className="relative bg-white rounded-xl border border-border shadow-xl w-full max-w-md mx-4 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold flex items-center gap-2">
+                  <Copy size={14} className="text-teal" />
+                  Save as Copy
+                </h3>
+                <button onClick={() => setShowSaveAs(false)} className="p-1 rounded-lg text-muted hover:bg-gray-100 hover:text-navy transition-colors">
+                  <XIcon size={14} />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">New Drill Name</label>
+                  <input
+                    type="text"
+                    value={saveAsName}
+                    onChange={(e) => setSaveAsName(e.target.value)}
+                    placeholder="e.g. 2-on-1 Rush — Part B"
+                    className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-muted mt-1">Creates a new drill with all current diagram elements and form fields copied.</p>
+                </div>
+                {saveError && (
+                  <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 rounded-lg px-3 py-2">
+                    <AlertCircle size={14} />
+                    {saveError}
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowSaveAs(false)}
+                    className="px-4 py-2 text-sm font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAsCopy}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save size={14} />
+                    {saving ? "Saving..." : "Save Copy"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </ProtectedRoute>
   );

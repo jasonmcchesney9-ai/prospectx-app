@@ -36,6 +36,7 @@ interface RinkCanvasProps {
   showToolbar?: boolean;
   editable?: boolean;
   className?: string;
+  onToggleHelp?: () => void;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -162,6 +163,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   showToolbar = true,
   editable = true,
   className = "",
+  onToggleHelp,
 }, ref) {
   // ── State ──
   const [rinkType, setRinkType] = useState<RinkType>(initialData?.rinkType || "full");
@@ -172,6 +174,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<{ id: string; startX: number; startY: number; elSnapshot: RinkElement } | null>(null);
   const [history, setHistory] = useState<RinkElement[][]>([]);
+  const [redoStack, setRedoStack] = useState<RinkElement[][]>([]);
   const [freehandPoints, setFreehandPoints] = useState<{ x: number; y: number }[]>([]);
   const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
 
@@ -195,6 +198,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       const next = [...prev, elements];
       return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
     });
+    setRedoStack([]); // Clear redo on new action
   }, [elements]);
 
   // ── Undo ──
@@ -203,13 +207,32 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       if (prev.length === 0) return prev;
       const newHist = [...prev];
       const last = newHist.pop()!;
+      setRedoStack((rs) => [...rs, elements]); // Push current to redo
       setElements(last);
       notifyChange(last, rinkType);
       return newHist;
     });
     setSelectedId(null);
     setArrowStart(null);
-  }, [rinkType, notifyChange]);
+  }, [rinkType, notifyChange, elements]);
+
+  // ── Redo ──
+  const handleRedo = useCallback(() => {
+    setRedoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const newRedo = [...prev];
+      const last = newRedo.pop()!;
+      setHistory((h) => {
+        const next = [...h, elements];
+        return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
+      });
+      setElements(last);
+      notifyChange(last, rinkType);
+      return newRedo;
+    });
+    setSelectedId(null);
+    setArrowStart(null);
+  }, [rinkType, notifyChange, elements]);
 
   // ── Clear all ──
   const handleClear = useCallback(() => {
@@ -240,30 +263,121 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     [elements, notifyChange]
   );
 
+  // ── Nudge selected element ──
+  const nudgeSelected = useCallback((dx: number, dy: number) => {
+    if (!selectedId) return;
+    pushHistory();
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id !== selectedId) return el;
+        if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net") {
+          return { ...el, x: el.x + dx, y: el.y + dy };
+        }
+        if (el.type === "arrow") {
+          return { ...el, x1: el.x1 + dx, y1: el.y1 + dy, x2: el.x2 + dx, y2: el.y2 + dy };
+        }
+        if (el.type === "freehand") {
+          return { ...el, points: el.points.map((p: { x: number; y: number }) => ({ x: p.x + dx, y: p.y + dy })) };
+        }
+        return el;
+      })
+    );
+  }, [selectedId, pushHistory]);
+
   // ── Keyboard shortcuts ──
   useEffect(() => {
     if (!editable) return;
     function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+      // Delete / Backspace
       if (e.key === "Delete" || e.key === "Backspace") {
-        // Don't intercept if focus is in an input
-        if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+        if (isInput) return;
         e.preventDefault();
         handleDeleteSelected();
+        return;
       }
+
+      // Escape
       if (e.key === "Escape") {
         setArrowStart(null);
         setSelectedId(null);
         setIsDrawingFreehand(false);
         setFreehandPoints([]);
+        return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+
+      // Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey) || (e.key === "Z" && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // Arrow keys — nudge selected element
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && selectedId) {
+        if (isInput) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 2;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        nudgeSelected(dx, dy);
+        return;
+      }
+
+      // Skip tool shortcuts when typing in inputs
+      if (isInput) return;
+
+      // ? = toggle help panel
+      if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+        if (onToggleHelp) onToggleHelp();
+        return;
+      }
+
+      // Tool keyboard shortcuts (single keys)
+      const toolKeys: Record<string, ToolMode> = {
+        v: "select",
+        e: "eraser",
+        f: "freehand",
+        s: "arrow_solid",
+        w: "arrow_skate_puck",
+        b: "arrow_backward",
+        p: "arrow_pass",
+        h: "arrow_shot",
+        l: "arrow_lateral",
+        o: "pylon",
+        n: "net",
+      };
+      const numKeys: Record<string, ToolMode> = {
+        "1": "marker_X",
+        "2": "marker_O",
+        "3": "marker_G",
+        "4": "marker_C",
+      };
+
+      const lk = e.key.toLowerCase();
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (toolKeys[lk]) {
+          setToolMode(toolKeys[lk]);
+          setArrowStart(null);
+          return;
+        }
+        if (numKeys[e.key]) {
+          setToolMode(numKeys[e.key]);
+          setArrowStart(null);
+          return;
+        }
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editable, handleDeleteSelected, handleUndo]);
+  }, [editable, handleDeleteSelected, handleUndo, handleRedo, selectedId, nudgeSelected, onToggleHelp]);
 
   // ── SVG Mouse Handlers ─────────────────────────────────────
 
@@ -612,11 +726,14 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             onToolModeChange={setToolMode}
             onClear={handleClear}
             onUndo={handleUndo}
+            onRedo={handleRedo}
             onExportSvg={exportSvg}
             onExportPng={exportPng}
             canUndo={history.length > 0}
+            canRedo={redoStack.length > 0}
             selectedElement={selectedElement}
             onDeleteSelected={handleDeleteSelected}
+            onToggleHelp={onToggleHelp}
           />
         </div>
       )}

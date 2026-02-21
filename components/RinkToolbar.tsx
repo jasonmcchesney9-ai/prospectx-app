@@ -3,7 +3,7 @@
 // Tool selection, rink type, actions (undo, clear, export)
 // ============================================================
 
-import { Undo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon } from "lucide-react";
+import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle } from "lucide-react";
 import { RINK_COLORS, MARKER_COLORS, RINK_LABELS, type RinkType, type ToolMode, type RinkElement } from "@/types/rink";
 
 interface RinkToolbarProps {
@@ -13,11 +13,14 @@ interface RinkToolbarProps {
   onToolModeChange: (mode: ToolMode) => void;
   onClear: () => void;
   onUndo: () => void;
+  onRedo?: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
   canUndo: boolean;
+  canRedo?: boolean;
   selectedElement: RinkElement | null;
   onDeleteSelected: () => void;
+  onToggleHelp?: () => void;
 }
 
 // ── Mini marker preview (inline SVG) ─────────────────────────
@@ -221,11 +224,14 @@ export default function RinkToolbar({
   onToolModeChange,
   onClear,
   onUndo,
+  onRedo,
   onExportSvg,
   onExportPng,
   canUndo,
+  canRedo,
   selectedElement,
   onDeleteSelected,
+  onToggleHelp,
 }: RinkToolbarProps) {
   const rinkTypes: RinkType[] = ["full", "half", "quarter"];
 
@@ -323,6 +329,11 @@ export default function RinkToolbar({
       <ActionBtn onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
         <Undo2 size={16} />
       </ActionBtn>
+      {onRedo && (
+        <ActionBtn onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)">
+          <Redo2 size={16} />
+        </ActionBtn>
+      )}
       <ActionBtn onClick={onClear} title="Clear All">
         <Trash2 size={16} />
       </ActionBtn>
@@ -342,6 +353,14 @@ export default function RinkToolbar({
       <ActionBtn onClick={onExportPng} title="Download PNG">
         <Image size={16} />
       </ActionBtn>
+      {onToggleHelp && (
+        <>
+          <div className="w-px h-7 bg-border mx-1" />
+          <ActionBtn onClick={onToggleHelp} title="Help & Shortcuts (?)">
+            <HelpCircle size={16} />
+          </ActionBtn>
+        </>
+      )}
     </div>
   );
 }
