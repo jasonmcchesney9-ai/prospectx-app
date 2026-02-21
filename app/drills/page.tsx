@@ -8,7 +8,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { assetUrl } from "@/lib/api";
 import type { Drill } from "@/types/api";
-import { DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS, ICE_SURFACES, INTENSITY_COLORS } from "@/types/api";
+import { DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS, ICE_SURFACES, INTENSITY_COLORS, DRILL_FRAMEWORK_OPTIONS } from "@/types/api";
 
 export default function DrillsPage() {
   const [drills, setDrills] = useState<Drill[]>([]);
@@ -19,6 +19,7 @@ export default function DrillsPage() {
   const [ageFilter, setAgeFilter] = useState("");
   const [surfaceFilter, setSurfaceFilter] = useState("");
   const [intensityFilter, setIntensityFilter] = useState("");
+  const [frameworkFilter, setFrameworkFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function DrillsPage() {
         if (ageFilter) params.set("age_level", ageFilter);
         if (surfaceFilter) params.set("ice_surface", surfaceFilter);
         if (intensityFilter) params.set("intensity", intensityFilter);
+        if (frameworkFilter) params.set("country_framework", frameworkFilter);
         params.set("limit", "200");
         const { data } = await api.get<Drill[]>(`/drills?${params}`);
         setDrills(data);
@@ -44,7 +46,7 @@ export default function DrillsPage() {
     }
     const timer = setTimeout(load, 300);
     return () => clearTimeout(timer);
-  }, [search, categoryFilter, ageFilter, surfaceFilter, intensityFilter]);
+  }, [search, categoryFilter, ageFilter, surfaceFilter, intensityFilter, frameworkFilter]);
 
   async function handleDiagramUpload(drillId: string, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -133,6 +135,16 @@ export default function DrillsPage() {
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
+          </select>
+          <select
+            value={frameworkFilter}
+            onChange={(e) => setFrameworkFilter(e.target.value)}
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
+          >
+            <option value="">All Frameworks</option>
+            {Object.entries(DRILL_FRAMEWORK_OPTIONS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
           </select>
         </div>
 

@@ -1812,6 +1812,8 @@ export const DRILL_CATEGORIES: Record<string, string> = {
   special_teams: "Special Teams",
   cool_down: "Cool Down",
   fun: "Fun & Team Building",
+  station_setup: "Station Setup",
+  skills_testing: "Skills Testing",
 };
 
 export const DRILL_AGE_LEVELS = [

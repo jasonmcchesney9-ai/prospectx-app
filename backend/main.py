@@ -1886,6 +1886,16 @@ def init_db():
         conn.commit()
         logger.info("Migration: added diagram_data column to drills table")
 
+    # ── Migration: Add age_group and country_framework to drills ──
+    if "age_group" not in drill_cols:
+        conn.execute("ALTER TABLE drills ADD COLUMN age_group TEXT")
+        conn.commit()
+        logger.info("Migration: added age_group column to drills")
+    if "country_framework" not in drill_cols:
+        conn.execute("ALTER TABLE drills ADD COLUMN country_framework TEXT DEFAULT NULL")
+        conn.commit()
+        logger.info("Migration: added country_framework column to drills")
+
     # ── Migration: PXI mode column on bench_talk_conversations ──
     bt_cols = {r[1] for r in conn.execute("PRAGMA table_info(bench_talk_conversations)").fetchall()}
     if "mode" not in bt_cols:
@@ -4958,6 +4968,1292 @@ def seed_drills_pxi():
     logger.info("Seeded %d PXI drills", len(drills))
 
 
+def seed_drills_v3():
+    """Seed 173 Hockey Canada LTPD-aligned drills across 10 categories."""
+    conn = get_db()
+    exists = conn.execute("SELECT COUNT(*) FROM drills WHERE concept_id = 'hc_fwd_warmup_1'").fetchone()[0]
+    if exists > 0:
+        conn.close()
+        return
+
+    # Age-level shortcuts matching existing system
+    ALL = '["U8","U10","U12","U14","U16_U18","JUNIOR_COLLEGE_PRO"]'
+    U9 = '["U8","U10"]'
+    U11 = '["U10","U12"]'
+    U11P = '["U10","U12","U14","U16_U18","JUNIOR_COLLEGE_PRO"]'
+    U13P = '["U12","U14","U16_U18","JUNIOR_COLLEGE_PRO"]'
+    HC = "hockey_canada_ltpd"
+
+    # Tuples: (name, category, description, coaching_points, setup, duration, players_needed, ice_surface, equipment, age_levels, tags, skill_focus, intensity, concept_id, age_group, country_framework)
+    drills = [
+        # ═══════════════════════════════════════════
+        # C.1 — SKATING (42 drills)
+        # ═══════════════════════════════════════════
+
+        ("Forward Skating Warm-Up #1", "skating",
+         "Full-ice forward skating progression. Players skate length of ice focusing on full stride extension, arm drive, and knee bend. Start at 60% effort building to 90% by the third repetition. Emphasize proper body lean and recovery.",
+         "Deep knee bend on every stride. Full arm swing from hip to shoulder. Head up, chest forward. Push through the toe for maximum extension.",
+         "Full ice. Players line up on goal line. Skate to far end and back.",
+         8, 0, "full", "None",
+         ALL, '["skating","warm_up","forward_stride","fundamentals"]', "skating", "medium", "hc_fwd_warmup_1", "All Ages", HC),
+
+        ("Forward Skating Warm-Up #2", "skating",
+         "Variation warm-up with directional changes. Players skate forward to center, tight turn around a pylon, continue to far blue line, crossover around circle, then finish with a sprint to the goal line. Builds on basic warm-up with agility elements.",
+         "Tight turns: drop inside shoulder, load inside edge. Crossovers: full under-push, dont just step over. Maintain speed through transitions. Sprint finish should be game-speed.",
+         "Full ice with pylons at center and at far circle. Players go in waves of 3-4.",
+         8, 0, "full", "Pylons (4)",
+         ALL, '["skating","warm_up","crossovers","tight_turns","agility"]', "skating", "medium", "hc_fwd_warmup_2", "All Ages", HC),
+
+        ("Backward Skating Warm-Up #1", "skating",
+         "Full-ice backward skating progression focusing on C-cuts, weight transfer, and head shoulder checks. Players skate backward from goal line to far end with proper heel push technique. Build from controlled pace to game speed across reps.",
+         "Sit into your heels. Full C-cut push with each stride. Head up, shoulder check every 3-4 strides. Hips square to direction of travel. Drive through the ball of the foot on each push.",
+         "Full ice. Players line up on goal line facing backward. 3-4 players per wave.",
+         8, 0, "full", "None",
+         U11P, '["skating","warm_up","backward","fundamentals"]', "skating", "medium", "hc_bwd_warmup_1", "U11+", HC),
+
+        ("Backward Skating Warm-Up #2", "skating",
+         "Backward skating warm-up with transition elements. Players skate backward to blue line, open pivot to forward, sprint to center, pivot back to backward to far blue, then open pivot and sprint to finish. Combines backward mechanics with transition work.",
+         "Open pivots: lead with hips, dont swing the leg wide. Keep feet moving through the pivot point. Backward posture: slight forward lean, knees bent. Each pivot should be smooth and quick — no hesitation at the turn.",
+         "Full ice with coach whistling pivot points. 3-4 per wave.",
+         8, 0, "full", "None",
+         U11P, '["skating","warm_up","backward","transitions","pivots"]', "skating", "medium", "hc_bwd_warmup_2", "U11+", HC),
+
+        ("Skating Agility Warm-Up", "skating",
+         "Multi-directional agility warm-up using the neutral zone. Players weave through 5 pylons with forward crossovers, tight turns at each end, and lateral shuffles between pylons. Finish with a controlled stop. Develops edge control and body coordination.",
+         "Stay low through direction changes. Load edges properly — dont just turn your upper body. Quick feet through the pylons, dont glide. Finish each rep with a strong two-foot stop.",
+         "Neutral zone with 5 pylons in a zigzag pattern. Full group rotates through.",
+         8, 0, "half", "Pylons (5)",
+         ALL, '["skating","warm_up","agility","edges","crossovers"]', "skating", "medium", "hc_agility_warmup", "All Ages", HC),
+
+        ("Speed Progression Warm-Up", "skating",
+         "Progressive speed warm-up across three zones. Players skate at 50% through the first zone, 75% through neutral zone, and 100% through the offensive zone. Walk back and repeat 3 times. Teaches pace management and explosive acceleration.",
+         "Each zone increase should be deliberate — dont just gradually speed up. Drop lower at each speed increase. Arms drive harder as speed builds. Final zone should be all-out sprint with full recovery between reps.",
+         "Full ice divided into three zones. Go in groups of 3-4.",
+         8, 0, "full", "None",
+         U11P, '["skating","warm_up","speed","acceleration","progression"]', "skating", "high", "hc_speed_progression_warmup", "U11+", HC),
+
+        ("4 Pylon Agility", "skating",
+         "Four pylons arranged in a square pattern (10 feet apart). Players perform a sequence of forward skating, crossovers, tight turns, and backward skating around the square. Each repetition adds a new element. Develops multi-directional skating agility.",
+         "Tight turns: drop the shoulder, load the inside edge, and explode out. Crossovers: full under-push from the inside leg. Stay compact through direction changes — wide stance kills speed. Head up, dont look at the pylons.",
+         "Set up 4 pylons in a 10x10 foot square in one zone. Players go one at a time with 5 seconds between.",
+         6, 1, "quarter", "Pylons (4)",
+         ALL, '["skating","agility","crossovers","tight_turns","edges"]', "skating", "high", "hc_4pylon_agility", "All Ages", HC),
+
+        ("5 Puck Agility", "skating",
+         "Five pucks placed in an X pattern in one zone. Player starts at center puck, picks it up and places it on the first point, sprints back to center for next puck, repeats to all four points. Tests explosive starts, stops, and directional changes under fatigue.",
+         "Full stops at each puck — no gliding through. Explosive first three steps out of every stop. Pick up pucks with the stick, not the hands. Recover body position quickly after bending for the puck. This is a race against the clock.",
+         "One zone. 5 pucks in an X pattern — center and 4 corners. Timer optional.",
+         5, 1, "quarter", "Pucks (5)",
+         U11P, '["skating","agility","speed","stops","compete"]', "skating", "high", "hc_5puck_agility", "U11+", HC),
+
+        ("Agility Sequence", "skating",
+         "Multi-element skating sequence combining forward crossovers, backward crossovers, mohawk turns, and lateral slides in a continuous pattern around the circle. Players follow the prescribed pattern without stopping. Develops flow and edge mastery.",
+         "Smooth transitions between elements — no stopping between moves. Maintain a low center of gravity throughout. Crossovers should have full extension on each push. Mohawk turns: open the hips fully, dont force the rotation with the upper body.",
+         "Use one face-off circle. Players line up and go one at a time, 5 second intervals.",
+         6, 1, "quarter", "None",
+         U11P, '["skating","agility","crossovers","transitions","edges"]', "skating", "high", "hc_agility_sequence", "U11+", HC),
+
+        ("Agility Nets", "skating",
+         "Skating agility course using small nets or barriers as obstacles. Players weave, jump over, and skate around nets placed in various configurations. Teaches spatial awareness and quick feet while navigating obstacles at speed.",
+         "Quick feet over the nets — dont jump high, jump quick. Stay low through the weave patterns. Eyes up to read the next obstacle. Recover balance immediately after each jump.",
+         "Half ice with 4-6 small nets arranged as obstacles. Go in pairs.",
+         6, 2, "half", "Small nets or barriers (4-6)",
+         ALL, '["skating","agility","balance","quick_feet","spatial_awareness"]', "skating", "high", "hc_agility_nets", "All Ages", HC),
+
+        ("Skating Stride Side Push", "skating",
+         "Lateral stride development drill. Players skate down the ice using exaggerated side pushes — pushing off one foot at a 45-degree angle and recovering under the body. Alternate sides every 5 pushes. Isolates the lateral push mechanics of the skating stride.",
+         "Full extension on each push — get the leg all the way out. Recovery foot comes back directly under the body, not wide. Slight forward lean to maintain glide between pushes. Feel the inside edge load before each push.",
+         "Full ice, lengthwise. Players spread across the width. Slow controlled pace.",
+         8, 0, "full", "None",
+         ALL, '["skating","stride","edges","fundamentals","technique"]', "skating", "low", "hc_stride_side_push", "All Ages", HC),
+
+        ("Skating Warm-Up Tag Game", "skating",
+         "Modified tag game where 2-3 players are It. Boundaries are the neutral zone. If tagged, you freeze and can be freed by a teammate skating through your legs. Active for 60-90 seconds per round. High energy, develops acceleration and evasive skating.",
+         "Quick acceleration to escape taggers. Read the ice — find open space. Short, choppy strides when evading. Taggers should work together to corner players. Encourage creative skating to dodge.",
+         "Neutral zone boundaries. 2-3 taggers wear pinnies. 60-90 second rounds.",
+         5, 0, "neutral_zone", "Pinnies (3)",
+         U9, '["skating","warm_up","fun","agility","acceleration","game"]', "skating", "high", "hc_tag_game_warmup", "U9", HC),
+
+        ("Transition Skating Gap Control", "skating",
+         "Defensive transition drill. Player skates backward, reads a forward approaching with speed, and practices gap control timing — when to pivot, when to hold the gap, when to close. Forward varies approach speed to challenge the defenders reads.",
+         "Maintain an active stick while skating backward. Dont back up too far — close the gap proactively. Pivot timing is everything: too early and the forward goes around you, too late and you are flat-footed. Hips stay square until the commit point.",
+         "One zone. Defence at blue line facing forward at center. 1-on-1 approach.",
+         10, 2, "half", "Pucks",
+         U13P, '["skating","transitions","gap_control","defensive","1v1"]', "skating", "medium", "hc_gap_control_transition", "U13+", HC),
+
+        ("Circle Skating — Backward", "skating",
+         "Backward crossover skating around the face-off circles. Players skate backward around the full circle maintaining crossover technique. Alternate directions every two laps. Focus on edge control, hip rotation, and maintaining speed through the crossover pattern.",
+         "Full crossover — dont just step, push under with the inside leg. Keep the hips open to the inside of the circle. Head on a swivel checking both ways. Stay low — standing tall kills your edge grip.",
+         "Use face-off circles. 2-3 players per circle, staggered start.",
+         6, 3, "quarter", "None",
+         U11P, '["skating","backward","crossovers","edges","circles"]', "skating", "medium", "hc_circle_bwd_skating", "U11+", HC),
+
+        ("Skating Circles", "skating",
+         "Forward crossover skating around all five face-off circles in sequence. Start at one end, skate a full circle around each dot, then sprint to the next. Alternate clockwise and counterclockwise. Builds crossover endurance and edge strength.",
+         "Lean into the circle — dont fight the turn with your upper body. Full under-push on every crossover. Transition between circles should be a sprint. Alternate directions to work both sides equally.",
+         "Full ice, all 5 circles. Players go one at a time with 10 second gaps.",
+         8, 1, "full", "None",
+         ALL, '["skating","crossovers","edges","circles","endurance"]', "skating", "medium", "hc_skating_circles", "All Ages", HC),
+
+        ("Forward Stride Drill", "skating",
+         "Isolated forward stride technique drill. Players skate slowly focusing on one element at a time: first rep is all arm drive, second rep is knee bend, third rep is toe flick, fourth rep combines all three. Walk back between reps for full recovery.",
+         "Arm drive: front hand to chin height, back hand past the hip. Knee bend: thigh parallel to ice at full load. Toe flick: finish each stride by pushing through the toe cap. Combine: smooth integration of all three elements at increasing speed.",
+         "Full ice, lengthwise. Coach calls out the focus element before each rep.",
+         10, 0, "full", "None",
+         ALL, '["skating","stride","technique","fundamentals","power"]', "skating", "low", "hc_fwd_stride_drill", "All Ages", HC),
+
+        ("Quick Feet Crossovers", "skating",
+         "Rapid-fire crossover drill through cones set 3 feet apart. Players perform quick crossovers through the line of cones with emphasis on foot speed rather than power. Sets of 10 cones, recover, repeat. Develops fast-twitch crossover mechanics.",
+         "Quick feet, not powerful strides — this is about turnover rate. Stay compact — dont reach wide between cones. Arms pumping in sync with feet. Push off the balls of the feet for quicker recovery.",
+         "Line of 10 cones spaced 3 feet apart along the boards. One player at a time.",
+         6, 1, "neutral_zone", "Cones (10)",
+         U11P, '["skating","crossovers","quick_feet","agility","speed"]', "skating", "high", "hc_quick_feet_crossovers", "U11+", HC),
+
+        ("Transition Footwork", "skating",
+         "Forward-to-backward and backward-to-forward footwork drill on a line. Players practice open pivots, closed pivots, and mohawk turns in sequence along the blue line. Each transition is isolated and repeated 5 times before moving to the next.",
+         "Open pivot: open hips to the direction of travel, dont swing the back leg. Closed pivot: tight hip rotation, stay compact. Mohawk: smooth weight transfer from one inside edge to the other. All transitions should be on balance with knees bent.",
+         "Blue line or center line. Players spread along the line. Coach calls transitions.",
+         8, 0, "neutral_zone", "None",
+         U11P, '["skating","transitions","footwork","pivots","technique"]', "skating", "medium", "hc_transition_footwork", "U11+", HC),
+
+        ("Transition Footwork Races", "skating",
+         "Competitive version of transition footwork. Two players race side by side performing identical transition sequences called by the coach. First to complete the full sequence wins. Adds competition pressure to technical skating.",
+         "Technique under pressure — dont sacrifice form to win. Quick recovery between transitions. Anticipate the next call from the coach. Compete but stay clean on your edges.",
+         "Two parallel lanes from goal line to blue line. Pairs race side by side.",
+         6, 2, "half", "None",
+         U11P, '["skating","transitions","compete","races","footwork"]', "skating", "high", "hc_transition_races", "U11+", HC),
+
+        ("Transition Races", "skating",
+         "Full-ice transition racing. Players start forward, whistle triggers a backward transition, second whistle triggers forward again. Race format with elimination rounds. Develops explosive transition speed under competitive pressure.",
+         "Fastest players have the smoothest pivots — dont rush the turn, rush the skating after the turn. Load your edges before pivoting. Maintain speed through the transition point. Arms drive through every phase.",
+         "Full ice. 3-4 players race at once. Coach whistles transition points.",
+         8, 4, "full", "None",
+         U11P, '["skating","transitions","speed","compete","races"]', "skating", "high", "hc_transition_races_full", "U11+", HC),
+
+        ("Transition Skating", "skating",
+         "Controlled transition skating pattern. Players skate forward 5 strides, pivot to backward 5 strides, pivot to forward again. Continuous pattern down the full length of ice. Focus on smooth, effortless pivots maintaining constant speed.",
+         "Smooth is fast. The goal is zero speed loss at each pivot. Stay low through the transition. Use the arms to help initiate the pivot. Eyes and chest face the direction of travel immediately after pivoting.",
+         "Full ice lengthwise. Waves of 3-4 players.",
+         8, 0, "full", "None",
+         ALL, '["skating","transitions","pivots","fundamentals"]', "skating", "medium", "hc_transition_skating_basic", "All Ages", HC),
+
+        ("Heel to Heel Skating", "skating",
+         "Advanced edge control drill. Players glide on one foot with weight on the heel, transfer to the other heel in a rocking motion while maintaining a straight line. Progresses from stationary to moving. Develops deep edge awareness and balance.",
+         "All weight on the heel — feel the back of the blade. Transfer smoothly from one heel to the other. Keep the free foot close to the ice. Progress from standing still to slow forward movement. Upper body stays quiet.",
+         "Any line on the ice. Players practice individually with space around them.",
+         6, 0, "quarter", "None",
+         U11P, '["skating","edges","balance","technique","heel_work"]', "skating", "low", "hc_heel_to_heel", "U11+", HC),
+
+        ("Knee Drops", "skating",
+         "Balance and recovery drill. While skating forward at moderate speed, players drop one knee to touch the ice and immediately recover to full stride without losing speed. Alternate knees. Develops lower body strength, balance, and recovery mechanics.",
+         "Controlled knee drop — dont crash down. Touch and recover in one smooth motion. Maintain forward momentum throughout. Keep the upper body upright. Build up speed as confidence grows.",
+         "Full ice lengthwise. Stagger starts to give space.",
+         6, 0, "full", "None",
+         U11P, '["skating","balance","recovery","strength","fundamentals"]', "skating", "medium", "hc_knee_drops", "U11+", HC),
+
+        ("Alternating Feet Edge Control", "skating",
+         "Single-foot edge control drill. Players glide on one foot alternating between inside and outside edges while maintaining a straight line. Switch feet at center ice. Develops isolated edge awareness and ankle strength on each foot independently.",
+         "One foot at a time — commit to the edge. Feel the blade roll from inside to outside. Keep the free foot off the ice for the full length. Bend the skating knee deeply. Use arms for balance but keep the upper body quiet.",
+         "Full ice lengthwise. Players go individually with ample spacing.",
+         8, 0, "full", "None",
+         U11P, '["skating","edges","balance","single_foot","technique"]', "skating", "low", "hc_alt_feet_edges", "U11+", HC),
+
+        ("Figure 8 Edge Control", "skating",
+         "Classic figure 8 pattern around two pylons or face-off dots. Players use inside and outside edges to carve smooth figure 8 patterns without crossovers — pure edge skating. Both directions. Fundamental edge mastery drill.",
+         "No crossovers — this is all edges. Lean into the turn from the ankles, not the waist. Inside edge on the inside of the curve, outside edge on the outside. Smooth, continuous movement. Increase speed only when the edges are clean.",
+         "Two pylons or face-off dots 15 feet apart. Small groups rotate through.",
+         6, 1, "quarter", "Pylons (2)",
+         ALL, '["skating","edges","figure_8","balance","fundamentals"]', "skating", "low", "hc_figure8_edges", "All Ages", HC),
+
+        ("Transition Figure 8", "skating",
+         "Figure 8 pattern with forward-to-backward transitions at each crossing point. Players skate forward around one pylon, transition to backward at the center, skate backward around the second pylon, transition to forward at center. Continuous flow.",
+         "Smooth pivots at the center crossing point. Maintain edge pressure through the pivot. Speed should stay constant — dont slow down to transition. Both clockwise and counterclockwise. Advanced players add pucks.",
+         "Two pylons 15 feet apart. Small groups rotate through.",
+         6, 1, "quarter", "Pylons (2)",
+         U11P, '["skating","transitions","figure_8","edges","pivots"]', "skating", "medium", "hc_transition_figure8", "U11+", HC),
+
+        ("Half Circle Lateral Skating", "skating",
+         "Lateral skating drill using the half circle of the face-off circle. Players shuffle laterally along the arc maintaining a defensive stance — hips low, stick on the ice, feet never crossing. Forward and backward versions. Develops lateral mobility.",
+         "Feet never cross — pure lateral shuffle. Stay low, butt down, chest up. Active stick on the ice throughout. Push off the inside edges. Quick feet, small steps. Cover the full arc smoothly.",
+         "Face-off circle. Players work the half circle arc. 4-5 per circle.",
+         6, 3, "quarter", "None",
+         U11P, '["skating","lateral","defensive","shuffle","edges"]', "skating", "medium", "hc_half_circle_lateral", "U11+", HC),
+
+        ("Toe on Puck", "skating",
+         "Balance and body control drill. Players place one skate toe on a stationary puck and perform single-leg balance exercises: dips, arm reaches, stick extensions. Switch feet. Develops stability, proprioception, and single-leg strength on the ice.",
+         "Control is everything — dont rush. Hold each position for 3-5 seconds. Skating knee deeply bent. Free leg engages for balance, not for support. Progress from stationary balance to adding movement challenges.",
+         "Players spread out in one zone, each with a puck. Individual work.",
+         5, 0, "quarter", "Pucks",
+         ALL, '["skating","balance","single_foot","proprioception","fundamentals"]', "skating", "low", "hc_toe_on_puck", "All Ages", HC),
+
+        ("2 Foot Stop", "skating",
+         "Two-foot hockey stop technique drill. Players build speed across the zone and execute a controlled two-foot stop at the line. Emphasize equal weight distribution, snow spray from both skates, and immediate ready position after stopping. Both sides.",
+         "Equal weight on both feet. Turn the hips and shoulders together. Dig both edges into the ice simultaneously. Snow should spray evenly from both blades. Stop and immediately be in a ready position to move again.",
+         "Blue line to blue line. Waves of 4-5 players. Stop at each line.",
+         6, 0, "full", "None",
+         ALL, '["skating","stopping","fundamentals","technique","edges"]', "skating", "medium", "hc_2foot_stop", "All Ages", HC),
+
+        ("Tight Turns", "skating",
+         "Tight turn technique around pylons. Players approach a pylon at speed, execute a tight turn (inside edge load, shoulder drop, knee drive), and accelerate out. Set up 4 pylons for continuous turning practice. Work both directions.",
+         "Drop the inside shoulder into the turn. Load the inside edge deeply. Knee drives through the turn — dont stand up. Explode out of the turn with crossover steps. Look where you want to go, not at the pylon.",
+         "4 pylons in a line, 15 feet apart. Players weave through with tight turns.",
+         6, 1, "half", "Pylons (4)",
+         ALL, '["skating","tight_turns","edges","agility","acceleration"]', "skating", "medium", "hc_tight_turns", "All Ages", HC),
+
+        ("Transition — Heels First", "skating",
+         "Heel-first transition technique. Players skate forward and initiate the backward pivot by turning the heels first — opening the heels outward to rotate the body to backward skating. Isolates the heel-turn method of transitioning.",
+         "Heels open first, then the hips follow. Weight stays centered over the blades. Dont reach with the toe — let the heels lead the rotation. Smooth, controlled movement. Speed maintained through the transition.",
+         "Blue line. Players practice transitions along the line, both directions.",
+         6, 0, "neutral_zone", "None",
+         U11P, '["skating","transitions","heels","technique","pivots"]', "skating", "medium", "hc_transition_heels", "U11+", HC),
+
+        ("Transition — Ride Inside Edge", "skating",
+         "Transition technique focusing on inside edge engagement. Players pivot from forward to backward by riding the inside edge through the turn — maintaining pressure on the inside edge throughout the rotation. Clean, controlled transitions.",
+         "Feel the inside edge load through the entire pivot. Dont lift the pivoting foot — ride the edge. Smooth weight transfer to the new skating direction. Knees bent deeply through the turn. Practice both left and right pivots.",
+         "Blue line or any line. Individual practice with space.",
+         6, 0, "neutral_zone", "None",
+         U11P, '["skating","transitions","edges","inside_edge","technique"]', "skating", "low", "hc_transition_inside_edge", "U11+", HC),
+
+        ("Transition — Toes First", "skating",
+         "Toe-first transition technique. Players skate forward and initiate the backward pivot by turning the toes inward — pigeon-toe rotation to spin the body backward. Alternative transition method. Compare with heel-first technique.",
+         "Toes turn inward to initiate the pivot. Keep weight on the balls of the feet. Quick hip rotation follows the toes. Dont lean back during the transition. Smooth continuation to backward skating. Practice at slow speed first.",
+         "Blue line. Players practice along the line. Both directions.",
+         6, 0, "neutral_zone", "None",
+         U11P, '["skating","transitions","toes","technique","pivots"]', "skating", "medium", "hc_transition_toes", "U11+", HC),
+
+        ("Neutral Zone Agility #1", "skating",
+         "Neutral zone agility course using pylons and lines. Players perform a sequence: forward sprint to center, crossovers around pylon, backward skate to blue line, lateral shuffle across, forward sprint to finish. Timed for competition.",
+         "Attack each element at full speed. Smooth transitions between elements — dont stop and reset. Stay low through crossovers and shuffles. Compete against the clock. Recovery between reps should be 1:3 work-to-rest.",
+         "Neutral zone with pylons marking the course. 1 player at a time, timed.",
+         8, 1, "neutral_zone", "Pylons (3), Stopwatch",
+         U11P, '["skating","agility","speed","compete","transitions"]', "skating", "high", "hc_nz_agility_1", "U11+", HC),
+
+        ("Neutral Zone Agility #2", "skating",
+         "Advanced neutral zone agility with added complexity. Forward to center pylon, 360 spin, backward crossovers to far pylon, open pivot, forward sprint through agility sticks, hockey stop at the line. Higher skill demand than course #1.",
+         "Clean 360 spin — stay on one spot. Backward crossovers with full extension. Open pivot should be smooth and immediate. Quick feet through the agility sticks. Finish with a crisp stop. Time and compete.",
+         "Neutral zone with pylons and agility sticks. 1 player at a time, timed.",
+         8, 1, "neutral_zone", "Pylons (4), Agility sticks (6), Stopwatch",
+         U11P, '["skating","agility","speed","spins","compete"]', "skating", "high", "hc_nz_agility_2", "U11+", HC),
+
+        ("Skating on Pucks — Stride", "skating",
+         "Players place a puck under each foot and practice the skating stride motion while stationary — pushing out and recovering in. Develops the exact muscle memory of a proper stride push without actually moving. Transfer to gliding reps after.",
+         "Feel the outward push — same angle as a real stride. Recover the foot directly under the body. Alternate feet rhythmically. Exaggerate the motion: full push, full recovery. After 10 reps per foot, skate a lap applying the same feeling.",
+         "Players spread out in one zone, each with 2 pucks. Stationary drill.",
+         5, 0, "quarter", "Pucks (2 per player)",
+         ALL, '["skating","stride","technique","muscle_memory","fundamentals"]', "skating", "low", "hc_skating_on_pucks", "All Ages", HC),
+
+        ("Defence Agility Escapes", "skating",
+         "Defence-specific agility drill. D starts in the corner, skates backward along the boards, pivots open to forward around a pylon at the hash marks, accelerates to the blue line, tight turn, and drives back to the starting position. Simulates escape routes.",
+         "Backward skating: head on swivel, active stick. Open pivot at the pylon: hips lead, feet follow. Accelerate immediately out of the pivot. Tight turn at the blue line simulates reading the play and redirecting. Game speed.",
+         "One corner to blue line. Pylons at hash marks. D go one at a time.",
+         8, 1, "half", "Pylons (2)",
+         U11P, '["skating","defence","agility","escapes","pivots","transitions"]', "skating", "high", "hc_d_agility_escapes", "U11+", HC),
+
+        ("Defence Agility Transition", "skating",
+         "Defenceman transitions drill. Start at blue line facing forward, pivot to backward at hash marks, lateral slide to the middle, pivot to forward, sprint to the corner. Mimics reading a rush, adjusting gap, and recovering to retrieve a dump-in.",
+         "Each transition should be game-realistic. Backward skating with gap control posture. Lateral slide: feet never cross, stay in defensive stance. Final sprint to corner simulates puck retrieval urgency. Head up through every phase.",
+         "Blue line to corner. Pylons mark transition points. D go one at a time.",
+         8, 1, "half", "Pylons (3)",
+         U11P, '["skating","defence","transitions","gap_control","agility"]', "skating", "high", "hc_d_agility_transition", "U11+", HC),
+
+        ("Defence Skating Escapes", "skating",
+         "D retrieval and escape skating. Defenceman starts at the goal line, skates behind the net to retrieve a puck placed in the corner, uses an escape move (reverse, cutback, or up the wall), and transitions to a breakout pass. Reads the forecheck pressure.",
+         "Read the forechecker before committing to the escape route. Reverse: tight turn behind the net to the other side. Cutback: fake one way, go the other. Up the wall: speed and protection. Make the decision early.",
+         "Pucks placed in both corners. D alternate sides. Coach acts as passive forechecker.",
+         10, 1, "half", "Pucks, Net",
+         U11P, '["skating","defence","escapes","retrieval","breakout"]', "skating", "medium", "hc_d_skating_escapes", "U11+", HC),
+
+        ("Defence Transition Skating", "skating",
+         "Full-ice defensive skating transitions. D starts at the far blue line, skates backward to center (gap control), pivots at center, sprints forward to retrieve the puck at the hash marks, skates behind the net, and executes a breakout. Full defensive sequence.",
+         "Gap control while backward — dont back up too deep. Pivot at center should be crisp and quick. Sprint to retrieve with purpose. Smooth transition around the net. Breakout pass should be hard and accurate.",
+         "Full ice. D starts at far blue line. Puck at near hash marks. One at a time.",
+         10, 1, "full", "Pucks, Net",
+         U11P, '["skating","defence","transitions","breakout","gap_control"]', "skating", "high", "hc_d_transition_skating", "U11+", HC),
+
+        ("Defence Straight Line Skating", "skating",
+         "Straight-line skating for defencemen focusing on backward speed and forward recovery sprint. D skate backward the full length of ice at maximum speed, touch the goal line, immediately sprint forward back to start. Tests pure backward speed.",
+         "Maximum backward speed — full C-cuts, arms pumping. Touch the line with the stick, not the hand. Immediate forward transition and sprint. This is a conditioning and speed test. Track times for improvement.",
+         "Full ice. D go in pairs, racing side by side.",
+         6, 2, "full", "None",
+         U11P, '["skating","defence","backward","speed","conditioning"]', "skating", "high", "hc_d_straight_line", "U11+", HC),
+
+        ("Defence Transition Sequence", "skating",
+         "Advanced defensive sequence combining all transition types. D starts forward, pivots backward at blue line, lateral shuffle across the zone, open pivot to forward at far boards, tight turn, backward crossovers through the slot, and finishes with a puck retrieval behind the net.",
+         "This is the full defensive skating toolbox in one sequence. Each transition must be clean and purposeful. Stay low throughout — defencemen who stand tall get beaten. React to coaches whistle or visual cues for realistic timing.",
+         "Full zone setup with pylons marking transition points. One D at a time. Coach directs.",
+         12, 1, "half", "Pylons (4), Pucks",
+         U13P, '["skating","defence","transitions","sequence","advanced"]', "skating", "high", "hc_d_transition_sequence", "U13+", HC),
+
+        # ═══════════════════════════════════════════
+        # C.2 — U9 SKATING (23 drills)
+        # ═══════════════════════════════════════════
+
+        ("U9 Skating Warm-Up — Edges #1", "skating",
+         "U9-appropriate edge introduction warm-up. Players glide on two feet practicing weight shifts from inside edges to outside edges. Coach demonstrates, players mirror. Emphasize feeling the blade bite into the ice. Lots of encouragement, keep it fun.",
+         "Bend your knees like youre sitting in a chair. Feel the edges of your blades — inside edges make a V shape, outside edges make an A shape. Keep your hands on your knees if you need balance. Smile and have fun with it.",
+         "Half ice. All players spread out. Coach at front demonstrating.",
+         5, 0, "half", "None",
+         U9, '["skating","edges","warm_up","u9","fundamentals","beginner"]', "skating", "low", "hc_u9_edges_1", "U9", HC),
+
+        ("U9 Skating Warm-Up — Edges #2", "skating",
+         "Second edge warm-up building on #1. Players practice inside edge glides on one foot at a time. Alternate feet every 5 seconds. Add gentle curves using edge pressure. Progress from straight glides to gentle S-curves.",
+         "One foot at a time — its okay to wobble. Hold your arms out for balance like airplane wings. Push gently and glide on one foot. Try to make your skate curve by leaning to one side. Celebrate every attempt.",
+         "Half ice. Players spread out. Coach alongside encouraging.",
+         5, 0, "half", "None",
+         U9, '["skating","edges","warm_up","u9","balance","single_foot"]', "skating", "low", "hc_u9_edges_2", "U9", HC),
+
+        ("U9 Skating Warm-Up — Edges #3", "skating",
+         "Third edge warm-up adding movement. Players skate slowly doing edge weaves — swizzles using inside edges to push out and outside edges to pull back in. Creates a wave-like skating pattern. Progress to adding speed.",
+         "Push out with your toes, pull back in with your heels. Make a wave pattern on the ice. Keep your knees bent the whole time. Start slow and smooth, then try to go a little faster each time.",
+         "Half ice. Players follow the coach in a line.",
+         5, 0, "half", "None",
+         U9, '["skating","edges","warm_up","u9","swizzles","weaving"]', "skating", "low", "hc_u9_edges_3", "U9", HC),
+
+        ("U9 Warm-Up — Turning and Crossovers", "skating",
+         "Introduction to turning and crossovers for U9 players. Players skate in a large circle, practicing leaning into the turn and stepping over with the outside foot. Coach breaks down the crossover into three steps: glide, lift, step. Both directions.",
+         "Lean into the circle like youre on a bike. Pick up your outside foot and step over the inside foot. Start slow — speed comes later. Try both directions. Its okay to feel wobbly, thats how you learn.",
+         "Use the center circle. Players follow the coach around the circle.",
+         6, 0, "half", "None",
+         U9, '["skating","crossovers","u9","warm_up","turning","fundamentals"]', "skating", "low", "hc_u9_turning_crossovers", "U9", HC),
+
+        ("U9 4 Station Skating #1", "skating",
+         "Four-station skating circuit for U9. Station 1: forward stride laps. Station 2: two-foot glide balance. Station 3: snowplow stops. Station 4: wide turns around pylons. 3 minutes per station, whistle to rotate. Active and fun format.",
+         "Forward stride: push and glide, push and glide. Balance: how long can you glide on two feet? Stops: make snow with your skates like a snowplow. Turns: lean and look where you want to go. Keep trying!",
+         "Cross-ice divided into 4 stations. Coaches at each station. 4-5 players per station.",
+         12, 0, "cross_ice", "Pylons (8)",
+         U9, '["skating","stations","u9","fundamentals","balance","stops"]', "skating", "medium", "hc_u9_4station_1", "U9", HC),
+
+        ("U9 4 Station Skating — Crossovers", "skating",
+         "Four-station U9 circuit focused on crossovers. Station 1: circle crossovers left. Station 2: circle crossovers right. Station 3: figure 8 crossovers. Station 4: crossover relay race. Progression from technique to competition.",
+         "Step over, not around. Lean into the turn. Push with the under foot. Race station: fastest clean crossovers win — sloppy doesnt count. Help each other, cheer each other on.",
+         "Cross-ice with 4 stations using circles and pylons.",
+         12, 0, "cross_ice", "Pylons (4)",
+         U9, '["skating","crossovers","u9","stations","technique"]', "skating", "medium", "hc_u9_4station_crossovers", "U9", HC),
+
+        ("U9 4 Station Skating — Glide and Tight Turns", "skating",
+         "Four U9 stations: Station 1: long two-foot glide for distance. Station 2: single-foot glide (alternate feet). Station 3: tight turns around single pylons. Station 4: slalom through pylon course. Develops balance and turning skills.",
+         "Glide: how far can you go without pushing? One foot: hold it as long as you can. Tight turns: look where you want to go, your body follows your eyes. Slalom: weave smoothly, dont rush.",
+         "Cross-ice 4 stations. Pylons for turning stations.",
+         12, 0, "cross_ice", "Pylons (10)",
+         U9, '["skating","u9","stations","glide","tight_turns","balance"]', "skating", "medium", "hc_u9_4station_glide_turns", "U9", HC),
+
+        ("U9 4 Station Skating — Agility Nets", "skating",
+         "Four U9 stations with agility nets. Station 1: skate around nets in a circle. Station 2: stop at each net. Station 3: weave between nets. Station 4: race through the net course. Develops spatial awareness and control.",
+         "Go around the nets, not through them. Stop before the net, then go again. Weave like a snake through the nets. Race: fastest clean run wins. Keep your head up so you can see the nets.",
+         "Cross-ice with small nets arranged at each station.",
+         12, 0, "cross_ice", "Small nets (8-12)",
+         U9, '["skating","u9","stations","agility","nets","spatial_awareness"]', "skating", "medium", "hc_u9_4station_agility_nets", "U9", HC),
+
+        ("U9 4 Station Skating — Transition", "skating",
+         "Four U9 stations introducing transitions. Station 1: forward to stop to backward (short distances). Station 2: spin in place (360s). Station 3: forward to backward pivot attempts. Station 4: backward skating race. Introductory transition skills.",
+         "Forward and stop — then try to go backward. Spins: start slow, arms help you turn. Pivots: just try it, its okay if you stumble. Backward: push with your toes, look over your shoulder. Every attempt counts.",
+         "Cross-ice 4 stations. Open space at each.",
+         12, 0, "cross_ice", "Pylons (4)",
+         U9, '["skating","u9","stations","transitions","backward","pivots"]', "skating", "medium", "hc_u9_4station_transition", "U9", HC),
+
+        ("U9 3 Station Skills — Agility Nets Heel to Heel", "skating",
+         "Three U9 stations. Station 1: skate through agility net maze. Station 2: heel-to-heel gliding in a straight line. Station 3: puck handling warm-up. Combines skating with basic puck skills in a station format.",
+         "Net maze: head up, find the path. Heel to heel: rock from one heel to the other. Puck station: soft hands, keep the puck close. Rotate quickly between stations — no standing around.",
+         "Cross-ice 3 stations. Nets at station 1, open ice at station 2, pucks at station 3.",
+         10, 0, "cross_ice", "Small nets (4), Pucks",
+         U9, '["skating","u9","stations","agility","heel_work","puck_handling"]', "skating", "medium", "hc_u9_3station_nets_heel", "U9", HC),
+
+        ("U9 3 Station Skills — NZ Skating", "skating",
+         "Three U9 neutral zone stations. Station 1: forward skating stride work. Station 2: edge glides on lines. Station 3: fun skating game (tag or relay). Uses the neutral zone lines as guides for technique work.",
+         "Stride station: big pushes, long glides. Edge station: follow the line using your edges to steer. Game station: have fun, skate hard, be safe. Listen for the whistle to rotate.",
+         "Neutral zone divided into 3 stations along the lines.",
+         10, 0, "neutral_zone", "None",
+         U9, '["skating","u9","stations","stride","edges","games"]', "skating", "medium", "hc_u9_3station_nz", "U9", HC),
+
+        ("U9 3 Station Skills — Skating Races", "skating",
+         "Three U9 stations with racing elements. Station 1: straight-line speed race. Station 2: obstacle course race (pylons). Station 3: backward race. Competitive format keeps energy high. Celebrate all finishers.",
+         "Speed race: pump your arms, push hard. Obstacle race: around the pylons, no cutting corners. Backward race: just keep moving backward, look over your shoulder. Everyone is a winner for trying their best.",
+         "Cross-ice 3 stations. Pylons for obstacle course.",
+         10, 0, "cross_ice", "Pylons (6)",
+         U9, '["skating","u9","stations","races","speed","compete"]', "skating", "high", "hc_u9_3station_races", "U9", HC),
+
+        ("U9 3 Station Skills — Pylon Crossover Race", "skating",
+         "Three U9 stations. Station 1: crossover race around pylons. Station 2: single-foot glide challenges. Station 3: partner mirror skating. Racing builds excitement around crossover technique.",
+         "Crossovers around each pylon — step over and push. Glide on one foot: count how many seconds. Mirror skating: copy your partner exactly. Race clean — crashing into pylons doesnt count.",
+         "Cross-ice 3 stations. Pylons in zigzag for station 1.",
+         10, 0, "cross_ice", "Pylons (8)",
+         U9, '["skating","u9","stations","crossovers","races","mirror"]', "skating", "high", "hc_u9_3station_crossover_race", "U9", HC),
+
+        ("U9 3 Station Skills — Agility Sticks", "skating",
+         "Three U9 stations using sticks as obstacles. Station 1: step over sticks laid on ice. Station 2: weave between standing sticks. Station 3: jump over sticks (small hops). Develops foot control and coordination.",
+         "Step over: lift your feet high and clear the sticks. Weave: quick feet, go around each stick. Jumps: small hops, land on two feet. Keep your balance — take your time until you feel confident.",
+         "Cross-ice 3 stations. Sticks laid on ice and propped in pucks.",
+         10, 0, "cross_ice", "Extra sticks (10-12)",
+         U9, '["skating","u9","stations","agility","balance","coordination"]', "skating", "medium", "hc_u9_3station_agility_sticks", "U9", HC),
+
+        ("U9 3 Station Skills — Transition Agility", "skating",
+         "Three U9 stations focused on transition movements. Station 1: forward-stop-backward sequence. Station 2: pivot practice with a partner. Station 3: agility course with transitions at pylons. Builds early transition confidence.",
+         "Forward-stop-backward: three separate movements, make each one clean. Partner pivots: face your partner and pivot together. Agility course: follow the arrows on the pylons for which way to face. Keep trying!",
+         "Cross-ice 3 stations. Pylons with directional markers.",
+         10, 0, "cross_ice", "Pylons (6)",
+         U9, '["skating","u9","stations","transitions","agility","pivots"]', "skating", "medium", "hc_u9_3station_transition_agility", "U9", HC),
+
+        ("U9 3 Station Small Area Game", "skating",
+         "Three-station U9 format with a small area game focus. Station 1: 2v2 cross-ice game. Station 2: skating skill work with coach. Station 3: shooting on small nets. Games develop compete while stations build skills.",
+         "Game station: play hard, have fun, share the puck. Skill station: listen to the coach and try your best. Shooting station: aim for the corners of the small net. Rotate every 4 minutes.",
+         "Cross-ice divided into 3 zones. Small nets for games and shooting.",
+         12, 0, "cross_ice", "Small nets (4), Pucks, Pinnies",
+         U9, '["skating","u9","stations","small_area_games","2v2","shooting"]', "skating", "high", "hc_u9_3station_sag", "U9", HC),
+
+        ("U9 3 Station Small Area Game — 1v1 2v2 Cross Ice", "skating",
+         "Three U9 stations combining 1v1 and 2v2 cross-ice games. Station 1: 1v1 battles. Station 2: 2v2 cross-ice game. Station 3: free skating skills. Competitive game format builds hockey sense naturally at the U9 level.",
+         "1v1: protect your puck, try to score. 2v2: pass to your teammate, play together. Free skate: practice whatever you want to get better at. Every shift is short — go hard for 45 seconds then switch.",
+         "Cross-ice 3 zones. Small nets at each game station.",
+         12, 0, "cross_ice", "Small nets (4), Pucks, Pinnies",
+         U9, '["skating","u9","stations","1v1","2v2","cross_ice","compete"]', "skating", "high", "hc_u9_3station_1v1_2v2", "U9", HC),
+
+        ("U9 3 Station Small Area Game — Circle 2v2", "skating",
+         "Three U9 stations using face-off circles. Station 1: 2v2 inside the circle (must stay in circle). Station 2: circle edge skating. Station 3: circle passing in pairs. The confined circle space teaches tight-area skills.",
+         "Stay inside the circle during the game — out of bounds loses the puck. Edge skating: use the circle line as your guide. Passing: stand across the circle from your partner and pass back and forth. Quick rotations.",
+         "3 face-off circles as stations. Small nets in game circle.",
+         12, 0, "cross_ice", "Small nets (2), Pucks, Pinnies",
+         U9, '["skating","u9","stations","2v2","circles","confined_space"]', "skating", "high", "hc_u9_3station_circle_2v2", "U9", HC),
+
+        ("U9 Small Area Game — 3x1v1", "skating",
+         "Three simultaneous 1v1 games across the ice. Each pair plays in a confined cross-ice zone with small nets. 45-second shifts with winner staying on. High-energy format where every player gets maximum touches.",
+         "Protect your puck. Attack the net. When you lose the puck, get it back. Short shifts — go all out for 45 seconds. Winner stays, loser switches with the next player. Celebrate goals.",
+         "Cross-ice divided into 3 equal zones. Small nets in each zone.",
+         10, 6, "cross_ice", "Small nets (6), Pucks, Pinnies",
+         U9, '["skating","u9","1v1","small_area_games","compete","puck_protection"]', "skating", "high", "hc_u9_3x1v1", "U9", HC),
+
+        ("U9 3 Station Skills — Stopping", "skating",
+         "Three U9 stations focused on stopping. Station 1: snowplow stops (both sides). Station 2: two-foot hockey stops. Station 3: stop-and-start relay race. Building the ability to stop confidently at this age is critical for safety and fun.",
+         "Snowplow: push one foot out and dig the inside edge into the ice. Hockey stop: turn both feet sideways and dig in. Relay: stop completely at the line before turning around. Make lots of snow — thats how you know youre doing it right.",
+         "Cross-ice 3 stations. Lines on ice mark stopping points.",
+         10, 0, "cross_ice", "Pylons (4)",
+         U9, '["skating","u9","stations","stopping","snowplow","fundamentals"]', "skating", "medium", "hc_u9_3station_stopping", "U9", HC),
+
+        ("U9 3 Station Skills — Backward Skating", "skating",
+         "Three U9 stations introducing backward skating. Station 1: backward wiggles (weight shift side to side). Station 2: backward C-cuts. Station 3: backward race (short distance). First exposure to backward movement for young players.",
+         "Wiggles: shift your weight from side to side while going backward. C-cuts: push out to the side with one foot in a C shape. Race: its okay to go slow, just keep moving backward. Look over your shoulder to see where youre going.",
+         "Cross-ice 3 stations. Short distances at each station.",
+         10, 0, "cross_ice", "None",
+         U9, '["skating","u9","stations","backward","fundamentals","introduction"]', "skating", "medium", "hc_u9_3station_backward", "U9", HC),
+
+        ("U9 Half Ice Warm-Up Full Length", "skating",
+         "U9 warm-up using half ice for full-length skating. Players skate from goal line to center line and back. Each lap adds a new element: first lap is easy skating, second adds stops, third adds crossovers, fourth adds backward. Progressive warm-up.",
+         "Lap 1: easy skating, loosen up. Lap 2: stop at center line then go again. Lap 3: crossovers around the circle. Lap 4: try some backward skating. Get warmer and faster with each lap.",
+         "Half ice from goal line to center line. All players go together.",
+         6, 0, "half", "None",
+         U9, '["skating","u9","warm_up","progressive","fundamentals"]', "skating", "medium", "hc_u9_half_ice_warmup", "U9", HC),
+
+        ("U9 Puck Control Warm-Up — Agility", "skating",
+         "U9 warm-up combining puck control with skating agility. Players stickhandle through a simple pylon course focusing on keeping the puck close while navigating obstacles. Develops hand-eye coordination with skating simultaneously.",
+         "Keep the puck on your stick — dont let it get away. Look up between the pylons, not down at the puck. Go at a speed where you can control the puck. Its okay to lose it — just pick it up and keep going.",
+         "Half ice with pylons in a simple weave pattern. One puck per player.",
+         6, 0, "half", "Pylons (6), Pucks",
+         U9, '["skating","u9","warm_up","puck_control","agility","stickhandling"]', "puck_handling", "medium", "hc_u9_puck_control_warmup", "U9", HC),
+
+        # ═══════════════════════════════════════════
+        # C.3 — U11 SKATING (14 drills)
+        # ═══════════════════════════════════════════
+
+        ("U11 Skating Warm-Up", "skating",
+         "U11 progressive skating warm-up. Players skate full ice in a group, building from 50% effort to 80% over 4 laps. Incorporates forward stride work, gentle crossovers at the ends, and basic stops. Age-appropriate pace and intensity.",
+         "Full extension on every stride. Crossovers at the ends — lean into the turn. Stop at the far end: two-foot stop, both sides. Build speed gradually, dont sprint from the start. Technique first, speed second.",
+         "Full ice. Group skating in one direction, switching direction each lap.",
+         6, 0, "full", "None",
+         U11, '["skating","u11","warm_up","stride","crossovers","fundamentals"]', "skating", "medium", "hc_u11_warmup", "U11", HC),
+
+        ("U11 Skating Warm-Up — Backward", "skating",
+         "U11 backward skating warm-up. Players skate backward from goal line to blue line, forward sprint to center, backward to far blue line, forward sprint to finish. Alternating backward and forward develops transitions naturally during warm-up.",
+         "Backward: sit low, full C-cuts, head check over both shoulders. Forward sprint: explode out of the transition. Transition points should be smooth — dont stop then start. Each rep gets faster as you warm up.",
+         "Full ice. Groups of 4-5 players per wave.",
+         6, 0, "full", "None",
+         U11, '["skating","u11","warm_up","backward","transitions"]', "skating", "medium", "hc_u11_warmup_backward", "U11", HC),
+
+        ("U11 Edge Control", "skating",
+         "U11 edge control progression. Players practice inside and outside edge glides on both feet, progressing from straight lines to curves to figure 8 patterns. Coach demonstrates each progression before players attempt. Building on U9 edge fundamentals.",
+         "Inside edges: knees together, ankles apart. Outside edges: knees apart, ankles together. Single foot at a time. Feel the blade bite. Progress from straight to curved only when straight is clean.",
+         "Half ice. Players spread out. Coach demonstrates at center.",
+         8, 0, "half", "None",
+         U11, '["skating","u11","edges","balance","technique","progression"]', "skating", "low", "hc_u11_edge_control", "U11", HC),
+
+        ("U11 Edge Control — Puck Dots", "skating",
+         "U11 edge control using pucks as markers on the ice. Players weave between pucks using only edges (no crossovers). Pucks placed in various patterns — straight line, zigzag, circle. Combines edge work with spatial awareness.",
+         "Weave around each puck using edge pressure only. No crossovers allowed — pure edge steering. Stay low and balanced. Eyes up to read the pattern. Start slow and add speed as edges get cleaner.",
+         "Half ice. 8-10 pucks arranged in patterns. Players go in sequence.",
+         8, 0, "half", "Pucks (10)",
+         U11, '["skating","u11","edges","puck_dots","spatial_awareness","technique"]', "skating", "low", "hc_u11_edge_puck_dots", "U11", HC),
+
+        ("U11 Edge Control — Crossunder", "skating",
+         "U11 crossunder technique development. Players practice the crossunder push during crossovers — focusing on the under-leg push that generates power in crossovers. Isolated at slow speed first, then integrated into full crossovers at speed.",
+         "The power in crossovers comes from the under-push, not the step-over. Push fully to extension with the under foot. Recover the under foot directly back under your body. Practice slowly to feel the full push. Gradually add speed.",
+         "Face-off circle. Players work around the circle one at a time.",
+         8, 0, "quarter", "None",
+         U11, '["skating","u11","crossovers","crossunder","technique","power"]', "skating", "medium", "hc_u11_crossunder", "U11", HC),
+
+        ("U11 Lateral Agility", "skating",
+         "U11 lateral movement drill. Players shuffle laterally between two pylons set 10 feet apart. Touch each pylon with the stick and shuffle back. Progress from shuffles to crossover steps. Timed sets build competitive intensity.",
+         "Lateral shuffle: feet never cross, stay low. Touch the pylon with your stick at each end. Progress to crossover steps when shuffle is smooth. Quick direction changes — load the outside edge to push off. Time your sets and try to improve.",
+         "Two pylons 10 feet apart per player. Players work individually.",
+         6, 1, "quarter", "Pylons (2 per player)",
+         U11, '["skating","u11","lateral","agility","shuffle","crossovers"]', "skating", "high", "hc_u11_lateral_agility", "U11", HC),
+
+        ("U11 Circle Crossover Progression", "skating",
+         "U11 crossover progression using the full circle. Phase 1: walk-through crossovers around the circle. Phase 2: slow skating crossovers. Phase 3: game-speed crossovers. Phase 4: crossovers with a puck. Building layers of complexity.",
+         "Phase 1: understand the footwork standing still. Phase 2: add gliding, feel the edges. Phase 3: speed up, lean into the circle. Phase 4: keep the puck on the outside, away from the center. Both directions.",
+         "Face-off circle. Small groups of 3-4 per circle.",
+         8, 3, "quarter", "Pucks (optional Phase 4)",
+         U11, '["skating","u11","crossovers","progression","circles","technique"]', "skating", "medium", "hc_u11_circle_crossover_prog", "U11", HC),
+
+        ("U11 Skating Stations", "skating",
+         "Four-station U11 skating circuit. Station 1: forward stride power push. Station 2: backward C-cuts and crossovers. Station 3: transition pivots (forward to backward). Station 4: agility course through pylons. Rotate every 3 minutes.",
+         "Stride station: long powerful pushes, full recovery. Backward: sit low, push to full extension. Pivots: smooth transitions, no stopping. Agility: stay low, quick feet through the pylons. Maximum effort at each station.",
+         "Full ice divided into 4 stations. Coach at each station.",
+         12, 0, "full", "Pylons (8)",
+         U11, '["skating","u11","stations","stride","backward","transitions","agility"]', "skating", "high", "hc_u11_skating_stations", "U11", HC),
+
+        ("U11 Agility Skating Stations", "skating",
+         "U11 agility-focused four-station circuit. Station 1: figure 8 around pylons. Station 2: quick-feet ladder on ice. Station 3: stop-and-start sprints. Station 4: backward weave through pylons. All stations emphasize foot speed and body control.",
+         "Figure 8: smooth edges, no crossovers. Ladder: quick feet, dont touch the marks. Sprints: explosive starts, full stops. Backward weave: head up, C-cuts through the pylons. Go hard at each station.",
+         "Full ice divided into 4 zones with pylons and markers.",
+         12, 0, "full", "Pylons (12), Tape/markers for ladder",
+         U11, '["skating","u11","stations","agility","figure_8","speed"]', "skating", "high", "hc_u11_agility_stations", "U11", HC),
+
+        ("U11 Agility Skating Stations #2", "skating",
+         "Second U11 agility circuit with different patterns. Station 1: tight turn slalom. Station 2: crossover box drill. Station 3: lateral slides between lines. Station 4: transition races in pairs. Keeps sessions fresh with varied agility challenges.",
+         "Slalom: tight turns, drop the shoulder. Box drill: crossovers on all four sides, both directions. Lateral slides: defensive stance, quick feet. Races: compete clean, first to finish with good technique wins.",
+         "Full ice 4 stations. Pylons for slalom and box drill.",
+         12, 0, "full", "Pylons (10)",
+         U11, '["skating","u11","stations","agility","slalom","compete"]', "skating", "high", "hc_u11_agility_stations_2", "U11", HC),
+
+        ("U11 Puck Control — Half Ice Lanes", "skating",
+         "U11 half-ice lane drill combining skating with puck control. Three lanes: left lane forward stickhandling, middle lane stickhandling through pylons, right lane stickhandling with speed. Players rotate lanes. Develops skating with the puck.",
+         "Keep the puck in the middle of your blade. Head up between pylons. Outside lanes focus on speed with puck control. Middle lane is technique — go at a controllable speed. Soft hands, quick feet.",
+         "Half ice divided into 3 lanes. Pylons in the middle lane.",
+         8, 0, "half", "Pylons (6), Pucks",
+         U11, '["skating","u11","puck_control","lanes","stickhandling"]', "puck_handling", "medium", "hc_u11_puck_control_lanes", "U11", HC),
+
+        ("U11 Puck Control — Half Ice Lanes #2", "skating",
+         "Second U11 half-ice lane drill with added complexity. Lane 1: stickhandle and shoot. Lane 2: puck control through tight obstacles. Lane 3: pass-and-skate with a partner. Builds on the first lane drill with finishing elements.",
+         "Shoot in stride from lane 1 — dont stop to shoot. Obstacles: tight control, puck stays close. Pass and skate: lead your partner with the pass, receive in motion. Always end with a shot or finish.",
+         "Half ice 3 lanes. Pylons in lane 2. Net at the end.",
+         8, 0, "half", "Pylons (6), Pucks, Net",
+         U11, '["skating","u11","puck_control","lanes","shooting","passing"]', "puck_handling", "medium", "hc_u11_puck_control_lanes_2", "U11", HC),
+
+        ("U11 Skating on Puck — Stride", "skating",
+         "U11 version of the skating-on-pucks stride drill. Players place pucks under their feet and practice stride mechanics while stationary. Then apply the same feeling to actual skating reps. Direct feel-transfer teaching method.",
+         "Push the puck out to the side — same angle as a skating push. Recover the foot back under your body. Alternate feet in rhythm. After 10 per foot, skate a lap and try to recreate the same push angle. Feel the difference.",
+         "Players spread out in one zone with 2 pucks each.",
+         6, 0, "quarter", "Pucks (2 per player)",
+         U11, '["skating","u11","stride","technique","muscle_memory"]', "skating", "low", "hc_u11_skating_on_puck", "U11", HC),
+
+        ("U11 Scoring — Breakaway and Tip", "skating",
+         "U11 scoring combination drill. Player 1 goes on a breakaway from center ice. Player 2 drives to the net for a tip/redirect from a point shot. Alternating between breakaway attempts and net-front tip attempts. Combines skating with finishing.",
+         "Breakaway: attack with speed, pick your move early, commit to it. Tip: drive to the net, get your stick on the ice, redirect anything that comes your way. Both require skating to create the scoring chance.",
+         "Full ice. Breakaway line at center. Tippers at the top of the circle. D at the point for tips.",
+         10, 3, "full", "Pucks, Net, Goalie",
+         U11, '["skating","u11","scoring","breakaway","tips","finishing"]', "shooting", "high", "hc_u11_breakaway_tip", "U11", HC),
+
+        # ═══════════════════════════════════════════
+        # C.4 — STATION SETUP / ICE PREP (34 drills)
+        # ═══════════════════════════════════════════
+
+        ("IP 3 Station Setup #1", "station_setup",
+         "Basic three-station ice prep layout. Station 1: skating fundamentals. Station 2: puck handling course. Station 3: small area game. Simple setup that coaches can deploy in under 2 minutes. Foundation template for practice organization.",
+         "Set up before players arrive. Each station should have a clear start and end point. Explain all three stations before starting. Rotate every 4 minutes on the whistle. Coaches spread across stations.",
+         "Full ice divided into 3 equal zones. Pylons mark station boundaries.",
+         12, 0, "full", "Pylons (6), Pucks, Small nets (2)",
+         ALL, '["station_setup","3_station","practice_organization","template"]', None, "medium", "hc_ip_3station_1", "All Ages", HC),
+
+        ("IP 3 Station — Skating Agility Course", "station_setup",
+         "Three-station setup with agility focus at each station. Station 1: forward agility weave. Station 2: backward agility course. Station 3: transition agility race. All stations use pylons in different patterns. Rotation every 3 minutes.",
+         "Station 1: quick feet through the weave, dont glide. Station 2: backward with head up, use C-cuts. Station 3: pivot at each pylon — forward, backward, forward. Go hard, recover during rotation.",
+         "Full ice 3 zones. Pylons arranged differently in each zone.",
+         12, 0, "full", "Pylons (15)",
+         ALL, '["station_setup","3_station","agility","skating","course"]', "skating", "high", "hc_ip_3station_agility_course", "All Ages", HC),
+
+        ("IP 3 Station — Skating Agility Nets #1", "station_setup",
+         "Three-station setup using agility nets as obstacles. Station 1: weave around nets. Station 2: stop at each net (hockey stop practice). Station 3: net obstacle course race. Nets add unpredictable element compared to pylons.",
+         "Nets are bigger than pylons — give yourself more space. Stop completely at each net before moving to the next one. Race through the course: fastest clean run wins. Keep your head up to see the nets ahead.",
+         "Full ice 3 zones. 3-4 small nets per station arranged in patterns.",
+         12, 0, "full", "Small nets or barriers (12)",
+         ALL, '["station_setup","3_station","agility","nets","skating"]', "skating", "medium", "hc_ip_3station_nets_1", "All Ages", HC),
+
+        ("IP 3 Station — Skating Agility Nets #2", "station_setup",
+         "Second net-based three-station setup with increased difficulty. Station 1: figure 8 around nets. Station 2: lateral slides between nets. Station 3: backward skating around nets. Progresses net obstacle skills from setup #1.",
+         "Figure 8: use edges, lean into the turns. Lateral slides: defensive stance, stick on ice. Backward: C-cuts, look over your shoulder for the nets. Clean technique matters more than speed at first.",
+         "Full ice 3 zones. Nets arranged in tighter formations than setup #1.",
+         12, 0, "full", "Small nets or barriers (12)",
+         ALL, '["station_setup","3_station","agility","nets","advanced"]', "skating", "medium", "hc_ip_3station_nets_2", "All Ages", HC),
+
+        ("IP 3 Station — Skating Agility Nets #3", "station_setup",
+         "Third net-based setup adding puck control elements. Station 1: stickhandle around nets. Station 2: puck carry and stop at each net. Station 3: pass around nets to a partner. Combines skating agility with puck skills.",
+         "Puck close to your body through the nets. Stop with the puck under control. Passes: crisp and accurate around the nets. Combine what you learned in setups 1 and 2 with puck control.",
+         "Full ice 3 zones. Nets arranged for puck work. Pucks at each station.",
+         12, 0, "full", "Small nets or barriers (12), Pucks",
+         ALL, '["station_setup","3_station","agility","nets","puck_control"]', "puck_handling", "medium", "hc_ip_3station_nets_3", "All Ages", HC),
+
+        ("IP 3 Station — Tight Turn Relay Races", "station_setup",
+         "Three-station relay race format. Each station is a tight-turn course. Teams of 3-4 race through their course and tag the next player. First team to finish wins. Competitive format makes tight turn practice exciting.",
+         "Tight turns: drop the shoulder, load the edge, explode out. Tag your teammate clearly before they go. Race is about clean turns AND speed — crashing through pylons adds time penalty. Cheer for your team.",
+         "Full ice 3 zones. Each zone has identical pylon course. Teams at each zone.",
+         8, 0, "full", "Pylons (12)",
+         ALL, '["station_setup","3_station","tight_turns","relay","compete","races"]', "skating", "high", "hc_ip_3station_relay", "All Ages", HC),
+
+        ("IP 3 Station Setup #2", "station_setup",
+         "Alternative three-station template. Station 1: shooting drill. Station 2: passing pairs. Station 3: skating technique with coach. Balanced setup covering three core skill areas in one practice segment.",
+         "Shooting: quick release, pick your target. Passing: both forehand and backhand, firm on the tape. Skating: listen to the coach and focus on the technique of the day. Rotate every 4 minutes.",
+         "Full ice 3 zones. Net and pucks at station 1. Station 3 is open ice with coach.",
+         12, 0, "full", "Net, Pucks, Pylons (4)",
+         ALL, '["station_setup","3_station","shooting","passing","skating","template"]', None, "medium", "hc_ip_3station_2", "All Ages", HC),
+
+        ("IP 3 Station Skills — Asteroids", "station_setup",
+         "Three-station setup featuring the Asteroids game. Station 1: Asteroids — players skate freely in a zone while dodging thrown soft objects (tennis balls). Station 2: puck handling course. Station 3: partner passing. Fun game integrated into structured practice.",
+         "Asteroids: skate and dodge! Keep your head up and read the flying objects. Puck handling: tight control through the course. Passing: soft hands, receive and give. Asteroids station keeps energy high and develops awareness.",
+         "Full ice 3 zones. Tennis balls at station 1. Pylons and pucks at stations 2-3.",
+         12, 0, "full", "Tennis balls (6-10), Pylons (6), Pucks",
+         ALL, '["station_setup","3_station","asteroids","fun","puck_handling","passing"]', None, "high", "hc_ip_3station_asteroids", "All Ages", HC),
+
+        ("IP 3 Station Skills", "station_setup",
+         "General three-station skills setup. Station 1: stickhandling through obstacle course. Station 2: one-timer practice off a pass. Station 3: edge control drills on the circle. Versatile template that can be adjusted to any age group.",
+         "Stickhandling: soft hands, puck in the middle of the blade. One-timers: stick on the ice, watch the puck onto the blade. Edge control: inside and outside edges, both feet. Rotate every 3-4 minutes.",
+         "Full ice 3 zones. Pylons at station 1. Net and passer at station 2. Circle at station 3.",
+         12, 0, "full", "Pylons (6), Net, Pucks",
+         ALL, '["station_setup","3_station","skills","stickhandling","one_timer","edges"]', None, "medium", "hc_ip_3station_skills", "All Ages", HC),
+
+        ("IP 3 Station Skills — Cross Ice Hand Soccer", "station_setup",
+         "Three-station setup with Hand Soccer game. Station 1: cross-ice hand soccer (no sticks, throw and catch a soft ball to score in small nets). Station 2: skating agility. Station 3: shooting. The hand soccer game develops team play and spatial awareness without sticks.",
+         "Hand soccer: throw and catch, work as a team, move to open space. No body contact — play the ball. Skating: go hard at the agility course. Shooting: aim small, miss small. Rotate every 4 minutes.",
+         "Full ice 3 zones. Soft ball and small nets at station 1. Pylons at station 2. Net and pucks at station 3.",
+         12, 0, "full", "Soft ball, Small nets (4), Pylons (6), Pucks, Net",
+         U9, '["station_setup","3_station","hand_soccer","fun","u9","skating","shooting"]', None, "high", "hc_ip_3station_hand_soccer", "U9", HC),
+
+        ("IP 3 Station Skills — Crossover Race", "station_setup",
+         "Three-station setup centered on crossover development. Station 1: crossover technique with coach. Station 2: crossover course through pylons. Station 3: crossover racing in pairs. Progression from instruction to practice to competition.",
+         "Technique station: coach breaks down the crossover step by step. Course station: practice the full crossover through the pylons. Race station: compete clean — best technique AND speed wins. Both directions at every station.",
+         "Full ice 3 zones. Coach at station 1. Pylons at stations 2-3.",
+         12, 0, "full", "Pylons (10)",
+         ALL, '["station_setup","3_station","crossovers","technique","races","compete"]', "skating", "high", "hc_ip_3station_crossover_race", "All Ages", HC),
+
+        ("IP 4 Lane Skating A", "station_setup",
+         "Four-lane skating setup using the full ice width. Lane 1: forward stride. Lane 2: crossovers. Lane 3: backward skating. Lane 4: transition skating. Players go down one lane and walk back to the next. Efficient use of ice for large groups.",
+         "Each lane is a different skating skill. Focus on the specific technique for that lane. Dont rush — quality reps. Walk back to the next lane to recover. Complete all four lanes for one cycle.",
+         "Full ice divided into 4 lanes lengthwise using pylons or lines.",
+         10, 0, "full", "Pylons (8)",
+         ALL, '["station_setup","4_lane","skating","stride","crossovers","backward","transitions"]', "skating", "medium", "hc_ip_4lane_a", "All Ages", HC),
+
+        ("IP 4 Lane Skating B", "station_setup",
+         "Second four-lane skating setup with different skills. Lane 1: edge glides. Lane 2: tight turns around pylons. Lane 3: stops (alternating hockey stops left and right). Lane 4: sprint with stops. Complements the A setup for variety.",
+         "Edges: feel the blade, no crossovers. Tight turns: shoulder drop, edge load, explode out. Stops: equal stops both sides. Sprint: explosive start, full stop at each line. Quality over speed except lane 4.",
+         "Full ice 4 lanes lengthwise. Pylons in lane 2.",
+         10, 0, "full", "Pylons (8)",
+         ALL, '["station_setup","4_lane","skating","edges","tight_turns","stops","speed"]', "skating", "medium", "hc_ip_4lane_b", "All Ages", HC),
+
+        ("IP 4 Lane Skating Combo #1", "station_setup",
+         "Four-lane combination drill mixing skating with puck skills. Lane 1: forward stride with puck. Lane 2: crossovers with puck. Lane 3: skating agility (no puck). Lane 4: puck handling through obstacles. Develops integrated skating and puck skills.",
+         "Lanes 1-2: keep your head up while carrying the puck. Lane 3: pure skating, no puck distraction. Lane 4: tight control through the obstacles. Alternate cycles with and without pucks for comparison.",
+         "Full ice 4 lanes. Pylons/obstacles in lane 4. Pucks for lanes 1, 2, 4.",
+         10, 0, "full", "Pylons (8), Pucks",
+         U11P, '["station_setup","4_lane","skating","puck_control","combo"]', "skating", "medium", "hc_ip_4lane_combo_1", "U11+", HC),
+
+        ("IP 4 Lane Skating Combo #2", "station_setup",
+         "Second four-lane combo with advanced elements. Lane 1: transition skating with puck. Lane 2: backward puck handling. Lane 3: pass and skate with a partner. Lane 4: shooting in stride from a skating approach. Higher skill demands.",
+         "Transitions with puck: smooth pivots, puck stays on the blade. Backward with puck: feel the puck, look forward. Pass and skate: timing the pass while moving. Shot in stride: dont stop, shoot while skating.",
+         "Full ice 4 lanes. Net at the end of lane 4.",
+         10, 0, "full", "Pylons (4), Pucks, Net",
+         U11P, '["station_setup","4_lane","skating","puck_control","shooting","advanced"]', "skating", "medium", "hc_ip_4lane_combo_2", "U11+", HC),
+
+        ("IP 4 Lane Skating Combo #3", "station_setup",
+         "Third four-lane combo with competitive elements. Lane 1: sprint race (pairs). Lane 2: crossover race. Lane 3: backward race. Lane 4: obstacle course race. Timed or paired competition in every lane. High energy session.",
+         "Every lane is a race. Clean technique — no shortcuts around pylons. Sprint: arm drive and knee lift. Crossover: full under-push. Backward: maximum C-cut extension. Obstacle: smooth and fast beats choppy and fast.",
+         "Full ice 4 lanes. Pylons in lanes 2, 3, 4. Timer optional.",
+         10, 0, "full", "Pylons (12), Stopwatch",
+         U11P, '["station_setup","4_lane","racing","compete","speed","conditioning"]', "skating", "high", "hc_ip_4lane_combo_3", "U11+", HC),
+
+        ("IP 4 Station 3 Quarter Split", "station_setup",
+         "Four-station setup using three-quarter ice split. Two stations in the offensive zone, two in the neutral zone. Station 1: passing drill. Station 2: shooting. Station 3: skating agility. Station 4: puck handling. Maximizes ice usage for 4 groups.",
+         "Two stations per zone. Keep groups tight so everyone gets reps. Station 1: pass and receive, both sides. Station 2: quick release shots. Station 3: agility through pylons. Station 4: stickhandling course. Rotate every 3 minutes.",
+         "Three-quarter ice. OZ split into 2 stations. NZ split into 2 stations.",
+         12, 0, "full", "Pylons (8), Net, Pucks",
+         U11P, '["station_setup","4_station","quarter_split","passing","shooting","agility"]', None, "medium", "hc_ip_4station_3q", "U11+", HC),
+
+        ("IP 4 Station 3 Quarter Split — Lane Skating", "station_setup",
+         "Three-quarter ice four-station setup with lane skating emphasis. Station 1: forward stride lanes. Station 2: backward skating lanes. Station 3: puck control lanes. Station 4: transition lane race. Uses lanes within the station format.",
+         "Lanes within each station keep players organized. Forward: full extension strides. Backward: deep C-cuts. Puck control: head up while handling. Transition: smooth pivots, maintain speed. Go the length of your zone.",
+         "Three-quarter ice. Each station divided into 2-3 lanes.",
+         12, 0, "full", "Pylons (12)",
+         U11P, '["station_setup","4_station","lanes","skating","backward","puck_control"]', "skating", "medium", "hc_ip_4station_3q_lanes", "U11+", HC),
+
+        ("IP 4 Station Half Ice #1 — Crossovers", "station_setup",
+         "Four-station half-ice setup focused on crossovers. Station 1: circle crossovers. Station 2: figure 8 crossovers. Station 3: crossover agility course. Station 4: crossover race. Half-ice format for smaller groups or shared ice.",
+         "Circle: lean and push under. Figure 8: smooth transitions between circles. Agility: quick crossovers through the course. Race: fastest clean crossovers win. Work both directions at every station.",
+         "Half ice divided into 4 quadrants. Pylons in stations 3-4.",
+         12, 0, "half", "Pylons (8)",
+         U11P, '["station_setup","4_station","half_ice","crossovers","agility","race"]', "skating", "high", "hc_ip_4station_hi_crossovers", "U11+", HC),
+
+        ("IP 4 Station Half Ice #1", "station_setup",
+         "General four-station half-ice setup. Station 1: edge control. Station 2: puck handling. Station 3: passing pairs. Station 4: shooting at target. Compact format works well when sharing ice or with smaller groups.",
+         "Edge control: clean inside and outside edges. Puck handling: soft hands, puck in the middle of the blade. Passing: forehand and backhand, hit the tape. Shooting: pick your spot, quick release. Rotate every 3 minutes.",
+         "Half ice divided into 4 quadrants. Net with target at station 4.",
+         12, 0, "half", "Pylons (4), Pucks, Net, Shooting targets",
+         U11P, '["station_setup","4_station","half_ice","edges","puck_handling","passing","shooting"]', None, "medium", "hc_ip_4station_hi_1", "U11+", HC),
+
+        ("IP 4 Station Half Ice #2 — 4 Pylon Chase", "station_setup",
+         "Half-ice four-station setup with a chase game. Station 1: 4-pylon chase — one player chases another through a pylon course. Station 2: edge drills. Station 3: stick handling. Station 4: partner passing. The chase game adds compete level to skating.",
+         "Chase: evader leads through the pylons, chaser tries to tag. Switch roles after each rep. Edges: quality reps, feel the blade. Stickhandling: tight moves, head up. Passing: flat on the tape, forehand and backhand.",
+         "Half ice 4 quadrants. 4 pylons in a square at station 1.",
+         12, 0, "half", "Pylons (8), Pucks",
+         U11P, '["station_setup","4_station","half_ice","chase","compete","agility"]', "skating", "high", "hc_ip_4station_hi_chase", "U11+", HC),
+
+        ("IP 4 Station Half Ice #2 — Backyard Drill", "station_setup",
+         "Half-ice setup featuring the backyard creativity drill. Station 1: Backyard Drill — free play in a small area, players work on their own moves. Station 2: skating skills. Station 3: shooting. Station 4: 1v1 battles. Encourages creative play.",
+         "Backyard: be creative, try new moves, theres no wrong way. Skating: focus on todays specific skill. Shooting: quick release, change your angle. 1v1: protect the puck, attack the net. Have fun at every station.",
+         "Half ice 4 quadrants. Small nets at station 4.",
+         12, 0, "half", "Pucks, Small nets (2)",
+         U11P, '["station_setup","4_station","half_ice","creativity","backyard","1v1"]', None, "medium", "hc_ip_4station_hi_backyard", "U11+", HC),
+
+        ("IP 4 Station Half Ice #2", "station_setup",
+         "General four-station half-ice template #2. Station 1: transition skating. Station 2: wrist shot technique. Station 3: give-and-go passing. Station 4: small area 2v1 game. Balanced skills development in a compact format.",
+         "Transitions: smooth pivots, maintain speed. Wrist shots: weight transfer, follow through at the target. Give-and-go: pass and immediately skate for the return. 2v1: make it simple — get the extra player open.",
+         "Half ice 4 quadrants. Net at station 2. Small nets at station 4.",
+         12, 0, "half", "Pylons (4), Pucks, Net, Small nets (2)",
+         U11P, '["station_setup","4_station","half_ice","transitions","shooting","passing","2v1"]', None, "medium", "hc_ip_4station_hi_2", "U11+", HC),
+
+        ("IP 4 Station Half Ice #2 — Puck Control Obstacles", "station_setup",
+         "Half-ice setup with puck control obstacle focus. Station 1: puck through obstacle gates. Station 2: stickhandle around random objects. Station 3: puck control relay race. Station 4: creative deking course. Lots of puck touches in every station.",
+         "Gates: thread the puck through cleanly. Random objects: react and adjust to unpredictable obstacles. Relay: speed with control. Deking: try a new move every time through. The player who touches the puck the most improves the most.",
+         "Half ice 4 quadrants. Various obstacles at each station.",
+         12, 0, "half", "Pylons (8), Sticks on ice, Pucks, Small barriers",
+         U11P, '["station_setup","4_station","half_ice","puck_control","obstacles","creativity"]', "puck_handling", "medium", "hc_ip_4station_hi_puck_obstacles", "U11+", HC),
+
+        ("IP 4 Station Setup #2 — Backward Stopping", "station_setup",
+         "Four-station setup emphasizing backward skating and stopping. Station 1: backward stride work. Station 2: backward stops (both sides). Station 3: backward-to-forward transitions. Station 4: backward race. Dedicated backward skills session.",
+         "Backward stride: deep C-cuts, sit low. Stops: turn the hips, dig both edges. Transitions: quick pivot, immediate acceleration. Race: full speed backward, test your limits. Both directions for all stops.",
+         "Half ice 4 quadrants. Lines on ice mark stopping points.",
+         12, 0, "half", "Pylons (4)",
+         U11P, '["station_setup","4_station","backward","stopping","transitions","race"]', "skating", "medium", "hc_ip_4station_bwd_stopping", "U11+", HC),
+
+        ("IP 4 Station Setup #2", "station_setup",
+         "Alternative four-station template #2. Station 1: power skating. Station 2: one-touch passing. Station 3: snap shot drill. Station 4: defensive gap control. Well-rounded setup covering skating, passing, shooting, and defensive fundamentals.",
+         "Power skating: long powerful strides, full extension. One-touch: receive and pass in one motion. Snap shot: quick pull-and-release. Gap control: backward with active stick, read the attacker. Maximum reps at each station.",
+         "Half ice 4 quadrants. Net at stations 3-4.",
+         12, 0, "half", "Pylons (4), Pucks, Net",
+         U11P, '["station_setup","4_station","power_skating","passing","shooting","gap_control"]', None, "medium", "hc_ip_4station_2", "U11+", HC),
+
+        ("IP 4 Station Setup #2 — Stopping", "station_setup",
+         "Four-station stopping skills focus. Station 1: two-foot hockey stop (both sides). Station 2: one-foot stop practice. Station 3: stop-and-start sprint. Station 4: game-situation stops (receive a pass, stop, look, pass). Comprehensive stopping session.",
+         "Two-foot: equal weight, both edges dig. One-foot: balance, edge control. Stop-and-start: explosive out of every stop. Game stops: stop under control, head up immediately to find the next play.",
+         "Half ice 4 quadrants. Lines mark stopping points. Pucks at station 4.",
+         12, 0, "half", "Pucks",
+         U11P, '["station_setup","4_station","stopping","technique","game_situations"]', "skating", "medium", "hc_ip_4station_stopping", "U11+", HC),
+
+        ("IP 4 Station Skating — Circle Crossovers", "station_setup",
+         "Four-station circuit using all available circles for crossover work. Station 1: slow crossovers on circle. Station 2: speed crossovers on circle. Station 3: crossovers with puck on circle. Station 4: crossover competition on circle. Progressive crossover development.",
+         "Each station adds complexity. Slow: feel the technique. Speed: maintain technique at pace. Puck: keep the puck to the outside. Competition: race a partner around the circle. Switch directions every 90 seconds.",
+         "4 face-off circles. One group per circle.",
+         12, 0, "full", "Pucks (for station 3)",
+         U11P, '["station_setup","4_station","crossovers","circles","progressive","compete"]', "skating", "high", "hc_ip_4station_circle_xo", "U11+", HC),
+
+        ("IP 4 Station Skating", "station_setup",
+         "General four-station skating template. Station 1: stride power work. Station 2: agility through pylons. Station 3: edge control on lines. Station 4: speed bursts with recovery. Covers the four pillars of skating: power, agility, edges, and speed.",
+         "Power: long strides, full extension. Agility: quick changes through pylons. Edges: clean inside and outside, both feet. Speed: 10 seconds all-out, 20 seconds recovery. Hit each pillar every practice.",
+         "Full ice 4 zones. Pylons at station 2.",
+         12, 0, "full", "Pylons (8)",
+         U11P, '["station_setup","4_station","skating","power","agility","edges","speed"]', "skating", "high", "hc_ip_4station_skating", "U11+", HC),
+
+        ("IP 4 Station Skating — Forward to Backward Pivots", "station_setup",
+         "Four-station pivot-specific setup. Station 1: open pivot practice. Station 2: closed pivot practice. Station 3: pivot at speed through course. Station 4: pivot tag game. Dedicated session for the most important transition skill in hockey.",
+         "Open pivot: hips open, lead with the hip. Closed pivot: tight rotation, stay compact. At speed: dont slow down to pivot. Tag game: evade using pivots only — best pivoters win. Master this skill and your game changes.",
+         "Full ice 4 zones. Pylons mark pivot points at stations 3-4.",
+         12, 0, "full", "Pylons (8), Pinnies (for tag)",
+         U11P, '["station_setup","4_station","pivots","transitions","forward_backward","tag"]', "skating", "high", "hc_ip_4station_pivots", "U11+", HC),
+
+        ("IP 4 Station Skating — Stopping", "station_setup",
+         "Four-station stopping-focused setup. Station 1: hockey stop both sides. Station 2: one-foot stops. Station 3: stop progression (glide, scrape, full stop). Station 4: stop competition. Every station builds stopping confidence and technique.",
+         "Both sides: if you can only stop left, you can only turn left. One-foot: balance and edge control. Progression: build from scraping to full snow spray. Competition: who makes the most snow? Stopping is the most underrated skating skill.",
+         "Full ice 4 zones. Lines on ice mark stopping locations.",
+         12, 0, "full", "None",
+         U11P, '["station_setup","4_station","stopping","edges","technique","compete"]', "skating", "medium", "hc_ip_4station_stopping_focus", "U11+", HC),
+
+        ("IP 4 Station Skating — Tight Turns", "station_setup",
+         "Four-station tight-turn development. Station 1: single-pylon tight turns. Station 2: multi-pylon slalom. Station 3: tight turns with puck. Station 4: tight-turn race. Progressive stations from technique to competition. Critical skill for game speed.",
+         "Drop the inside shoulder into every turn. Load the inside edge. Knee drives through the turn. Explode out with crossover steps. With the puck: protect it on the outside of the turn. Race clean.",
+         "Full ice 4 zones. Pylons at every station.",
+         12, 0, "full", "Pylons (16), Pucks (station 3)",
+         U11P, '["station_setup","4_station","tight_turns","slalom","puck_control","race"]', "skating", "high", "hc_ip_4station_tight_turns", "U11+", HC),
+
+        ("IP 5 Station Setup #1", "station_setup",
+         "Five-station ice prep for larger groups. Station 1: skating agility. Station 2: puck handling. Station 3: passing. Station 4: shooting. Station 5: small area game. Every core skill covered in one rotation cycle. 2.5 minutes per station.",
+         "5 stations = smaller groups = more reps. Each station covers a different skill. Rotate quickly on the whistle — no wasted time. Coaches spread across stations for feedback. 2.5 minutes per station, full cycle in 12.5 minutes.",
+         "Full ice divided into 5 zones. Nets and targets set up before practice.",
+         13, 0, "full", "Pylons (10), Net, Small nets (2), Pucks",
+         U11P, '["station_setup","5_station","comprehensive","practice_organization"]', None, "medium", "hc_ip_5station_1", "U11+", HC),
+
+        ("IP 5 Station Setup #2", "station_setup",
+         "Alternative five-station setup with advanced focus. Station 1: power skating. Station 2: creative puck handling. Station 3: one-timers. Station 4: 1v1 battles. Station 5: defensive positioning. Higher skill demand for experienced groups.",
+         "Power skating: full power strides. Creative puck: try new moves, be unpredictable. One-timers: stick on ice, eyes on puck. 1v1: compete, protect, attack. Defensive: body position, gap, stick placement. All game-applicable skills.",
+         "Full ice 5 zones. Net at station 3. Small nets at station 4.",
+         13, 0, "full", "Pylons (8), Net, Small nets (2), Pucks, Pinnies",
+         U11P, '["station_setup","5_station","advanced","1v1","defensive","one_timer"]', None, "high", "hc_ip_5station_2", "U11+", HC),
+
+        # ═══════════════════════════════════════════
+        # C.5 — PUCK CONTROL (7 drills)
+        # ═══════════════════════════════════════════
+
+        ("Puck Control Pylon Warm-Up", "puck_handling",
+         "Puck handling warm-up through a pylon course. Players stickhandle through 6 pylons spaced 8 feet apart in a straight line. Forehand only first pass, backhand only second pass, alternating third pass. Simple and effective pre-practice warm-up.",
+         "Soft hands — let the puck roll across the blade. Head up between pylons. Forehand: cup the puck, dont slap at it. Backhand: roll the wrists over, blade stays on the ice. Smooth is fast.",
+         "Half ice with 6 pylons in a line. Players go one at a time.",
+         6, 1, "half", "Pylons (6), Pucks",
+         ALL, '["puck_handling","warm_up","pylons","forehand","backhand","fundamentals"]', "puck_handling", "low", "hc_puck_pylon_warmup", "All Ages", HC),
+
+        ("Puck Control 4 Pylon Agility", "puck_handling",
+         "Four pylons in a square with puck control challenges. Players stickhandle through the square using different patterns — figure 8, cross, perimeter, diagonal. Each pattern works different hand positions and puck protection angles.",
+         "Puck stays within 6 inches of the blade at all times. Change pace through the pylons — slow through the tight turns, accelerate on the straights. Eyes up, use peripheral vision to see the pylons. Try all four patterns.",
+         "4 pylons in a 10x10 foot square. One player per setup, 2-3 setups running.",
+         6, 1, "quarter", "Pylons (4), Pucks",
+         ALL, '["puck_handling","agility","pylons","patterns","technique"]', "puck_handling", "medium", "hc_puck_4pylon_agility", "All Ages", HC),
+
+        ("Puck Control Box Creativity", "puck_handling",
+         "Creative puck handling within a confined box (pylons). Players stay inside the box and practice every move they know: toe drags, between the legs, spin moves, fakes. Timed rounds of 30 seconds. Develops repertoire and comfort.",
+         "Try every move you know. Failed attempts are fine — this is the place to experiment. 30 seconds of continuous movement. Dont just stickhandle side to side — try toe drags, spins, reach moves. Be creative. Be unpredictable.",
+         "Small pylon box per player (6x6 feet). Players work individually.",
+         5, 1, "quarter", "Pylons (4 per player), Pucks",
+         U11P, '["puck_handling","creativity","deking","toe_drag","confined_space"]', "puck_handling", "medium", "hc_puck_box_creativity", "U11+", HC),
+
+        ("Puck Control Escapes", "puck_handling",
+         "Puck protection and escape moves drill. A passive defender applies pressure while the puck carrier practices escape moves: cutback, reverse, protect-and-go, spin away. Develops puck protection skills used in board battles and tight spaces.",
+         "Protect the puck with your body — keep it on the side away from the defender. Cutback: change direction sharply. Reverse: behind the net or along the boards. Spin: use your body to shield during the turn. Read the pressure and react.",
+         "Along the boards in one zone. Pairs work together — one passive D, one carrier.",
+         8, 2, "quarter", "Pucks",
+         U11P, '["puck_handling","escapes","puck_protection","board_battles","1v1"]', "puck_handling", "medium", "hc_puck_escapes", "U11+", HC),
+
+        ("Puck Control Half Ice Lanes", "puck_handling",
+         "Three-lane half-ice puck control drill. Lane 1: stickhandling through stationary obstacles. Lane 2: puck handling at speed (open ice). Lane 3: puck handling with a defender trailing. Progressive difficulty from lane to lane.",
+         "Lane 1: control and precision, dont rush. Lane 2: speed with the puck, keep it on the blade. Lane 3: protect while moving, use your body. Work every lane, then rotate. Head up in all lanes.",
+         "Half ice divided into 3 lanes. Obstacles in lane 1. Defenders at lane 3.",
+         8, 0, "half", "Pylons (6), Pucks",
+         U11P, '["puck_handling","lanes","progressive","speed","protection"]', "puck_handling", "medium", "hc_puck_half_lanes", "U11+", HC),
+
+        ("Puck Control Half Ice Lanes #2", "puck_handling",
+         "Second half-ice lane drill with passing integration. Lane 1: stickhandle and pass to a stationary target. Lane 2: receive a pass, stickhandle, pass to the next station. Lane 3: continuous puck movement with a partner. Combines individual control with passing.",
+         "Receive and give — dont hold the puck too long. Soft hands on the receive, firm pass on the give. Lane 3: constant motion, both players moving. Quality passes after quality handles. Build tempo through the drill.",
+         "Half ice 3 lanes. Partners at receiving points.",
+         8, 0, "half", "Pylons (4), Pucks",
+         U11P, '["puck_handling","lanes","passing","receive","combination"]', "puck_handling", "medium", "hc_puck_half_lanes_2", "U11+", HC),
+
+        ("Skating Puck Control Half Ice Lanes", "puck_handling",
+         "Half-ice lane drill emphasizing skating fundamentals while handling the puck. Lane 1: forward stride with puck on forehand. Lane 2: crossovers with puck transfer. Lane 3: transition skating while maintaining puck control. Skating quality with puck possession.",
+         "Skating technique doesnt change because you have a puck. Full strides with the puck on your forehand. Crossovers: transfer the puck to the outside hand. Transitions: smooth pivots, puck stays on the blade through the turn.",
+         "Half ice 3 lanes. Full length of each lane.",
+         8, 0, "half", "Pucks",
+         U11P, '["puck_handling","skating","lanes","crossovers","transitions"]', "puck_handling", "medium", "hc_skating_puck_lanes", "U11+", HC),
+
+        # ═══════════════════════════════════════════
+        # C.6 — SHOOTING / SCORING (8 drills)
+        # ═══════════════════════════════════════════
+
+        ("Shooting Lateral Skate and Shoot #1", "shooting",
+         "Lateral skating into a shooting position. Player skates laterally across the top of the circles, receives a pass from the corner, and shoots in stride. Works on shooting while moving laterally — a critical scoring skill at higher levels.",
+         "Stick on the ice, blade open to receive. Shoot in stride — dont stop to shoot. Weight transfer from back foot to front foot through the shot. Pick your target before you receive the puck. Quick release.",
+         "One zone. Passer in the corner. Shooter moves laterally across the slot. Goalie in net.",
+         8, 2, "half", "Pucks, Net, Goalie",
+         U11P, '["shooting","lateral","skate_and_shoot","receive","quick_release"]', "shooting", "high", "hc_lateral_shoot_1", "U11+", HC),
+
+        ("Defence Lateral Skate and Shoot #2", "shooting",
+         "Defence-specific lateral shooting drill. D starts at the blue line, lateral skates to create a lane, receives a pass from down low, and takes a point shot. Focuses on the D-specific skill of walking the line and shooting through traffic.",
+         "Walk the line to create a shooting lane. Receive with the blade open, shoot in one motion. Low and hard — get it through to the net. Read the passing lane before moving laterally. Shot should be on net, not over the glass.",
+         "One zone. D at blue line. Forward down low passing up. Goalie in net with screener optional.",
+         8, 2, "half", "Pucks, Net, Goalie",
+         U13P, '["shooting","defence","lateral","point_shot","walk_the_line"]', "shooting", "high", "hc_d_lateral_shoot_2", "U13+", HC),
+
+        ("Scoring Corner Escapes", "shooting",
+         "Scoring drill starting from the corner. Player retrieves puck in the corner, uses an escape move, drives to the net, and finishes with a shot or deke. Simulates creating scoring chances from below the goal line.",
+         "Corner escape: read the pressure, choose your move. Drive to the net with speed and purpose. Finish: shot, deke, or backhand — have multiple options. Protect the puck during the escape. Attack the net hard.",
+         "One zone. Pucks in both corners. Net with goalie. One at a time, alternate corners.",
+         8, 1, "half", "Pucks, Net, Goalie",
+         U11P, '["shooting","scoring","escapes","corners","net_drive","finishing"]', "shooting", "high", "hc_scoring_corner_escapes", "U11+", HC),
+
+        ("Scoring 2 on 0 Down Low", "shooting",
+         "Two-on-zero scoring drill from below the goal line. Two players start in opposite corners, exchange a pass below the goal line, and attack the net together — one drives the near post, one drives the far post. Quick passing to scoring.",
+         "First pass: hard and flat below the goal line. Second player: receive and immediately attack. Near post player: go hard for a tip or short-side shot. Far post player: back door option. Attack from below the goal line is an underused weapon.",
+         "One zone. Two lines in the corners. Goalie in net.",
+         8, 2, "half", "Pucks, Net, Goalie",
+         U11P, '["shooting","scoring","2v0","down_low","net_drive","passing"]', "shooting", "high", "hc_scoring_2on0_down_low", "U11+", HC),
+
+        ("Scoring Angling Gates 1v1", "shooting",
+         "One-on-one scoring through angling gates. Two pylons create a gate the attacker must pass through to get a shot. Defender uses angling to force the attacker wide and away from the gate. Attacker must use speed and deception to get through.",
+         "Attacker: speed, change of direction, and deception to beat the angle. Defender: inside position, angling stick on the puck side. Gate is the scoring zone — whoever controls it controls the play. Both players work hard.",
+         "One zone. Two pylons as a gate at the top of the crease. 1v1 from blue line.",
+         8, 2, "half", "Pylons (2), Pucks, Net, Goalie",
+         U11P, '["shooting","scoring","1v1","angling","gates","compete"]', "shooting", "high", "hc_scoring_angling_1v1", "U11+", HC),
+
+        ("5 Shot Warm-Up", "shooting",
+         "Quick five-shot warm-up sequence. Each player takes 5 shots from 5 different spots: left circle, right circle, slot, left wing, right wing. Wrist shots first round, snap shots second round. Gets sticks and hands warm for practice.",
+         "Wrist shots: pull and release, follow through at the target. Snap shots: quick load and fire. Pick your spot before you shoot. Dont just throw pucks at the net — aim. 5 different locations = 5 different shooting angles.",
+         "One zone. 5 marked shooting positions. Pucks at each spot. Goalie optional.",
+         5, 1, "half", "Pucks (25+), Net",
+         ALL, '["shooting","warm_up","wrist_shot","snap_shot","fundamentals"]', "shooting", "medium", "hc_5shot_warmup", "All Ages", HC),
+
+        ("Skate Pass Shoot Warm-Up", "shooting",
+         "Skating-passing-shooting combination warm-up. Player skates from blue line, receives a pass at the top of the circle, takes 2-3 strides, and shoots. Simple three-element warm-up that mimics game flow. Both sides.",
+         "Skate with speed to the receiving point. Call for the puck. Receive in stride — dont stop. 2-3 strides then shoot. Pick your target. Both sides of the ice. Shoot to score, not just to shoot.",
+         "Full ice. Lines at both blue lines. Passers at the half wall. Nets with goalies.",
+         6, 2, "full", "Pucks, Nets, Goalies",
+         ALL, '["shooting","warm_up","skate_pass_shoot","receive","combination"]', "shooting", "medium", "hc_skate_pass_shoot_warmup", "All Ages", HC),
+
+        ("U11 Breakaway and Tip", "shooting",
+         "U11-specific breakaway and tipping drill. Player 1 goes on a breakaway from center. After the shot, Player 2 drives to the net for a tip from a point shot by the coach. Teaches finishing skills — both solo scoring and deflection scoring.",
+         "Breakaway: pick your move early, sell the fake, finish. Tip: get to the net, stick on the ice, redirect anything within reach. Both are goal-scoring skills. Alternate roles so everyone tries both. Celebrate every goal.",
+         "Full ice. One line at center for breakaways. One line at the circle for tips. Coach at the point.",
+         10, 3, "full", "Pucks, Net, Goalie",
+         U11, '["shooting","scoring","u11","breakaway","tips","finishing"]', "shooting", "high", "hc_u11_breakaway_and_tip", "U11", HC),
+
+        # ═══════════════════════════════════════════
+        # C.7 — DEFENCE (32 drills)
+        # ═══════════════════════════════════════════
+
+        ("Defence Alternating Retrievals — Quick Up", "defensive",
+         "Defenceman retrieval drill alternating sides. D starts at the goal line, skates to one corner to retrieve a rimmed puck, executes a quick-up pass to a forward at the hash marks, then immediately skates to the opposite corner for the next retrieval. Continuous reps.",
+         "Get to the puck quickly — first man to the puck wins. Quick up pass must be hard and on the tape. Dont admire your pass — immediately transition to the other corner. Alternate sides to work both forehand and backhand retrievals.",
+         "One zone. Pucks rimmed to alternate corners by coach. Forward at each hash mark.",
+         8, 3, "half", "Pucks",
+         U13P, '["defensive","retrieval","quick_up","breakout","transitions"]', "defensive", "high", "hc_d_alt_retrieve_quickup", "U13+", HC),
+
+        ("Defence Alternating Retrievals — Wheel", "defensive",
+         "Alternating retrieval drill with wheel breakout option. D retrieves in one corner and executes a wheel (skate behind the net to the other side) before passing to a forward. Alternates corners. Develops the wheel as a breakout option under pressure.",
+         "Wheel: skate hard behind the net, protect the puck, look up as you come out the other side. The wheel buys time when the quick-up is covered. Head on a swivel as you come around the net. Hard, accurate pass to the forward.",
+         "One zone. Coach rims pucks. Forwards on the half wall. D alternate retrievals.",
+         8, 3, "half", "Pucks",
+         U13P, '["defensive","retrieval","wheel","breakout","puck_protection"]', "defensive", "high", "hc_d_alt_retrieve_wheel", "U13+", HC),
+
+        ("Defence Breakout Wheel", "defensive",
+         "Focused wheel breakout drill. D retrieves behind the net, wheels to the strong side, and connects with a forward on the half wall. Coach adds a passive forechecker to create urgency. Repetitive reps to build the wheel as a natural breakout habit.",
+         "Head up as you come around the net — read the forecheckers. Wheel to the open side. Pass must be tape-to-tape. If the half wall is covered, look to the middle or carry. Speed through the wheel — dont slow down behind the net.",
+         "One zone. D starts behind net. Coach rims pucks. Passive forechecker. Forward on half wall.",
+         10, 3, "half", "Pucks",
+         U13P, '["defensive","breakout","wheel","passing","reading_pressure"]', "defensive", "high", "hc_d_breakout_wheel", "U13+", HC),
+
+        ("Defence Escape Triangle", "defensive",
+         "D escape drill using a triangle pattern. Three pylons form a triangle behind the net. D retrieves the puck and uses the triangle points as escape route options — each point represents a different exit (quick up, wheel, reverse). Read and react to pressure.",
+         "Each point of the triangle is an escape option. Quick up: direct pass from retrieval side. Wheel: skate through the triangle to the other side. Reverse: fake one way, go back. Read the forechecker to pick your route.",
+         "One zone. 3 pylons in a triangle behind the net. Coach applies varying pressure.",
+         10, 1, "half", "Pylons (3), Pucks",
+         U13P, '["defensive","escapes","triangle","breakout","decision_making"]', "defensive", "medium", "hc_d_escape_triangle", "U13+", HC),
+
+        ("Defence Escapes from F1", "defensive",
+         "D escape drill with one forechecker (F1). D retrieves the puck while F1 applies pressure. D must read F1s angle and choose the appropriate escape: if F1 comes from the left, escape right. Develops real-time decision making under single-forechecker pressure.",
+         "Read F1 before you pick up the puck. Escape away from pressure — simple reads first. Protect the puck with your body. Make the decision early and commit to it. Quick feet out of the escape route.",
+         "One zone. D retrieves. F1 forechecks with a defined angle. Rotate after each rep.",
+         10, 2, "half", "Pucks",
+         U13P, '["defensive","escapes","F1","forecheck","decision_making","1v1"]', "defensive", "high", "hc_d_escapes_f1", "U13+", HC),
+
+        ("Defence Escapes from F1 and F2", "defensive",
+         "D escape drill with two forecheckers (F1 and F2). D retrieves while F1 attacks and F2 supports. D must now read two layers of pressure — the immediate threat and the cut-off player. Increased complexity demands quicker reads.",
+         "Read F1 first, then find F2. Escape where neither forechecker can reach you. May need to use the net as a tool to create separation. Two forecheckers means less time — decision speed is critical. Strong on the puck.",
+         "One zone. D retrieves. F1 and F2 forecheck with defined roles. Switch roles.",
+         10, 3, "half", "Pucks",
+         U13P, '["defensive","escapes","F1","F2","forecheck","2v1","pressure"]', "defensive", "high", "hc_d_escapes_f1f2", "U13+", HC),
+
+        ("Defence Escapes from F1 and F2 with Outlet", "defensive",
+         "D escape with two forecheckers and an outlet pass. After escaping F1 and F2, D must connect with a forward outlet at the blue line or half wall. Adds the critical finishing element to the escape — getting the puck out of the zone.",
+         "Escape first, then find your outlet. Head up after the escape move — scan for the open forward. Pass must be hard and accurate — soft passes get intercepted. The escape means nothing if the breakout pass fails.",
+         "One zone. D retrieves. F1/F2 forecheck. Forwards at blue line and half wall as outlets.",
+         10, 4, "half", "Pucks",
+         U13P, '["defensive","escapes","outlet","breakout","forecheck","passing"]', "defensive", "high", "hc_d_escapes_f1f2_outlet", "U13+", HC),
+
+        ("Defence Retrieval with Quick Up", "defensive",
+         "Focused quick-up retrieval drill. D skates to the corner, retrieves a stationary puck, and immediately passes to a forward positioned at the hash marks. Emphasis on speed of retrieval and accuracy of the first pass. High-rep drill.",
+         "Race to the puck. Pick it up clean. Look up immediately. Quick up pass: hard, flat, on the tape. Dont stickhandle — retrieve and pass. The fastest breakout starts with a quick up. Both sides, forehand and backhand.",
+         "One zone. Pucks placed in corners. Forward at hash marks. D alternate sides.",
+         8, 2, "half", "Pucks",
+         U13P, '["defensive","retrieval","quick_up","passing","speed","breakout"]', "defensive", "high", "hc_d_retrieval_quickup", "U13+", HC),
+
+        ("Defence Retrieval with Wheel", "defensive",
+         "Focused wheel retrieval drill. D retrieves in the corner and immediately wheels behind the net to the opposite side. Forward reads the wheel and adjusts position. Repetitive wheel practice until the movement becomes second nature.",
+         "Retrieve and wheel — no hesitation. Protect the puck as you go behind the net. Come out the other side with your head up and puck ready to pass. Forward must read the wheel and move to support the new angle.",
+         "One zone. Pucks in corner. D wheel behind net. Forward adjusts. Alternate sides.",
+         8, 2, "half", "Pucks",
+         U13P, '["defensive","retrieval","wheel","breakout","protect","transition"]', "defensive", "high", "hc_d_retrieval_wheel", "U13+", HC),
+
+        ("Defence Retrieve and Wheel", "defensive",
+         "Combined retrieve-and-wheel with added skating elements. D starts at blue line, backward skates to the corner, transitions, retrieves, and wheels behind the net. Full defensive sequence from gap control to breakout. Adds conditioning element.",
+         "Start from the blue line backward — maintain gap control posture. Transition to forward near the corner. Retrieve with urgency. Wheel with speed. The full sequence should be smooth and game-speed. Condition through repetition.",
+         "Full half ice. D starts at blue line. Pucks dumped into corner. Forwards at outlets.",
+         10, 2, "half", "Pucks",
+         U13P, '["defensive","retrieve","wheel","gap_control","conditioning","breakout"]', "defensive", "high", "hc_d_retrieve_wheel_full", "U13+", HC),
+
+        ("Defence Skills Stations", "defensive",
+         "Four-station defence-specific skills circuit. Station 1: gap control skating. Station 2: stick checks and body position. Station 3: puck retrieval escapes. Station 4: breakout passing. Dedicated D development session.",
+         "Gap control: maintain an active stick while backward. Stick checks: poke, lift, and press. Retrievals: quick, decisive escapes. Breakout passing: hard, flat, accurate. Rotate every 3 minutes. D-specific skill session.",
+         "One zone divided into 4 quadrants. Coach at station 2.",
+         12, 0, "half", "Pylons (8), Pucks",
+         U13P, '["defensive","stations","gap_control","stick_checks","retrievals","breakout"]', "defensive", "high", "hc_d_skills_stations", "U13+", HC),
+
+        ("Defence Step Ups to Outlet Pass", "defensive",
+         "D step-up drill transitioning to outlet pass. D starts in defensive position, steps up to intercept a pass or close a gap, gains puck possession, and immediately connects with a forward outlet. Develops aggressive defensive play with a purpose.",
+         "Step up timing: close the gap before the attacker gains speed. Intercept or strip the puck. Immediately transition from defence to offence. Outlet pass: first look is up ice. Quick decision, quick execution.",
+         "One zone. Forward skates with puck. D steps up from inside the zone. Outlets at blue line.",
+         8, 3, "half", "Pucks",
+         U13P, '["defensive","step_up","outlet","interception","gap_control","transition"]', "defensive", "high", "hc_d_step_ups_outlet", "U13+", HC),
+
+        ("Defence Turn Ups", "defensive",
+         "D turn-up drill — skating forward to retrieve and turning up ice with the puck. D starts at the blue line, skates to the corner, retrieves, and turns up the boards with speed. Simulates retrieving a dump-in and starting the breakout with your feet.",
+         "Turn up: face up ice as quickly as possible after retrieval. Use your feet — skate the puck out, dont just pass. Protect along the boards. Head up to read the next option: pass or carry. Speed through the turn.",
+         "One zone. Pucks dumped into corners. D alternate sides. Forwards provide outlet options.",
+         8, 2, "half", "Pucks",
+         U13P, '["defensive","turn_ups","retrieval","breakout","skating","puck_protection"]', "defensive", "high", "hc_d_turn_ups", "U13+", HC),
+
+        ("Defence Transition Triangle", "defensive",
+         "Defensive transition drill using a triangle pattern in the neutral zone. D passes to a forward, gets a return pass, transitions, and passes to the other forward. Creates a continuous triangle passing pattern while D works on transitions between passes.",
+         "D: pass and immediately transition to receive. Forwards: be available, give a target. Keep the triangle moving with crisp passes. D works on forward-to-backward-to-forward transitions between each pass. Smooth and continuous.",
+         "Neutral zone. D in the middle. Two forwards forming a triangle. Continuous passing.",
+         8, 3, "neutral_zone", "Pucks",
+         U13P, '["defensive","transition","triangle","passing","continuous","movement"]', "defensive", "medium", "hc_d_transition_triangle", "U13+", HC),
+
+        ("Defence Transition Horseshoe Skating", "defensive",
+         "Horseshoe skating pattern for defencemen. D skates a horseshoe pattern (forward around one circle, transition, backward through the slot, transition, forward around the other circle). Continuous flow developing defensive zone mobility.",
+         "Forward through the circles with crossovers. Transition at the top of the circle — smooth, no stopping. Backward through the slot with good gap posture. Continuous horseshoe pattern. Both directions. Add a puck when comfortable.",
+         "One zone using both circles. D skate the horseshoe continuously.",
+         8, 0, "half", "None",
+         U13P, '["defensive","transition","horseshoe","skating","circles","continuous"]', "skating", "medium", "hc_d_horseshoe", "U13+", HC),
+
+        ("Defence Transition Shooting", "defensive",
+         "D transition to shooting drill. D starts backward at the blue line, receives a pass from behind the net, transitions to forward, walks the line, and shoots. Simulates receiving a breakout pass and generating a point shot in one fluid motion.",
+         "Receive while moving backward. Quick transition to forward. Walk the line to create a shooting lane. Shoot low and hard through traffic. Dont telegraph — shoot when the lane opens. Point shots that miss the net are wasted possessions.",
+         "One zone. D at blue line. Passer behind net. Goalie in net. Screener optional.",
+         8, 2, "half", "Pucks, Net, Goalie",
+         U13P, '["defensive","transition","shooting","point_shot","walk_line","breakout"]', "shooting", "high", "hc_d_transition_shooting", "U13+", HC),
+
+        ("Defence Breakout Progression — Quick Up Wheel", "defensive",
+         "Progressive breakout drill combining quick-up and wheel options. Rep 1: D retrieves and quick ups. Rep 2: D retrieves and wheels. Rep 3: Coach calls which option on the fly — D must read and react. Builds breakout decision-making.",
+         "Quick up: immediate pass from the retrieval side. Wheel: skate behind the net to the open side. Read and react: coach calls or signals the option — execute immediately. Both options must be game-ready at all times.",
+         "One zone. Coach rims pucks. D retrieves. Forwards at outlets. Coach signals option.",
+         10, 3, "half", "Pucks",
+         U13P, '["defensive","breakout","quick_up","wheel","progression","decision_making"]', "defensive", "high", "hc_d_breakout_progression", "U13+", HC),
+
+        ("Defence Breakout Skate and Shoot", "defensive",
+         "D breakout-to-offense drill. D retrieves in the corner, breaks out with a pass, receives a return pass at the blue line, and drives to the net for a shot. Full offensive sequence starting from the defensive zone. D joins the rush.",
+         "Breakout pass first. Sprint to the blue line for the return. Receive in stride. Attack the net with the puck — D getting to the net creates offensive chances. Shoot or drive for a rebound. Full sequence at game speed.",
+         "Full ice. D starts in corner. Forward at half wall. Return pass at blue line. Goalie in net.",
+         10, 2, "full", "Pucks, Net, Goalie",
+         U13P, '["defensive","breakout","skating","shooting","joining_rush","offensive_d"]', "shooting", "high", "hc_d_breakout_skate_shoot", "U13+", HC),
+
+        ("Defence Escape Slide Stops", "defensive",
+         "D escape drill incorporating slide stops. D retrieves, slide stops to read the pressure, then chooses an escape route. The slide stop creates a pause that allows the D to see the ice before committing. Tactical stopping skill.",
+         "Slide stop: controlled two-foot stop facing up ice. During the stop, read where the pressure is coming from. Choose your escape based on what you see during the stop. Quick acceleration after the stop. Head up throughout.",
+         "One zone. D retrieves. Coach or forward applies pressure. D slide stops and escapes.",
+         8, 2, "half", "Pucks",
+         U13P, '["defensive","escapes","stops","reading_ice","decision_making","breakout"]', "defensive", "medium", "hc_d_escape_slide_stops", "U13+", HC),
+
+        ("Defence Half Circle Breakout to Double Shot", "defensive",
+         "D half-circle skating pattern into a breakout pass followed by a shot opportunity. D skates a half circle in the zone, receives a pass, makes a breakout pass, then gets a return for a shot from the point. Two scoring opportunities from one sequence.",
+         "Half circle: smooth edges, maintain speed. First pass: breakout to the forward. Second touch: return pass at the point. Shot: quick release, low and on net. The sequence should flow — no stopping between elements.",
+         "One zone. D skates half circle. Forward at half wall. Return pass. Shot on net.",
+         10, 2, "half", "Pucks, Net, Goalie",
+         U13P, '["defensive","breakout","half_circle","shooting","double_shot","sequence"]', "defensive", "high", "hc_d_half_circle_double_shot", "U13+", HC),
+
+        ("Defence Loose Puck Retrievals — Toes Up Ice #1", "defensive",
+         "D loose puck retrieval with toes pointed up ice. D approaches a loose puck in the corner with skates angled toward the blue line (toes up ice), retrieves, and immediately transitions to breakout. Body positioning maximizes up-ice vision.",
+         "Toes pointing up ice as you approach the puck. This gives you vision of the ice ahead while retrieving. Pick up the puck on the forehand side. Immediate breakout pass or carry. Dont turn your back to the play during retrieval.",
+         "One zone. Loose pucks in corners. D approach with proper body angle. Outlets available.",
+         8, 2, "half", "Pucks",
+         U13P, '["defensive","retrieval","toes_up_ice","body_position","breakout","vision"]', "defensive", "medium", "hc_d_loose_puck_toes_1", "U13+", HC),
+
+        ("Defence Loose Puck Retrievals — Toes Up Ice with Shot #2", "defensive",
+         "Extended version of toes-up-ice retrieval adding a shot. D retrieves with proper body position, makes a breakout pass, skates to the blue line, receives a return, and shoots. Full offensive sequence from a defensive retrieval.",
+         "Same toes-up-ice retrieval technique as drill 1. Breakout pass after retrieval. Sprint to the blue line. Receive and shoot in one motion. The shot is the reward for a clean retrieval and breakout. Make it count.",
+         "Full ice. D starts in corner. Forward on half wall. Return pass at blue line. Shot on net.",
+         10, 2, "full", "Pucks, Net, Goalie",
+         U13P, '["defensive","retrieval","toes_up_ice","shooting","breakout","full_sequence"]', "defensive", "high", "hc_d_loose_puck_toes_2", "U13+", HC),
+
+        ("Defence Quick Up Lateral Skating", "defensive",
+         "D lateral skating into a quick-up pass. D shuffles laterally across the zone, receives a pass while moving, and immediately quick-ups to a forward. Develops the ability to make breakout passes while skating laterally in the defensive zone.",
+         "Lateral shuffle in defensive stance. Receive the pass with soft hands while moving. Quick up: immediate pass up to the forward. Dont stop moving — receive and pass in motion. Both directions across the zone.",
+         "One zone. D shuffles laterally. Passer behind net. Forward at hash marks.",
+         8, 3, "half", "Pucks",
+         U13P, '["defensive","quick_up","lateral","skating","passing","in_motion"]', "defensive", "high", "hc_d_quickup_lateral", "U13+", HC),
+
+        ("Defence Retrieval Quick Up Wheel", "defensive",
+         "Combined quick-up and wheel retrieval drill with game reads. Coach places puck and signals direction of forecheck. D reads the signal, retrieves, and chooses quick up or wheel based on pressure. Random reps build pattern recognition.",
+         "Read the signal — its simulating a forechecker. Quick up if the path is clear. Wheel if the quick up is covered. Make the decision before you get to the puck. Execute with speed and confidence. Both options must be sharp.",
+         "One zone. Coach signals forecheck direction. D retrieves and reacts. Forwards at outlets.",
+         10, 3, "half", "Pucks",
+         U13P, '["defensive","retrieval","quick_up","wheel","reads","pattern_recognition"]', "defensive", "high", "hc_d_retrieval_quickup_wheel", "U13+", HC),
+
+        ("Defence Transition Pass and Skate", "defensive",
+         "D pass-and-skate transition drill. D passes to a forward, transitions from backward to forward, receives a return pass, and carries through the neutral zone. Develops the pass-and-follow transition that starts the rush.",
+         "Pass first — hard and accurate. Immediately transition to forward. Sprint to support the play. Receive the return pass in stride. Carry with your head up. The transition must be quick — slow transitions kill the rush.",
+         "Full ice. D at blue line backward. Forward at hash marks. Return pass in NZ.",
+         10, 2, "full", "Pucks",
+         U13P, '["defensive","transition","pass_and_skate","breakout","support","rushing"]', "defensive", "high", "hc_d_transition_pass_skate", "U13+", HC),
+
+        ("Defence Transition Quick Up Wheel", "defensive",
+         "D transition drill combining backward skating with quick-up or wheel decision. D skates backward from the blue line, transitions at the hash marks, retrieves in the corner, and executes either a quick up or wheel. Full defensive sequence.",
+         "Backward with gap control posture. Transition near the hash marks — smooth pivot. Retrieve with urgency. Read the pressure: quick up or wheel. Full sequence from gap control to breakout. Game speed by rep 3.",
+         "One zone. D starts at blue line backward. Pucks in corners. Coach directs pressure.",
+         10, 2, "half", "Pucks",
+         U13P, '["defensive","transition","quick_up","wheel","gap_control","full_sequence"]', "defensive", "high", "hc_d_transition_quickup_wheel", "U13+", HC),
+
+        ("Defence 1v1 Lateral Skating", "defensive",
+         "One-on-one lateral skating drill. D mirrors a forward skating laterally across the blue line. Forward tries to beat the D with speed changes and fakes. D maintains gap and inside position through lateral movement. Pure defensive skating competition.",
+         "D: stay between the forward and the net. Match speed changes. Dont lunge — stay patient. Forward: use change of pace and head fakes. D wins by maintaining position. Forward wins by creating separation.",
+         "Blue line. Forward and D face each other. Forward tries to beat D laterally.",
+         8, 2, "half", "None",
+         U13P, '["defensive","1v1","lateral","gap_control","mirroring","compete"]', "defensive", "high", "hc_d_1v1_lateral", "U13+", HC),
+
+        ("Defence Pivot Pass Shoot Sequence", "defensive",
+         "D pivot-pass-shoot combination. D pivots from backward to forward at the blue line, receives a pass in stride, walks the line, and shoots. Three elements in one fluid motion. Develops D offensive contribution from the point.",
+         "Pivot: clean and quick. Receive: in stride, stick on the ice. Walk: create a lane with lateral movement. Shoot: low and hard, get it through. The whole sequence is one continuous motion — no pauses.",
+         "One zone. D at blue line backward. Passer at half wall. Shot on net.",
+         8, 2, "half", "Pucks, Net, Goalie",
+         U13P, '["defensive","pivot","passing","shooting","point_shot","sequence"]', "shooting", "high", "hc_d_pivot_pass_shoot", "U13+", HC),
+
+        ("Defence Full Ice Pivot", "defensive",
+         "Full-ice pivot drill for defencemen. D skates backward full length, pivots to forward at center, sprints to the far blue line, pivots back to backward, and continues to the goal line. Tests D skating endurance and pivot quality over distance.",
+         "Maintain backward speed the full length. Pivot at center: clean, no speed loss. Sprint the neutral zone at 100%. Second pivot at the blue line: smooth transition back to backward. This is conditioning with a purpose.",
+         "Full ice lengthwise. D go in pairs.",
+         8, 2, "full", "None",
+         U13P, '["defensive","pivot","full_ice","conditioning","backward","speed"]', "skating", "high", "hc_d_full_ice_pivot", "U13+", HC),
+
+        ("Defence Heels and Hips Transition to Open Pivot", "defensive",
+         "D-specific transition technique focusing on heel-and-hip initiation to an open pivot. D starts backward, initiates the transition by opening the heels and hips simultaneously, and completes an open pivot to forward skating. Isolates the biomechanics.",
+         "Heels open first, hips follow immediately. The open pivot is the most common D transition — it must be automatic. Stay low through the pivot. Eyes forward throughout. Practice at slow speed first, then build to game speed.",
+         "Blue line. D practice pivots along the line. Individual work with feedback.",
+         6, 0, "neutral_zone", "None",
+         U13P, '["defensive","transition","heels","hips","open_pivot","technique"]', "skating", "medium", "hc_d_heels_hips_pivot", "U13+", HC),
+
+        ("Defence Toes First Transition to Open Pivot", "defensive",
+         "D transition using toe-first initiation into an open pivot. D starts backward, turns the toes inward to initiate rotation, and completes the open pivot to forward. Alternative initiation method — some D find this more natural than heel-first.",
+         "Toes turn inward to start the rotation. Let the momentum carry you through the pivot. Compare this to the heel-first method — use whichever feels more natural. The end result is the same: a clean open pivot. Both methods should be practiced.",
+         "Blue line. D practice both methods for comparison. Individual work.",
+         6, 0, "neutral_zone", "None",
+         U13P, '["defensive","transition","toes","open_pivot","technique","comparison"]', "skating", "medium", "hc_d_toes_first_pivot", "U13+", HC),
+
+        ("Defence Open Pivot", "defensive",
+         "Pure open pivot technique drill for defencemen. D practices the open pivot in isolation — backward to forward — with emphasis on maintaining speed, balance, and vision through the pivot. The foundational D transition skill.",
+         "Open the hips to the direction you want to go. Lead with the hip, feet follow. No speed loss through the pivot. Eyes stay forward — never look down. Practice both left and right open pivots equally. This is the single most important D skating skill.",
+         "Any line on the ice. D practice pivots at various speeds. Coach provides feedback.",
+         8, 0, "neutral_zone", "None",
+         U13P, '["defensive","open_pivot","technique","fundamental","backward_to_forward"]', "skating", "medium", "hc_d_open_pivot", "U13+", HC),
+
+        # ═══════════════════════════════════════════
+        # C.8 — TEAM TACTICS (2 drills)
+        # ═══════════════════════════════════════════
+
+        ("Team Tactics Skate Pass Shoot Regroup", "systems",
+         "Team tactic drill combining skating, passing, shooting, and regrouping. Three forwards skate through the neutral zone passing, enter the zone for a shot, regroup at the far blue line, and come back the other way for a second attack. Continuous flow.",
+         "Pass in motion — dont stop to pass. Entry: controlled with speed. Shot: shoot to score, drive for rebounds. Regroup: quick transition, get back onside. Second attack should be faster than the first. Communication throughout.",
+         "Full ice. Three forwards start at one end. Nets at both ends with goalies.",
+         10, 3, "full", "Pucks, Nets (2), Goalies",
+         U13P, '["systems","team_tactics","passing","shooting","regroup","flow"]', "offensive", "high", "hc_tt_skate_pass_shoot_regroup", "U13+", HC),
+
+        ("Team Tactics NZ Retrieval with Support", "systems",
+         "Neutral zone puck retrieval with team support drill. One player dumps the puck into the NZ, a second player retrieves it, and a third provides a passing option for support. Teaches off-puck support positioning and communication in the neutral zone.",
+         "Retrieval: get to the puck first. Support: provide a passing lane — dont stand behind the retriever. Third player: read the play and fill the next lane. Communication: call for the puck, direct traffic. Simple plays executed quickly.",
+         "Neutral zone. Three players at a time. Coach dumps puck. Repeat from both sides.",
+         8, 3, "neutral_zone", "Pucks",
+         U13P, '["systems","team_tactics","nz_retrieval","support","communication","positioning"]', "offensive", "medium", "hc_tt_nz_retrieval_support", "U13+", HC),
+
+        # ═══════════════════════════════════════════
+        # C.9 — SMALL AREA GAMES (3 drills)
+        # ═══════════════════════════════════════════
+
+        ("Small Area Game Pass for Points 2v2", "small_area_games",
+         "Two-on-two game where goals only count from one-touch or two-touch plays. Completing a set number of consecutive passes earns a bonus point. Encourages puck movement and quick passing under pressure in a small space.",
+         "Move the puck quickly — holding it too long loses possession in tight spaces. One-touch finishes: pass for a one-timer. Two-touch: receive, quick shot. Pass chains: 3 consecutive passes = bonus point. This game rewards teamwork.",
+         "One face-off circle or small zone. 2v2 with small nets at each end.",
+         8, 4, "quarter", "Small nets (2), Pucks, Pinnies",
+         ALL, '["small_area_games","2v2","passing","one_touch","compete","teamwork"]', "passing", "high", "hc_sag_pass_points_2v2", "All Ages", HC),
+
+        ("Small Area Game Touch the Paint", "small_area_games",
+         "Small area game where players must skate through the crease (touch the paint) before they can score. Encourages net drives and crease-area play. 2v2 or 3v3 format. Goals only count if the scorer has touched the paint within the last 5 seconds.",
+         "Get to the net. Touch the crease paint, then get the puck and score. This teaches players to go to the hard areas. Defenders: box out, protect the crease. Attackers: find ways to get to the paint. Rebounds are gold.",
+         "One zone around the net. 2v2 or 3v3. Net with goalie.",
+         8, 4, "quarter", "Pucks, Net, Goalie, Pinnies",
+         ALL, '["small_area_games","2v2","3v3","net_drive","crease","compete"]', "offensive", "high", "hc_sag_touch_paint", "All Ages", HC),
+
+        ("Cross Ice Warm-Up", "small_area_games",
+         "Cross-ice warm-up game. Modified scrimmage across the width of the ice with small nets. 3v3 or 4v4 format, 2-minute shifts. Warms up game instincts, puck handling, and decision-making. More effective than skating laps for warm-up.",
+         "Short shifts, high intensity. Play like a real game — no lazy plays. Small space means quick decisions. Move the puck, find open space, get to the net. This is the best warm-up because it warms up your brain and your body.",
+         "Cross-ice (width). Small nets at each end. 3v3 or 4v4. Pinnies for teams.",
+         6, 6, "cross_ice", "Small nets (2), Pucks, Pinnies",
+         ALL, '["small_area_games","warm_up","cross_ice","scrimmage","game_sense"]', None, "high", "hc_sag_cross_ice_warmup", "All Ages", HC),
+
+        # ═══════════════════════════════════════════
+        # C.10 — SKILLS TESTING (8 drills)
+        # ═══════════════════════════════════════════
+
+        ("Skills Testing — Forward Weave Agility Skate", "skills_testing",
+         "Timed agility test. Player weaves through 5 pylons spaced evenly across the neutral zone, performing crossovers and tight turns. Timed from start to finish. Tests forward skating agility, edge control, and crossover speed. Standardized for benchmarking.",
+         "This is a timed test — go all out. Clean weaves around each pylon. Crossovers must be full — no stepping around. Tight turns at each pylon. Time is recorded for comparison over the season. Warm up thoroughly before testing.",
+         "Neutral zone. 5 pylons evenly spaced. Stopwatch. Start and finish lines marked.",
+         3, 1, "neutral_zone", "Pylons (5), Stopwatch",
+         U11P, '["skills_testing","agility","timed","crossovers","benchmark"]', "skating", "high", "hc_test_fwd_weave", "U11+", HC),
+
+        ("Skills Testing — Agility Weave with Puck", "skills_testing",
+         "Same weave course as the forward agility test but with a puck. Tests the players ability to maintain puck control while performing agility skating. Time compared to the without-puck version shows the puck handling efficiency.",
+         "Same course, add a puck. Keep the puck on your blade through every weave. The time difference between with and without puck tells you how much your puck handling costs your speed. Work to close that gap.",
+         "Neutral zone. Same 5 pylon course. Stopwatch. Player carries a puck.",
+         3, 1, "neutral_zone", "Pylons (5), Pucks, Stopwatch",
+         U11P, '["skills_testing","agility","puck_control","timed","benchmark"]', "puck_handling", "high", "hc_test_agility_puck", "U11+", HC),
+
+        ("Skills Testing — Backward Speed Skate with Puck", "skills_testing",
+         "Timed backward speed test with puck control. Player skates backward the full length of ice while controlling a puck. Tests backward skating speed and puck handling ability simultaneously. Advanced test for defencemen.",
+         "Full backward speed while maintaining puck control. C-cuts for power. Puck stays on the blade — dont let it drift. Time recorded. Compare to the without-puck version. This is a D-specific test that measures game-ready backward skating.",
+         "Full ice lengthwise. Start and finish lines. Stopwatch.",
+         3, 1, "full", "Pucks, Stopwatch",
+         U11P, '["skills_testing","backward","speed","puck_control","timed","defence"]', "skating", "high", "hc_test_bwd_speed_puck", "U11+", HC),
+
+        ("Skills Testing — Backward Speed Skate", "skills_testing",
+         "Timed backward speed test without puck. Pure backward skating speed over the full length of ice. Measures C-cut power, backward stride mechanics, and top-end backward speed. Baseline test for all defencemen.",
+         "Maximum backward speed. Full C-cuts, arms pumping for balance. Head on a swivel but dont sacrifice speed for checks. Timed from goal line to goal line. This is the D speed baseline — where does your backward skating rank?",
+         "Full ice lengthwise. Start and finish lines. Stopwatch.",
+         3, 1, "full", "Stopwatch",
+         U11P, '["skills_testing","backward","speed","timed","benchmark","defence"]', "skating", "high", "hc_test_bwd_speed", "U11+", HC),
+
+        ("Skills Testing — Forward Speed Skate with Puck", "skills_testing",
+         "Timed forward speed test with puck. Player sprints full length of ice while controlling a puck. Measures how much speed is lost when handling the puck at full sprint. The gap between with-puck and without-puck times reveals puck handling efficiency.",
+         "Sprint with the puck — full speed. Keep the puck on your blade, dont let it run ahead. Time compared to the without-puck version. The smaller the gap, the better your puck handling under speed. Train to close this gap.",
+         "Full ice lengthwise. Start and finish lines. Stopwatch.",
+         3, 1, "full", "Pucks, Stopwatch",
+         U11P, '["skills_testing","forward","speed","puck_control","timed","benchmark"]', "skating", "high", "hc_test_fwd_speed_puck", "U11+", HC),
+
+        ("Skills Testing — Forward Speed Skate", "skills_testing",
+         "Timed forward speed test. Pure forward skating speed over the full length of ice. Measures stride power, acceleration, and top-end speed. The most basic skating benchmark. Every player should know their forward speed time.",
+         "Maximum speed from goal line to goal line. Explosive start: first 5 steps are everything. Full stride extension at top speed. Arm drive throughout. Timed and recorded. This is your speed baseline — improve it every month.",
+         "Full ice lengthwise. Start and finish lines. Stopwatch.",
+         3, 1, "full", "Stopwatch",
+         U11P, '["skills_testing","forward","speed","timed","benchmark","baseline"]', "skating", "high", "hc_test_fwd_speed", "U11+", HC),
+
+        ("Skills Testing — Transition Agility with Puck", "skills_testing",
+         "Timed transition agility test with puck. Player performs a set sequence of forward-backward-forward transitions while carrying a puck through marked points. Tests transition speed and puck control under directional changes.",
+         "Pivot and control — both at once. The puck must stay on the blade through every transition. Timed from start to finish. Compare to the without-puck version. Masters lose almost no time with the puck. Thats the goal.",
+         "Neutral zone with transition points marked. Stopwatch.",
+         3, 1, "neutral_zone", "Pylons (4), Pucks, Stopwatch",
+         U11P, '["skills_testing","transitions","agility","puck_control","timed","benchmark"]', "skating", "high", "hc_test_transition_puck", "U11+", HC),
+
+        ("Skills Testing — Transition Agility Skating", "skills_testing",
+         "Timed transition agility test without puck. Player performs forward-backward-forward transitions through a set course. Measures pure transition speed and skating agility. Baseline test for evaluating pivot and transition mechanics.",
+         "Clean pivots at every marked point. No speed loss through transitions. Full speed between pivot points. Timed and recorded. This tests your ability to change direction at speed — the core of defensive skating. Improve your time monthly.",
+         "Neutral zone with transition points marked. Stopwatch.",
+         3, 1, "neutral_zone", "Pylons (4), Stopwatch",
+         U11P, '["skills_testing","transitions","agility","timed","benchmark","baseline"]', "skating", "high", "hc_test_transition_agility", "U11+", HC),
+    ]
+
+    # INSERT with new columns (age_group, country_framework)
+    for d in drills:
+        try:
+            conn.execute("""
+                INSERT INTO drills (id, org_id, name, category, description, coaching_points, setup,
+                    duration_minutes, players_needed, ice_surface, equipment, age_levels, tags,
+                    skill_focus, intensity, concept_id, age_group, country_framework)
+                VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (str(uuid.uuid4()), *d))
+        except Exception:
+            pass
+    conn.commit()
+    conn.close()
+    logger.info("Seeded %d HC LTPD drills (v3)", len(drills))
+
+
 def generate_missing_diagrams():
     """Generate SVG rink diagrams for any drills that don't have one yet."""
     conn = get_db()
@@ -5128,6 +6424,7 @@ seed_teams()
 seed_drills()
 seed_drills_v2()
 seed_drills_pxi()
+seed_drills_v3()
 generate_missing_diagrams()
 seed_glossary_v2()
 _seed_superadmin_user()
@@ -8218,6 +9515,8 @@ class DrillCreate(BaseModel):
     intensity: str = "medium"
     concept_id: Optional[str] = None
     diagram_data: Optional[dict] = None
+    age_group: Optional[str] = None
+    country_framework: Optional[str] = None
 
 class DrillUpdate(BaseModel):
     name: Optional[str] = None
@@ -8236,6 +9535,8 @@ class DrillUpdate(BaseModel):
     intensity: Optional[str] = None
     concept_id: Optional[str] = None
     diagram_data: Optional[dict] = None
+    age_group: Optional[str] = None
+    country_framework: Optional[str] = None
 
 class PracticePlanCreate(BaseModel):
     team_name: Optional[str] = None
@@ -9219,6 +10520,7 @@ async def list_drills(
     search: Optional[str] = None,
     intensity: Optional[str] = None,
     concept_id: Optional[str] = None,
+    country_framework: Optional[str] = None,
     limit: int = 200,
     token_data: dict = Depends(verify_token),
 ):
@@ -9239,6 +10541,9 @@ async def list_drills(
     if concept_id:
         where.append("concept_id = ?")
         params.append(concept_id)
+    if country_framework:
+        where.append("(country_framework = ? OR country_framework IS NULL)")
+        params.append(country_framework)
     if search:
         where.append("(LOWER(name) LIKE ? OR LOWER(description) LIKE ?)")
         params.extend([f"%{search.lower()}%", f"%{search.lower()}%"])
@@ -9296,13 +10601,14 @@ async def create_drill(body: DrillCreate, token_data: dict = Depends(verify_toke
     conn.execute("""
         INSERT INTO drills (id, org_id, name, category, description, coaching_points, setup,
             duration_minutes, players_needed, ice_surface, equipment, age_levels, tags,
-            diagram_url, skill_focus, intensity, concept_id, diagram_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            diagram_url, skill_focus, intensity, concept_id, diagram_data, age_group, country_framework)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         drill_id, org_id, body.name, body.category, body.description,
         body.coaching_points, body.setup, body.duration_minutes, body.players_needed,
         body.ice_surface, body.equipment, json.dumps(body.age_levels), json.dumps(body.tags),
-        body.diagram_url, body.skill_focus, body.intensity, body.concept_id, diagram_data_str
+        body.diagram_url, body.skill_focus, body.intensity, body.concept_id, diagram_data_str,
+        body.age_group, body.country_framework
     ))
     conn.commit()
     row = conn.execute("SELECT * FROM drills WHERE id = ?", (drill_id,)).fetchone()
@@ -9758,6 +11064,9 @@ async def generate_practice_plan(body: PracticePlanGenerateRequest, token_data: 
     # 2. Query matching drills
     drill_where = ["(org_id IS NULL OR org_id = ?)", "age_levels LIKE ?"]
     drill_params: list = [org_id, f'%"{body.age_level}"%']
+    if org_framework:
+        drill_where.append("(country_framework = ? OR country_framework IS NULL)")
+        drill_params.append(org_framework)
     drill_rows = conn.execute(
         f"SELECT * FROM drills WHERE {' AND '.join(drill_where)} ORDER BY category, name",
         drill_params
