@@ -20,6 +20,9 @@ import {
   Radio,
   BookOpen,
   BarChart3,
+  TrendingUp,
+  CheckCircle,
+  Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -171,6 +174,7 @@ function Dashboard() {
   const [scoutingList, setScoutingList] = useState<ScoutingListItem[]>([]);
   const [topProspects, setTopProspects] = useState<TopProspect[]>([]);
   const [agentClients, setAgentClients] = useState<AgentClient[]>([]);
+  const [playersWithoutPlans, setPlayersWithoutPlans] = useState<Player[]>([]);
 
   // ── League switcher (scorebar override) ─────────────────
   const [scorebarLeague, setScorebarLeague] = useState<string>("");
@@ -221,6 +225,8 @@ function Dashboard() {
         api.get<TopProspect[]>("/analytics/top-prospects?limit=5"),
       ];
       if (isAgent) fetches.push(api.get<AgentClient[]>("/agent/clients"));
+      const isCoachRole = user?.hockey_role === "coach" || user?.hockey_role === "admin" || user?.hockey_role === "gm";
+      if (isCoachRole) fetches.push(api.get<Player[]>("/players/without-development-plans"));
 
       const results = await Promise.allSettled(fetches);
 
@@ -259,6 +265,12 @@ function Dashboard() {
 
       // Agent clients
       if (isAgent && results[6]?.status === "fulfilled") setAgentClients((results[6] as PromiseFulfilledResult<{ data: AgentClient[] }>).value.data);
+
+      // Players without development plans (coach/admin/gm — index 6 when no agent, or 7 if agent also pushed)
+      const devPlanIdx = isAgent ? 7 : 6;
+      if (isCoachRole && results[devPlanIdx]?.status === "fulfilled") {
+        setPlayersWithoutPlans((results[devPlanIdx] as PromiseFulfilledResult<{ data: Player[] }>).value.data);
+      }
 
       setLoading(false);
     }
@@ -430,6 +442,41 @@ function Dashboard() {
                     ))}
                   </div>
                 </DashboardCard>
+
+                {/* Players Without Development Plans */}
+                {(user?.hockey_role === "coach" || user?.hockey_role === "admin" || user?.hockey_role === "gm") && (
+                  <DashboardCard
+                    icon={<TrendingUp size={15} className="text-orange" />}
+                    title="Players Without Development Plans"
+                    viewAllHref="/players"
+                    loading={loading}
+                    empty={playersWithoutPlans.length === 0}
+                    emptyIcon={<CheckCircle size={24} className="text-green-400" />}
+                    emptyText={`All players have development plans for ${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(2)}`}
+                  >
+                    <div className="space-y-1.5">
+                      {playersWithoutPlans.slice(0, 5).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between p-2 rounded-lg border border-border hover:border-teal/30 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm text-navy font-medium truncate">{p.first_name} {p.last_name}</span>
+                            <span className="text-[10px] text-muted font-oswald uppercase">{p.position}</span>
+                          </div>
+                          <Link
+                            href={`/players/${p.id}?tab=player&autoGenerate=true`}
+                            className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs font-oswald uppercase tracking-wider text-orange hover:bg-orange/5 rounded-lg transition-colors"
+                          >
+                            <Sparkles size={12} /> Generate
+                          </Link>
+                        </div>
+                      ))}
+                      {playersWithoutPlans.length > 5 && (
+                        <p className="text-xs text-muted text-center pt-1">
+                          +{playersWithoutPlans.length - 5} more players
+                        </p>
+                      )}
+                    </div>
+                  </DashboardCard>
+                )}
 
                 {/* Quick Actions */}
                 <div className="flex flex-wrap gap-2">

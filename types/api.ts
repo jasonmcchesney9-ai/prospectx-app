@@ -2812,6 +2812,76 @@ export interface DevelopmentPlan {
   updated_at: string;
 }
 
+// ── Development Plans v2 (9-section model) ──────────────────
+
+export interface DevelopmentPlanV2 {
+  id: string;
+  player_id: string;
+  org_id?: string;
+  version: number;
+  title: string;
+  status: 'draft' | 'final';
+  season: string;
+  created_by: string;
+  created_by_name: string;
+  plan_type: string;
+  is_current: boolean;
+  section_1_snapshot: string | null;
+  section_2_context: string | null;
+  section_3_strengths: string | null;
+  section_4_development: string | null;
+  section_5_phase_plan: string | null;
+  section_6_integration: string | null;
+  section_7_metrics: string | null;
+  section_8_staff_notes: string | null;
+  section_9_raw: string | null;
+  section_1_visible_to_player: boolean;
+  section_2_visible_to_player: boolean;
+  section_3_visible_to_player: boolean;
+  section_4_visible_to_player: boolean;
+  section_5_visible_to_player: boolean;
+  section_6_visible_to_player: boolean;
+  section_7_visible_to_player: boolean;
+  section_8_visible_to_player: boolean;
+  sections?: DevelopmentPlanSection[];
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const PARENT_STAT_LABELS: Record<string, string> = {
+  "CF%": "Was on the ice for more shots than against (possession)",
+  xGF: "Created high-quality scoring chances",
+  "TOI/game": "Ice time per game",
+  entry_success_rate: "Successfully carried the puck into the offensive zone",
+  fo_pct: "Won faceoffs",
+  battles_pct: "Won puck battles along the boards",
+  inner_slot_pct: "Shot from high-danger areas",
+};
+
+export const DEV_PLAN_SECTION_TITLES: Record<number, string> = {
+  1: "Player Snapshot & Identity",
+  2: "Season Context",
+  3: "Current Strengths",
+  4: "Development Priorities",
+  5: "Phase Plan",
+  6: "Practice & Game Integration",
+  7: "Success Metrics",
+  8: "Staff Notes",
+};
+
+export interface ParentDashboardPlayer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string | null;
+  current_team: string | null;
+  current_league: string | null;
+  image_url: string | null;
+  latest_plan_status: string | null;
+  latest_plan_date: string | null;
+}
+
 export interface PlayerStatSnapshot {
   id: string;
   player_id: string;
