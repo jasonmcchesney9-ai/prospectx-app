@@ -187,7 +187,8 @@ Professional scouting voice. No hype, no soft-selling. Call it like you see it.
 - Include role projection with concrete next steps.
 - Provide ceiling / median / floor projection lines with conditions for each.
 - Use comparables only when data supports them — never force a comp.
-- End with CONFIDENCE tag on all major assessments.""",
+- End with CONFIDENCE tag on all major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "coach": """PXI MODE: COACH
 Primary User: Coaching staff
@@ -204,7 +205,8 @@ Bench-usable, tactical, concise. Write like you're handing notes to a coach betw
 - Include drill suggestions with specific cues when relevant.
 - Format matchup recommendations as: Player A vs Player B → advantage/disadvantage → deployment suggestion.
 - All stat references must include source tags.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "analyst": """PXI MODE: ANALYST
 Primary User: Analytics staff
@@ -222,7 +224,8 @@ Evidence-first. Define metrics before using them. No overreach beyond what data 
 - Provide 3–5 decision implications with supporting evidence and source tags.
 - Flag where sample size or context makes conclusions unreliable.
 - Separate descriptive stats from predictive claims with clear labels.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "gm": """PXI MODE: GM
 Primary User: Management (GMs, AGMs, Hockey Ops)
@@ -241,7 +244,8 @@ Do not speculate on dollar amounts. Focus on on-ice value and roster fit.
 - Address roster composition implications where relevant.
 - Frame in terms of organizational risk tolerance.
 - All stat references must include source tags.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "agent": """PXI MODE: AGENT
 Primary User: Advisors, agents, player representatives
@@ -262,7 +266,8 @@ Strategic, protective of the player, realistic about timelines.
 - Never guarantee outcomes — use conditional language.
 - Address both upside opportunities and downside risks.
 - All stat references must include source tags.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "parent": """PXI MODE: PARENT
 Primary User: Families, players' support systems
@@ -293,7 +298,8 @@ Plain language. Supportive but honest. Encouraging tone. Think: a knowledgeable 
 - Provide 3–5 practical, actionable next steps the family can support.
 - Frame development areas as growth opportunities, not weaknesses.
 - Include age-appropriate benchmarks when available.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "skill_coach": """PXI MODE: SKILL COACH
 Primary User: Player development staff, skills coaches
@@ -315,7 +321,8 @@ Cue-driven. Think: cue → drill → reps → transfer. Practical and specific.
 - Set measurable checkpoints for each development area.
 - Include a weekly practice integration plan with rep targets.
 - All stat references must include source tags.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "mental_coach": """PXI MODE: MENTAL COACH
 Primary User: Players, coaches working on mental performance
@@ -341,7 +348,8 @@ Practical, non-clinical, routines-focused. This is for the bench and the locker 
 - Offer pre-game visualization and focus scripts.
 - Provide specific self-talk scripts (what to say, when to say it).
 - Include a mental reps practice plan.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "broadcast": """PXI MODE: BROADCAST
 Primary User: Media, broadcast analysts, color commentators
@@ -363,7 +371,8 @@ Concise, broadcast-ready, punchy. Write for someone who has 30 seconds to read b
 - Include 'if this happens, say this' contingency notes.
 - Use vivid, specific language — not generic praise.
 - All stat references must include source tags.
-- End with CONFIDENCE tag on major assessments.""",
+- End with CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 
     "producer": """PXI MODE: PRODUCER
 Primary User: Broadcast producers, control room staff
@@ -374,7 +383,8 @@ Required Output Behaviors:
 - Include specific replay trigger moments to watch for.
 - List graphics/lower-third ideas with data points.
 - Include backup segments if primary storylines don't develop.
-- Always include CONFIDENCE tag on major assessments.""",
+- Always include CONFIDENCE tag on major assessments.
+- CRITICAL RULE: Only reference statistics and data explicitly provided in the player context. If a stat is not in the data, say 'not on file' — never estimate, calculate, or generate a number. Fabricating statistics is a critical error.""",
 }
 
 # ─────────────────────────────────────────────────────────

@@ -2441,6 +2441,55 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_player ON development_plans(player_id, version)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_org ON development_plans(org_id)")
 
+    # --- Migration: Add 9 section columns + 8 visibility flags + is_current to development_plans ---
+    dp_cols = {c[1] for c in conn.execute("PRAGMA table_info(development_plans)").fetchall()}
+    dp_new_cols = [
+        ("section_1_snapshot", "TEXT"),
+        ("section_2_context", "TEXT"),
+        ("section_3_strengths", "TEXT"),
+        ("section_4_development", "TEXT"),
+        ("section_5_phase_plan", "TEXT"),
+        ("section_6_integration", "TEXT"),
+        ("section_7_metrics", "TEXT"),
+        ("section_8_staff_notes", "TEXT"),
+        ("section_9_raw", "TEXT"),
+        ("section_1_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_2_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_3_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_4_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_5_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_6_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_7_visible_to_player", "INTEGER DEFAULT 1"),
+        ("section_8_visible_to_player", "INTEGER DEFAULT 0"),
+        ("is_current", "INTEGER DEFAULT 1"),
+    ]
+    for col_name, col_type in dp_new_cols:
+        if col_name not in dp_cols:
+            try:
+                conn.execute(f"ALTER TABLE development_plans ADD COLUMN {col_name} {col_type}")
+                logger.info("Migration: added %s to development_plans", col_name)
+            except sqlite3.OperationalError:
+                pass
+    conn.commit()
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_current ON development_plans(player_id, season, is_current)")
+
+    # --- Migration: Create player_parents table ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_parents (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            parent_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(player_id, parent_id),
+            FOREIGN KEY (player_id) REFERENCES players(id),
+            FOREIGN KEY (parent_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_parents_player ON player_parents(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_parents_parent ON player_parents(parent_id)")
+    conn.commit()
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS player_stat_snapshots (
             id TEXT PRIMARY KEY,
@@ -9735,6 +9784,26 @@ async def list_deleted_players(token_data: dict = Depends(verify_token)):
             "can_restore": days <= 30,
         })
     return result
+
+
+@app.get("/players/without-development-plans")
+async def players_without_dev_plans(token_data: dict = Depends(verify_token)):
+    """Return players in this org that have no current development plan."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT p.id, p.first_name, p.last_name, p.position, p.current_team
+            FROM players p
+            LEFT JOIN development_plans dp ON dp.player_id = p.id AND dp.org_id = p.org_id AND dp.is_current = 1
+            WHERE p.org_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL) AND dp.id IS NULL
+            ORDER BY p.last_name, p.first_name
+            LIMIT 10
+        """, (org_id,)).fetchall()
+        return [{"id": r["id"], "first_name": r["first_name"], "last_name": r["last_name"],
+                 "position": r["position"], "current_team": r["current_team"]} for r in rows]
+    finally:
+        conn.close()
 
 
 @app.post("/players/{player_id}/restore")
@@ -17701,6 +17770,36 @@ class DevelopmentPlanUpdate(BaseModel):
     summary: str | None = None
     status: str | None = None
 
+
+class DevPlanSaveRequest(BaseModel):
+    title: str = "Season Development Plan"
+    plan_type: str = "in_season"
+    season: str = "2025-26"
+    status: str = "draft"  # draft | final
+    section_1_snapshot: str | None = None
+    section_2_context: str | None = None
+    section_3_strengths: str | None = None
+    section_4_development: str | None = None
+    section_5_phase_plan: str | None = None
+    section_6_integration: str | None = None
+    section_7_metrics: str | None = None
+    section_8_staff_notes: str | None = None
+    section_9_raw: str | None = None
+    section_1_visible_to_player: bool = True
+    section_2_visible_to_player: bool = True
+    section_3_visible_to_player: bool = True
+    section_4_visible_to_player: bool = True
+    section_5_visible_to_player: bool = True
+    section_6_visible_to_player: bool = True
+    section_7_visible_to_player: bool = True
+    section_8_visible_to_player: bool = False
+    summary: str | None = None
+
+
+class ParentLinkRequest(BaseModel):
+    parent_email: str
+
+
 @app.get("/players/{player_id}/development-plans")
 async def list_development_plans(player_id: str, token_data: dict = Depends(verify_token)):
     """List all development plan versions for a player."""
@@ -17799,8 +17898,8 @@ async def create_development_plan(player_id: str, body: DevelopmentPlanCreate, t
     new_version = max_ver + 1
 
     # Get creator name
-    user = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
-    creator_name = user[0] if user else "Unknown"
+    user = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
+    creator_name = f"{user[0] or ''} {user[1] or ''}".strip() if user else "Unknown"
 
     plan_id = str(uuid.uuid4())
     conn.execute("""
@@ -17855,8 +17954,8 @@ async def update_development_plan(plan_id: str, body: DevelopmentPlanUpdate, tok
     ).fetchone()[0]
     new_version = max_ver + 1
 
-    user = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
-    creator_name = user[0] if user else "Unknown"
+    user = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
+    creator_name = f"{user[0] or ''} {user[1] or ''}".strip() if user else "Unknown"
 
     new_sections = json.dumps(body.sections) if body.sections is not None else existing[3]
     new_title = body.title if body.title is not None else existing[2]
@@ -17969,8 +18068,8 @@ async def generate_development_plan(player_id: str, token_data: dict = Depends(v
             {"title": "Tracking & Metrics", "content": "Track progress every 5 games against baseline metrics. Use game log data to measure improvement in targeted areas.", "priority": "info"},
         ]
         # Create and return
-        user = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
-        creator_name = user[0] if user else "Unknown"
+        user = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
+        creator_name = f"{user[0] or ''} {user[1] or ''}".strip() if user else "Unknown"
         max_ver = conn.execute("SELECT COALESCE(MAX(version), 0) FROM development_plans WHERE player_id = ? AND org_id = ?", (player_id, org_id)).fetchone()[0]
         new_version = max_ver + 1
         plan_id = str(uuid.uuid4())
@@ -18061,8 +18160,8 @@ Return ONLY valid JSON in this exact format:
         ]
         summary = f"Development plan for {player_name}. AI generation encountered an error — please edit sections manually."
 
-    user = conn.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
-    creator_name = user[0] if user else "Unknown"
+    user = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
+    creator_name = f"{user[0] or ''} {user[1] or ''}".strip() if user else "Unknown"
     max_ver = conn.execute("SELECT COALESCE(MAX(version), 0) FROM development_plans WHERE player_id = ? AND org_id = ?", (player_id, org_id)).fetchone()[0]
     new_version = max_ver + 1
     plan_id = str(uuid.uuid4())
@@ -18084,6 +18183,622 @@ Return ONLY valid JSON in this exact format:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ============================================================
+# DEVELOPMENT PLAN V2 — Singular /development-plan endpoints
+# ============================================================
+
+DEV_PLAN_SECTION_TITLES = {
+    1: "Player Snapshot & Identity",
+    2: "Season Context",
+    3: "Current Strengths",
+    4: "Development Priorities",
+    5: "Phase Plan",
+    6: "Practice & Game Integration",
+    7: "Success Metrics",
+    8: "Staff Notes",
+}
+
+SECTION_COLS = [
+    "section_1_snapshot", "section_2_context", "section_3_strengths",
+    "section_4_development", "section_5_phase_plan", "section_6_integration",
+    "section_7_metrics", "section_8_staff_notes", "section_9_raw",
+]
+VISIBILITY_COLS = [
+    "section_1_visible_to_player", "section_2_visible_to_player",
+    "section_3_visible_to_player", "section_4_visible_to_player",
+    "section_5_visible_to_player", "section_6_visible_to_player",
+    "section_7_visible_to_player", "section_8_visible_to_player",
+]
+
+def _devplan_row_to_dict(row):
+    """Convert a development_plans row (sqlite3.Row) to a dict with section columns."""
+    d = dict(row)
+    # Parse old-style JSON sections for backward compat
+    if d.get("sections"):
+        try:
+            d["sections"] = json.loads(d["sections"]) if isinstance(d["sections"], str) else d["sections"]
+        except (json.JSONDecodeError, TypeError):
+            d["sections"] = []
+    else:
+        d["sections"] = []
+    # Ensure booleans for visibility flags
+    for vc in VISIBILITY_COLS:
+        if vc in d:
+            d[vc] = bool(d[vc]) if d[vc] is not None else (False if vc == "section_8_visible_to_player" else True)
+    d["is_current"] = bool(d.get("is_current", 1))
+    return d
+
+
+def _get_hockey_role(conn, user_id: str) -> str:
+    """Get hockey_role for a user. Returns 'scout' as default."""
+    row = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+    return row["hockey_role"] if row and row["hockey_role"] else "scout"
+
+
+def _apply_devplan_role_gate(plan: dict, hockey_role: str) -> dict:
+    """Remove sections the role should not see."""
+    restricted_roles = {"player", "parent"}
+    if hockey_role in restricted_roles:
+        plan["section_8_staff_notes"] = None
+        # Hide sections where visible_to_player is false
+        for i in range(1, 8):
+            vis_key = f"section_{i}_visible_to_player"
+            sec_key = SECTION_COLS[i - 1]
+            if not plan.get(vis_key, True):
+                plan[sec_key] = None
+    elif hockey_role == "scout":
+        plan["section_8_staff_notes"] = None
+    return plan
+
+
+@app.post("/players/{player_id}/development-plan/generate")
+async def generate_devplan_v2(player_id: str, token_data: dict = Depends(verify_token)):
+    """Generate a development plan draft via PXI. Returns sections without saving to DB."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        # Auth: coach/admin only
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "scout", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can generate development plans")
+
+        # Gather player data
+        player = conn.execute("""
+            SELECT first_name, last_name, position, current_team, current_league,
+                   dob, shoots, height_cm, weight_kg, jersey_number
+            FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+        """, (player_id, org_id)).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        player_name = f"{player['first_name']} {player['last_name']}"
+        position = player["position"] or "Forward"
+        team = player["current_team"] or "Unknown"
+        league = player["current_league"] or "Unknown"
+
+        # Get stats from player_stats
+        stats = conn.execute("""
+            SELECT season, gp, g, a, p, plus_minus, pim, ppg, shg, gwg, shots, shooting_pct
+            FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        # Get InStat stats if available
+        instat_stats = conn.execute("""
+            SELECT gp, goals, assists, points, ppg, plus_minus, pim, shots, shooting_pct,
+                   xG, corsi_pct, fenwick_pct, fo_pct, battles_pct
+            FROM instat_player_stats WHERE player_id = ? ORDER BY uploaded_at DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        # Get recent game log
+        game_log = conn.execute("""
+            SELECT game_date, opponent, goals, assists, points, plus_minus, shots, toi_seconds
+            FROM instat_player_game_log WHERE player_id = ? ORDER BY game_date DESC LIMIT 10
+        """, (player_id,)).fetchall()
+
+        # Get intelligence
+        intel = conn.execute("""
+            SELECT archetype, strengths, development_areas, grade_overall,
+                   grade_offensive, grade_defensive, grade_skating, grade_hockey_iq, grade_compete
+            FROM player_intelligence WHERE player_id = ? ORDER BY version DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        # Get scout notes
+        notes = conn.execute("""
+            SELECT content, tags FROM scout_notes WHERE player_id = ? ORDER BY created_at DESC LIMIT 5
+        """, (player_id,)).fetchall()
+
+        # Build context strings
+        stats_text = ""
+        if instat_stats:
+            stats_text = f"GP: {instat_stats['gp']}, Goals: {instat_stats['goals']}, Assists: {instat_stats['assists']}, Points: {instat_stats['points']}, PPG: {instat_stats['ppg']}, +/-: {instat_stats['plus_minus']}, PIM: {instat_stats['pim']}, Shots: {instat_stats['shots']}, SH%: {instat_stats['shooting_pct']}, xG: {instat_stats['xG']}, CF%: {instat_stats['corsi_pct']}, FF%: {instat_stats['fenwick_pct']}, FO%: {instat_stats['fo_pct']}, Battles%: {instat_stats['battles_pct']}"
+        elif stats:
+            stats_text = f"Season: {stats['season']}, GP: {stats['gp']}, G: {stats['g']}, A: {stats['a']}, P: {stats['p']}, +/-: {stats['plus_minus']}, PIM: {stats['pim']}, PPG: {stats['ppg']}, Shots: {stats['shots']}, SH%: {stats['shooting_pct']}"
+
+        game_log_text = ""
+        if game_log:
+            game_log_text = "\n".join([
+                f"  {g['game_date']} vs {g['opponent']}: {g['goals']}G-{g['assists']}A-{g['points']}P, +/-:{g['plus_minus']}, SOG:{g['shots']}"
+                for g in game_log
+            ])
+
+        intel_text = ""
+        if intel:
+            intel_text = f"Archetype: {intel['archetype']}, Strengths: {intel['strengths']}, Development Areas: {intel['development_areas']}, Grades: OVR={intel['grade_overall']}, OFF={intel['grade_offensive']}, DEF={intel['grade_defensive']}, SKT={intel['grade_skating']}, IQ={intel['grade_hockey_iq']}, CMP={intel['grade_compete']}"
+
+        notes_text = ""
+        if notes:
+            notes_text = "\n".join([f"- {n['content']} (tags: {n['tags']})" for n in notes[:5]])
+
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            # Return template-based draft without saving
+            return {
+                "section_1_snapshot": f"{player_name} — {position} — {team} ({league})\nJersey: #{player['jersey_number'] or 'N/A'}\nShoots: {player['shoots'] or 'N/A'}",
+                "section_2_context": f"Season 2025-26. Player is currently rostered with {team} in the {league}.",
+                "section_3_strengths": "Identify key strengths through game film review and coaching observation.",
+                "section_4_development": "Define 2-3 priority development areas with specific, measurable targets.",
+                "section_5_phase_plan": "Phase 1 (Games 1-15): Foundation skills\nPhase 2 (Games 16-30): Building consistency\nPhase 3 (Games 31+): Performance integration",
+                "section_6_integration": "Practice focus areas and game-day application goals.",
+                "section_7_metrics": "Define 5-game block tracking metrics and success indicators.",
+                "section_8_staff_notes": "Internal coaching notes — not visible to player or parent.",
+                "summary": f"Template-based development plan for {player_name}. Edit sections to customize.",
+                "data_sources": ["player_profile"],
+                "player_name": player_name,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+        # Build AI prompt
+        prompt = f"""You are an elite hockey player development specialist. Generate a detailed, actionable in-season development plan for the following player.
+
+PLAYER: {player_name}
+POSITION: {position}
+TEAM: {team} ({league})
+{"DOB: " + str(player['dob']) if player['dob'] else ""}
+{"STATS: " + stats_text if stats_text else "NO STATS AVAILABLE — base plan on position and profile."}
+{"SCOUTING INTELLIGENCE: " + intel_text if intel_text else ""}
+{"RECENT GAME LOG (last 10):\n" + game_log_text if game_log_text else ""}
+{"SCOUT NOTES:\n" + notes_text if notes_text else ""}
+
+Generate a development plan with EXACTLY these 8 sections, using these EXACT headers:
+
+## PLAYER SNAPSHOT
+A concise identity summary — who this player is right now (role, style, system fit).
+
+## SEASON CONTEXT
+Where the player sits in the season, team context, upcoming milestones.
+
+## CURRENT STRENGTHS
+Top 3-5 strengths with specific evidence from stats and scouting.
+
+## DEVELOPMENT PRIORITIES
+Top 3 development areas ranked by impact, with specific targets and drills.
+
+## PHASE PLAN
+Break the remainder of the season into 2-3 phases with specific focus areas per phase.
+
+## PRACTICE & GAME INTEGRATION
+How development priorities translate into daily practice and game-day execution.
+
+## SUCCESS METRICS
+Measurable indicators of progress — stat targets, behavioral markers, coaching checkpoints.
+
+## STAFF NOTES
+Internal coaching observations, personality notes, communication approach.
+
+Also provide a 2-sentence summary after all sections.
+
+Return ONLY valid JSON in this format:
+{{
+  "section_1_snapshot": "...",
+  "section_2_context": "...",
+  "section_3_strengths": "...",
+  "section_4_development": "...",
+  "section_5_phase_plan": "...",
+  "section_6_integration": "...",
+  "section_7_metrics": "...",
+  "section_8_staff_notes": "...",
+  "summary": "..."
+}}"""
+
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60) as http_client:
+                resp = await http_client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-sonnet-4-20250514",
+                        "max_tokens": 6000,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                ai_text = data["content"][0]["text"]
+
+                # Extract JSON from markdown blocks if present
+                if "```json" in ai_text:
+                    ai_text = ai_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in ai_text:
+                    ai_text = ai_text.split("```")[1].split("```")[0].strip()
+
+                plan_data = json.loads(ai_text)
+
+                return {
+                    "section_1_snapshot": plan_data.get("section_1_snapshot", ""),
+                    "section_2_context": plan_data.get("section_2_context", ""),
+                    "section_3_strengths": plan_data.get("section_3_strengths", ""),
+                    "section_4_development": plan_data.get("section_4_development", ""),
+                    "section_5_phase_plan": plan_data.get("section_5_phase_plan", ""),
+                    "section_6_integration": plan_data.get("section_6_integration", ""),
+                    "section_7_metrics": plan_data.get("section_7_metrics", ""),
+                    "section_8_staff_notes": plan_data.get("section_8_staff_notes", ""),
+                    "summary": plan_data.get("summary", ""),
+                    "data_sources": [s for s in ["player_stats" if stats else None, "instat_player_stats" if instat_stats else None,
+                                                  "instat_player_game_log" if game_log else None, "player_intelligence" if intel else None,
+                                                  "scout_notes" if notes else None] if s],
+                    "player_name": player_name,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                }
+
+        except Exception as e:
+            logger.warning("AI dev plan v2 generation failed: %s", e)
+            return {
+                "section_1_snapshot": f"{player_name} — {position} — {team} ({league})",
+                "section_2_context": f"Season 2025-26. AI generation encountered an error.",
+                "section_3_strengths": "Please edit — identify strengths from game film.",
+                "section_4_development": "Please edit — define development priorities.",
+                "section_5_phase_plan": "Please edit — break season into phases.",
+                "section_6_integration": "Please edit — define practice and game integration.",
+                "section_7_metrics": "Please edit — define measurable success indicators.",
+                "section_8_staff_notes": "Internal coaching notes.",
+                "summary": f"Development plan for {player_name}. AI generation failed — edit sections manually.",
+                "data_sources": [],
+                "player_name": player_name,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+    finally:
+        conn.close()
+
+
+@app.post("/players/{player_id}/development-plan")
+async def save_devplan_v2(player_id: str, body: DevPlanSaveRequest, token_data: dict = Depends(verify_token)):
+    """Save a development plan (creates a new version). Coach/admin only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can save development plans")
+
+        player = conn.execute(
+            "SELECT first_name, last_name FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        # Mark existing plans as not current for this player+season
+        conn.execute(
+            "UPDATE development_plans SET is_current = 0 WHERE player_id = ? AND org_id = ? AND season = ?",
+            (player_id, org_id, body.season)
+        )
+
+        max_ver = conn.execute(
+            "SELECT COALESCE(MAX(version), 0) FROM development_plans WHERE player_id = ? AND org_id = ?",
+            (player_id, org_id)
+        ).fetchone()[0]
+        new_version = max_ver + 1
+
+        user = conn.execute("SELECT first_name, last_name FROM users WHERE id = ?", (user_id,)).fetchone()
+        creator_name = f"{user[0] or ''} {user[1] or ''}".strip() if user else "Unknown"
+
+        # Build backward-compat JSON sections array
+        sections_json = json.dumps([
+            {"title": DEV_PLAN_SECTION_TITLES.get(i, f"Section {i}"), "content": getattr(body, SECTION_COLS[i-1]) or "", "priority": "medium"}
+            for i in range(1, 9) if getattr(body, SECTION_COLS[i-1])
+        ])
+
+        plan_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute("""
+            INSERT INTO development_plans (
+                id, player_id, org_id, version, title, status, season,
+                created_by, created_by_name, plan_type, sections, summary,
+                section_1_snapshot, section_2_context, section_3_strengths,
+                section_4_development, section_5_phase_plan, section_6_integration,
+                section_7_metrics, section_8_staff_notes, section_9_raw,
+                section_1_visible_to_player, section_2_visible_to_player,
+                section_3_visible_to_player, section_4_visible_to_player,
+                section_5_visible_to_player, section_6_visible_to_player,
+                section_7_visible_to_player, section_8_visible_to_player,
+                is_current, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            plan_id, player_id, org_id, new_version, body.title, body.status, body.season,
+            user_id, creator_name, body.plan_type, sections_json, body.summary,
+            body.section_1_snapshot, body.section_2_context, body.section_3_strengths,
+            body.section_4_development, body.section_5_phase_plan, body.section_6_integration,
+            body.section_7_metrics, body.section_8_staff_notes, body.section_9_raw,
+            int(body.section_1_visible_to_player), int(body.section_2_visible_to_player),
+            int(body.section_3_visible_to_player), int(body.section_4_visible_to_player),
+            int(body.section_5_visible_to_player), int(body.section_6_visible_to_player),
+            int(body.section_7_visible_to_player), int(body.section_8_visible_to_player),
+            1, now, now,
+        ))
+        conn.commit()
+
+        return {
+            "id": plan_id, "player_id": player_id, "org_id": org_id,
+            "version": new_version, "title": body.title, "status": body.status,
+            "season": body.season, "plan_type": body.plan_type, "is_current": True,
+            "section_1_snapshot": body.section_1_snapshot,
+            "section_2_context": body.section_2_context,
+            "section_3_strengths": body.section_3_strengths,
+            "section_4_development": body.section_4_development,
+            "section_5_phase_plan": body.section_5_phase_plan,
+            "section_6_integration": body.section_6_integration,
+            "section_7_metrics": body.section_7_metrics,
+            "section_8_staff_notes": body.section_8_staff_notes,
+            "section_9_raw": body.section_9_raw,
+            "section_1_visible_to_player": body.section_1_visible_to_player,
+            "section_2_visible_to_player": body.section_2_visible_to_player,
+            "section_3_visible_to_player": body.section_3_visible_to_player,
+            "section_4_visible_to_player": body.section_4_visible_to_player,
+            "section_5_visible_to_player": body.section_5_visible_to_player,
+            "section_6_visible_to_player": body.section_6_visible_to_player,
+            "section_7_visible_to_player": body.section_7_visible_to_player,
+            "section_8_visible_to_player": body.section_8_visible_to_player,
+            "sections": json.loads(sections_json),
+            "summary": body.summary,
+            "created_by": user_id, "created_by_name": creator_name,
+            "created_at": now, "updated_at": now,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/players/{player_id}/development-plan")
+async def get_devplan_v2(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get the current development plan for a player. Role-gated: staff notes hidden from player/parent."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT * FROM development_plans
+            WHERE player_id = ? AND org_id = ? AND is_current = 1
+            ORDER BY version DESC LIMIT 1
+        """, (player_id, org_id)).fetchone()
+        if not row:
+            # Fallback: try latest by version if is_current not set
+            row = conn.execute("""
+                SELECT * FROM development_plans
+                WHERE player_id = ? AND org_id = ?
+                ORDER BY version DESC LIMIT 1
+            """, (player_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="No development plan on file")
+
+        plan = _devplan_row_to_dict(row)
+        hockey_role = _get_hockey_role(conn, user_id)
+        plan = _apply_devplan_role_gate(plan, hockey_role)
+        return plan
+    finally:
+        conn.close()
+
+
+@app.get("/players/{player_id}/development-plan/history")
+async def devplan_history(player_id: str, token_data: dict = Depends(verify_token)):
+    """List all development plan versions for a player. Coach/admin only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can view plan history")
+
+        rows = conn.execute("""
+            SELECT * FROM development_plans
+            WHERE player_id = ? AND org_id = ?
+            ORDER BY version DESC
+        """, (player_id, org_id)).fetchall()
+        return [_devplan_row_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/players/{player_id}/development-plan/{version}")
+async def get_devplan_version(player_id: str, version: int, token_data: dict = Depends(verify_token)):
+    """Get a specific version of a development plan. Coach/admin only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can view specific plan versions")
+
+        row = conn.execute("""
+            SELECT * FROM development_plans
+            WHERE player_id = ? AND org_id = ? AND version = ?
+        """, (player_id, org_id, version)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Development plan version not found")
+        return _devplan_row_to_dict(row)
+    finally:
+        conn.close()
+
+
+# ── Parent linking endpoints ──────────────────────────────────
+
+@app.post("/players/{player_id}/link-parent")
+async def link_parent_to_player(player_id: str, body: ParentLinkRequest, token_data: dict = Depends(verify_token)):
+    """Link a parent user to a player. Coach/admin only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can link parents")
+
+        # Find parent user by email
+        parent = conn.execute(
+            "SELECT id, first_name, last_name, hockey_role FROM users WHERE email = ? AND org_id = ?",
+            (body.parent_email, org_id)
+        ).fetchone()
+        if not parent:
+            raise HTTPException(status_code=404, detail="No user found with that email in your organization")
+
+        # Verify player exists
+        player = conn.execute(
+            "SELECT id FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        # Insert link
+        link_id = str(uuid.uuid4())
+        try:
+            conn.execute(
+                "INSERT INTO player_parents (id, player_id, parent_id, org_id) VALUES (?, ?, ?, ?)",
+                (link_id, player_id, parent["id"], org_id)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=400, detail="Parent is already linked to this player")
+
+        # Also update user's linked_player_id if not already set
+        conn.execute(
+            "UPDATE users SET linked_player_id = ? WHERE id = ? AND (linked_player_id IS NULL OR linked_player_id = '')",
+            (player_id, parent["id"])
+        )
+        conn.commit()
+
+        return {"id": link_id, "player_id": player_id, "parent_id": parent["id"],
+                "parent_name": f"{parent['first_name'] or ''} {parent['last_name'] or ''}".strip(),
+                "parent_email": body.parent_email}
+    finally:
+        conn.close()
+
+
+@app.get("/players/{player_id}/parents")
+async def get_player_parents(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get linked parent users for a player. Coach/admin only."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT pp.id as link_id, u.id as user_id, u.email, u.first_name, u.last_name, pp.created_at
+            FROM player_parents pp
+            JOIN users u ON u.id = pp.parent_id
+            WHERE pp.player_id = ? AND pp.org_id = ?
+            ORDER BY pp.created_at DESC
+        """, (player_id, org_id)).fetchall()
+        return [{"link_id": r["link_id"], "user_id": r["user_id"], "email": r["email"],
+                 "first_name": r["first_name"], "last_name": r["last_name"],
+                 "created_at": r["created_at"]} for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/players/{player_id}/parents/{parent_user_id}")
+async def unlink_parent(player_id: str, parent_user_id: str, token_data: dict = Depends(verify_token)):
+    """Unlink a parent from a player. Coach/admin only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can unlink parents")
+
+        result = conn.execute(
+            "DELETE FROM player_parents WHERE player_id = ? AND parent_id = ? AND org_id = ?",
+            (player_id, parent_user_id, org_id)
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Parent link not found")
+        return {"deleted": True}
+    finally:
+        conn.close()
+
+
+@app.get("/parent/dashboard")
+async def parent_dashboard(token_data: dict = Depends(verify_token)):
+    """Parent dashboard — returns linked players with their latest dev plans and stats."""
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Get linked player IDs from both sources
+        linked_ids = set()
+
+        # From users.linked_player_id
+        user_row = conn.execute("SELECT linked_player_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if user_row and user_row["linked_player_id"]:
+            linked_ids.add(user_row["linked_player_id"])
+
+        # From player_parents table
+        pp_rows = conn.execute(
+            "SELECT player_id FROM player_parents WHERE parent_id = ? AND org_id = ?",
+            (user_id, org_id)
+        ).fetchall()
+        for r in pp_rows:
+            linked_ids.add(r["player_id"])
+
+        if not linked_ids:
+            return {"players": []}
+
+        result = []
+        for pid in linked_ids:
+            # Player info
+            player = conn.execute("""
+                SELECT id, first_name, last_name, position, current_team, current_league,
+                       dob, image_url, jersey_number
+                FROM players WHERE id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+            """, (pid,)).fetchone()
+            if not player:
+                continue
+
+            # Latest dev plan (role-gated for parent)
+            plan_row = conn.execute("""
+                SELECT * FROM development_plans
+                WHERE player_id = ? AND is_current = 1
+                ORDER BY version DESC LIMIT 1
+            """, (pid,)).fetchone()
+            plan = None
+            if plan_row:
+                plan = _devplan_row_to_dict(plan_row)
+                plan = _apply_devplan_role_gate(plan, "parent")
+
+            # Latest stats
+            stats = conn.execute("""
+                SELECT season, gp, g, a, p, plus_minus, pim, ppg
+                FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1
+            """, (pid,)).fetchone()
+
+            result.append({
+                "player": dict(player),
+                "plan": plan,
+                "stats": dict(stats) if stats else None,
+            })
+
+        return {"players": result}
+    finally:
+        conn.close()
 
 
 # ============================================================
