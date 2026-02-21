@@ -35,6 +35,7 @@ import {
   MessageSquare,
   Eye,
   Search,
+  Dumbbell,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -151,6 +152,7 @@ const COACHING_ITEMS: NavItem[] = [
   { href: "/drills", label: "Drill Library", icon: BookOpen },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
+  { href: "/skills", label: "Skills Library", icon: Dumbbell },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
 

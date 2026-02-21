@@ -2920,3 +2920,45 @@ export interface DevelopmentCurveData {
     toi_seconds: number;
   }[];
 }
+
+// ── Skills Library ──────────────────────────────────────────
+
+export interface SkillLesson {
+  id: string;
+  title: string;
+  series: string | null;
+  lesson_number: number;
+  category: string;
+  description: string | null;
+  coaching_points: string[];
+  common_errors: string[];
+  skill_tags: string[];
+  positions: string[];
+  age_level: string;
+  video_url: string | null;
+  created_at: string;
+}
+
+export interface ProAnalysisEntry {
+  id: string;
+  concept_title: string;
+  player_reference: string | null;
+  description: string | null;
+  key_coaching_cues: string[];
+  what_to_look_for: string[];
+  skill_tags: string[];
+  positions: string[];
+  level: string;
+  video_url: string | null;
+  created_at: string;
+}
+
+export const SKILL_CATEGORIES = [
+  "Shooting",
+  "Skating",
+  "Puck Handling",
+  "Awareness",
+  "Positional Play",
+  "Off-Ice Training",
+  "Drill Add-Ons",
+] as const;

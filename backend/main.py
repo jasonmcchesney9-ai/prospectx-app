@@ -2522,6 +2522,46 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_player ON player_stat_snapshots(player_id, snapshot_date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_date ON player_stat_snapshots(snapshot_date)")
 
+    # ── Skills Library tables ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS skill_lessons (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            series TEXT,
+            lesson_number INTEGER DEFAULT 1,
+            category TEXT NOT NULL,
+            description TEXT,
+            coaching_points TEXT,
+            common_errors TEXT,
+            skill_tags TEXT,
+            positions TEXT,
+            age_level TEXT DEFAULT 'all',
+            video_url TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            org_id TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_skill_lessons_category ON skill_lessons(category)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_skill_lessons_series ON skill_lessons(series)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pro_analysis_entries (
+            id TEXT PRIMARY KEY,
+            concept_title TEXT NOT NULL,
+            player_reference TEXT,
+            description TEXT,
+            key_coaching_cues TEXT,
+            what_to_look_for TEXT,
+            skill_tags TEXT,
+            positions TEXT,
+            level TEXT DEFAULT 'elite',
+            video_url TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            org_id TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pro_analysis_skill_tags ON pro_analysis_entries(skill_tags)")
+
     conn.commit()
 
     conn.close()
@@ -6477,6 +6517,10 @@ seed_drills_v3()
 generate_missing_diagrams()
 seed_glossary_v2()
 _seed_superadmin_user()
+
+# Seed skills library
+from seed_skills import seed_skills as _seed_skills_fn
+_seed_skills_fn()
 
 
 # ── Auto-backup thread ──────────────────────────────────────────────
@@ -26828,6 +26872,150 @@ async def skip_onboarding(token_data: dict = Depends(verify_token)):
     conn.close()
     logger.info("Onboarding skipped for user %s", token_data["user_id"])
     return {"onboarding_completed": True, "detail": "Onboarding skipped"}
+
+
+# ============================================================
+# SKILLS LIBRARY
+# ============================================================
+
+@app.get("/skills")
+def list_skills(
+    category: str = None,
+    skill_tag: str = None,
+    position: str = None,
+    age_level: str = None,
+    series: str = None,
+    search: str = None,
+    token_data: dict = Depends(verify_token),
+):
+    conn = get_db()
+    try:
+        sql = "SELECT * FROM skill_lessons WHERE 1=1"
+        params = []
+        if category:
+            sql += " AND category = ?"
+            params.append(category)
+        if skill_tag:
+            sql += " AND skill_tags LIKE ?"
+            params.append(f"%{skill_tag}%")
+        if position:
+            sql += " AND positions LIKE ?"
+            params.append(f"%{position}%")
+        if age_level:
+            sql += " AND age_level = ?"
+            params.append(age_level)
+        if series:
+            sql += " AND series = ?"
+            params.append(series)
+        if search:
+            sql += " AND (title LIKE ? OR description LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%"])
+        sql += " ORDER BY category, series, lesson_number"
+        rows = conn.execute(sql, params).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            for field in ("coaching_points", "common_errors", "skill_tags", "positions"):
+                val = d.get(field)
+                if val:
+                    try:
+                        d[field] = json.loads(val)
+                    except Exception:
+                        d[field] = []
+                else:
+                    d[field] = []
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/skills/{skill_id}")
+def get_skill(skill_id: str, token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM skill_lessons WHERE id = ?", (skill_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Skill lesson not found")
+        d = dict(row)
+        for field in ("coaching_points", "common_errors", "skill_tags", "positions"):
+            val = d.get(field)
+            if val:
+                try:
+                    d[field] = json.loads(val)
+                except Exception:
+                    d[field] = []
+            else:
+                d[field] = []
+        return d
+    finally:
+        conn.close()
+
+
+@app.get("/pro-analysis")
+def list_pro_analysis(
+    skill_tag: str = None,
+    position: str = None,
+    level: str = None,
+    search: str = None,
+    token_data: dict = Depends(verify_token),
+):
+    conn = get_db()
+    try:
+        sql = "SELECT * FROM pro_analysis_entries WHERE 1=1"
+        params = []
+        if skill_tag:
+            sql += " AND skill_tags LIKE ?"
+            params.append(f"%{skill_tag}%")
+        if position:
+            sql += " AND positions LIKE ?"
+            params.append(f"%{position}%")
+        if level:
+            sql += " AND level = ?"
+            params.append(level)
+        if search:
+            sql += " AND (concept_title LIKE ? OR description LIKE ? OR player_reference LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        sql += " ORDER BY concept_title"
+        rows = conn.execute(sql, params).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            for field in ("key_coaching_cues", "what_to_look_for", "skill_tags", "positions"):
+                val = d.get(field)
+                if val:
+                    try:
+                        d[field] = json.loads(val)
+                    except Exception:
+                        d[field] = []
+                else:
+                    d[field] = []
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/pro-analysis/{entry_id}")
+def get_pro_analysis(entry_id: str, token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM pro_analysis_entries WHERE id = ?", (entry_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Pro analysis entry not found")
+        d = dict(row)
+        for field in ("key_coaching_cues", "what_to_look_for", "skill_tags", "positions"):
+            val = d.get(field)
+            if val:
+                try:
+                    d[field] = json.loads(val)
+                except Exception:
+                    d[field] = []
+            else:
+                d[field] = []
+        return d
+    finally:
+        conn.close()
 
 
 # ============================================================
