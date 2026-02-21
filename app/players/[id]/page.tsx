@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import {
@@ -40,6 +40,8 @@ import {
   Plus,
   History,
   Sparkles,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   RadarChart,
@@ -55,6 +57,7 @@ import ExtendedStatTable from "@/components/ExtendedStatTable";
 import GoalieStatTable from "@/components/GoalieStatTable";
 import ReportCard from "@/components/ReportCard";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import { formatLeague } from "@/lib/leagues";
 import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
@@ -62,7 +65,7 @@ import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
-type Tab = "profile" | "stats" | "notes" | "reports" | "development";
+type Tab = "profile" | "stats" | "notes" | "reports" | "player";
 type StatsSubView = "current" | "progression" | "gamelog";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -81,9 +84,75 @@ function fullPosition(pos: string | null | undefined): string {
   return POSITION_LABELS[pos.toUpperCase()] || pos;
 }
 
+// Section titles for the 9-section development plan model
+const DEV_PLAN_SECTION_TITLES: Record<number, string> = {
+  1: "Player Snapshot & Identity",
+  2: "Season Context",
+  3: "Current Strengths",
+  4: "Development Priorities",
+  5: "Phase Plan",
+  6: "Practice & Game Integration",
+  7: "Success Metrics",
+  8: "Staff Notes",
+};
+
+// Plain-language stat labels for parents
+const PARENT_STAT_LABELS: Record<string, string> = {
+  "CF%": "Was on the ice for more shots than against (possession)",
+  xGF: "Created high-quality scoring chances",
+  "TOI/game": "Ice time per game",
+  entry_success_rate: "Successfully carried the puck into the offensive zone",
+  fo_pct: "Won faceoffs",
+  battles_pct: "Won puck battles along the boards",
+  inner_slot_pct: "Shot from high-danger areas",
+};
+
+// Interface for v2 dev plan with 9 section columns
+interface DevPlanV2 {
+  id: string;
+  player_id: string;
+  org_id?: string;
+  version: number;
+  title: string;
+  status: "draft" | "final";
+  season: string;
+  created_by: string;
+  created_by_name: string;
+  plan_type: string;
+  is_current: boolean;
+  section_1_snapshot: string | null;
+  section_2_context: string | null;
+  section_3_strengths: string | null;
+  section_4_development: string | null;
+  section_5_phase_plan: string | null;
+  section_6_integration: string | null;
+  section_7_metrics: string | null;
+  section_8_staff_notes: string | null;
+  section_9_raw: string | null;
+  section_1_visible_to_player: boolean;
+  section_2_visible_to_player: boolean;
+  section_3_visible_to_player: boolean;
+  section_4_visible_to_player: boolean;
+  section_5_visible_to_player: boolean;
+  section_6_visible_to_player: boolean;
+  section_7_visible_to_player: boolean;
+  section_8_visible_to_player: boolean;
+  sections?: DevelopmentPlanSection[];
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const COACH_ROLES = new Set(["coach", "gm", "admin", "scout"]);
+const FAMILY_ROLES = new Set(["parent", "player"]);
+
 export default function PlayerDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const playerId = params.id as string;
+  const currentUser = getUser();
+  const userRole = currentUser?.hockey_role || "scout";
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [stats, setStats] = useState<PlayerStats[]>([]);
@@ -163,7 +232,7 @@ export default function PlayerDetailPage() {
   const [savingNote, setSavingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
-  // Development Plans
+  // Development Plans (legacy)
   const [devPlan, setDevPlan] = useState<DevelopmentPlan | null>(null);
   const [devPlanVersions, setDevPlanVersions] = useState<DevelopmentPlan[]>([]);
   const [loadingDevPlan, setLoadingDevPlan] = useState(false);
@@ -174,6 +243,15 @@ export default function PlayerDetailPage() {
   const [savingDevPlan, setSavingDevPlan] = useState(false);
   const [showDevVersions, setShowDevVersions] = useState(false);
 
+  // Development Plans v2 (9-section model)
+  const [devPlanV2, setDevPlanV2] = useState<DevPlanV2 | null>(null);
+  const [devPlanV2History, setDevPlanV2History] = useState<DevPlanV2[]>([]);
+  const [draftSections, setDraftSections] = useState<Record<string, string> | null>(null);
+  const [planStatus, setPlanStatus] = useState<"empty" | "generating" | "draft" | "saved">("empty");
+  const [visibilityFlags, setVisibilityFlags] = useState<Record<string, boolean>>({});
+  const [editingV2Section, setEditingV2Section] = useState<number | null>(null);
+  const [editV2Content, setEditV2Content] = useState("");
+
   const loadNotes = useCallback(async () => {
     try {
       const { data } = await api.get<ScoutNote[]>(`/players/${playerId}/notes`);
@@ -182,6 +260,66 @@ export default function PlayerDetailPage() {
       // non-critical
     }
   }, [playerId]);
+
+  // Generate a v2 development plan (returns draft without saving)
+  const handleGenerateV2 = async () => {
+    setPlanStatus("generating");
+    setGeneratingDevPlan(true);
+    try {
+      const { data } = await api.post(`/players/${playerId}/development-plan/generate`);
+      // data has section_1_snapshot through section_9_raw
+      const sections: Record<string, string> = {};
+      for (let i = 1; i <= 8; i++) {
+        const key = `section_${i}_${["snapshot", "context", "strengths", "development", "phase_plan", "integration", "metrics", "staff_notes"][i - 1]}`;
+        sections[key] = data[key] || "";
+      }
+      sections.section_9_raw = data.section_9_raw || "";
+      setDraftSections(sections);
+      // Default visibility
+      const vis: Record<string, boolean> = {};
+      for (let i = 1; i <= 7; i++) vis[`section_${i}_visible_to_player`] = true;
+      vis["section_8_visible_to_player"] = false;
+      setVisibilityFlags(vis);
+      setPlanStatus("draft");
+      toast.success("Development plan generated — review and save");
+    } catch {
+      toast.error("Failed to generate plan");
+      setPlanStatus(devPlanV2 ? "saved" : "empty");
+    } finally {
+      setGeneratingDevPlan(false);
+    }
+  };
+
+  // Save draft as a new version
+  const handleSaveV2 = async (status: "draft" | "final") => {
+    if (!draftSections) return;
+    setSavingDevPlan(true);
+    try {
+      const payload = {
+        ...draftSections,
+        ...visibilityFlags,
+        season: new Date().getFullYear() > 6 ? `${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(2)}` : `${new Date().getFullYear() - 1}-${String(new Date().getFullYear()).slice(2)}`,
+        status,
+        title: `${player?.first_name} ${player?.last_name} Development Plan`,
+        plan_type: "in_season",
+        summary: draftSections.section_1_snapshot?.slice(0, 200) || null,
+      };
+      const { data } = await api.post<DevPlanV2>(`/players/${playerId}/development-plan`, payload);
+      setDevPlanV2(data);
+      setDraftSections(null);
+      setPlanStatus("saved");
+      toast.success(status === "final" ? "Plan finalized!" : "Draft saved");
+      // Refresh history
+      try {
+        const histRes = await api.get<DevPlanV2[]>(`/players/${playerId}/development-plan/history`);
+        setDevPlanV2History(histRes.data);
+      } catch { /* Non-critical */ }
+    } catch {
+      toast.error("Failed to save plan");
+    } finally {
+      setSavingDevPlan(false);
+    }
+  };
 
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -442,12 +580,25 @@ export default function PlayerDetailPage() {
           setPendingCorrections(corrRes.data.filter((c: PlayerCorrection) => c.status === "pending").length);
         } catch { /* Non-critical */ }
 
-        // Load development plans (non-blocking)
+        // Load development plans — try v2 singular endpoint first, fallback to legacy
         try {
-          const plansRes = await api.get<DevelopmentPlan[]>(`/players/${playerId}/development-plans`);
-          setDevPlanVersions(plansRes.data);
-          if (plansRes.data.length > 0) setDevPlan(plansRes.data[0]); // latest version first
-        } catch { /* Non-critical */ }
+          const v2Res = await api.get<DevPlanV2>(`/players/${playerId}/development-plan`);
+          setDevPlanV2(v2Res.data);
+          setPlanStatus("saved");
+          // Also try fetching version history
+          try {
+            const histRes = await api.get<DevPlanV2[]>(`/players/${playerId}/development-plan/history`);
+            setDevPlanV2History(histRes.data);
+            setDevPlanVersions(histRes.data as unknown as DevelopmentPlan[]);
+          } catch { /* History may require coach role */ }
+        } catch {
+          // Fallback to legacy plural endpoint
+          try {
+            const plansRes = await api.get<DevelopmentPlan[]>(`/players/${playerId}/development-plans`);
+            setDevPlanVersions(plansRes.data);
+            if (plansRes.data.length > 0) setDevPlan(plansRes.data[0]);
+          } catch { /* Non-critical */ }
+        }
 
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
@@ -465,6 +616,23 @@ export default function PlayerDetailPage() {
     }
     if (playerId) load();
   }, [playerId]);
+
+  // Auto-trigger: deep-link from dashboard with ?tab=player&autoGenerate=true
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    const autoGen = searchParams.get("autoGenerate");
+    if (tabParam === "player") {
+      setActiveTab("player");
+    }
+    if (autoGen === "true" && !loading && !devPlanV2 && planStatus === "empty") {
+      // Auto-trigger generation
+      setActiveTab("player");
+      handleGenerateV2();
+      // Clear URL params
+      router.replace(`/players/${playerId}?tab=player`, { scroll: false });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams]);
 
   // Lazy-load progression/game log when sub-view switches
   useEffect(() => {
@@ -672,7 +840,7 @@ export default function PlayerDetailPage() {
             { key: "stats" as Tab, label: "Stats", count: stats.length },
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
-            { key: "development" as Tab, label: "Development", count: devPlanVersions.length || null },
+            { key: "player" as Tab, label: "Player", count: devPlanV2History.length || devPlanVersions.length || null },
           ]).map(({ key, label, count }) => (
             <button
               key={key}
@@ -2109,227 +2277,481 @@ export default function PlayerDetailPage() {
           </section>
         )}
 
-        {/* Development Tab */}
-        {activeTab === "development" && (
+        {/* Player Tab */}
+        {activeTab === "player" && (
           <section className="space-y-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-navy">Development Plan</h2>
-              <div className="flex gap-2">
-                {devPlanVersions.length > 1 && (
-                  <button
-                    onClick={() => setShowDevVersions(!showDevVersions)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-gray-50 text-muted"
-                  >
-                    <History size={14} />
-                    v{devPlan?.version || 1} of {devPlanVersions.length}
-                  </button>
-                )}
-                <button
-                  onClick={async () => {
-                    setGeneratingDevPlan(true);
-                    try {
-                      const { data } = await api.post<DevelopmentPlan>(`/players/${playerId}/development-plans/generate`);
-                      setDevPlan(data);
-                      setDevPlanVersions((prev) => [data, ...prev]);
-                      toast.success("Development plan generated!");
-                    } catch {
-                      toast.error("Failed to generate plan");
-                    } finally {
-                      setGeneratingDevPlan(false);
-                    }
-                  }}
-                  disabled={generatingDevPlan}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
-                >
-                  {generatingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {devPlan ? "New Version" : "Generate Plan"}
-                </button>
-              </div>
-            </div>
-
-            {/* Version History Dropdown */}
-            {showDevVersions && devPlanVersions.length > 1 && (
-              <div className="bg-white rounded-xl border border-border p-3 space-y-1">
-                <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Version History</p>
-                {devPlanVersions.map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => { setDevPlan(v); setShowDevVersions(false); }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between ${
-                      v.id === devPlan?.id ? "bg-teal/10 text-teal" : "hover:bg-gray-50 text-navy"
-                    }`}
-                  >
-                    <span>v{v.version} — {v.created_by_name}</span>
-                    <span className="text-xs text-muted">{new Date(v.created_at).toLocaleDateString()}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {!devPlan && !loadingDevPlan && !generatingDevPlan && (
-              <div className="text-center py-12 bg-white rounded-xl border border-border">
-                <TrendingUp size={32} className="mx-auto text-muted/40 mb-3" />
-                <p className="text-muted text-sm mb-3">No development plan yet for this player.</p>
-                <p className="text-muted/60 text-xs mb-4">Click &quot;Generate Plan&quot; to create an AI-powered development roadmap.</p>
-              </div>
-            )}
-
-            {loadingDevPlan && (
-              <div className="text-center py-12 bg-white rounded-xl border border-border">
-                <Loader2 size={24} className="mx-auto text-teal animate-spin mb-2" />
-                <p className="text-sm text-muted">Loading development plan...</p>
-              </div>
-            )}
-
-            {devPlan && (
-              <div className="space-y-4">
-                {/* Plan Header */}
-                <div className="bg-white rounded-xl border border-border p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-base font-oswald uppercase tracking-wider text-navy">{devPlan.title}</h3>
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                        devPlan.status === "active" ? "bg-green-100 text-green-700" :
-                        devPlan.status === "superseded" ? "bg-yellow-100 text-yellow-700" :
-                        "bg-gray-100 text-gray-700"
-                      }`}>
-                        {devPlan.status}
-                      </span>
-                      <span className="text-xs text-muted">v{devPlan.version}</span>
-                    </div>
+            {/* ── Section 1: Player Card ──────────────────────────── */}
+            {player && (
+              <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-4">
+                {player.image_url && hasRealImage(player.image_url) ? (
+                  <img src={assetUrl(player.image_url)} alt={`${player.first_name} ${player.last_name}`} className="w-16 h-16 rounded-full object-cover border border-border" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-navy/5 flex items-center justify-center text-lg font-oswald text-navy/40">
+                    {player.first_name?.charAt(0)}{player.last_name?.charAt(0)}
                   </div>
-                  {devPlan.summary && (
-                    <p className="text-sm text-muted leading-relaxed">{devPlan.summary}</p>
+                )}
+                <div>
+                  <h2 className="text-lg font-oswald font-bold text-navy uppercase tracking-wider">
+                    {player.first_name} {player.last_name}
+                  </h2>
+                  <p className="text-sm text-muted">
+                    {fullPosition(player.position)} {player.jersey_number ? `#${player.jersey_number}` : ""} {player.current_team ? `• ${player.current_team}` : ""} {player.current_league ? `• ${formatLeague(player.current_league)}` : ""}
+                  </p>
+                  {player.dob && (
+                    <p className="text-xs text-muted/60 mt-0.5">
+                      DOB: {new Date(player.dob).toLocaleDateString()} {player.shoots ? `• Shoots: ${player.shoots}` : ""}
+                    </p>
                   )}
-                  <div className="flex items-center gap-4 mt-2 text-xs text-muted/60">
-                    <span>Season: {devPlan.season}</span>
-                    <span>Type: {devPlan.plan_type.replace("_", " ")}</span>
-                    <span>By: {devPlan.created_by_name}</span>
-                    <span>{new Date(devPlan.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            )}
+
+            {/* ── Section 2: Season Snapshot ───────────────────────── */}
+            {stats.length > 0 && (
+              <div className="bg-white rounded-xl border border-border p-4">
+                <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Season Snapshot</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {(() => {
+                    const s = stats[0];
+                    const isGoalie = player?.position?.toUpperCase() === "G";
+                    const isFamily = FAMILY_ROLES.has(userRole);
+                    if (isGoalie) {
+                      return [
+                        { label: isFamily ? "Games played" : "GP", value: s.gp },
+                        { label: isFamily ? "Goals-against average" : "GAA", value: (s as unknown as Record<string, unknown>).gaa || "—" },
+                        { label: isFamily ? "Save percentage" : "SV%", value: (s as unknown as Record<string, unknown>).sv_pct || "—" },
+                        { label: isFamily ? "Shutouts" : "SO", value: (s as unknown as Record<string, unknown>).so || "—" },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="text-center p-2 bg-gray-50 rounded-lg">
+                          <p className="text-lg font-oswald font-bold text-navy">{String(value)}</p>
+                          <p className="text-xs text-muted">{label}</p>
+                        </div>
+                      ));
+                    }
+                    return [
+                      { label: isFamily ? "Games played" : "GP", value: s.gp },
+                      { label: isFamily ? "Goals scored" : "G", value: s.g },
+                      { label: isFamily ? "Assists" : "A", value: s.a },
+                      { label: isFamily ? "Total points" : "P", value: s.p },
+                      { label: isFamily ? "Points per game" : "PPG", value: s.gp > 0 ? (s.p / s.gp).toFixed(2) : "—" },
+                      { label: isFamily ? "Plus/minus rating" : "+/-", value: s.plus_minus ?? "—" },
+                      { label: isFamily ? "Penalty minutes" : "PIM", value: s.pim ?? "—" },
+                      { label: isFamily ? "Shots on goal" : "SOG", value: s.shots ?? "—" },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="text-center p-2 bg-gray-50 rounded-lg">
+                        <p className="text-lg font-oswald font-bold text-navy">{String(value)}</p>
+                        <p className="text-xs text-muted">{label}</p>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ── Section 3: Development Plan ─────────────────────── */}
+            <div className="bg-white rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-oswald uppercase tracking-wider text-muted">Development Plan</h3>
+                <div className="flex gap-2">
+                  {/* Version history toggle (coach/admin only, saved state) */}
+                  {COACH_ROLES.has(userRole) && devPlanV2History.length > 1 && planStatus === "saved" && (
+                    <button
+                      onClick={() => setShowDevVersions(!showDevVersions)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-gray-50 text-muted"
+                    >
+                      <History size={14} />
+                      v{devPlanV2?.version || 1} of {devPlanV2History.length}
+                    </button>
+                  )}
+                  {/* Generate / New Version button (coach/admin only) */}
+                  {COACH_ROLES.has(userRole) && planStatus !== "generating" && planStatus !== "draft" && (
+                    <button
+                      onClick={handleGenerateV2}
+                      disabled={generatingDevPlan}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-orange text-white rounded-lg hover:bg-orange/90 disabled:opacity-50"
+                    >
+                      {generatingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {devPlanV2 ? "Generate New Version" : "Generate Development Plan"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Version History Dropdown */}
+              {showDevVersions && devPlanV2History.length > 1 && (
+                <div className="bg-gray-50 rounded-lg border border-border p-3 space-y-1 mb-3">
+                  <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Version History</p>
+                  {devPlanV2History.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={async () => {
+                        try {
+                          const { data } = await api.get<DevPlanV2>(`/players/${playerId}/development-plan/${v.version}`);
+                          setDevPlanV2(data);
+                          setShowDevVersions(false);
+                        } catch {
+                          toast.error("Failed to load version");
+                        }
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between ${
+                        v.id === devPlanV2?.id ? "bg-teal/10 text-teal" : "hover:bg-white text-navy"
+                      }`}
+                    >
+                      <span>v{v.version} — {v.created_by_name}</span>
+                      <span className="text-xs text-muted">{new Date(v.created_at).toLocaleDateString()}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* ── EMPTY STATE ──────────────────────────────────── */}
+              {planStatus === "empty" && !loadingDevPlan && (
+                <div className="text-center py-12">
+                  <TrendingUp size={32} className="mx-auto text-muted/40 mb-3" />
+                  {FAMILY_ROLES.has(userRole) ? (
+                    <p className="text-muted text-sm">Your development plan will appear here once your coach creates it</p>
+                  ) : (
+                    <>
+                      <p className="text-muted text-sm mb-1">No development plan on file for {new Date().getFullYear()}-{String(new Date().getFullYear() + 1).slice(2)}</p>
+                      <p className="text-muted/60 text-xs">Click &quot;Generate Development Plan&quot; to create an AI-powered roadmap.</p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── GENERATING STATE ─────────────────────────────── */}
+              {planStatus === "generating" && (
+                <div className="text-center py-12">
+                  <Loader2 size={28} className="mx-auto text-teal animate-spin mb-3" />
+                  <p className="text-sm text-navy font-medium">PXI is generating {player?.first_name}&apos;s development plan...</p>
+                  <p className="text-xs text-muted mt-1">This may take 15-30 seconds</p>
+                </div>
+              )}
+
+              {/* ── DRAFT STATE ──────────────────────────────────── */}
+              {planStatus === "draft" && draftSections && (
+                <div className="space-y-3">
+                  {/* Draft banner */}
+                  <div className="flex items-center gap-2 text-sm text-orange bg-orange/5 px-3 py-2 rounded-lg">
+                    <AlertTriangle size={16} />
+                    <span className="font-medium">Draft — review sections below, then save or finalize.</span>
+                  </div>
+
+                  {/* 9 editable section cards */}
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => {
+                    const sectionKey = `section_${num}_${["snapshot", "context", "strengths", "development", "phase_plan", "integration", "metrics", "staff_notes"][num - 1]}`;
+                    const title = DEV_PLAN_SECTION_TITLES[num] || `Section ${num}`;
+                    const content = draftSections[sectionKey] || "";
+                    const isStaffOnly = num === 8;
+                    const visKey = `section_${num}_visible_to_player`;
+
+                    // Skip staff notes for non-coach roles
+                    if (isStaffOnly && !COACH_ROLES.has(userRole)) return null;
+
+                    return (
+                      <div key={num} className="bg-white rounded-xl border border-border overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-oswald text-muted">{num}.</span>
+                            <h4 className="text-sm font-semibold text-navy">{title}</h4>
+                            {isStaffOnly && (
+                              <span className="flex items-center gap-1 text-xs text-teal bg-teal/10 px-2 py-0.5 rounded-full">
+                                <Lock size={10} /> Internal
+                              </span>
+                            )}
+                          </div>
+                          {/* Visibility toggle (sections 1-7 only, coach/admin) */}
+                          {!isStaffOnly && COACH_ROLES.has(userRole) && (
+                            <button
+                              onClick={() => setVisibilityFlags((prev) => ({ ...prev, [visKey]: !prev[visKey] }))}
+                              className={`p-1 rounded ${visibilityFlags[visKey] ? "text-teal" : "text-muted/40"}`}
+                              title={visibilityFlags[visKey] ? "Visible to player/parent" : "Hidden from player/parent"}
+                            >
+                              {visibilityFlags[visKey] ? <Eye size={14} /> : <EyeOff size={14} />}
+                            </button>
+                          )}
+                        </div>
+                        <div className="px-4 py-3">
+                          <textarea
+                            value={content}
+                            onChange={(e) => setDraftSections((prev) => prev ? { ...prev, [sectionKey]: e.target.value } : prev)}
+                            rows={6}
+                            className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
+                          />
+                          <p className="text-xs text-muted/40 mt-1 text-right">{content.length} characters</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Draft action buttons */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      onClick={() => handleSaveV2("draft")}
+                      disabled={savingDevPlan}
+                      className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider bg-navy text-white rounded-lg hover:bg-navy/90 disabled:opacity-50"
+                    >
+                      {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                      Save as Draft
+                    </button>
+                    <button
+                      onClick={() => handleSaveV2("final")}
+                      disabled={savingDevPlan}
+                      className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                    >
+                      <CheckCircle size={14} />
+                      Finalize
+                    </button>
+                    <button
+                      onClick={() => { setDraftSections(null); setPlanStatus(devPlanV2 ? "saved" : "empty"); }}
+                      className="px-4 py-2 text-sm text-muted hover:text-navy"
+                    >
+                      Discard
+                    </button>
                   </div>
                 </div>
+              )}
 
-                {/* Plan Sections */}
-                {devPlan.sections.map((section: DevelopmentPlanSection, idx: number) => (
-                  <div key={idx} className="bg-white rounded-xl border border-border overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${
-                          section.priority === "critical" ? "bg-red-500" :
-                          section.priority === "high" ? "bg-orange-500" :
-                          section.priority === "medium" ? "bg-yellow-500" :
-                          section.priority === "low" ? "bg-blue-500" :
-                          "bg-gray-400"
-                        }`} />
-                        {editingDevSection === idx ? (
-                          <input
-                            value={editDevTitle}
-                            onChange={(e) => setEditDevTitle(e.target.value)}
-                            className="text-sm font-semibold text-navy bg-transparent border-b border-teal/30 outline-none px-1 py-0.5 w-full"
-                          />
-                        ) : (
-                          <h4 className="text-sm font-semibold text-navy">{section.title}</h4>
-                        )}
+              {/* ── SAVED STATE ──────────────────────────────────── */}
+              {planStatus === "saved" && devPlanV2 && (
+                <div className="space-y-3">
+                  {/* Plan header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                        devPlanV2.status === "final" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                      }`}>
+                        {devPlanV2.status}
+                      </span>
+                      <span className="text-xs text-muted">v{devPlanV2.version} • {devPlanV2.season}</span>
+                    </div>
+                    <span className="text-xs text-muted">
+                      {devPlanV2.created_by_name} • {new Date(devPlanV2.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  {/* Render saved sections */}
+                  {[1, 2, 3, 4, 5, 6, 7].map((num) => {
+                    const sectionKey = `section_${num}_${["snapshot", "context", "strengths", "development", "phase_plan", "integration", "metrics"][num - 1]}` as keyof DevPlanV2;
+                    const content = devPlanV2[sectionKey] as string | null;
+                    const visKey = `section_${num}_visible_to_player` as keyof DevPlanV2;
+                    const isVisible = devPlanV2[visKey] as boolean;
+                    const title = DEV_PLAN_SECTION_TITLES[num] || `Section ${num}`;
+
+                    // For family roles, skip hidden sections
+                    if (FAMILY_ROLES.has(userRole) && !isVisible) return null;
+                    if (!content) return null;
+
+                    return (
+                      <div key={num} className="bg-white rounded-xl border border-border overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-oswald text-muted">{num}.</span>
+                            <h4 className="text-sm font-semibold text-navy">{title}</h4>
+                            {!isVisible && COACH_ROLES.has(userRole) && (
+                              <span className="flex items-center gap-1 text-xs text-muted/60 bg-gray-100 px-2 py-0.5 rounded-full">
+                                <EyeOff size={10} /> Hidden
+                              </span>
+                            )}
+                          </div>
+                          {/* Per-section edit button (coach only) */}
+                          {COACH_ROLES.has(userRole) && (
+                            <div className="flex items-center gap-1">
+                              {editingV2Section === num ? (
+                                <>
+                                  <button
+                                    onClick={async () => {
+                                      setSavingDevPlan(true);
+                                      try {
+                                        const updatePayload: Record<string, unknown> = {};
+                                        const sk = `section_${num}_${["snapshot", "context", "strengths", "development", "phase_plan", "integration", "metrics"][num - 1]}`;
+                                        updatePayload[sk] = editV2Content;
+                                        // Copy all existing fields for save
+                                        for (let i = 1; i <= 8; i++) {
+                                          const k = `section_${i}_${["snapshot", "context", "strengths", "development", "phase_plan", "integration", "metrics", "staff_notes"][i - 1]}`;
+                                          if (k !== sk) updatePayload[k] = (devPlanV2 as unknown as Record<string, unknown>)[k] || "";
+                                        }
+                                        for (let i = 1; i <= 8; i++) {
+                                          const vk = `section_${i}_visible_to_player`;
+                                          updatePayload[vk] = (devPlanV2 as unknown as Record<string, unknown>)[vk];
+                                        }
+                                        updatePayload.season = devPlanV2.season;
+                                        updatePayload.status = devPlanV2.status;
+                                        updatePayload.title = devPlanV2.title;
+                                        updatePayload.plan_type = devPlanV2.plan_type;
+                                        updatePayload.summary = devPlanV2.summary;
+                                        const { data } = await api.post<DevPlanV2>(`/players/${playerId}/development-plan`, updatePayload);
+                                        setDevPlanV2(data);
+                                        setEditingV2Section(null);
+                                        toast.success(`Saved as v${data.version}`);
+                                        // Refresh history
+                                        try {
+                                          const histRes = await api.get<DevPlanV2[]>(`/players/${playerId}/development-plan/history`);
+                                          setDevPlanV2History(histRes.data);
+                                        } catch { /* Non-critical */ }
+                                      } catch {
+                                        toast.error("Failed to save");
+                                      } finally {
+                                        setSavingDevPlan(false);
+                                      }
+                                    }}
+                                    disabled={savingDevPlan}
+                                    className="p-1 text-teal hover:bg-teal/10 rounded"
+                                  >
+                                    {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                  </button>
+                                  <button onClick={() => setEditingV2Section(null)} className="p-1 text-muted hover:bg-gray-100 rounded">
+                                    <X size={14} />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingV2Section(num); setEditV2Content(content || ""); }}
+                                  className="p-1 text-muted hover:bg-gray-100 rounded"
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-4 py-3">
+                          {editingV2Section === num ? (
+                            <textarea
+                              value={editV2Content}
+                              onChange={(e) => setEditV2Content(e.target.value)}
+                              rows={8}
+                              className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
+                            />
+                          ) : (
+                            <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{content}</div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        {editingDevSection === idx ? (
+                    );
+                  })}
+
+                  {/* Section 8: Staff Notes (coach/admin only) */}
+                  {COACH_ROLES.has(userRole) && devPlanV2.section_8_staff_notes && (
+                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-oswald text-muted">8.</span>
+                          <h4 className="text-sm font-semibold text-navy">Staff Notes</h4>
+                          <span className="flex items-center gap-1 text-xs text-teal bg-teal/10 px-2 py-0.5 rounded-full">
+                            <Lock size={10} /> Internal — not visible to player or parent
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (editingV2Section === 8) {
+                              setEditingV2Section(null);
+                            } else {
+                              setEditingV2Section(8);
+                              setEditV2Content(devPlanV2.section_8_staff_notes || "");
+                            }
+                          }}
+                          className="p-1 text-muted hover:bg-gray-100 rounded"
+                        >
+                          {editingV2Section === 8 ? <X size={14} /> : <Edit3 size={14} />}
+                        </button>
+                      </div>
+                      <div className="px-4 py-3">
+                        {editingV2Section === 8 ? (
                           <>
-                            <button
-                              onClick={async () => {
-                                setSavingDevPlan(true);
-                                try {
-                                  const updated = [...devPlan.sections];
-                                  updated[idx] = { ...updated[idx], title: editDevTitle, content: editDevContent };
-                                  const { data } = await api.put<DevelopmentPlan>(`/development-plans/${devPlan.id}`, {
-                                    sections: updated,
-                                  });
-                                  setDevPlan(data);
-                                  setDevPlanVersions((prev) => [data, ...prev.filter((v) => v.id !== devPlan.id)]);
-                                  setEditingDevSection(null);
-                                  toast.success(`Saved as v${data.version}`);
-                                } catch {
-                                  toast.error("Failed to save");
-                                } finally {
-                                  setSavingDevPlan(false);
-                                }
-                              }}
-                              disabled={savingDevPlan}
-                              className="p-1 text-teal hover:bg-teal/10 rounded"
-                            >
-                              {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                            </button>
-                            <button
-                              onClick={() => setEditingDevSection(null)}
-                              className="p-1 text-muted hover:bg-gray-100 rounded"
-                            >
-                              <X size={14} />
-                            </button>
+                            <textarea
+                              value={editV2Content}
+                              onChange={(e) => setEditV2Content(e.target.value)}
+                              rows={6}
+                              className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
+                            />
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={async () => {
+                                  setSavingDevPlan(true);
+                                  try {
+                                    const updatePayload: Record<string, unknown> = {};
+                                    for (let i = 1; i <= 8; i++) {
+                                      const k = `section_${i}_${["snapshot", "context", "strengths", "development", "phase_plan", "integration", "metrics", "staff_notes"][i - 1]}`;
+                                      updatePayload[k] = i === 8 ? editV2Content : (devPlanV2 as unknown as Record<string, unknown>)[k] || "";
+                                    }
+                                    for (let i = 1; i <= 8; i++) {
+                                      updatePayload[`section_${i}_visible_to_player`] = (devPlanV2 as unknown as Record<string, unknown>)[`section_${i}_visible_to_player`];
+                                    }
+                                    updatePayload.season = devPlanV2.season;
+                                    updatePayload.status = devPlanV2.status;
+                                    updatePayload.title = devPlanV2.title;
+                                    updatePayload.plan_type = devPlanV2.plan_type;
+                                    updatePayload.summary = devPlanV2.summary;
+                                    const { data } = await api.post<DevPlanV2>(`/players/${playerId}/development-plan`, updatePayload);
+                                    setDevPlanV2(data);
+                                    setEditingV2Section(null);
+                                    toast.success(`Staff notes saved as v${data.version}`);
+                                  } catch {
+                                    toast.error("Failed to save");
+                                  } finally {
+                                    setSavingDevPlan(false);
+                                  }
+                                }}
+                                disabled={savingDevPlan}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                              >
+                                {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                Save
+                              </button>
+                              <button onClick={() => setEditingV2Section(null)} className="px-3 py-1.5 text-xs text-muted hover:text-navy">
+                                Cancel
+                              </button>
+                            </div>
                           </>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setEditingDevSection(idx);
-                              setEditDevContent(section.content);
-                              setEditDevTitle(section.title);
-                            }}
-                            className="p-1 text-muted hover:bg-gray-100 rounded"
-                          >
-                            <Edit3 size={14} />
-                          </button>
+                          <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{devPlanV2.section_8_staff_notes}</div>
                         )}
                       </div>
                     </div>
-                    <div className="px-4 py-3">
-                      {editingDevSection === idx ? (
-                        <textarea
-                          value={editDevContent}
-                          onChange={(e) => setEditDevContent(e.target.value)}
-                          rows={8}
-                          className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 font-mono leading-relaxed resize-y"
-                        />
-                      ) : (
-                        <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">
-                          {section.content}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  )}
 
-                {/* Add Section Button */}
-                <button
-                  onClick={async () => {
-                    const newSection: DevelopmentPlanSection = {
-                      title: "New Section",
-                      content: "Add your development notes here...",
-                      priority: "medium",
-                    };
-                    setSavingDevPlan(true);
-                    try {
-                      const updated = [...devPlan.sections, newSection];
-                      const { data } = await api.put<DevelopmentPlan>(`/development-plans/${devPlan.id}`, {
-                        sections: updated,
-                      });
-                      setDevPlan(data);
-                      setDevPlanVersions((prev) => [data, ...prev.filter((v) => v.id !== devPlan.id)]);
-                      setEditingDevSection(data.sections.length - 1);
-                      setEditDevTitle(newSection.title);
-                      setEditDevContent(newSection.content);
-                      toast.success("Section added");
-                    } catch {
-                      toast.error("Failed to add section");
-                    } finally {
-                      setSavingDevPlan(false);
-                    }
-                  }}
-                  disabled={savingDevPlan}
-                  className="w-full py-3 border border-dashed border-border rounded-xl text-sm text-muted hover:border-teal/40 hover:text-teal flex items-center justify-center gap-1"
-                >
-                  <Plus size={14} />
-                  Add Section
-                </button>
-              </div>
-            )}
+                  {/* Recent Reports (coach/admin/scout only) */}
+                  {COACH_ROLES.has(userRole) && reports.length > 0 && (
+                    <div className="bg-white rounded-xl border border-border p-4">
+                      <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Recent Reports</h3>
+                      <div className="space-y-2">
+                        {reports.slice(0, 3).map((r) => (
+                          <Link key={r.id} href={`/reports/${r.id}`} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 border border-border">
+                            <div className="flex items-center gap-2">
+                              <FileText size={14} className="text-muted" />
+                              <span className="text-sm text-navy">{r.title || r.report_type.replace(/_/g, " ")}</span>
+                            </div>
+                            <span className="text-xs text-muted">{new Date(r.created_at).toLocaleDateString()}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Legacy backward compat: show old sections model if no v2 sections */}
+                  {!devPlanV2.section_1_snapshot && devPlan?.sections && devPlan.sections.length > 0 && (
+                    <div className="bg-white rounded-xl border border-border p-4">
+                      <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Legacy Plan Sections</h3>
+                      {devPlan.sections.map((section: DevelopmentPlanSection, idx: number) => (
+                        <div key={idx} className="mb-3 last:mb-0">
+                          <h4 className="text-sm font-semibold text-navy mb-1">{section.title}</h4>
+                          <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{section.content}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Loading state */}
+              {loadingDevPlan && (
+                <div className="text-center py-12">
+                  <Loader2 size={24} className="mx-auto text-teal animate-spin mb-2" />
+                  <p className="text-sm text-muted">Loading development plan...</p>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
