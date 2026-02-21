@@ -76,6 +76,7 @@ type NavItem = { href: string; label: string; icon: React.ElementType; badge?: n
 const PRO_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leagues", label: "Leagues", icon: Trophy },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
 ];
 const PRO_NAV_RIGHT: NavItem[] = [
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -128,12 +129,12 @@ const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
 const SCOUTING_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
   { href: "/game-plans", label: "Chalk Talk", icon: Swords },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
 ];
 
 // Reports dropdown items (PRO only)
 const REPORTS_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/reports", label: "Generated Reports", icon: FileText },
+  { href: "/reports/library", label: "Report Library", icon: BookOpen },
   { href: "/reports/custom", label: "Custom Report", icon: PenTool },
   { href: "/reports/generate", label: "Generate Report", icon: FileText },
 ];
