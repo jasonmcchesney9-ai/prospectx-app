@@ -2558,7 +2558,10 @@ export interface AgentClient {
   id: string;
   player_id: string;
   status: AgentClientStatus;
+  league_context?: string;
+  signed_date?: string;
   pathway_notes?: string;
+  notes?: string;
   created_at?: string;
   updated_at?: string;
   player?: {
@@ -2590,6 +2593,16 @@ export interface AgentPackData {
   ninety_day_plan: string[];
   target_programs: string[];
   generated_at?: string;
+}
+
+export interface AgentMarketNote {
+  id: string;
+  player_id: string;
+  team_or_school?: string;
+  contact_name?: string;
+  note: string;
+  follow_up_date?: string;
+  created_at?: string;
 }
 
 // ── Broadcast Hub Types ─────────────────────────────────────

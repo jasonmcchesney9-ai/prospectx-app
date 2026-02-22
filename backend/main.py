@@ -2679,6 +2679,61 @@ def init_db():
 
     conn.commit()
 
+    # ── Table: agent_clients ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS agent_clients (
+            id TEXT PRIMARY KEY,
+            agent_user_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            league_context TEXT DEFAULT 'gojhl',
+            status TEXT DEFAULT 'active',
+            signed_date TEXT,
+            pathway_notes TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (agent_user_id) REFERENCES users(id),
+            FOREIGN KEY (player_id) REFERENCES players(id),
+            UNIQUE(agent_user_id, player_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_clients_agent ON agent_clients(agent_user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_clients_player ON agent_clients(player_id)")
+    conn.commit()
+
+    # ── Table: agent_market_notes ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS agent_market_notes (
+            id TEXT PRIMARY KEY,
+            agent_user_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            team_or_school TEXT,
+            contact_name TEXT,
+            note TEXT NOT NULL,
+            follow_up_date TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (agent_user_id) REFERENCES users(id),
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_market_notes_agent ON agent_market_notes(agent_user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_market_notes_player ON agent_market_notes(player_id)")
+    conn.commit()
+
+    # ── Migrate agent_clients schema (rename agent_id→agent_user_id, add missing cols) ──
+    ac_cols = {r[1] for r in conn.execute("PRAGMA table_info(agent_clients)").fetchall()}
+    if "agent_id" in ac_cols and "agent_user_id" not in ac_cols:
+        conn.execute("ALTER TABLE agent_clients RENAME COLUMN agent_id TO agent_user_id")
+        conn.commit()
+        ac_cols.discard("agent_id")
+        ac_cols.add("agent_user_id")
+    for col, defn in [("org_id", "TEXT DEFAULT ''"), ("league_context", "TEXT DEFAULT 'gojhl'"),
+                       ("signed_date", "TEXT"), ("notes", "TEXT")]:
+        if col not in ac_cols:
+            conn.execute(f"ALTER TABLE agent_clients ADD COLUMN {col} {defn}")
+    conn.commit()
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -28836,6 +28891,358 @@ def get_pro_analysis(entry_id: str, token_data: dict = Depends(verify_token)):
             else:
                 d[field] = []
         return d
+    finally:
+        conn.close()
+
+
+# ── Agent / Advisor Module ────────────────────────────────────
+
+AGENT_LEAGUE_CONTEXTS = {
+    "gojhl": "GOJHL",
+    "ohl": "OHL",
+    "ojhl": "OJHL",
+    "whl": "WHL",
+    "qmjhl": "QMJHL",
+    "ushl": "USHL",
+    "ncaa": "NCAA",
+    "nhl": "NHL/AHL",
+    "pro_europe": "Pro Europe",
+    "u18": "U18 / Minor Midget",
+    "pwhl": "PWHL",
+}
+
+
+def _require_agent_role(token_data: dict, conn) -> dict:
+    """Verify user has agent hockey_role. Returns user row."""
+    user = conn.execute(
+        "SELECT id, hockey_role FROM users WHERE id = ?",
+        (token_data["user_id"],),
+    ).fetchone()
+    if not user or user["hockey_role"] != "agent":
+        raise HTTPException(status_code=403, detail="Agent role required")
+    return user
+
+
+@app.get("/agent/clients")
+async def agent_list_clients(token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        rows = conn.execute("""
+            SELECT ac.*, p.first_name, p.last_name, p.position, p.shoots,
+                   p.current_team, p.current_league, p.dob, p.image_url,
+                   p.commitment_status
+            FROM agent_clients ac
+            JOIN players p ON p.id = ac.player_id
+            WHERE ac.agent_user_id = ?
+            ORDER BY ac.created_at DESC
+        """, (token_data["user_id"],)).fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "id": r["id"],
+                "player_id": r["player_id"],
+                "league_context": r["league_context"],
+                "status": r["status"],
+                "signed_date": r["signed_date"],
+                "pathway_notes": r["pathway_notes"],
+                "notes": r["notes"],
+                "created_at": r["created_at"],
+                "updated_at": r["updated_at"],
+                "player": {
+                    "id": r["player_id"],
+                    "first_name": r["first_name"],
+                    "last_name": r["last_name"],
+                    "position": r["position"],
+                    "shoots": r["shoots"],
+                    "current_team": r["current_team"],
+                    "current_league": r["current_league"],
+                    "dob": r["dob"],
+                    "image_url": r["image_url"],
+                    "commitment_status": r["commitment_status"],
+                },
+            })
+        return result
+    finally:
+        conn.close()
+
+
+@app.post("/agent/clients")
+async def agent_add_client(request: Request, token_data: dict = Depends(verify_token)):
+    body = await request.json()
+    player_id = body.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id required")
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        # Check player exists
+        player = conn.execute("SELECT id FROM players WHERE id = ?", (player_id,)).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        # Check not already a client
+        existing = conn.execute(
+            "SELECT id FROM agent_clients WHERE agent_user_id = ? AND player_id = ?",
+            (token_data["user_id"], player_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player is already a client")
+        client_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO agent_clients (id, agent_user_id, player_id, org_id, league_context, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (client_id, token_data["user_id"], player_id, token_data["org_id"],
+             body.get("league_context", "gojhl"), body.get("status", "active"),
+             body.get("notes", ""), now, now),
+        )
+        conn.commit()
+        return {"id": client_id, "player_id": player_id, "status": "active"}
+    finally:
+        conn.close()
+
+
+@app.get("/agent/clients/{client_id}/detail")
+async def agent_client_detail(client_id: str, token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        row = conn.execute("""
+            SELECT ac.*, p.first_name, p.last_name, p.position, p.shoots,
+                   p.current_team, p.current_league, p.dob, p.image_url,
+                   p.commitment_status, p.birth_year, p.height_cm, p.weight_kg,
+                   p.elite_prospects_url
+            FROM agent_clients ac
+            JOIN players p ON p.id = ac.player_id
+            WHERE ac.id = ? AND ac.agent_user_id = ?
+        """, (client_id, token_data["user_id"])).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Client not found")
+        # Get client's reports
+        reports = conn.execute("""
+            SELECT id, title, report_type, status, created_at
+            FROM reports
+            WHERE player_id = ? AND org_id = ?
+            ORDER BY created_at DESC LIMIT 10
+        """, (row["player_id"], token_data["org_id"])).fetchall()
+        # Get market notes
+        market_notes = conn.execute("""
+            SELECT * FROM agent_market_notes
+            WHERE agent_user_id = ? AND player_id = ?
+            ORDER BY created_at DESC
+        """, (token_data["user_id"], row["player_id"])).fetchall()
+        # Get latest stats
+        stats = conn.execute("""
+            SELECT * FROM player_stats
+            WHERE player_id = ?
+            ORDER BY season DESC LIMIT 1
+        """, (row["player_id"],)).fetchone()
+        return {
+            "id": row["id"],
+            "player_id": row["player_id"],
+            "league_context": row["league_context"],
+            "status": row["status"],
+            "signed_date": row["signed_date"],
+            "pathway_notes": row["pathway_notes"],
+            "notes": row["notes"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "player": {
+                "id": row["player_id"],
+                "first_name": row["first_name"],
+                "last_name": row["last_name"],
+                "position": row["position"],
+                "shoots": row["shoots"],
+                "current_team": row["current_team"],
+                "current_league": row["current_league"],
+                "dob": row["dob"],
+                "birth_year": row["birth_year"],
+                "height_cm": row["height_cm"],
+                "weight_kg": row["weight_kg"],
+                "image_url": row["image_url"],
+                "commitment_status": row["commitment_status"],
+                "elite_prospects_url": row["elite_prospects_url"],
+            },
+            "reports": [dict(r) for r in reports],
+            "market_notes": [dict(n) for n in market_notes],
+            "current_stats": dict(stats) if stats else None,
+        }
+    finally:
+        conn.close()
+
+
+@app.put("/agent/clients/{client_id}")
+async def agent_update_client(client_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    body = await request.json()
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        existing = conn.execute(
+            "SELECT id FROM agent_clients WHERE id = ? AND agent_user_id = ?",
+            (client_id, token_data["user_id"]),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Client not found")
+        updates = []
+        params = []
+        for field in ("status", "pathway_notes", "notes", "league_context", "signed_date"):
+            if field in body:
+                updates.append(f"{field} = ?")
+                params.append(body[field])
+        if updates:
+            updates.append("updated_at = ?")
+            params.append(datetime.now(timezone.utc).isoformat())
+            params.append(client_id)
+            conn.execute(f"UPDATE agent_clients SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.delete("/agent/clients/{client_id}")
+async def agent_remove_client(client_id: str, token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        deleted = conn.execute(
+            "DELETE FROM agent_clients WHERE id = ? AND agent_user_id = ?",
+            (client_id, token_data["user_id"]),
+        ).rowcount
+        conn.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Client not found")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+# ── Agent Market Notes ──
+
+@app.post("/agent/clients/{player_id}/market-notes")
+async def agent_add_market_note(player_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    body = await request.json()
+    note_text = body.get("note", "").strip()
+    if not note_text:
+        raise HTTPException(status_code=400, detail="note is required")
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        # Verify this is the agent's client
+        client = conn.execute(
+            "SELECT id FROM agent_clients WHERE agent_user_id = ? AND player_id = ?",
+            (token_data["user_id"], player_id),
+        ).fetchone()
+        if not client:
+            raise HTTPException(status_code=404, detail="Player is not your client")
+        note_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO agent_market_notes (id, agent_user_id, player_id, team_or_school, contact_name, note, follow_up_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (note_id, token_data["user_id"], player_id,
+             body.get("team_or_school"), body.get("contact_name"),
+             note_text, body.get("follow_up_date"),
+             datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        return {"id": note_id}
+    finally:
+        conn.close()
+
+
+@app.get("/agent/clients/{player_id}/market-notes")
+async def agent_list_market_notes(player_id: str, token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        rows = conn.execute("""
+            SELECT * FROM agent_market_notes
+            WHERE agent_user_id = ? AND player_id = ?
+            ORDER BY created_at DESC
+        """, (token_data["user_id"], player_id)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/agent/market-notes/{note_id}")
+async def agent_delete_market_note(note_id: str, token_data: dict = Depends(verify_token)):
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        deleted = conn.execute(
+            "DELETE FROM agent_market_notes WHERE id = ? AND agent_user_id = ?",
+            (note_id, token_data["user_id"]),
+        ).rowcount
+        conn.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Note not found")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.post("/agent/generate-pack")
+async def agent_generate_pack(request: Request, token_data: dict = Depends(verify_token)):
+    """Generate an agent pack (player summary, strengths, pathway assessment, 90-day plan, targets)."""
+    body = await request.json()
+    player_id = body.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id required")
+    conn = get_db()
+    try:
+        _require_agent_role(token_data, conn)
+        # Fetch player + stats + intelligence
+        player = conn.execute(
+            "SELECT * FROM players WHERE id = ?", (player_id,)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        stats = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        intel = conn.execute(
+            "SELECT * FROM player_intelligence WHERE player_id = ? ORDER BY created_at DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        # Build mock pack (Claude API integration for real content)
+        p = dict(player)
+        name = f"{p.get('first_name', '')} {p.get('last_name', '')}"
+        pos = p.get("position", "Unknown")
+        team = p.get("current_team", "Unknown")
+        league = p.get("current_league", "Unknown")
+        s = dict(stats) if stats else {}
+        gp = s.get("gp", 0)
+        g = s.get("g", 0)
+        a = s.get("a", 0)
+        pts = s.get("p", g + a)
+        strengths_list = []
+        if intel:
+            try:
+                raw = intel["strengths"]
+                strengths_list = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            except Exception:
+                strengths_list = []
+        if not strengths_list:
+            strengths_list = ["Compete level", "Hockey sense", "Skating"]
+        pack = {
+            "player_summary": f"{name} is a {pos} currently playing for {team} in the {league}. In {gp} games this season, {name.split()[0]} has recorded {g} goals and {a} assists for {pts} points.",
+            "strengths": strengths_list[:5],
+            "pathway_assessment": f"Based on current production and trajectory, {name.split()[0]} projects as a candidate for the next competitive level. Continued development in key areas will strengthen positioning.",
+            "ninety_day_plan": [
+                "Increase controlled zone entries per game",
+                "Build consistency in defensive zone reads",
+                "Add 5 lbs of functional strength",
+                "Showcase at upcoming evaluation events",
+            ],
+            "target_programs": [
+                f"{league} — current level",
+                "OHL — primary target",
+                "USHL — alternative pathway",
+                "NCAA D1 — long-term option",
+            ],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        return pack
     finally:
         conn.close()
 
