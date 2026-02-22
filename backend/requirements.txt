@@ -17,6 +17,7 @@ anthropic==0.44.0
 # Environment
 python-dotenv==1.0.1
 # Database
+psycopg2-binary==2.9.10
 aiosqlite==0.20.0
 # HTTP client (for HockeyTech API)
 httpx==0.28.1

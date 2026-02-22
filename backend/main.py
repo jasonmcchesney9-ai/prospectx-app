@@ -18,6 +18,8 @@ import re
 import secrets
 import hashlib
 import sqlite3
+import psycopg2
+import psycopg2.extras
 import sys
 import threading
 import time
@@ -126,8 +128,11 @@ logger = logging.getLogger("prospectx")
 # CONFIG
 # ============================================================
 
-# Store SQLite DB outside the Next.js project folder so Turbopack doesn't
-# try to read the WAL lock files (.db-shm, .db-wal) and crash.
+# Database configuration — PostgreSQL (via DATABASE_URL) or SQLite fallback
+DATABASE_URL = os.getenv("DATABASE_URL")
+USE_PG = DATABASE_URL is not None
+
+# SQLite fallback for local development
 _DATA_DIR = os.path.join(os.path.expanduser("~"), ".prospectx")
 os.makedirs(_DATA_DIR, exist_ok=True)
 DB_FILE = os.path.join(_DATA_DIR, "prospectx.db")
@@ -707,12 +712,106 @@ async def global_exception_handler(request: Request, exc: Exception):
 # DATABASE
 # ============================================================
 
-def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+class PgConnectionWrapper:
+    """Wraps psycopg2 connection to match sqlite3.Connection API.
+
+    sqlite3 allows conn.execute() which auto-creates a cursor.
+    psycopg2 requires cursor.execute(). This wrapper bridges the gap
+    so all 1,089 conn.execute() calls work unchanged.
+    Also converts sqlite3.Row-style dict access to work with RealDictCursor.
+    """
+
+    def __init__(self, dsn: str):
+        self._conn = psycopg2.connect(dsn)
+        self._conn.autocommit = False
+
+    @staticmethod
+    def _convert_sql(sql):
+        """Convert sqlite3-style SQL to psycopg2-compatible SQL.
+
+        Handles:
+        - ? → %s placeholder conversion
+        - INSERT OR REPLACE INTO → INSERT INTO ... ON CONFLICT (id) DO UPDATE SET ...
+        - INSERT OR IGNORE INTO → INSERT INTO ... ON CONFLICT DO NOTHING
+        """
+        # Handle INSERT OR IGNORE → just strip the "OR IGNORE" part
+        # (ON CONFLICT DO NOTHING is already appended at call sites)
+        sql = sql.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+
+        # Handle INSERT OR REPLACE → INSERT ... ON CONFLICT (id) DO UPDATE SET
+        ior_match = re.search(
+            r'INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)',
+            sql, re.IGNORECASE | re.DOTALL
+        )
+        if ior_match:
+            table = ior_match.group(1)
+            cols_str = ior_match.group(2)
+            cols = [c.strip() for c in cols_str.split(",")]
+            non_id_cols = [c for c in cols if c != "id"]
+            update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in non_id_cols)
+            # Replace "INSERT OR REPLACE INTO" with "INSERT INTO"
+            sql = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO', 'INSERT INTO', sql, flags=re.IGNORECASE)
+            # Append ON CONFLICT clause before any trailing whitespace/semicolon
+            sql = sql.rstrip().rstrip(";")
+            sql += f"\n            ON CONFLICT (id) DO UPDATE SET {update_clause}"
+
+        # Convert ? placeholders to %s
+        sql = sql.replace("?", "%s")
+        return sql
+
+    def execute(self, sql, params=None):
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(self._convert_sql(sql), params)
+        return cur
+
+    def executemany(self, sql, params_list):
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.executemany(self._convert_sql(sql), params_list)
+        return cur
+
+    def cursor(self):
+        return self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+    @property
+    def closed(self):
+        return self._conn.closed
+
+
+def get_db():
+    """Return a database connection — PostgreSQL if DATABASE_URL is set, else SQLite."""
+    if USE_PG:
+        return PgConnectionWrapper(DATABASE_URL)
+    else:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+
+def _get_table_columns(conn, table_name: str) -> set:
+    """Return a set of column names for the given table.
+
+    Works with both PostgreSQL (information_schema) and SQLite (PRAGMA table_info).
+    """
+    if USE_PG:
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+            (table_name,),
+        ).fetchall()
+        return {r[0] if isinstance(r, (list, tuple)) else r["column_name"] for r in rows}
+    else:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {r[1] if isinstance(r, (list, tuple)) else r["name"] for r in rows}
 
 
 @contextmanager
@@ -1109,23 +1208,18 @@ def init_db():
     """)
 
     # Migrate existing team_systems table — add Team Style columns if missing
-    try:
+    ts_cols = _get_table_columns(c, "team_systems")
+    if "pace" not in ts_cols:
         c.execute("ALTER TABLE team_systems ADD COLUMN pace TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    try:
+    if "physicality" not in ts_cols:
         c.execute("ALTER TABLE team_systems ADD COLUMN physicality TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass
-    try:
+    if "offensive_style" not in ts_cols:
         c.execute("ALTER TABLE team_systems ADD COLUMN offensive_style TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass
+
 
     # ── Reports table migration: make player_id nullable, add team_name column ──
     # SQLite doesn't support ALTER COLUMN, so we check and recreate if needed
-    cursor_info = c.execute("PRAGMA table_info(reports)").fetchall()
-    report_cols = {col[1] for col in cursor_info}
+    report_cols = _get_table_columns(c, "reports")
     if "team_name" not in report_cols:
         logger.info("Migrating reports table: adding team_name column, making player_id nullable...")
         c.execute("""CREATE TABLE IF NOT EXISTS reports_new (
@@ -1321,14 +1415,14 @@ def init_db():
 
     # ── Migrations for existing databases ───────────────────
     # Add image_url column if it doesn't exist
-    cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    cols = _get_table_columns(conn, "players")
     if "image_url" not in cols:
         conn.execute("ALTER TABLE players ADD COLUMN image_url TEXT")
         conn.commit()
         logger.info("Migration: added image_url column to players table")
 
     # Add extended_stats and data_source columns to player_stats
-    ps_cols = [col[1] for col in conn.execute("PRAGMA table_info(player_stats)").fetchall()]
+    ps_cols = _get_table_columns(conn, "player_stats")
     if "extended_stats" not in ps_cols:
         conn.execute("ALTER TABLE player_stats ADD COLUMN extended_stats TEXT")
         conn.commit()
@@ -1347,21 +1441,21 @@ def init_db():
         logger.info("Migration: added notes column to player_stats")
 
     # Add logo_url column to teams
-    teams_cols = [col[1] for col in conn.execute("PRAGMA table_info(teams)").fetchall()]
+    teams_cols = _get_table_columns(conn, "teams")
     if "logo_url" not in teams_cols:
         conn.execute("ALTER TABLE teams ADD COLUMN logo_url TEXT")
         conn.commit()
         logger.info("Migration: added logo_url column to teams")
 
     # Add intelligence_version column to players
-    player_cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    player_cols = _get_table_columns(conn, "players")
     if "intelligence_version" not in player_cols:
         conn.execute("ALTER TABLE players ADD COLUMN intelligence_version INTEGER DEFAULT 0")
         conn.commit()
         logger.info("Migration: added intelligence_version column to players")
 
     # ── Data Compartmentalization: birth_year, age_group, draft_eligible_year, league_tier ──
-    player_cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    player_cols = _get_table_columns(conn, "players")
     new_player_cols = {
         "birth_year": "INTEGER",
         "age_group": "TEXT",
@@ -1379,7 +1473,7 @@ def init_db():
     _populate_derived_player_fields(conn)
 
     # Add category / subcategory columns to report_templates
-    tmpl_cols = [col[1] for col in conn.execute("PRAGMA table_info(report_templates)").fetchall()]
+    tmpl_cols = _get_table_columns(conn, "report_templates")
     if "category" not in tmpl_cols:
         conn.execute("ALTER TABLE report_templates ADD COLUMN category TEXT")
         conn.commit()
@@ -1393,7 +1487,7 @@ def init_db():
     _seed_template_categories(conn)
 
     # Add hockeytech_id + hockeytech_league columns to players
-    player_cols = [col[1] for col in conn.execute("PRAGMA table_info(players)").fetchall()]
+    player_cols = _get_table_columns(conn, "players")
     for col_name, col_type in {"hockeytech_id": "INTEGER", "hockeytech_league": "TEXT"}.items():
         if col_name not in player_cols:
             conn.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_type}")
@@ -1401,7 +1495,7 @@ def init_db():
             logger.info("Migration: added %s column to players", col_name)
 
     # Add hockeytech_team_id + hockeytech_league columns to teams table
-    team_cols = [col[1] for col in conn.execute("PRAGMA table_info(teams)").fetchall()]
+    team_cols = _get_table_columns(conn, "teams")
     for col_name, col_type in {"hockeytech_team_id": "INTEGER", "hockeytech_league": "TEXT"}.items():
         if col_name not in team_cols:
             conn.execute(f"ALTER TABLE teams ADD COLUMN {col_name} {col_type}")
@@ -1409,7 +1503,7 @@ def init_db():
             logger.info("Migration: added %s column to teams", col_name)
 
     # Add line_label, line_order, updated_at columns to line_combinations
-    lc_cols = [col[1] for col in conn.execute("PRAGMA table_info(line_combinations)").fetchall()]
+    lc_cols = _get_table_columns(conn, "line_combinations")
     for col_name, col_type in {"line_label": "TEXT", "line_order": "INTEGER DEFAULT 0", "updated_at": "TEXT"}.items():
         bare_name = col_name.split()[0]  # handle "INTEGER DEFAULT 0"
         if bare_name not in lc_cols:
@@ -1651,14 +1745,14 @@ def init_db():
     """)
 
     # ── Migration: hockey_role on users ─────────────────────────
-    user_cols = [col[1] for col in conn.execute("PRAGMA table_info(users)").fetchall()]
+    user_cols = _get_table_columns(conn, "users")
     if "hockey_role" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN hockey_role TEXT DEFAULT 'scout'")
         conn.commit()
         logger.info("Migration: added hockey_role column to users")
 
     # ── Migration: subscription columns on users ─────────────────
-    user_cols = [col[1] for col in conn.execute("PRAGMA table_info(users)").fetchall()]
+    user_cols = _get_table_columns(conn, "users")
     sub_cols = {
         "subscription_tier": "TEXT DEFAULT 'rookie'",
         "subscription_started_at": "TEXT",
@@ -1713,7 +1807,7 @@ def init_db():
         conn.execute(idx_sql)
 
     # ── NEW: Soft delete + merge + created_by columns on players ──
-    p_cols_check = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    p_cols_check = _get_table_columns(conn, "players")
     for col_name, col_type in [
         ("is_deleted", "INTEGER DEFAULT 0"),
         ("deleted_at", "TEXT"),
@@ -1811,7 +1905,7 @@ def init_db():
     """)
 
     # ── Chalk Talk columns on game_plans ──
-    gp_cols = {r[1] for r in conn.execute("PRAGMA table_info(game_plans)").fetchall()}
+    gp_cols = _get_table_columns(conn, "game_plans")
     for col_name, col_type in [
         ("session_type", "TEXT DEFAULT 'pre_game'"),
         ("talking_points", "TEXT DEFAULT '{}'"),
@@ -1828,7 +1922,7 @@ def init_db():
             conn.commit()
 
     # ── Enhanced series columns on series_plans ──
-    sp_cols = {r[1] for r in conn.execute("PRAGMA table_info(series_plans)").fetchall()}
+    sp_cols = _get_table_columns(conn, "series_plans")
     for col_name, col_type in [
         ("opponent_systems", "TEXT DEFAULT '{}'"),
         ("key_players_dossier", "TEXT DEFAULT '[]'"),
@@ -1881,7 +1975,7 @@ def init_db():
     conn.commit()
 
     # ── Migration: Add diagram_data column to drills ──────────
-    drill_cols = [col[1] for col in conn.execute("PRAGMA table_info(drills)").fetchall()]
+    drill_cols = _get_table_columns(conn, "drills")
     if "diagram_data" not in drill_cols:
         conn.execute("ALTER TABLE drills ADD COLUMN diagram_data TEXT DEFAULT NULL")
         conn.commit()
@@ -1898,14 +1992,14 @@ def init_db():
         logger.info("Migration: added country_framework column to drills")
 
     # ── Migration: PXI mode column on bench_talk_conversations ──
-    bt_cols = {r[1] for r in conn.execute("PRAGMA table_info(bench_talk_conversations)").fetchall()}
+    bt_cols = _get_table_columns(conn, "bench_talk_conversations")
     if "mode" not in bt_cols:
         conn.execute("ALTER TABLE bench_talk_conversations ADD COLUMN mode TEXT DEFAULT NULL")
         conn.commit()
         logger.info("Migration: added mode column to bench_talk_conversations")
 
     # ── Migration: Share columns on reports ──
-    rpt_cols = {r[1] for r in conn.execute("PRAGMA table_info(reports)").fetchall()}
+    rpt_cols = _get_table_columns(conn, "reports")
     for col_name, col_type in [
         ("share_token", "TEXT DEFAULT NULL"),
         ("shared_with_org", "INTEGER DEFAULT 0"),
@@ -1932,21 +2026,21 @@ def init_db():
 
     # ── Migration: roster_status on players ──
     # Values: active (default), ap, inj, susp, scrch
-    p_cols_final = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    p_cols_final = _get_table_columns(conn, "players")
     if "roster_status" not in p_cols_final:
         conn.execute("ALTER TABLE players ADD COLUMN roster_status TEXT DEFAULT 'active'")
         conn.commit()
         logger.info("Migration: added roster_status column to players")
 
     # ── Migration: practice_date on practice_plans ──
-    pp_cols = {r[1] for r in conn.execute("PRAGMA table_info(practice_plans)").fetchall()}
+    pp_cols = _get_table_columns(conn, "practice_plans")
     if "practice_date" not in pp_cols:
         conn.execute("ALTER TABLE practice_plans ADD COLUMN practice_date TEXT")
         conn.commit()
         logger.info("Migration: added practice_date column to practice_plans")
 
     # ── Migration: source + game_issue_text on practice_plans (Spec B) ──
-    pp_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(practice_plans)").fetchall()}
+    pp_cols2 = _get_table_columns(conn, "practice_plans")
     if "source" not in pp_cols2:
         conn.execute("ALTER TABLE practice_plans ADD COLUMN source TEXT DEFAULT 'manual'")
         conn.commit()
@@ -1957,7 +2051,7 @@ def init_db():
         logger.info("Migration: added game_issue_text column to practice_plans")
 
     # ── Migration: Country framework columns on organizations ──
-    org_cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)").fetchall()}
+    org_cols = _get_table_columns(conn, "organizations")
     for col_name, col_type in [
         ("country", "TEXT DEFAULT 'Canada'"),
         ("development_framework", "TEXT DEFAULT 'hockey_canada_ltpd'"),
@@ -1969,7 +2063,7 @@ def init_db():
             logger.info("Migration: added %s column to organizations", col_name)
 
     # ── Migration: Country/age_division columns on teams ──
-    teams_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(teams)").fetchall()}
+    teams_cols2 = _get_table_columns(conn, "teams")
     for col_name, col_type in [
         ("age_division", "TEXT"),
         ("country", "TEXT"),
@@ -2084,14 +2178,14 @@ def init_db():
     conn.commit()
 
     # Add linked_player_id to users table for parent→player linking
-    user_cols = [col[1] for col in conn.execute("PRAGMA table_info(users)").fetchall()]
+    user_cols = _get_table_columns(conn, "users")
     if "linked_player_id" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN linked_player_id TEXT")
         conn.commit()
         logger.info("Migration: added linked_player_id column to users")
 
     # ── Migration: onboarding wizard columns on users ──
-    user_cols = [col[1] for col in conn.execute("PRAGMA table_info(users)").fetchall()]
+    user_cols = _get_table_columns(conn, "users")
     onboarding_cols = {
         "onboarding_completed": "INTEGER DEFAULT 0",
         "onboarding_step": "INTEGER DEFAULT 0",
@@ -2141,7 +2235,7 @@ def init_db():
         logger.info("Migration: auto-verified %d users (email verification not enforced)", unverified)
 
     # ── Scout Notes v2 columns ──
-    sn_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scout_notes)").fetchall()}
+    sn_cols = _get_table_columns(conn, "scout_notes")
     if "overall_grade" not in sn_cols:
         for col_sql in [
             "ALTER TABLE scout_notes ADD COLUMN game_date TEXT",
@@ -2170,14 +2264,14 @@ def init_db():
         logger.info("Migration: added Scout Notes v2 columns")
 
     # ── Migration: add elite_prospects_url to players (CR-012) ──
-    p_cols_ep = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    p_cols_ep = _get_table_columns(conn, "players")
     if "elite_prospects_url" not in p_cols_ep:
         conn.execute("ALTER TABLE players ADD COLUMN elite_prospects_url TEXT")
         conn.commit()
         logger.info("Migration: added elite_prospects_url column to players")
 
     # ── Migration: PXR v1 player card columns ──
-    pxr_cols = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    pxr_cols = _get_table_columns(conn, "players")
     pxr_new = {
         "role_tags": "TEXT DEFAULT '[]'",
         "health_status": "TEXT DEFAULT 'healthy'",
@@ -2469,7 +2563,7 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_org ON development_plans(org_id)")
 
     # --- Migration: Add 9 section columns + 8 visibility flags + is_current to development_plans ---
-    dp_cols = {c[1] for c in conn.execute("PRAGMA table_info(development_plans)").fetchall()}
+    dp_cols = _get_table_columns(conn, "development_plans")
     dp_new_cols = [
         ("section_1_snapshot", "TEXT"),
         ("section_2_context", "TEXT"),
@@ -2492,11 +2586,8 @@ def init_db():
     ]
     for col_name, col_type in dp_new_cols:
         if col_name not in dp_cols:
-            try:
-                conn.execute(f"ALTER TABLE development_plans ADD COLUMN {col_name} {col_type}")
-                logger.info("Migration: added %s to development_plans", col_name)
-            except sqlite3.OperationalError:
-                pass
+            conn.execute(f"ALTER TABLE development_plans ADD COLUMN {col_name} {col_type}")
+            logger.info("Migration: added %s to development_plans", col_name)
     conn.commit()
     conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_current ON development_plans(player_id, season, is_current)")
 
@@ -2722,7 +2813,7 @@ def init_db():
     conn.commit()
 
     # ── Migrate agent_clients schema (rename agent_id→agent_user_id, add missing cols) ──
-    ac_cols = {r[1] for r in conn.execute("PRAGMA table_info(agent_clients)").fetchall()}
+    ac_cols = _get_table_columns(conn, "agent_clients")
     if "agent_id" in ac_cols and "agent_user_id" not in ac_cols:
         conn.execute("ALTER TABLE agent_clients RENAME COLUMN agent_id TO agent_user_id")
         conn.commit()
@@ -2770,7 +2861,7 @@ def init_db():
     conn.commit()
 
     # ── Migrate player_parents: add access_level + relationship cols ──
-    pp_cols = {r[1] for r in conn.execute("PRAGMA table_info(player_parents)").fetchall()}
+    pp_cols = _get_table_columns(conn, "player_parents")
     for col, defn in [("access_level", "TEXT DEFAULT 'full_parent'"),
                        ("relationship", "TEXT DEFAULT 'parent'")]:
         if col not in pp_cols:
@@ -19374,7 +19465,7 @@ async def admin_restore_db(
     """Restore DB tables from a ProspectX XLSX export. Admin/superadmin only.
 
     Each sheet name maps to a DB table. Row 1 = column headers.
-    Uses INSERT OR REPLACE — existing rows with matching PKs are overwritten.
+    Uses upsert — existing rows with matching PKs are overwritten.
     A server-side backup is created automatically before any changes.
     """
     _require_admin(token_data)
@@ -19577,7 +19668,7 @@ async def admin_restore_db(
             aliased_headers = [aliases.get(h, h) for h in raw_headers]
 
             # Validate against actual DB columns
-            db_cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            db_cols = _get_table_columns(conn, table)
             valid_indices = []
             valid_cols = []
             unmapped = []
@@ -20673,7 +20764,7 @@ async def link_parent_to_player(player_id: str, body: ParentLinkRequest, token_d
                 (link_id, player_id, parent["id"], org_id)
             )
             conn.commit()
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
             raise HTTPException(status_code=400, detail="Parent is already linked to this player")
 
         # Also update user's linked_player_id if not already set
@@ -23341,9 +23432,10 @@ async def ht_sync_gamelog(league: str, player_id: str, season_id: Optional[int] 
                 else:
                     game_db_id = gen_id()
                     conn.execute("""
-                        INSERT OR IGNORE INTO games (id, league, season, ht_game_id, game_date,
+                        INSERT INTO games (id, league, season, ht_game_id, game_date,
                             home_team, away_team, home_score, away_score, status, data_source)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'final', 'hockeytech')
+                        ON CONFLICT DO NOTHING
                     """, (game_db_id, ht_league, season_name, ht_game_id, g["game_date"],
                           g.get("home_team", ""), g.get("away_team", ""),
                           g.get("home_score"), g.get("away_score")))
@@ -28174,7 +28266,7 @@ async def block_user(body: BlockUserRequest, token_data: dict = Depends(verify_t
             "INSERT INTO message_blocks (id, blocker_id, blocked_id, reason) VALUES (?, ?, ?, ?)",
             (block_id, user_id, body.blocked_id, body.reason)
         )
-    except sqlite3.IntegrityError:
+    except (sqlite3.IntegrityError, psycopg2.IntegrityError):
         conn.close()
         return {"detail": "User already blocked"}
 
@@ -30244,8 +30336,9 @@ def _seed_guide_content():
         for item in FAMILY_GUIDE_SEED:
             gid = str(uuid.uuid4())
             conn.execute("""
-                INSERT OR IGNORE INTO guide_content (id, category, title, content, age_band, country, tags)
+                INSERT INTO guide_content (id, category, title, content, age_band, country, tags)
                 VALUES (?, ?, ?, ?, ?, 'all', ?)
+                ON CONFLICT DO NOTHING
             """, (gid, item["category"], item["title"], item["content"],
                   item.get("age_band", "all"), json.dumps([item["category"]])))
         conn.commit()
