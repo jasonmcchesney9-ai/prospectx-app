@@ -3002,20 +3002,21 @@ def init_db():
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
-    # ── Startup backup ──
-    try:
-        backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
-        os.makedirs(backup_dir, exist_ok=True)
-        ts = datetime.now(timezone.utc).isoformat()[:19].replace(":", "-")
-        backup_name = f"prospectx_{ts}.db"
-        shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
-        # Keep last 20 backups
-        backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
-        for old in backups[:-20]:
-            os.remove(old)
-        logger.info("Startup backup created: %s", backup_name)
-    except Exception as e:
-        logger.warning("Startup backup failed: %s", e)
+    # ── Startup backup (SQLite only) ──
+    if not USE_PG:
+        try:
+            backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            ts = datetime.now(timezone.utc).isoformat()[:19].replace(":", "-")
+            backup_name = f"prospectx_{ts}.db"
+            shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
+            # Keep last 20 backups
+            backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
+            for old in backups[:-20]:
+                os.remove(old)
+            logger.info("Startup backup created: %s", backup_name)
+        except Exception as e:
+            logger.warning("Startup backup failed: %s", e)
 
 
 def seed_hockey_os():
@@ -6959,28 +6960,31 @@ from seed_skills import seed_skills as _seed_skills_fn
 _seed_skills_fn()
 
 
-# ── Auto-backup thread ──────────────────────────────────────────────
-def _auto_backup_loop():
-    """Background thread: backup database every 6 hours."""
-    while True:
-        time.sleep(6 * 3600)  # 6 hours
-        try:
-            backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
-            os.makedirs(backup_dir, exist_ok=True)
-            ts = datetime.now(timezone.utc).isoformat()[:19].replace(":", "-")
-            backup_name = f"prospectx_auto_{ts}.db"
-            shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
-            # Keep last 20 backups total
-            all_backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
-            for old in all_backups[:-20]:
-                os.remove(old)
-            logger.info("Auto backup created: %s", backup_name)
-        except Exception as e:
-            logger.warning("Auto backup failed: %s", e)
+# ── Auto-backup thread (SQLite only) ────────────────────────────────
+if not USE_PG:
+    def _auto_backup_loop():
+        """Background thread: backup database every 6 hours."""
+        while True:
+            time.sleep(6 * 3600)  # 6 hours
+            try:
+                backup_dir = os.path.join(os.path.dirname(DB_FILE), "backups")
+                os.makedirs(backup_dir, exist_ok=True)
+                ts = datetime.now(timezone.utc).isoformat()[:19].replace(":", "-")
+                backup_name = f"prospectx_auto_{ts}.db"
+                shutil.copy2(DB_FILE, os.path.join(backup_dir, backup_name))
+                # Keep last 20 backups total
+                all_backups = sorted(glob.glob(os.path.join(backup_dir, "prospectx_*.db")))
+                for old in all_backups[:-20]:
+                    os.remove(old)
+                logger.info("Auto backup created: %s", backup_name)
+            except Exception as e:
+                logger.warning("Auto backup failed: %s", e)
 
-_backup_thread = threading.Thread(target=_auto_backup_loop, daemon=True)
-_backup_thread.start()
-logger.info("Auto-backup thread started (every 6 hours)")
+    _backup_thread = threading.Thread(target=_auto_backup_loop, daemon=True)
+    _backup_thread.start()
+    logger.info("Auto-backup thread started (every 6 hours)")
+else:
+    logger.info("PostgreSQL mode — SQLite backup thread skipped")
 
 
 # ============================================================

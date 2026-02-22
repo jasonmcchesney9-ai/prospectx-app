@@ -10,14 +10,13 @@ Requires:
     - DB_* environment variables set (or defaults to localhost/prospectx)
 """
 
-import asyncio
 import json
 import os
 
 from dotenv import load_dotenv
 load_dotenv()
 
-import asyncpg
+import psycopg2
 
 # ============================================================
 # ALL 19 REPORT TEMPLATES
@@ -866,8 +865,8 @@ IMPORTANT: Write in warm, supportive language. Never crush a dream — but alway
 # SEED FUNCTION
 # ============================================================
 
-async def seed():
-    dsn = (
+def seed():
+    dsn = os.getenv("DATABASE_URL") or (
         f"postgresql://{os.getenv('DB_USER', 'postgres')}"
         f":{os.getenv('DB_PASSWORD', '')}"
         f"@{os.getenv('DB_HOST', 'localhost')}"
@@ -875,33 +874,31 @@ async def seed():
         f"/{os.getenv('DB_NAME', 'prospectx')}"
     )
 
-    conn = await asyncpg.connect(dsn)
+    conn = psycopg2.connect(dsn)
+    conn.autocommit = True
+    cur = conn.cursor()
     print(f"Connected to database: {os.getenv('DB_NAME', 'prospectx')}")
 
     # Clear existing global templates
-    deleted = await conn.execute(
-        "DELETE FROM report_templates WHERE is_global = TRUE"
-    )
-    print(f"Cleared existing global templates: {deleted}")
+    cur.execute("DELETE FROM report_templates WHERE is_global = TRUE")
+    print(f"Cleared existing global templates: {cur.rowcount} deleted")
 
     inserted = 0
     for name, rtype, prompt, schema in TEMPLATES:
-        await conn.execute(
+        cur.execute(
             """
             INSERT INTO report_templates (template_name, report_type, prompt_text, data_schema, is_global)
-            VALUES ($1, $2, $3, $4::jsonb, TRUE)
+            VALUES (%s, %s, %s, %s::jsonb, TRUE)
             """,
-            name,
-            rtype,
-            prompt,
-            schema,
+            (name, rtype, prompt, schema),
         )
         inserted += 1
         print(f"  [{inserted:2d}/19] {name} ({rtype})")
 
     print(f"\nDone! Inserted {inserted} global report templates.")
-    await conn.close()
+    cur.close()
+    conn.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    seed()
