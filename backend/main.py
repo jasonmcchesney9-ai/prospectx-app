@@ -19613,6 +19613,33 @@ async def health_check():
     }
 
 
+@app.get("/admin/team-dupes")
+async def admin_team_dupes(token_data: dict = Depends(verify_token)):
+    """Diagnostic: show duplicate teams and Chatham Maroons entries."""
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+    # All Chatham entries
+    chatham = conn.execute("SELECT id, name, league, org_id, logo_url, hockeytech_team_id, created_at FROM teams WHERE name ILIKE '%chatham%' ORDER BY created_at").fetchall()
+    # All duplicates
+    dupes = conn.execute("SELECT name, org_id, COUNT(*) as cnt FROM teams GROUP BY name, org_id HAVING COUNT(*) > 1").fetchall()
+    # Check unique index
+    if USE_PG:
+        idx = conn.execute("SELECT indexname FROM pg_indexes WHERE tablename = 'teams' AND indexname = 'idx_teams_name_org'").fetchall()
+    else:
+        idx = conn.execute("PRAGMA index_list(teams)").fetchall()
+    total = conn.execute("SELECT COUNT(*) as c FROM teams").fetchone()["c"]
+    conn.close()
+    return {
+        "total_teams": total,
+        "chatham_entries": [dict(r) for r in chatham],
+        "duplicate_groups": [dict(r) for r in dupes],
+        "unique_index_exists": len(idx) > 0 if idx else False,
+    }
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
