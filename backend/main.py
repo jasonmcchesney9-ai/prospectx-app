@@ -22911,23 +22911,8 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                         # Check if this team exists in our DB and needs a logo
                         team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url", ht_team_id=team_id)
                         if team_row:
-                            # Try downloading the logo locally first
-                            saved_url = None
-                            try:
-                                async with httpx.AsyncClient(timeout=10) as dl_client:
-                                    img_resp = await dl_client.get(ht_logo_url)
-                                    if img_resp.status_code == 200:
-                                        ext = "png" if "png" in ht_logo_url.lower() else "jpg"
-                                        logo_filename = f"team_{team_row['id']}_ht.{ext}"
-                                        logo_path = os.path.join(_IMAGES_DIR, logo_filename)
-                                        with open(logo_path, "wb") as f:
-                                            f.write(img_resp.content)
-                                        saved_url = f"/uploads/{logo_filename}"
-                            except Exception as dl_err:
-                                logger.warning("Logo download failed for %s, using CDN URL: %s", team_name_synced, dl_err)
-                            # Fall back to HockeyTech CDN URL if local download failed
-                            if not saved_url:
-                                saved_url = ht_logo_url
+                            # Always use HockeyTech CDN URL directly (no local download)
+                            saved_url = ht_logo_url
                             conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
                                          (saved_url, team_row["id"]))
                             logo_synced = saved_url
