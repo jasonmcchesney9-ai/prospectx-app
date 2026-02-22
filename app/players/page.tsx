@@ -1086,9 +1086,13 @@ export default function PlayersPage() {
               <div className="text-center py-16 text-muted text-sm">Loading player cards...</div>
             ) : cardData.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
-                <p className="text-muted text-sm">No players found.</p>
-                <Link href="/players/new" className="text-teal hover:underline text-sm mt-2 inline-block">
-                  Add your first player
+                <p className="text-muted text-sm">
+                  {search || posFilter || teamFilter || advancedFilterCount > 0
+                    ? "No players found matching your filters."
+                    : "No players in your system yet. Import your roster from a spreadsheet or sync directly from your league."}
+                </p>
+                <Link href={search || posFilter || teamFilter || advancedFilterCount > 0 ? "/players/new" : "/players/import"} className="text-teal hover:underline text-sm mt-2 inline-block">
+                  {search || posFilter || teamFilter || advancedFilterCount > 0 ? "Add a player" : "Import your roster"}
                 </Link>
               </div>
             ) : (
@@ -1146,8 +1150,12 @@ export default function PlayersPage() {
                   ) : players.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-4 py-12 text-center text-muted">
-                        No players found.{" "}
-                        <Link href="/players/new" className="text-teal hover:underline">Add your first player</Link>
+                        {search || posFilter || teamFilter || advancedFilterCount > 0
+                          ? "No players found matching your filters."
+                          : "No players in your system yet. Import your roster from a spreadsheet or sync directly from your league."}{" "}
+                        <Link href={search || posFilter || teamFilter || advancedFilterCount > 0 ? "/players/new" : "/players/import"} className="text-teal hover:underline">
+                          {search || posFilter || teamFilter || advancedFilterCount > 0 ? "Add a player" : "Import your roster"}
+                        </Link>
                       </td>
                     </tr>
                   ) : (

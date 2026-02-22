@@ -118,7 +118,7 @@ export default function PracticePlansPage() {
           <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
             <ClipboardList size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm mb-4">
-              {search || statusFilter || sourceFilter ? "No plans match your filters." : "No practice plans yet."}
+              {search || statusFilter || sourceFilter ? "No plans match your filters." : "No practice plans yet. Build your first one \u2014 describe a game problem and let PXI do the work, or start from scratch with the practice builder."}
             </p>
             {!search && !statusFilter && !sourceFilter && (
               <Link

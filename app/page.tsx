@@ -552,7 +552,7 @@ function Dashboard() {
               ) : recentReports.length === 0 ? (
                 <div className="text-center py-5 rounded-lg border border-dashed border-orange/20 bg-white/[0.03]">
                   <FileText size={24} className="mx-auto text-white/20 mb-1.5" />
-                  <p className="text-white/50 text-sm">No reports yet</p>
+                  <p className="text-white/50 text-sm">No reports generated yet. Choose a report type, pick a player or team, and let PXI do the work.</p>
                   <Link href="/reports/generate" className="inline-block mt-1.5 text-xs text-teal hover:underline">Generate your first report</Link>
                 </div>
               ) : (

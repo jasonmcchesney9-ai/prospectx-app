@@ -162,7 +162,7 @@ function GamePlanDetail() {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this game plan? This cannot be undone.")) return;
+    if (!confirm("Delete this session? You'll lose all strategy notes and matchup data. This cannot be undone.")) return;
     try {
       await api.delete(`/game-plans/${planId}`);
       router.push("/game-plans");

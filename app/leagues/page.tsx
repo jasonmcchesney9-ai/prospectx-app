@@ -143,7 +143,7 @@ export default function LeagueHubPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold font-oswald text-navy">League Hub</h1>
-              <p className="text-sm text-muted">Standings, stats, and scores from league data sync</p>
+              <p className="text-sm text-muted">Live standings, stats, and scores from 20 leagues. Your finger on the pulse of the hockey world.</p>
             </div>
           </div>
 

@@ -81,7 +81,7 @@ const BENCH_TALK_THEMES: Record<RoleGroup, BenchTalkTheme> = {
   PRO: {
     accentColor: "bg-teal",
     accentHover: "hover:bg-teal/90",
-    greeting: "I'm PXI, your hockey intelligence assistant. I can scout players, build game plans, analyze stats, or help with roster decisions.",
+    greeting: "PXI is ready. Ask for a scouting report, a practice plan, a player comparison, or anything hockey. Start with a player name or a question.",
     question: "What player or team are you evaluating?",
     defaultMode: "scout",
     modeBadgeColor: "bg-teal/15 text-teal",

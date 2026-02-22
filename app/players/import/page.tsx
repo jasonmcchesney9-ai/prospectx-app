@@ -490,7 +490,7 @@ Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
         {step === "done" && result && (
           <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
             <CheckCircle2 size={48} className="mx-auto text-green-500 mb-4" />
-            <h2 className="text-xl font-bold text-navy mb-2">Import Complete!</h2>
+            <h2 className="text-xl font-bold text-navy mb-2">Roster imported. Your players are live in ProspectX.</h2>
 
             <div className="flex justify-center gap-6 my-6">
               <div>

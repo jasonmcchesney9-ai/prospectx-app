@@ -233,7 +233,7 @@ function GenerateReportContent() {
           if (data.status === "complete") {
             if (pollRef.current) clearInterval(pollRef.current);
             setGenState("complete");
-            setStatusMessage("Report complete! Redirecting...");
+            setStatusMessage("Report ready. Save it, share it, or generate another.");
             setTimeout(() => router.push(`/reports/${id}`), 1000);
           } else if (data.status === "failed") {
             if (pollRef.current) clearInterval(pollRef.current);
@@ -286,7 +286,7 @@ function GenerateReportContent() {
 
       if (data.status === "complete") {
         setGenState("complete");
-        setStatusMessage("Report complete! Redirecting...");
+        setStatusMessage("Report ready. Save it, share it, or generate another.");
         setTimeout(() => router.push(`/reports/${data.report_id}`), 500);
       } else {
         pollStatus(data.report_id);

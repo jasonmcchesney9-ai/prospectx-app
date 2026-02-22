@@ -48,7 +48,7 @@ function NoteDetail() {
   }, [noteId]);
 
   const handleDelete = async () => {
-    if (!confirm("Delete this scout note? This cannot be undone.")) return;
+    if (!confirm("Delete this note? Your observation on this player will be permanently removed.")) return;
     setDeleting(true);
     try {
       await api.delete(`/notes/${noteId}`);

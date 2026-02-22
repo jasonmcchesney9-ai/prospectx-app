@@ -157,7 +157,11 @@ export default function DrillsPage() {
           <div className="text-center py-16 text-muted text-sm">Loading drills...</div>
         ) : drills.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
-            <p className="text-muted text-sm">No drills found matching your filters.</p>
+            <p className="text-muted text-sm">
+              {search || categoryFilter || ageFilter || surfaceFilter || intensityFilter || frameworkFilter
+                ? "No drills found matching your filters."
+                : "Your drill library is empty. Add your first drill or let PXI seed your library with 343 ready-to-use drills."}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

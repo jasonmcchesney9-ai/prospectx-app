@@ -405,7 +405,7 @@ function DuplicateGroupCard({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete ${p.first_name} ${p.last_name}? This cannot be undone.`)) {
+                        if (confirm(`Delete ${p.first_name} ${p.last_name}? This removes them from your roster and all associated reports. This cannot be undone.`)) {
                           handleDelete(p.id);
                         }
                       }}

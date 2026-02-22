@@ -417,7 +417,7 @@ export default function PlayerDetailPage() {
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    if (!confirm("Delete this note?")) return;
+    if (!confirm("Delete this note? Your observation on this player will be permanently removed.")) return;
     try {
       await api.delete(`/notes/${noteId}`);
       await loadNotes();
@@ -1605,7 +1605,7 @@ export default function PlayerDetailPage() {
             {(!intelligence || intelligence.version === 0) && (stats.length > 0 || goalieStats.length > 0 || notes.length > 0) && (
               <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-5 text-center">
                 <Brain size={28} className="mx-auto text-teal/40 mb-2" />
-                <p className="text-sm text-navy/70 mb-2">This player has data but no intelligence profile yet.</p>
+                <p className="text-sm text-navy/70 mb-2">No intelligence data yet. Upload an InStat XML export or sync league data to populate this card.</p>
                 <button
                   onClick={handleRefreshIntelligence}
                   disabled={refreshingIntel}

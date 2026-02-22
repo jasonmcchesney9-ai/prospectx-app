@@ -226,12 +226,12 @@ function ScoutNotesList() {
           <ClipboardCheck size={40} className="mx-auto text-muted mb-4" />
           <h3 className="font-oswald font-semibold text-navy text-lg">
             {notes.length === 0
-              ? "No scout notes yet"
+              ? "No notes yet"
               : "No notes match your filters"}
           </h3>
           <p className="text-muted text-sm mt-2 max-w-md mx-auto">
             {notes.length === 0
-              ? "Create your first structured scouting evaluation to get started."
+              ? "Start building your book \u2014 add your first observation on any player."
               : "Try adjusting your search or filter criteria."}
           </p>
           {notes.length === 0 && (
