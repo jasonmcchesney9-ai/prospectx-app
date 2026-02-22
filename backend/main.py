@@ -6624,27 +6624,28 @@ def generate_missing_diagrams():
 def _seed_superadmin_user():
     """Create the superadmin user on first run if they don't exist.
 
-    NOTE: This runs before gen_id() is defined, so we use uuid.uuid4() directly.
+    Uses deterministic UUIDs from ADMIN_USER_ID / ADMIN_ORG_ID env vars
+    so that data survives Railway redeploys without UUID mismatches.
+    Falls back to uuid.uuid4() only if env vars are not set.
     """
     conn = get_db()
     try:
-        existing = conn.execute(
-            "SELECT id FROM users WHERE email = 'jason@prospectx.com'"
-        ).fetchone()
+        # Check if ANY user exists — if so, skip entirely
+        existing = conn.execute("SELECT id FROM users LIMIT 1").fetchone()
         if existing:
-            return  # User already exists, migration handles role upgrade
+            return  # Users already exist, no seeding needed
 
         logger.info("Seeding superadmin user: jason@prospectx.com")
 
-        # Create org first (gen_id not available yet, use uuid directly)
-        org_id = str(uuid.uuid4())
+        # Use deterministic UUIDs from env vars (set these on Railway)
+        org_id = os.environ.get("ADMIN_ORG_ID", str(uuid.uuid4()))
+        user_id = os.environ.get("ADMIN_USER_ID", str(uuid.uuid4()))
+
         conn.execute(
             "INSERT INTO organizations (id, name) VALUES (?, ?)",
             (org_id, "ProspectX HQ")
         )
 
-        # Create superadmin user
-        user_id = str(uuid.uuid4())
         password_hash = pwd_context.hash("testpass123"[:72])
         conn.execute(
             "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, "
@@ -6653,7 +6654,7 @@ def _seed_superadmin_user():
             (user_id, org_id, "jason@prospectx.com", password_hash, "Jason", "McChesney")
         )
         conn.commit()
-        logger.info("Superadmin user seeded: jason@prospectx.com (org: ProspectX HQ)")
+        logger.info("Superadmin user seeded with user_id=%s org_id=%s", user_id, org_id)
     except Exception as e:
         logger.warning("Superadmin seed note: %s", e)
     finally:
