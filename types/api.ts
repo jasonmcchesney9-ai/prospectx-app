@@ -932,10 +932,13 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   custom: "Custom Report",
   // Priority 2 reports
   indices_dashboard: "ProspectX Metrics Dashboard",
+  metrics_dashboard: "ProspectX Metrics Dashboard",
   player_projection: "Next Season Projection",
+  next_season_projection: "Next Season Projection",
   league_benchmarks: "League Benchmarks",
   season_projection: "Season Projection",
-  free_agent_market: "Free Agent Market",
+  free_agent_market: "Free Agent Market Scan",
+  free_agent_target: "Free Agent Target Report",
   // Phase 2 templates
   pre_game_intel: "Pre-Game Intel Brief",
   player_guide_prep_college: "Prep/College Player Guide",
@@ -947,6 +950,14 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   bench_card: "Bench Card",
   bias_controlled_eval: "Bias-Controlled Evaluation",
   agent_projection: "Agent Projection Report",
+  // Addendum 5+6+8+9
+  in_season_projections: "In-Season Projections",
+  full_team_coaching: "Full Team Coaching Report",
+  personnel_suggestion: "Personnel Suggestion",
+  role_adjustment: "Role Adjustment Report",
+  player_season_roadmap: "Player Season Roadmap",
+  playoff_series_prep: "Playoff Series Prep (V2)",
+  special_teams_audit: "Special Teams Audit",
 };
 
 // ── Report Categories: Player vs Team ──────────────────────────
@@ -964,7 +975,9 @@ export const PLAYER_REPORT_TYPES = [
   "draft_comparative",
   "season_progress",
   "indices_dashboard",
+  "metrics_dashboard",
   "player_projection",
+  "next_season_projection",
   "player_guide_prep_college",
   "elite_profile",
   "forward_operating_profile",
@@ -972,6 +985,10 @@ export const PLAYER_REPORT_TYPES = [
   "bench_card",
   "bias_controlled_eval",
   "agent_projection",
+  "in_season_projections",
+  "player_season_roadmap",
+  "role_adjustment",
+  "free_agent_target",
 ] as const;
 
 export const TEAM_REPORT_TYPES = [
@@ -981,11 +998,15 @@ export const TEAM_REPORT_TYPES = [
   "st_optimization",
   "practice_plan",
   "playoff_series",
+  "playoff_series_prep",
   "goalie_tandem",
   "league_benchmarks",
   "season_projection",
   "free_agent_market",
   "pre_game_intel",
+  "full_team_coaching",
+  "personnel_suggestion",
+  "special_teams_audit",
 ] as const;
 
 // ── Report Categories (6 groups for report type selector) ──────
@@ -1009,14 +1030,14 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     label: "Player Development",
     description: "Development roadmaps, season tracking, and family communication.",
     accent: "teal",
-    types: ["development_roadmap", "season_progress", "player_projection", "player_guide_prep_college", "indices_dashboard"],
+    types: ["development_roadmap", "season_progress", "player_projection", "next_season_projection", "player_guide_prep_college", "indices_dashboard", "metrics_dashboard", "in_season_projections", "player_season_roadmap", "role_adjustment"],
   },
   {
     key: "team_strategy",
     label: "Team Strategy",
     description: "Team systems, line optimization, special teams, and series planning.",
     accent: "orange",
-    types: ["team_identity", "practice_plan", "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem"],
+    types: ["team_identity", "practice_plan", "line_chemistry", "st_optimization", "playoff_series", "playoff_series_prep", "goalie_tandem", "full_team_coaching", "personnel_suggestion", "special_teams_audit"],
   },
   {
     key: "communication",
@@ -1030,9 +1051,82 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     label: "Risk Management",
     description: "Trade analysis, market intelligence, and organizational planning.",
     accent: "orange",
-    types: ["trade_target", "operations", "free_agent_market", "season_intelligence", "league_benchmarks", "season_projection"],
+    types: ["trade_target", "operations", "free_agent_market", "free_agent_target", "season_intelligence", "league_benchmarks", "season_projection"],
   },
 ];
+
+// ── Report Audience Map — which roles can see each type ──────
+export const REPORT_AUDIENCE_MAP: Record<string, string[]> = {
+  // Scouting & Advancement
+  pro_skater: ["scout", "gm", "coach"],
+  unified_prospect: ["scout", "gm", "agent"],
+  goalie: ["scout", "coach", "gm"],
+  draft_comparative: ["scout", "gm"],
+  elite_profile: ["scout", "gm", "coach"],
+  bias_controlled_eval: ["scout", "gm"],
+  agent_projection: ["agent", "scout"],
+  // Game-Day Operations
+  game_decision: ["coach", "gm"],
+  opponent_gameplan: ["coach"],
+  pre_game_intel: ["coach"],
+  forward_operating_profile: ["coach", "gm"],
+  defense_operating_profile: ["coach", "gm"],
+  bench_card: ["coach"],
+  // Player Development
+  development_roadmap: ["coach", "scout", "parent"],
+  season_progress: ["coach", "scout"],
+  player_projection: ["gm", "coach", "scout"],
+  next_season_projection: ["gm", "coach", "scout"],
+  player_guide_prep_college: ["parent", "agent", "coach"],
+  indices_dashboard: ["scout", "gm", "coach"],
+  metrics_dashboard: ["scout", "gm", "coach"],
+  in_season_projections: ["coach", "scout", "gm"],
+  player_season_roadmap: ["coach"],
+  role_adjustment: ["coach", "gm"],
+  // Team Strategy
+  team_identity: ["coach", "gm"],
+  practice_plan: ["coach"],
+  line_chemistry: ["coach", "gm"],
+  st_optimization: ["coach"],
+  playoff_series: ["coach", "gm"],
+  playoff_series_prep: ["coach", "gm"],
+  goalie_tandem: ["coach", "gm"],
+  full_team_coaching: ["coach"],
+  personnel_suggestion: ["coach", "gm"],
+  special_teams_audit: ["coach"],
+  // Communication
+  family_card: ["parent", "coach"],
+  agent_pack: ["agent", "scout"],
+  // Risk Management
+  trade_target: ["gm", "scout"],
+  operations: ["gm", "coach"],
+  free_agent_market: ["gm"],
+  free_agent_target: ["gm"],
+  season_intelligence: ["gm", "coach", "scout"],
+  league_benchmarks: ["coach", "gm", "scout"],
+  season_projection: ["gm", "coach"],
+};
+
+// ── Wired Report Types — types with full prompt specs in pxi_prompt_core.py ──
+// Types NOT in this set will show a "Coming Soon" badge in the catalog
+export const WIRED_REPORT_TYPES: Set<string> = new Set([
+  // Original 19 templates
+  "pro_skater", "unified_prospect", "goalie", "game_decision", "season_intelligence",
+  "operations", "team_identity", "opponent_gameplan", "agent_pack", "development_roadmap",
+  "family_card", "line_chemistry", "st_optimization", "trade_target", "draft_comparative",
+  "season_progress", "practice_plan", "playoff_series", "goalie_tandem",
+  // Phase 2+3 templates
+  "pre_game_intel", "player_guide_prep_college", "elite_profile",
+  // Addendum 2 — Operating Profiles
+  "forward_operating_profile", "defense_operating_profile", "bench_card",
+  "bias_controlled_eval", "agent_projection",
+  // Addendum 5+6+8+9
+  "in_season_projections", "full_team_coaching", "personnel_suggestion",
+  "role_adjustment", "player_season_roadmap", "playoff_series_prep", "special_teams_audit",
+  // V1 Polish — ReportSpecs_v1
+  "next_season_projection", "metrics_dashboard", "free_agent_market",
+  "free_agent_target", "league_benchmarks", "season_projection",
+]);
 
 // ── Prospect Grading Scale ─────────────────────────────────────
 // Used in Pro/Amateur Skater, Unified Prospect, and other scouting reports.
