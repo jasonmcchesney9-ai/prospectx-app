@@ -3962,9 +3962,9 @@ def seed_leagues():
         ("CCHL", "Central Canada Hockey League", "Canada", "junior_a", 26),
         ("NOJHL", "Northern Ontario Junior Hockey League", "Canada", "junior_a", 27),
         ("MHL", "Maritime Hockey League", "Canada", "junior_a", 28),
-        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_a", 29),
         ("NAHL", "North American Hockey League", "USA", "junior_a", 30),
         # Junior B
+        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_b", 39),
         ("KIJHL", "Kootenay International Junior Hockey League", "Canada", "junior_b", 40),
         ("PJHL", "Provincial Junior Hockey League", "Canada", "junior_b", 41),
         ("VIJHL", "Vancouver Island Junior Hockey League", "Canada", "junior_b", 42),
@@ -3991,7 +3991,7 @@ def migrate_leagues():
     old_gojhl = conn.execute("SELECT id FROM leagues WHERE abbreviation = 'GOJHL'").fetchone()
     if old_gojhl:
         conn.execute(
-            "UPDATE leagues SET abbreviation = 'GOHL', name = 'Greater Ontario Hockey League', level = 'junior_a', sort_order = 29 WHERE abbreviation = 'GOJHL'"
+            "UPDATE leagues SET abbreviation = 'GOHL', name = 'Greater Ontario Hockey League', level = 'junior_b', sort_order = 39 WHERE abbreviation = 'GOJHL'"
         )
         # Also update any teams that reference the old abbreviation
         conn.execute("UPDATE teams SET league = 'GOHL' WHERE league = 'GOJHL'")
@@ -4018,9 +4018,9 @@ def migrate_leagues():
         ("CCHL", "Central Canada Hockey League", "Canada", "junior_a", 26),
         ("NOJHL", "Northern Ontario Junior Hockey League", "Canada", "junior_a", 27),
         ("MHL", "Maritime Hockey League", "Canada", "junior_a", 28),
-        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_a", 29),
         ("NAHL", "North American Hockey League", "USA", "junior_a", 30),
         # Junior B
+        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_b", 39),
         ("KIJHL", "Kootenay International Junior Hockey League", "Canada", "junior_b", 40),
         ("PJHL", "Provincial Junior Hockey League", "Canada", "junior_b", 41),
         ("VIJHL", "Vancouver Island Junior Hockey League", "Canada", "junior_b", 42),
@@ -4108,6 +4108,50 @@ def seed_teams():
     conn.commit()
     conn.close()
     logger.info("Seeded %d reference teams", len(gojhl_teams))
+
+
+def deduplicate_teams():
+    """Remove duplicate teams — keep the version with logo_url or hockeytech_team_id, delete the other."""
+    conn = get_db()
+    # Find teams with duplicate names (same org_id)
+    dupes = conn.execute("""
+        SELECT name, org_id, COUNT(*) as cnt
+        FROM teams
+        GROUP BY name, org_id
+        HAVING COUNT(*) > 1
+    """).fetchall()
+    if not dupes:
+        conn.close()
+        return
+    deleted = 0
+    for row in dupes:
+        team_name = row["name"] if isinstance(row, dict) or hasattr(row, 'keys') else row[0]
+        team_org = row["org_id"] if isinstance(row, dict) or hasattr(row, 'keys') else row[1]
+        # Get all rows for this team name + org
+        copies = conn.execute(
+            "SELECT id, logo_url, hockeytech_team_id FROM teams WHERE name = ? AND org_id = ?",
+            (team_name, team_org),
+        ).fetchall()
+        # Pick the keeper: prefer one with logo_url or hockeytech_team_id
+        keeper_id = None
+        for c in copies:
+            c_dict = dict(c)
+            if c_dict.get("logo_url") or c_dict.get("hockeytech_team_id"):
+                keeper_id = c_dict["id"]
+                break
+        # If none have logo/HT data, keep the first one
+        if not keeper_id:
+            keeper_id = dict(copies[0])["id"]
+        # Delete the rest
+        for c in copies:
+            c_id = dict(c)["id"]
+            if c_id != keeper_id:
+                conn.execute("DELETE FROM teams WHERE id = ?", (c_id,))
+                deleted += 1
+    conn.commit()
+    conn.close()
+    if deleted > 0:
+        logger.info("Deduplicated teams: removed %d duplicate entries", deleted)
 
 
 def seed_drills():
@@ -6950,6 +6994,7 @@ seed_hockey_os()
 seed_leagues()
 migrate_leagues()
 seed_teams()
+deduplicate_teams()
 seed_drills()
 seed_drills_v2()
 seed_drills_pxi()
