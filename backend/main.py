@@ -4112,44 +4112,61 @@ def seed_teams():
 
 
 def deduplicate_teams():
-    """Remove duplicate teams — keep the version with logo_url or hockeytech_team_id, delete the other.
+    """Remove duplicate teams — both same-org and cross-org (__global__ vs user org).
     Then ensure unique index exists to prevent future duplicates."""
     conn = get_db()
-    # Find teams with duplicate names (same org_id)
+    deleted = 0
+
+    # Phase 1: Remove __global__ teams that also exist in a user org
+    # (user org version is always richer — has logo, HT data from sync)
+    global_teams = conn.execute(
+        "SELECT id, name FROM teams WHERE org_id = '__global__'"
+    ).fetchall()
+    for gt in global_teams:
+        gt_name = gt["name"] if hasattr(gt, 'keys') else gt[1]
+        gt_id = gt["id"] if hasattr(gt, 'keys') else gt[0]
+        # Check if any non-global org has a team with the same name
+        user_copy = conn.execute(
+            "SELECT id FROM teams WHERE name = ? AND org_id != '__global__'",
+            (gt_name,),
+        ).fetchone()
+        if user_copy:
+            conn.execute("DELETE FROM teams WHERE id = ?", (gt_id,))
+            deleted += 1
+
+    # Phase 2: Remove same-org duplicates (legacy cleanup)
     dupes = conn.execute("""
         SELECT name, org_id, COUNT(*) as cnt
         FROM teams
         GROUP BY name, org_id
         HAVING COUNT(*) > 1
     """).fetchall()
-    deleted = 0
     if dupes:
         for row in dupes:
-            team_name = row["name"] if isinstance(row, dict) or hasattr(row, 'keys') else row[0]
-            team_org = row["org_id"] if isinstance(row, dict) or hasattr(row, 'keys') else row[1]
-            # Get all rows for this team name + org
+            team_name = row["name"] if hasattr(row, 'keys') else row[0]
+            team_org = row["org_id"] if hasattr(row, 'keys') else row[1]
             copies = conn.execute(
                 "SELECT id, logo_url, hockeytech_team_id FROM teams WHERE name = ? AND org_id = ?",
                 (team_name, team_org),
             ).fetchall()
-            # Pick the keeper: prefer one with logo_url or hockeytech_team_id
             keeper_id = None
             for c in copies:
                 c_dict = dict(c)
                 if c_dict.get("logo_url") or c_dict.get("hockeytech_team_id"):
                     keeper_id = c_dict["id"]
                     break
-            # If none have logo/HT data, keep the first one
             if not keeper_id:
                 keeper_id = dict(copies[0])["id"]
-            # Delete the rest
             for c in copies:
                 c_id = dict(c)["id"]
                 if c_id != keeper_id:
                     conn.execute("DELETE FROM teams WHERE id = ?", (c_id,))
                     deleted += 1
+
+    if deleted > 0:
         conn.commit()
         logger.info("Deduplicated teams: removed %d duplicate entries", deleted)
+
     # Ensure unique index exists (for existing DBs that predate this constraint)
     try:
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_org ON teams (name, org_id)")
