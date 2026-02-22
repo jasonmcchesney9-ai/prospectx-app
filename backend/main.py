@@ -30502,8 +30502,11 @@ async def migrate_data(
 
     conn = get_db()
     try:
+        # Disable FK constraints during migration
+        conn.execute("PRAGMA foreign_keys=OFF")
         # Execute the entire SQL script
         conn.executescript(sql_text)
+        conn.execute("PRAGMA foreign_keys=ON")
         conn.commit()
 
         # Count key tables to verify
