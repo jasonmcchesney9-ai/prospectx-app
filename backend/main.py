@@ -847,6 +847,9 @@ class PgConnectionWrapper:
             sql = sql.rstrip().rstrip(";")
             sql += f"\n            ON CONFLICT (id) DO UPDATE SET {update_clause}"
 
+        # Convert LIKE to ILIKE for case-insensitive matching (PG is case-sensitive unlike SQLite)
+        sql = re.sub(r'\bLIKE\b', 'ILIKE', sql)
+
         # Convert ? placeholders to %s
         sql = sql.replace("?", "%s")
         return sql
