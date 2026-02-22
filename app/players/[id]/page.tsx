@@ -62,7 +62,7 @@ import { formatLeague } from "@/lib/leagues";
 import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports" | "player";
@@ -251,6 +251,9 @@ export default function PlayerDetailPage() {
   const [visibilityFlags, setVisibilityFlags] = useState<Record<string, boolean>>({});
   const [editingV2Section, setEditingV2Section] = useState<number | null>(null);
   const [editV2Content, setEditV2Content] = useState("");
+
+  // Training Volume (drill logs)
+  const [drillLogData, setDrillLogData] = useState<PlayerDrillLogsResponse | null>(null);
 
   const loadNotes = useCallback(async () => {
     try {
@@ -599,6 +602,12 @@ export default function PlayerDetailPage() {
             if (plansRes.data.length > 0) setDevPlan(plansRes.data[0]);
           } catch { /* Non-critical */ }
         }
+
+        // Load drill logs for Training Volume widget
+        try {
+          const dlRes = await api.get<PlayerDrillLogsResponse>(`/players/${playerId}/drill-logs?limit=20`);
+          setDrillLogData(dlRes.data);
+        } catch { /* Non-critical */ }
 
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
@@ -2752,6 +2761,38 @@ export default function PlayerDetailPage() {
                 </div>
               )}
             </div>
+          </section>
+        )}
+
+        {/* Training Volume Widget */}
+        {drillLogData && drillLogData.summary.total_season > 0 && (
+          <section className="bg-white rounded-xl border border-border p-4 print:hidden">
+            <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center p-3 bg-teal/5 rounded-lg">
+                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_week}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Week</p>
+              </div>
+              <div className="text-center p-3 bg-teal/5 rounded-lg">
+                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_month}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Month</p>
+              </div>
+              <div className="text-center p-3 bg-teal/5 rounded-lg">
+                <p className="text-lg font-bold text-navy">{drillLogData.summary.total_season}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Season Total</p>
+              </div>
+            </div>
+            {drillLogData.logs.length > 0 && (
+              <div className="mt-3 space-y-1">
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Recent Drills</p>
+                {drillLogData.logs.slice(0, 5).map((log) => (
+                  <div key={log.id} className="flex items-center justify-between text-xs py-1">
+                    <span className="text-navy truncate">{log.drill_name}</span>
+                    <span className="text-muted shrink-0 ml-2">{new Date(log.logged_at).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 

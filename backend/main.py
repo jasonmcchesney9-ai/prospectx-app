@@ -2562,6 +2562,64 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pro_analysis_skill_tags ON pro_analysis_entries(skill_tags)")
 
+    # ── Practice Sessions (Spec A: auto-log drills to dev plans) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS practice_sessions (
+            id TEXT PRIMARY KEY,
+            practice_plan_id TEXT NOT NULL,
+            team_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            completed_at TEXT NOT NULL,
+            session_note TEXT,
+            absent_player_ids TEXT DEFAULT '[]',
+            created_by TEXT,
+            FOREIGN KEY (practice_plan_id) REFERENCES practice_plans(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_practice_sessions_plan ON practice_sessions(practice_plan_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_practice_sessions_team ON practice_sessions(team_id, org_id)")
+
+    # ── Player Drill Logs (Spec A: auto-log drills to dev plans) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_drill_logs (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            practice_session_id TEXT NOT NULL,
+            drill_id TEXT NOT NULL,
+            drill_name TEXT NOT NULL,
+            skill_focus TEXT DEFAULT '[]',
+            objective_ids TEXT DEFAULT '[]',
+            logged_at TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            FOREIGN KEY (player_id) REFERENCES players(id),
+            FOREIGN KEY (practice_session_id) REFERENCES practice_sessions(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_drill_logs_player ON player_drill_logs(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_drill_logs_session ON player_drill_logs(practice_session_id)")
+
+    # ── Development Plan Objectives (Spec A: skill_focus tags for drill matching) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS development_plan_objectives (
+            id TEXT PRIMARY KEY,
+            plan_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            skill_focus TEXT DEFAULT '[]',
+            drill_log_count INTEGER DEFAULT 0,
+            last_drilled_at TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (plan_id) REFERENCES development_plans(id),
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_objectives_plan ON development_plan_objectives(plan_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_objectives_player ON development_plan_objectives(player_id)")
+
     conn.commit()
 
     conn.close()
@@ -9670,6 +9728,10 @@ class PracticePlanGenerateRequest(BaseModel):
     age_level: str = "JUNIOR_COLLEGE_PRO"
     notes: Optional[str] = None
 
+class PracticeCompleteRequest(BaseModel):
+    absent_player_ids: List[str] = []
+    session_note: Optional[str] = None
+
 # ── Player Search (autocomplete) ─────────────────────────────
 
 @app.get("/players/search")
@@ -11360,6 +11422,306 @@ HOCKEY TERMINOLOGY:
     result = _get_plan_with_drills(conn, plan_id, org_id)
     conn.close()
     return result
+
+
+# ============================================================
+# PRACTICE SESSION COMPLETION + DRILL AUTO-LOG (Spec A)
+# ============================================================
+
+@app.post("/practice-plans/{plan_id}/complete", status_code=201)
+async def complete_practice_plan(plan_id: str, body: PracticeCompleteRequest, token_data: dict = Depends(verify_token)):
+    """Mark a practice plan as completed. Auto-logs drills to participating players' dev plan objectives."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+
+    # 1. Verify practice plan exists
+    plan_row = conn.execute(
+        "SELECT * FROM practice_plans WHERE id = ? AND org_id = ?", (plan_id, org_id)
+    ).fetchone()
+    if not plan_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Practice plan not found")
+
+    plan = _practice_plan_row_to_dict(plan_row)
+    team_name = plan.get("team_name")
+
+    # 2. Create practice_session record
+    session_id = gen_id()
+    now = datetime.utcnow().isoformat()
+    absent_ids = body.absent_player_ids or []
+    conn.execute("""
+        INSERT INTO practice_sessions (id, practice_plan_id, team_id, org_id, completed_at, session_note, absent_player_ids, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (session_id, plan_id, team_name or "", org_id, now, body.session_note, json.dumps(absent_ids), user_id))
+
+    # 3. Mark plan as completed
+    conn.execute("UPDATE practice_plans SET status = 'completed', updated_at = ? WHERE id = ?", (now, plan_id))
+
+    # 4. Get roster players (exclude absent)
+    roster_rows = conn.execute(
+        "SELECT id FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (org_id, team_name or "")
+    ).fetchall()
+    participating_ids = [r["id"] for r in roster_rows if r["id"] not in absent_ids]
+
+    # 5. Collect drills from plan
+    drills_in_plan = []
+    if plan.get("plan_data") and plan["plan_data"].get("phases"):
+        for phase in plan["plan_data"]["phases"]:
+            for drill_entry in phase.get("drills", []):
+                drill_id = drill_entry.get("drill_id")
+                drill_name = drill_entry.get("drill_name", "Unknown Drill")
+                # Get skill_focus from drills table if we have a drill_id
+                skill_focus_tags = []
+                if drill_id:
+                    drill_row = conn.execute("SELECT skill_focus, tags FROM drills WHERE id = ?", (drill_id,)).fetchone()
+                    if drill_row:
+                        sf = drill_row["skill_focus"]
+                        if sf:
+                            try:
+                                parsed = json.loads(sf) if sf.startswith("[") else [sf]
+                                skill_focus_tags.extend(parsed)
+                            except (json.JSONDecodeError, TypeError):
+                                skill_focus_tags.append(sf)
+                        tags_str = drill_row["tags"]
+                        if tags_str:
+                            try:
+                                parsed_tags = json.loads(tags_str) if tags_str.startswith("[") else [tags_str]
+                                skill_focus_tags.extend(parsed_tags)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                drills_in_plan.append({
+                    "drill_id": drill_id or gen_id(),
+                    "drill_name": drill_name,
+                    "skill_focus": list(set(skill_focus_tags)),
+                })
+
+    # Also check junction table drills
+    junction_drills = conn.execute("""
+        SELECT ppd.drill_id, d.name as drill_name, d.skill_focus, d.tags
+        FROM practice_plan_drills ppd
+        LEFT JOIN drills d ON ppd.drill_id = d.id
+        WHERE ppd.practice_plan_id = ?
+    """, (plan_id,)).fetchall()
+    existing_drill_ids = {d["drill_id"] for d in drills_in_plan}
+    for jd in junction_drills:
+        if jd["drill_id"] not in existing_drill_ids:
+            sf_tags = []
+            if jd["skill_focus"]:
+                try:
+                    parsed = json.loads(jd["skill_focus"]) if jd["skill_focus"].startswith("[") else [jd["skill_focus"]]
+                    sf_tags.extend(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    sf_tags.append(jd["skill_focus"])
+            if jd["tags"]:
+                try:
+                    parsed_tags = json.loads(jd["tags"]) if jd["tags"].startswith("[") else [jd["tags"]]
+                    sf_tags.extend(parsed_tags)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            drills_in_plan.append({
+                "drill_id": jd["drill_id"],
+                "drill_name": jd["drill_name"] or "Drill",
+                "skill_focus": list(set(sf_tags)),
+            })
+
+    # 6. Auto-log drills for each participating player
+    log_count = 0
+    for player_id in participating_ids:
+        # Get active objectives for this player
+        objectives = conn.execute(
+            "SELECT id, skill_focus FROM development_plan_objectives WHERE player_id = ? AND org_id = ? AND status = 'active'",
+            (player_id, org_id)
+        ).fetchall()
+
+        for drill in drills_in_plan:
+            matched_objective_ids = []
+            drill_sf = set(t.lower().strip() for t in drill["skill_focus"] if t)
+
+            for obj in objectives:
+                obj_sf_raw = obj["skill_focus"] or "[]"
+                try:
+                    obj_sf = json.loads(obj_sf_raw) if isinstance(obj_sf_raw, str) else obj_sf_raw
+                except (json.JSONDecodeError, TypeError):
+                    obj_sf = []
+                obj_sf_set = set(t.lower().strip() for t in obj_sf if t)
+
+                if drill_sf & obj_sf_set:
+                    matched_objective_ids.append(obj["id"])
+
+            log_id = gen_id()
+            conn.execute("""
+                INSERT INTO player_drill_logs (id, player_id, practice_session_id, drill_id, drill_name, skill_focus, objective_ids, logged_at, org_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (log_id, player_id, session_id, drill["drill_id"], drill["drill_name"],
+                  json.dumps(drill["skill_focus"]), json.dumps(matched_objective_ids), now, org_id))
+            log_count += 1
+
+            # Update matched objectives
+            for obj_id in matched_objective_ids:
+                conn.execute("""
+                    UPDATE development_plan_objectives SET drill_log_count = drill_log_count + 1, last_drilled_at = ? WHERE id = ?
+                """, (now, obj_id))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "session_id": session_id,
+        "practice_plan_id": plan_id,
+        "completed_at": now,
+        "players_logged": len(participating_ids),
+        "drills_in_plan": len(drills_in_plan),
+        "total_drill_logs": log_count,
+        "absent_count": len(absent_ids),
+    }
+
+
+@app.get("/players/{player_id}/drill-logs")
+async def get_player_drill_logs(
+    player_id: str,
+    skill_focus: Optional[str] = None,
+    objective_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 100,
+    token_data: dict = Depends(verify_token),
+):
+    """Get all drill logs for a player, filterable by skill_focus, objective, date range."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    where = ["pdl.player_id = ?", "pdl.org_id = ?"]
+    params: list = [player_id, org_id]
+
+    if skill_focus:
+        where.append("pdl.skill_focus LIKE ?")
+        params.append(f"%{skill_focus}%")
+    if objective_id:
+        where.append("pdl.objective_ids LIKE ?")
+        params.append(f"%{objective_id}%")
+    if date_from:
+        where.append("pdl.logged_at >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("pdl.logged_at <= ?")
+        params.append(date_to)
+    params.append(limit)
+
+    rows = conn.execute(f"""
+        SELECT pdl.*, ps.session_note, ps.completed_at as session_date, ps.practice_plan_id
+        FROM player_drill_logs pdl
+        LEFT JOIN practice_sessions ps ON pdl.practice_session_id = ps.id
+        WHERE {' AND '.join(where)}
+        ORDER BY pdl.logged_at DESC
+        LIMIT ?
+    """, params).fetchall()
+
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["skill_focus"] = json.loads(d.get("skill_focus") or "[]")
+        d["objective_ids"] = json.loads(d.get("objective_ids") or "[]")
+        results.append(d)
+
+    # Also return summary stats
+    total_row = conn.execute(
+        "SELECT COUNT(*) as total FROM player_drill_logs WHERE player_id = ? AND org_id = ?",
+        (player_id, org_id)
+    ).fetchone()
+
+    # This week
+    week_start = (datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())).strftime("%Y-%m-%dT00:00:00")
+    week_count = conn.execute(
+        "SELECT COUNT(*) as c FROM player_drill_logs WHERE player_id = ? AND org_id = ? AND logged_at >= ?",
+        (player_id, org_id, week_start)
+    ).fetchone()["c"]
+
+    # This month
+    month_start = datetime.utcnow().strftime("%Y-%m-01T00:00:00")
+    month_count = conn.execute(
+        "SELECT COUNT(*) as c FROM player_drill_logs WHERE player_id = ? AND org_id = ? AND logged_at >= ?",
+        (player_id, org_id, month_start)
+    ).fetchone()["c"]
+
+    conn.close()
+
+    return {
+        "logs": results,
+        "summary": {
+            "total_season": total_row["total"],
+            "this_week": week_count,
+            "this_month": month_count,
+        },
+    }
+
+
+@app.get("/practice-sessions/{session_id}")
+async def get_practice_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Get practice session details including which players were logged and which objectives were updated."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    session = conn.execute(
+        "SELECT * FROM practice_sessions WHERE id = ? AND org_id = ?", (session_id, org_id)
+    ).fetchone()
+    if not session:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Practice session not found")
+
+    result = dict(session)
+    result["absent_player_ids"] = json.loads(result.get("absent_player_ids") or "[]")
+
+    # Get drill logs grouped by player
+    logs = conn.execute(
+        "SELECT * FROM player_drill_logs WHERE practice_session_id = ? AND org_id = ?",
+        (session_id, org_id)
+    ).fetchall()
+
+    player_logs = {}
+    for log in logs:
+        ld = dict(log)
+        ld["skill_focus"] = json.loads(ld.get("skill_focus") or "[]")
+        ld["objective_ids"] = json.loads(ld.get("objective_ids") or "[]")
+        pid = ld["player_id"]
+        if pid not in player_logs:
+            player_logs[pid] = []
+        player_logs[pid].append(ld)
+
+    result["player_logs"] = player_logs
+    result["total_players"] = len(player_logs)
+    result["total_drill_logs"] = len(logs)
+
+    conn.close()
+    return result
+
+
+@app.delete("/player-drill-logs/{log_id}")
+async def delete_player_drill_log(log_id: str, token_data: dict = Depends(verify_token)):
+    """Coach manually removes an incorrect drill log."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    log_row = conn.execute(
+        "SELECT * FROM player_drill_logs WHERE id = ? AND org_id = ?", (log_id, org_id)
+    ).fetchone()
+    if not log_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Drill log not found")
+
+    # Decrement objective counts
+    objective_ids = json.loads(log_row["objective_ids"] or "[]")
+    for obj_id in objective_ids:
+        conn.execute(
+            "UPDATE development_plan_objectives SET drill_log_count = MAX(0, drill_log_count - 1) WHERE id = ?",
+            (obj_id,)
+        )
+
+    conn.execute("DELETE FROM player_drill_logs WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted", "id": log_id}
 
 
 def _parse_file_to_rows(content: bytes, fname: str) -> list[dict]:

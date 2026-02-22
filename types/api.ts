@@ -1794,6 +1794,56 @@ export interface PracticePlanGenerateRequest {
   notes?: string;
 }
 
+export interface PracticeSession {
+  id: string;
+  practice_plan_id: string;
+  team_id: string;
+  org_id: string;
+  completed_at: string;
+  session_note: string | null;
+  absent_player_ids: string[];
+  created_by: string;
+}
+
+export interface PlayerDrillLog {
+  id: string;
+  player_id: string;
+  practice_session_id: string;
+  drill_id: string;
+  drill_name: string;
+  skill_focus: string[];
+  objective_ids: string[];
+  logged_at: string;
+  org_id: string;
+  session_note?: string | null;
+  session_date?: string | null;
+  practice_plan_id?: string | null;
+}
+
+export interface DrillLogSummary {
+  total_season: number;
+  this_week: number;
+  this_month: number;
+}
+
+export interface PlayerDrillLogsResponse {
+  logs: PlayerDrillLog[];
+  summary: DrillLogSummary;
+}
+
+export interface DevelopmentPlanObjective {
+  id: string;
+  plan_id: string;
+  player_id: string;
+  org_id: string;
+  title: string;
+  skill_focus: string[];
+  drill_log_count: number;
+  last_drilled_at: string | null;
+  status: "active" | "completed";
+  created_at: string;
+}
+
 export const DRILL_CATEGORIES: Record<string, string> = {
   warm_up: "Warm Up",
   skating: "Skating",

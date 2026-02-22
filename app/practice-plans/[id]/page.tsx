@@ -12,6 +12,9 @@ import {
   Calendar,
   AlertCircle,
   ClipboardList,
+  CheckCircle2,
+  X,
+  Loader2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -43,6 +46,13 @@ export default function PracticePlanDetailPage() {
   const [plan, setPlan] = useState<PracticePlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Completion modal state
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [sessionNote, setSessionNote] = useState("");
+  const [rosterPlayers, setRosterPlayers] = useState<{ id: string; name: string; checked: boolean }[]>([]);
+  const [completionResult, setCompletionResult] = useState<{ session_id: string; players_logged: number; total_drill_logs: number } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -137,6 +147,45 @@ export default function PracticePlanDetailPage() {
     setTimeout(() => {
       document.title = prevTitle;
     }, 1000);
+  };
+
+  const handleOpenCompleteModal = async () => {
+    if (!plan?.team_name) {
+      setRosterPlayers([]);
+      setShowCompleteModal(true);
+      return;
+    }
+    try {
+      const { data } = await api.get(`/players?team=${encodeURIComponent(plan.team_name)}&limit=50`);
+      const players = (Array.isArray(data) ? data : data.players || []).map((p: { id: string; first_name: string; last_name: string }) => ({
+        id: p.id,
+        name: `${p.first_name} ${p.last_name}`,
+        checked: true,
+      }));
+      setRosterPlayers(players);
+    } catch {
+      setRosterPlayers([]);
+    }
+    setSessionNote("");
+    setShowCompleteModal(true);
+  };
+
+  const handleCompleteSession = async () => {
+    setCompleting(true);
+    try {
+      const absentIds = rosterPlayers.filter((p) => !p.checked).map((p) => p.id);
+      const { data } = await api.post(`/practice-plans/${planId}/complete`, {
+        absent_player_ids: absentIds,
+        session_note: sessionNote || null,
+      });
+      setCompletionResult(data);
+      setPlan((prev) => prev ? { ...prev, status: "completed" } : prev);
+      setShowCompleteModal(false);
+    } catch {
+      // non-critical
+    } finally {
+      setCompleting(false);
+    }
   };
 
   if (loading) {
@@ -244,6 +293,16 @@ export default function PracticePlanDetailPage() {
 
             {/* Action buttons */}
             <div className="flex items-center gap-2 shrink-0 ml-4 print:hidden">
+              {plan.status !== "completed" && (
+                <button
+                  onClick={handleOpenCompleteModal}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-orange hover:bg-orange/90 rounded-lg text-xs font-oswald font-semibold uppercase tracking-wider transition-colors text-white"
+                  title="Mark as Completed"
+                >
+                  <CheckCircle2 size={14} />
+                  Mark Complete
+                </button>
+              )}
               <button
                 onClick={handleDownloadPDF}
                 className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors"
@@ -413,6 +472,32 @@ export default function PracticePlanDetailPage() {
           </div>
         )}
 
+        {/* Completion result banner */}
+        {completionResult && (
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3 print:hidden">
+            <CheckCircle2 size={20} className="text-green-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-green-800">Practice Completed</p>
+              <p className="text-xs text-green-700 mt-1">
+                {completionResult.players_logged} player{completionResult.players_logged !== 1 ? "s" : ""} logged, {completionResult.total_drill_logs} drill log{completionResult.total_drill_logs !== 1 ? "s" : ""} recorded.
+              </p>
+              <Link
+                href={`/practice-sessions/${completionResult.session_id}`}
+                className="text-xs text-teal hover:underline mt-1 inline-block"
+              >
+                View Session Report
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {plan.status === "completed" && !completionResult && (
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 print:hidden">
+            <CheckCircle2 size={16} className="text-green-600" />
+            <span className="text-xs font-bold text-green-800">Completed</span>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-teal/20">
           <div className="ice-stripe rounded-full mb-4" />
@@ -421,6 +506,79 @@ export default function PracticePlanDetailPage() {
             <span>{new Date(plan.created_at).toLocaleDateString()}</span>
           </div>
         </div>
+
+        {/* Completion Modal */}
+        {showCompleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 print:hidden">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <h2 className="text-sm font-oswald font-bold uppercase tracking-wider text-navy">Mark Practice Complete</h2>
+                <button onClick={() => setShowCompleteModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X size={16} className="text-muted" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Attendance checklist */}
+                {rosterPlayers.length > 0 && (
+                  <div>
+                    <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">
+                      Attendance ({rosterPlayers.filter((p) => p.checked).length}/{rosterPlayers.length})
+                    </p>
+                    <div className="space-y-1 max-h-48 overflow-y-auto border border-border rounded-lg p-2">
+                      {rosterPlayers.map((p) => (
+                        <label key={p.id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={p.checked}
+                            onChange={() =>
+                              setRosterPlayers((prev) =>
+                                prev.map((rp) => (rp.id === p.id ? { ...rp, checked: !rp.checked } : rp))
+                              )
+                            }
+                            className="rounded border-border text-teal focus:ring-teal"
+                          />
+                          <span className="text-sm text-navy">{p.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Session note */}
+                <div>
+                  <label className="text-xs font-oswald uppercase tracking-wider text-muted mb-1 block">
+                    Session Note (optional)
+                  </label>
+                  <textarea
+                    value={sessionNote}
+                    onChange={(e) => setSessionNote(e.target.value)}
+                    placeholder="Any notes about today's practice..."
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none"
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-border flex justify-end gap-2">
+                <button
+                  onClick={() => setShowCompleteModal(false)}
+                  className="px-4 py-2 text-sm text-muted hover:text-navy transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCompleteSession}
+                  disabled={completing}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 disabled:opacity-50 transition-colors"
+                >
+                  {completing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  Complete Session
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </ProtectedRoute>
   );
