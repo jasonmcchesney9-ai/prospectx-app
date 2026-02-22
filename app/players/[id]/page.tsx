@@ -2827,67 +2827,77 @@ function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: str
   if (!season) return null;
 
   const gp = season.gp || 1;
-
-  // Points per game
   const ppg = season.p / gp;
-
-  // Goals per game
   const gpg = season.g / gp;
-
-  // Assists per game
-  const apg = season.a / gp;
-
-  // Shooting efficiency (if available)
   const shootPct = season.shooting_pct ?? (season.sog > 0 ? (season.g / season.sog) * 100 : null);
-
-  // Discipline index (lower PIM/GP is better)
   const pimPerGame = season.pim / gp;
-
-  // Plus/minus per game
   const pmPerGame = season.plus_minus / gp;
 
-  // Offensive index (0-100 scale, normalized for junior hockey)
-  const offenseIndex = Math.min(100, Math.round(
-    (ppg / 1.5) * 40 + // 1.5 PPG = 40 pts
-    ((shootPct ?? 10) / 20) * 30 + // 20% shooting = 30 pts
-    (gpg / 0.6) * 30 // 0.6 GPG = 30 pts
+  const offenseIndex = Math.min(99, Math.round(
+    (ppg / 1.5) * 40 + ((shootPct ?? 10) / 20) * 30 + (gpg / 0.6) * 30
+  ));
+  const twoWayIndex = Math.min(99, Math.round(
+    Math.max(0, 50 + pmPerGame * 10) + Math.max(0, 30 - pimPerGame * 5) + (ppg / 1.0) * 20
   ));
 
-  // Two-way index
-  const twoWayIndex = Math.min(100, Math.round(
-    Math.max(0, 50 + pmPerGame * 10) + // +/- contribution
-    Math.max(0, 30 - pimPerGame * 5) + // Discipline (fewer PIMs = better)
-    (ppg / 1.0) * 20 // Offensive production
-  ));
+  const ARC_R = 36;
+  const CIRCUMFERENCE = 2 * Math.PI * ARC_R;
 
-  const indices = [
-    { label: "PPG", value: ppg.toFixed(2), bar: Math.min(100, (ppg / 1.5) * 100) },
-    { label: "GPG", value: gpg.toFixed(2), bar: Math.min(100, (gpg / 0.6) * 100) },
-    { label: "S%", value: shootPct !== null ? `${shootPct.toFixed(1)}%` : "—", bar: shootPct ? Math.min(100, (shootPct / 20) * 100) : 0 },
-    { label: "Offense", value: `${offenseIndex}`, bar: offenseIndex },
-    { label: "Two-Way", value: `${twoWayIndex}`, bar: twoWayIndex },
+  const tiles: { key: string; label: string; arcVal: number; display: string; color: string; IconComp: typeof Zap }[] = [
+    { key: "ppg", label: "PPG", arcVal: Math.min(99, Math.round((ppg / 1.5) * 99)), display: ppg.toFixed(2), color: "#18B3A6", IconComp: Zap },
+    { key: "gpg", label: "GPG", arcVal: Math.min(99, Math.round((gpg / 0.6) * 99)), display: gpg.toFixed(2), color: "#ef4444", IconComp: Target },
+    { key: "shot", label: "SHOT", arcVal: shootPct !== null ? Math.min(99, Math.round((shootPct / 20) * 99)) : 0, display: shootPct !== null ? `${shootPct.toFixed(0)}%` : "—", color: "#3b82f6", IconComp: Activity },
+    { key: "off", label: "OFF", arcVal: offenseIndex, display: `${offenseIndex}`, color: "#F36F21", IconComp: Flame },
+    { key: "2way", label: "2WAY", arcVal: twoWayIndex, display: `${twoWayIndex}`, color: "#0F2A3D", IconComp: Shield },
   ];
 
   return (
-    <div className="space-y-2">
-      {indices.map(({ label, value, bar }) => (
-        <div key={label} className="flex items-center gap-3">
-          <span className="text-[10px] font-oswald uppercase tracking-wider text-muted w-14">{label}</span>
-          <div className="flex-1 h-2 bg-navy/[0.06] rounded-full overflow-hidden">
+    <div>
+      <div className="grid grid-cols-3 gap-2">
+        {tiles.map(({ key, label, arcVal, display, color, IconComp }) => {
+          const dashOffset = CIRCUMFERENCE * (1 - arcVal / 99);
+          return (
             <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${bar}%`,
-                background: bar > 70 ? "var(--teal)" : bar > 40 ? "var(--orange)" : "#94a3b8",
-              }}
-            />
+              key={key}
+              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg bg-navy/[0.02] border border-navy/[0.06]"
+            >
+              <div className="relative w-[76px] h-[76px]">
+                <svg width="76" height="76" viewBox="0 0 80 80" className="transform -rotate-90">
+                  <circle cx="40" cy="40" r={ARC_R} fill="none" stroke={color} strokeWidth="5" opacity={0.08} />
+                  <circle
+                    cx="40" cy="40" r={ARC_R} fill="none" stroke={color} strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray={CIRCUMFERENCE}
+                    strokeDashoffset={dashOffset}
+                    style={{ transition: "stroke-dashoffset 0.8s ease-out" }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <IconComp size={12} style={{ color }} className="mb-0.5" />
+                  <span className="text-lg font-oswald font-bold leading-none tabular-nums" style={{ color }}>
+                    {display}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[9px] font-oswald uppercase tracking-widest text-muted mt-1">{label}</span>
+            </div>
+          );
+        })}
+        {/* 6th tile: PXI placeholder */}
+        <div className="relative flex flex-col items-center justify-center py-2.5 px-1 rounded-lg border border-dashed border-teal/20 bg-teal/[0.02]">
+          <div className="relative w-[76px] h-[76px] flex items-center justify-center">
+            <Sparkles size={18} className="text-teal/30" />
           </div>
-          <span className="text-xs font-semibold text-navy w-10 text-right">{value}</span>
+          <span className="text-[9px] font-oswald uppercase tracking-widest text-teal/40 mt-1">PXI</span>
+          <span className="text-[7px] text-muted/40 mt-0.5">Run AI Analysis</span>
         </div>
-      ))}
-      <p className="text-[9px] text-muted/50 mt-1">
-        Based on {season.gp} GP {season.season ? `(${season.season})` : ""}
-      </p>
+      </div>
+      <div className="flex items-center justify-between pt-2 mt-2 border-t border-teal/8">
+        <p className="text-[9px] text-muted/50">
+          Based on {season.gp} GP {season.season ? `(${season.season})` : ""} · Stat-derived estimates
+        </p>
+        <span className="text-[8px] text-muted/30 font-oswald uppercase tracking-widest">ProspectX</span>
+      </div>
     </div>
   );
 }
@@ -2934,58 +2944,71 @@ function MetricsRadarChart({ indices }: { indices: PlayerMetrics }) {
   );
 }
 
-// ── ProspectX Metrics Panel (6 proprietary indices with percentiles) ──
+// ── ProspectX Metrics Panel (6 proprietary indices — premium arc tile grid) ──
 function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
   const metricOrder = ["sniper", "playmaker", "transition", "defensive", "compete", "hockey_iq"] as const;
+  const ARC_R = 36;
+  const CIRCUMFERENCE = 2 * Math.PI * ARC_R;
+  const ABBREV: Record<string, string> = {
+    sniper: "SNP", playmaker: "PLY", transition: "TRN",
+    defensive: "DEF", compete: "CMP", hockey_iq: "IQ",
+  };
 
   return (
-    <div className="space-y-2.5">
-      {metricOrder.map((key) => {
-        const idx = indices.indices[key];
-        if (!idx) return null;
-        const color = METRIC_COLORS[key] || "#9ca3af";
-        const icon = METRIC_ICONS[key] || "";
-        const pctLabel = idx.percentile >= 90 ? "Elite" :
-          idx.percentile >= 75 ? "Above Avg" :
-          idx.percentile >= 50 ? "Average" :
-          idx.percentile >= 25 ? "Below Avg" : "Developing";
+    <div>
+      <div className="grid grid-cols-3 gap-2">
+        {metricOrder.map((key) => {
+          const idx = indices.indices[key];
+          if (!idx) return null;
+          const color = METRIC_COLORS[key] || "#9ca3af";
+          const icon = METRIC_ICONS[key] || "";
+          const pctLabel = idx.percentile >= 90 ? "Elite" :
+            idx.percentile >= 75 ? "Above Avg" :
+            idx.percentile >= 50 ? "Average" :
+            idx.percentile >= 25 ? "Below Avg" : "Developing";
+          const dashOffset = CIRCUMFERENCE * (1 - idx.value / 99);
 
-        return (
-          <div key={key} className="group">
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="text-sm" title={idx.description}>{icon}</span>
-              <span className="text-[10px] font-oswald uppercase tracking-wider text-muted flex-1">
-                {idx.label}
+          return (
+            <div
+              key={key}
+              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg bg-navy/[0.02] border border-navy/[0.06] hover:border-teal/20 transition-all duration-300"
+              title={idx.description}
+            >
+              <div className="relative w-[76px] h-[76px]">
+                <svg width="76" height="76" viewBox="0 0 80 80" className="transform -rotate-90">
+                  <circle cx="40" cy="40" r={ARC_R} fill="none" stroke={color} strokeWidth="5" opacity={0.08} />
+                  <circle
+                    cx="40" cy="40" r={ARC_R} fill="none" stroke={color} strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray={CIRCUMFERENCE}
+                    strokeDashoffset={dashOffset}
+                    style={{ transition: "stroke-dashoffset 0.8s ease-out" }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xs leading-none mb-0.5">{icon}</span>
+                  <span
+                    className="text-lg font-oswald font-bold leading-none tabular-nums"
+                    style={{ color }}
+                  >
+                    {idx.value}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[9px] font-oswald uppercase tracking-widest text-muted mt-1">
+                {ABBREV[key] || idx.label}
               </span>
               <span
-                className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
-                style={{
-                  backgroundColor: color + "15",
-                  color: color,
-                }}
+                className="text-[7px] font-medium px-1.5 py-0.5 rounded-full mt-0.5"
+                style={{ backgroundColor: color + "12", color }}
               >
-                {pctLabel} &middot; {idx.percentile}th
-              </span>
-              <span className="text-xs font-bold tabular-nums w-8 text-right" style={{ color }}>
-                {idx.value}
+                {pctLabel}
               </span>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="flex-1 h-2 bg-navy/[0.06] rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-700 ease-out"
-                  style={{
-                    width: `${idx.value}%`,
-                    backgroundColor: color,
-                    opacity: 0.85,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })}
-      <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-teal/8">
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between pt-2 mt-2 border-t border-teal/8">
         <p className="text-[9px] text-muted/50">
           Based on {indices.gp} GP {indices.season ? `(${indices.season})` : ""}
           {indices.has_extended_stats && (
