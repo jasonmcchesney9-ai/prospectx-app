@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Clock, Plus, Copy, Check } from "lucide-react";
-import type { TimelineEntry, TimelineEntryType, GameState } from "@/types/api";
-import { TIMELINE_TYPE_COLORS } from "@/types/api";
+import { Clock, Plus, Copy, Check, Bookmark } from "lucide-react";
+import type { TimelineEntry, TimelineEntryType, GameState, BroadcastEventType } from "@/types/api";
+import { TIMELINE_TYPE_COLORS, BROADCAST_EVENT_CONFIG } from "@/types/api";
 
 /* ── Period label helper ─────────────────────────────── */
 function gameStateToPeriodLabel(gameState: GameState, period: number): string {
@@ -29,14 +29,33 @@ function genTimelineId(): string {
 interface Props {
   entries: TimelineEntry[];
   onAddEntry: (entry: TimelineEntry) => void;
+  onToggleNextBreak?: (entryId: string) => void;
   gameState: GameState;
   period: number;
 }
 
-export default function StorylineTimeline({ entries, onAddEntry, gameState, period }: Props) {
+export default function StorylineTimeline({ entries, onAddEntry, onToggleNextBreak, gameState, period }: Props) {
   const [noteText, setNoteText] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [toastEvent, setToastEvent] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Event bar handler
+  function handleEventButton(eventType: BroadcastEventType) {
+    const cfg = BROADCAST_EVENT_CONFIG[eventType];
+    const entry: TimelineEntry = {
+      id: genTimelineId(),
+      type: cfg.timelineType,
+      text: cfg.label,
+      period: gameStateToPeriodLabel(gameState, period),
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      source: "event_bar",
+      color_badge: eventType,
+    };
+    onAddEntry(entry);
+    setToastEvent(`${cfg.label} logged`);
+    setTimeout(() => setToastEvent(null), 3000);
+  }
 
   // Auto-scroll to bottom when entries change
   useEffect(() => {
@@ -78,17 +97,45 @@ export default function StorylineTimeline({ entries, onAddEntry, gameState, peri
     (a, b) => (periodOrder.indexOf(a) === -1 ? 99 : periodOrder.indexOf(a)) - (periodOrder.indexOf(b) === -1 ? 99 : periodOrder.indexOf(b))
   );
 
+  /* ── Event Bar ── */
+  const eventBar = (
+    <div className="flex flex-wrap gap-1.5 mb-3">
+      {(Object.keys(BROADCAST_EVENT_CONFIG) as BroadcastEventType[]).map((evType) => {
+        const cfg = BROADCAST_EVENT_CONFIG[evType];
+        return (
+          <button
+            key={evType}
+            onClick={() => handleEventButton(evType)}
+            className={`flex items-center gap-1 px-3 py-2.5 rounded-lg text-[10px] font-oswald font-bold uppercase tracking-wider transition-colors min-h-[44px] ${cfg.bgColor} ${cfg.color} hover:opacity-80 active:scale-95`}
+            title={`${cfg.label} (${cfg.shortcut})`}
+          >
+            {cfg.label}
+            <span className="text-[8px] opacity-50 ml-0.5">{cfg.shortcut}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  /* ── Toast ── */
+  const toast = toastEvent && (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-navy text-white text-xs font-oswald uppercase tracking-wider px-4 py-2 rounded-lg shadow-lg animate-pulse">
+      {toastEvent}
+    </div>
+  );
+
   /* ── Empty state ── */
   if (entries.length === 0) {
     return (
       <div className="space-y-3">
+        {eventBar}
         <div className="text-center py-6">
           <Clock size={24} className="mx-auto text-gray-300 mb-2" />
           <p className="text-xs text-gray-400">
             Storylines will appear here as you generate content and progress through the game.
           </p>
           <p className="text-[10px] text-gray-300 mt-1">
-            Add notes manually with the input below.
+            Use the event buttons above or add notes manually below.
           </p>
         </div>
         {/* Add note input */}
@@ -111,12 +158,16 @@ export default function StorylineTimeline({ entries, onAddEntry, gameState, peri
             Add
           </button>
         </div>
+        {toast}
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      {/* Event bar */}
+      {eventBar}
+
       {/* Scrollable timeline */}
       <div ref={scrollRef} className="max-h-[400px] overflow-y-auto pr-1 space-y-0">
         {sortedPeriods.map((periodLabel) => (
@@ -152,14 +203,26 @@ export default function StorylineTimeline({ entries, onAddEntry, gameState, peri
                         </div>
                         <p className="text-xs text-gray-700 leading-relaxed">{entry.text}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(entry)}
-                        className="shrink-0 p-1 rounded hover:bg-white/50 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Copy"
-                      >
-                        {copiedId === entry.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {onToggleNextBreak && (
+                          <button
+                            type="button"
+                            onClick={() => onToggleNextBreak(entry.id)}
+                            className={`p-1 rounded transition-colors ${entry.in_next_break ? "text-orange" : "text-gray-400 hover:text-orange"}`}
+                            title={entry.in_next_break ? "Remove from Next Break" : "Add to Next Break"}
+                          >
+                            <Bookmark size={12} className={entry.in_next_break ? "fill-current" : ""} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(entry)}
+                          className="p-1 rounded hover:bg-white/50 text-gray-400 hover:text-gray-600"
+                          title="Copy"
+                        >
+                          {copiedId === entry.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

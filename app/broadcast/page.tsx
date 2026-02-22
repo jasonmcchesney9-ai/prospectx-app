@@ -9,6 +9,12 @@ import {
   Camera,
   Radio,
   Clock,
+  X,
+  ListOrdered,
+  ChevronDown,
+  GripVertical,
+  CheckCircle2,
+  SkipForward,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -43,7 +49,13 @@ import type {
   InterviewQuestion,
   PostGameScriptData,
   TimelineEntry,
+  BroadcastScheduleGame,
+  BroadcastSummaryPlayer,
+  BroadcastSummaryTeam,
+  RunOfShowItem,
+  BroadcastEventType,
 } from "@/types/api";
+import { BROADCAST_EVENT_CONFIG } from "@/types/api";
 
 // ── Tool card state ──────────────────────────────────────
 interface ToolCardState {
@@ -143,6 +155,21 @@ export default function BroadcastPage() {
   const [activeRightTab, setActiveRightTab] = useState<RightTab>("profiles");
   const [isPostGameLocked, setIsPostGameLocked] = useState(true);
 
+  // Schedule picker
+  const [scheduleGames, setScheduleGames] = useState<BroadcastScheduleGame[]>([]);
+
+  // Player/Team card drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerType, setDrawerType] = useState<"player" | "team">("player");
+  const [drawerPlayerData, setDrawerPlayerData] = useState<BroadcastSummaryPlayer | null>(null);
+  const [drawerTeamData, setDrawerTeamData] = useState<BroadcastSummaryTeam | null>(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+
+  // Run of Show
+  const [runOfShow, setRunOfShow] = useState<RunOfShowItem[]>([]);
+  const [rosSessionId] = useState(() => `ros_${Date.now()}`);
+  const [showRunOfShow, setShowRunOfShow] = useState(false);
+
   // Game-state auto-switching
   const [pulsingTools, setPulsingTools] = useState<Set<BroadcastToolName>>(new Set());
   const prevGameStateRef = useRef<GameState>(gameState);
@@ -200,6 +227,136 @@ export default function BroadcastPage() {
       setIsPostGameLocked(false);
     }
   }, [gameState]);
+
+  // ── Load schedule games on mount ────────────────────────
+  useEffect(() => {
+    const league = teams.length > 0 && teams[0].league ? teams[0].league : "";
+    if (!league) return;
+    api.get(`/broadcast/games/today?league=${encodeURIComponent(league)}`).then(({ data }) => {
+      setScheduleGames(data?.games || []);
+    }).catch(() => {});
+  }, [teams]);
+
+  // ── Schedule picker handler ────────────────────────────
+  const handlePickGame = useCallback((game: BroadcastScheduleGame) => {
+    setHomeTeam(game.home_team);
+    setAwayTeam(game.away_team);
+    if (game.game_date) setGameDate(game.game_date);
+  }, []);
+
+  // ── Player drawer handler ──────────────────────────────
+  const handlePlayerClick = useCallback(async (playerName: string) => {
+    setDrawerOpen(true);
+    setDrawerType("player");
+    setDrawerPlayerData(null);
+    setDrawerLoading(true);
+    try {
+      // Find player ID from rosters
+      const allPlayers = [...homeRoster, ...awayRoster];
+      const match = allPlayers.find(
+        (p) => `${p.first_name} ${p.last_name}` === playerName || p.last_name === playerName
+      );
+      if (match) {
+        const { data } = await api.get(`/players/${match.id}/broadcast-summary`);
+        setDrawerPlayerData(data);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setDrawerLoading(false);
+    }
+  }, [homeRoster, awayRoster]);
+
+  // ── Team drawer handler ────────────────────────────────
+  const handleTeamClick = useCallback(async (teamName: string) => {
+    setDrawerOpen(true);
+    setDrawerType("team");
+    setDrawerTeamData(null);
+    setDrawerLoading(true);
+    try {
+      const { data } = await api.get(`/teams/${encodeURIComponent(teamName)}/broadcast-summary`);
+      setDrawerTeamData(data);
+    } catch {
+      // silently fail
+    } finally {
+      setDrawerLoading(false);
+    }
+  }, []);
+
+  // ── Next Break toggle handler ──────────────────────────
+  const handleToggleNextBreak = useCallback((entryId: string) => {
+    setTimelineEntries((prev) =>
+      prev.map((e) =>
+        e.id === entryId ? { ...e, in_next_break: !e.in_next_break } : e
+      )
+    );
+  }, []);
+
+  // ── Run of Show: push item ─────────────────────────────
+  const handlePushToRunOfShow = useCallback(async (content: string, itemType: string, sourceId?: string) => {
+    try {
+      const { data } = await api.post("/broadcast/run-of-show", {
+        session_id: rosSessionId,
+        item_type: itemType,
+        content,
+        source_id: sourceId,
+      });
+      setRunOfShow((prev) => [...prev, data]);
+    } catch {
+      // fallback: add locally
+      setRunOfShow((prev) => [...prev, { id: `local_${Date.now()}`, session_id: rosSessionId, item_type: itemType, content, sequence_order: prev.length + 1, status: "pending" as const, created_at: new Date().toISOString() }]);
+    }
+  }, [rosSessionId]);
+
+  // ── Run of Show: update status ─────────────────────────
+  const handleRosStatusUpdate = useCallback(async (id: string, status: "pending" | "done" | "skipped") => {
+    setRunOfShow((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
+    try {
+      await api.put(`/broadcast/run-of-show/${id}`, { status });
+    } catch {
+      // keep local update
+    }
+  }, []);
+
+  // ── Keyboard shortcuts for event bar ───────────────────
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Don't fire in input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const keyMap: Record<string, BroadcastEventType> = {
+        g: "goal_for",
+        a: "goal_against",
+        s: "save",
+        h: "hit",
+        p: "penalty",
+        t: "timeout",
+        n: "note",
+      };
+      const eventType = keyMap[e.key.toLowerCase()];
+      if (!eventType) return;
+
+      const cfg = BROADCAST_EVENT_CONFIG[eventType];
+      if (!cfg) return;
+
+      const periodLabel = gameState === "pre_game" ? "Pre-Game" : gameState === "post_game" ? "Post-Game" : gameState === "intermission" ? `INT ${period}` : period === 1 ? "1st" : period === 2 ? "2nd" : period === 3 ? "3rd" : "OT";
+
+      const entry: TimelineEntry = {
+        id: genTimelineId(),
+        type: cfg.timelineType,
+        text: cfg.label,
+        period: periodLabel,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        source: "event_bar",
+        color_badge: eventType,
+      };
+      setTimelineEntries((prev) => [...prev, entry]);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [gameState, period]);
 
   // ── Game-state auto-switching: expand/collapse tools ──
   useEffect(() => {
@@ -404,20 +561,21 @@ export default function BroadcastPage() {
   const renderToolContent = (toolId: BroadcastToolName) => {
     switch (toolId) {
       case "spotting_board":
-        return <SpottingBoard data={spottingBoard} />;
+        return <SpottingBoard data={spottingBoard} onPlayerClick={handlePlayerClick} />;
       case "talk_tracks":
-        return <TalkTracks data={talkTracks} />;
+        return <TalkTracks data={talkTracks} audience={audience} />;
       case "storyline_timeline":
         return (
           <StorylineTimeline
             entries={timelineEntries}
             onAddEntry={handleAddTimelineEntry}
+            onToggleNextBreak={handleToggleNextBreak}
             gameState={gameState}
             period={period}
           />
         );
       case "pxi_insights":
-        return <PXIInsights data={insights} />;
+        return <PXIInsights data={insights} audience={audience} />;
       case "stat_cards":
         return <LiveStatCards data={statCards} />;
       case "graphics_suggestions":
@@ -453,6 +611,37 @@ export default function BroadcastPage() {
             audience={audience}
             onGenerated={(d) => setPostGameScript(d)}
           />
+        );
+      case "runofshow":
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/60">Run of Show</span>
+              <span className="text-[9px] text-muted/40">{runOfShow.length} items</span>
+            </div>
+            {runOfShow.length === 0 ? (
+              <p className="text-xs text-muted/50 text-center py-4">No items. Push talk tracks, insights, or storylines here.</p>
+            ) : (
+              runOfShow.map((item, i) => (
+                <div key={item.id} className={`flex items-start gap-2 p-2 rounded-lg border ${item.status === "done" ? "bg-green-50 border-green-200 opacity-60" : item.status === "skipped" ? "bg-gray-50 border-gray-200 opacity-40" : "bg-white border-teal/10"}`}>
+                  <GripVertical size={12} className="text-muted/30 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/50">{item.item_type}</span>
+                    <p className="text-xs text-navy leading-relaxed">{item.content}</p>
+                  </div>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {item.status === "pending" && (
+                      <>
+                        <button onClick={() => handleRosStatusUpdate(item.id, "done")} className="p-1 text-green-500 hover:bg-green-50 rounded" title="Mark Done"><CheckCircle2 size={12} /></button>
+                        <button onClick={() => handleRosStatusUpdate(item.id, "skipped")} className="p-1 text-muted/40 hover:bg-gray-50 rounded" title="Skip"><SkipForward size={12} /></button>
+                      </>
+                    )}
+                    <span className="text-[8px] text-muted/40 ml-1">#{i + 1}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         );
       default:
         return null;
@@ -576,6 +765,8 @@ export default function BroadcastPage() {
               onGenerateAll={handleGenerateAll}
               onGenerateTool={handleGenerateTool}
               isGenerating={isGenerating}
+              scheduleGames={scheduleGames}
+              onPickGame={handlePickGame}
             />
           </div>
 
@@ -631,7 +822,7 @@ export default function BroadcastPage() {
         <div className="xl:hidden mt-4">
           <div className="bg-white rounded-xl border border-teal/20 p-4">
             <div className="flex flex-wrap gap-1 mb-3">
-              {(["profiles", "interview", "matchup", "producer", "postgame"] as RightTab[]).map((tab) => (
+              {(["profiles", "interview", "matchup", "producer", "postgame", "runofshow"] as RightTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveRightTab(tab)}
@@ -639,7 +830,7 @@ export default function BroadcastPage() {
                     activeRightTab === tab ? "bg-teal text-white" : "bg-navy/[0.04] text-muted/50"
                   }`}
                 >
-                  {tab === "postgame" ? "Post-Game" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === "postgame" ? "Post-Game" : tab === "runofshow" ? "Run of Show" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
             </div>
@@ -647,6 +838,172 @@ export default function BroadcastPage() {
           </div>
         </div>
       </div>
+      {/* Next Break Panel — shows queued items */}
+      {timelineEntries.some((e) => e.in_next_break && e.break_status !== "used") && (
+        <div className="fixed bottom-16 right-4 z-40 w-80 bg-white rounded-xl border border-orange/30 shadow-lg p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-oswald uppercase tracking-wider text-orange font-bold">Next Break Queue</span>
+            <span className="text-[9px] text-muted/40">{timelineEntries.filter((e) => e.in_next_break && e.break_status !== "used").length} items</span>
+          </div>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {timelineEntries.filter((e) => e.in_next_break && e.break_status !== "used").map((entry) => (
+              <div key={entry.id} className="flex items-center gap-2 px-2 py-1.5 bg-orange/5 rounded-lg text-xs">
+                <span className="flex-1 truncate text-navy">{entry.text}</span>
+                <button onClick={() => setTimelineEntries((prev) => prev.map((e) => e.id === entry.id ? { ...e, break_status: "used" } : e))} className="text-[9px] text-green-600 hover:underline shrink-0">Used</button>
+                <button onClick={() => handleToggleNextBreak(entry.id)} className="text-[9px] text-muted/40 hover:underline shrink-0">Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Run of Show collapsible strip */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#1A2332] text-white border-t border-white/10">
+        <button
+          onClick={() => setShowRunOfShow(!showRunOfShow)}
+          className="w-full flex items-center justify-between px-4 py-1.5"
+        >
+          <div className="flex items-center gap-2">
+            <ListOrdered size={12} />
+            <span className="text-[10px] font-oswald uppercase tracking-wider">Run of Show</span>
+            <span className="text-[9px] text-white/40">({runOfShow.filter((r) => r.status === "pending").length} pending)</span>
+          </div>
+          <ChevronDown size={12} className={`transition-transform ${showRunOfShow ? "rotate-180" : ""}`} />
+        </button>
+        {showRunOfShow && (
+          <div className="px-4 pb-3 max-h-40 overflow-y-auto">
+            {runOfShow.length === 0 ? (
+              <p className="text-xs text-white/30 py-2">No items yet. Push content from insights or talk tracks.</p>
+            ) : (
+              <div className="space-y-1">
+                {runOfShow.map((item, i) => (
+                  <div key={item.id} className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${item.status === "done" ? "text-white/30 line-through" : item.status === "skipped" ? "text-white/20" : "text-white/80"}`}>
+                    <span className="text-white/30 font-mono text-[9px]">{i + 1}</span>
+                    <span className="flex-1 truncate">{item.content}</span>
+                    <span className="text-[8px] text-white/20 uppercase">{item.item_type}</span>
+                    {item.status === "pending" && (
+                      <>
+                        <button onClick={() => handleRosStatusUpdate(item.id, "done")} className="text-[9px] text-green-400 hover:underline">Done</button>
+                        <button onClick={() => handleRosStatusUpdate(item.id, "skipped")} className="text-[9px] text-white/30 hover:underline">Skip</button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Player/Team Card Drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
+          <div className="relative w-full max-w-md bg-white shadow-2xl overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
+              <span className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">
+                {drawerType === "player" ? "Player Card" : "Team Card"}
+              </span>
+              <button onClick={() => setDrawerOpen(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X size={16} className="text-muted" />
+              </button>
+            </div>
+            <div className="p-4">
+              {drawerLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-teal/30 border-t-teal rounded-full animate-spin" />
+                </div>
+              ) : drawerType === "player" && drawerPlayerData ? (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h3 className="text-lg font-oswald font-bold text-navy">{drawerPlayerData.name}</h3>
+                    <div className="flex items-center justify-center gap-2 mt-1 text-xs text-muted">
+                      {drawerPlayerData.jersey_number && <span>#{drawerPlayerData.jersey_number}</span>}
+                      {drawerPlayerData.position && <span>{drawerPlayerData.position}</span>}
+                      {drawerPlayerData.handedness && <span>{drawerPlayerData.handedness}</span>}
+                    </div>
+                    {drawerPlayerData.current_team && <p className="text-xs text-teal mt-1">{drawerPlayerData.current_team}</p>}
+                  </div>
+                  {drawerPlayerData.quick_stats && (
+                    <div className="grid grid-cols-5 gap-2 bg-navy/[0.03] rounded-lg p-3">
+                      {(["gp", "goals", "assists", "points", "plus_minus"] as const).map((key) => (
+                        <div key={key} className="text-center">
+                          <div className="text-lg font-oswald font-bold text-navy">{drawerPlayerData.quick_stats[key]}</div>
+                          <div className="text-[9px] font-oswald uppercase tracking-wider text-muted/50">{key === "plus_minus" ? "+/-" : key.charAt(0).toUpperCase()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {drawerPlayerData.skill_profile_line && (
+                    <p className="text-sm text-navy/80 italic">{drawerPlayerData.skill_profile_line}</p>
+                  )}
+                  {drawerPlayerData.role_tags && drawerPlayerData.role_tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {drawerPlayerData.role_tags.map((tag) => (
+                        <span key={tag} className="text-[9px] px-2 py-0.5 rounded-full bg-teal/10 text-teal font-bold">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                  {drawerPlayerData.story_bites && drawerPlayerData.story_bites.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/50">Story Bites</span>
+                      {drawerPlayerData.story_bites.map((bite, i) => (
+                        <div key={i} className="bg-orange/5 rounded-lg p-2">
+                          <span className="text-[8px] font-oswald uppercase tracking-wider text-orange/60">{bite.type}</span>
+                          <p className="text-xs text-navy/80 leading-relaxed">{bite.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : drawerType === "team" && drawerTeamData ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-oswald font-bold text-navy text-center">{drawerTeamData.name}</h3>
+                  {drawerTeamData.record && (
+                    <div className="text-center text-sm text-navy/80">{drawerTeamData.record.w}-{drawerTeamData.record.l}-{drawerTeamData.record.ot} ({drawerTeamData.record.pts} pts)</div>
+                  )}
+                  {drawerTeamData.last_10 && <p className="text-xs text-muted text-center">Last 10: {drawerTeamData.last_10}</p>}
+                  <div className="grid grid-cols-2 gap-3">
+                    {drawerTeamData.pp_pct != null && (
+                      <div className="bg-navy/[0.03] rounded-lg p-2 text-center">
+                        <div className="text-lg font-oswald font-bold text-navy">{drawerTeamData.pp_pct}%</div>
+                        <div className="text-[9px] font-oswald uppercase text-muted/50">PP%</div>
+                      </div>
+                    )}
+                    {drawerTeamData.pk_pct != null && (
+                      <div className="bg-navy/[0.03] rounded-lg p-2 text-center">
+                        <div className="text-lg font-oswald font-bold text-navy">{drawerTeamData.pk_pct}%</div>
+                        <div className="text-[9px] font-oswald uppercase text-muted/50">PK%</div>
+                      </div>
+                    )}
+                  </div>
+                  {drawerTeamData.key_streaks && drawerTeamData.key_streaks.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/50">Key Streaks</span>
+                      {drawerTeamData.key_streaks.map((s, i) => (
+                        <p key={i} className="text-xs text-navy/80">{s}</p>
+                      ))}
+                    </div>
+                  )}
+                  {drawerTeamData.top_performers && drawerTeamData.top_performers.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/50">Top Performers</span>
+                      {drawerTeamData.top_performers.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-gray-50">
+                          <span className="text-navy font-medium">#{p.jersey} {p.name}</span>
+                          <span className="text-muted font-mono">{p.pts} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted/50 text-center py-8">No data available.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }

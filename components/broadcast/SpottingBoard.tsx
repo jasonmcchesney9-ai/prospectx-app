@@ -5,9 +5,10 @@ import type { SpottingBoardData } from "@/types/api";
 
 interface Props {
   data: SpottingBoardData | null;
+  onPlayerClick?: (playerName: string) => void;
 }
 
-export default function SpottingBoard({ data }: Props) {
+export default function SpottingBoard({ data, onPlayerClick }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPronunciation, setShowPronunciation] = useState(false);
   const [fontSize, setFontSize] = useState<"compact" | "standard" | "large">("standard");
@@ -80,6 +81,7 @@ export default function SpottingBoard({ data }: Props) {
               <th className="text-left px-2 py-1.5">#</th>
               <th className="text-left px-2 py-1.5">Name</th>
               <th className="text-center px-1.5 py-1.5">Pos</th>
+              <th className="text-center px-1.5 py-1.5">Hand</th>
               <th className="text-center px-1.5 py-1.5">GP</th>
               <th className="text-center px-1.5 py-1.5">G</th>
               <th className="text-center px-1.5 py-1.5">A</th>
@@ -104,8 +106,21 @@ export default function SpottingBoard({ data }: Props) {
                 className={`border-t border-teal/8 ${i % 2 === 0 ? "bg-white" : "bg-navy/[0.015]"} hover:bg-teal/[0.03] transition-colors`}
               >
                 <td className="px-2 py-1 font-mono text-muted/60">{p.jersey}</td>
-                <td className="px-2 py-1 font-medium text-navy whitespace-nowrap">{p.name}</td>
+                <td className="px-2 py-1 font-medium text-navy whitespace-nowrap">
+                  {onPlayerClick ? (
+                    <button onClick={() => onPlayerClick(p.name)} className="hover:text-teal hover:underline transition-colors text-left">
+                      {p.name}
+                    </button>
+                  ) : p.name}
+                </td>
                 <td className="text-center px-1.5 py-1 text-muted">{p.position}</td>
+                <td className="text-center px-1.5 py-1">
+                  {p.shoots ? (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${p.shoots.toUpperCase() === "L" ? "bg-teal/10 text-teal" : "bg-orange/10 text-orange"}`}>
+                      {p.shoots.toUpperCase()}
+                    </span>
+                  ) : "—"}
+                </td>
                 <td className="text-center px-1.5 py-1 font-mono">{p.gp}</td>
                 <td className="text-center px-1.5 py-1 font-mono">{p.g}</td>
                 <td className="text-center px-1.5 py-1 font-mono">{p.a}</td>

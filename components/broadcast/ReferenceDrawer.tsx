@@ -1,9 +1,9 @@
 "use client";
 
-import { User, MessageSquare, Crosshair, FileText, Award, Lock } from "lucide-react";
+import { User, MessageSquare, Crosshair, FileText, Award, Lock, ListOrdered } from "lucide-react";
 import type { GameState } from "@/types/api";
 
-export type RightTab = "profiles" | "interview" | "matchup" | "producer" | "postgame";
+export type RightTab = "profiles" | "interview" | "matchup" | "producer" | "postgame" | "runofshow";
 
 interface Props {
   activeTab: RightTab;
@@ -19,6 +19,7 @@ const TABS: { key: RightTab; icon: React.ElementType; label: string }[] = [
   { key: "matchup", icon: Crosshair, label: "Matchups" },
   { key: "producer", icon: FileText, label: "Producer" },
   { key: "postgame", icon: Award, label: "Post-Game" },
+  { key: "runofshow", icon: ListOrdered, label: "Run of Show" },
 ];
 
 export default function ReferenceDrawer({

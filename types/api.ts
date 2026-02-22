@@ -2515,6 +2515,12 @@ export interface PXIInsight {
   insight: string;
   stat_support?: string;
   suggested_use?: string;
+  text_casual?: string;
+  text_informed?: string;
+  text_hardcore?: string;
+  is_key?: boolean;
+  why_it_matters?: string;
+  speakable?: string;
 }
 
 export const INSIGHT_CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -2537,6 +2543,11 @@ export interface TimelineEntry {
   period: string;
   timestamp: string;
   source: string;
+  in_next_break?: boolean;
+  break_status?: "used" | "deferred" | null;
+  break_note?: string;
+  linked_player_ids?: string[];
+  color_badge?: string;
 }
 
 export const TIMELINE_TYPE_COLORS: Record<TimelineEntryType, { bg: string; text: string; label: string; border: string }> = {
@@ -2667,6 +2678,8 @@ export interface SpottingBoardPlayer {
   jersey: string;
   name: string;
   position: string;
+  shoots?: string;
+  role_tags?: string[];
   gp: number;
   g: number;
   a: number;
@@ -2697,10 +2710,18 @@ export type TalkTrackCategory =
   | "player_storyline"
   | "streak_milestone";
 
+export type TalkTrackSegment = "opening" | "color" | "bench_hit" | "panel" | "feature";
+export type TalkTrackContentTag = "human_story" | "analytics" | "tactical" | "milestone" | "rivalry";
+
 export interface TalkTrack {
   headline: string;
   twenty_sec_read: string;
   stat_hook: string;
+  text_casual?: string;
+  text_informed?: string;
+  text_hardcore?: string;
+  segment_type?: TalkTrackSegment;
+  content_tags?: TalkTrackContentTag[];
 }
 
 // ── Stat Cards ──────────────────────────────────────────────
@@ -3214,3 +3235,87 @@ export interface TrendlineResponse {
   trend: string;
   trendline: TrendlinePoint[];
 }
+
+// ── Broadcast: Player/Team Summary (drawer projections) ─────
+export interface BroadcastSummaryPlayer {
+  id: string;
+  name: string;
+  jersey_number?: string | null;
+  position: string;
+  handedness: string;
+  age?: number | null;
+  hometown?: string;
+  current_team: string;
+  photo_url?: string | null;
+  role_tags: string[];
+  archetype?: string;
+  quick_stats: {
+    gp: number;
+    goals: number;
+    assists: number;
+    points: number;
+    plus_minus: number;
+    last_5_games: { date: string; opponent: string; g: number; a: number; p: number }[];
+  };
+  story_bites: { type: string; text: string }[];
+  skill_profile_line?: string;
+}
+
+export interface BroadcastSummaryTeam {
+  id: string;
+  name: string;
+  logo_url?: string | null;
+  record: { w: number; l: number; ot: number; pts: number };
+  last_10: string;
+  pp_pct: number;
+  pk_pct: number;
+  pp_rank?: number | null;
+  pk_rank?: number | null;
+  key_streaks: string[];
+  top_performers: { name: string; jersey: string; pts: number }[];
+}
+
+// ── Broadcast: Run of Show ──────────────────────────────────
+export interface RunOfShowItem {
+  id: string;
+  session_id: string;
+  item_type: string;
+  content: string;
+  source_id?: string;
+  sequence_order: number;
+  status: "pending" | "done" | "skipped";
+  pushed_by?: string;
+  created_at: string;
+}
+
+// ── Broadcast: Schedule Game ────────────────────────────────
+export interface BroadcastScheduleGame {
+  id: string;
+  home_team: string;
+  away_team: string;
+  game_date: string;
+  venue?: string | null;
+  status: string;
+  home_score?: number | null;
+  away_score?: number | null;
+  league?: string;
+}
+
+// ── Broadcast: Event Bar Types ──────────────────────────────
+export type BroadcastEventType = "goal_for" | "goal_against" | "save" | "hit" | "penalty" | "timeout" | "note";
+
+export const BROADCAST_EVENT_CONFIG: Record<BroadcastEventType, {
+  label: string;
+  shortcut: string;
+  timelineType: TimelineEntryType;
+  color: string;
+  bgColor: string;
+}> = {
+  goal_for: { label: "Goal For", shortcut: "G", timelineType: "goal", color: "text-green-700", bgColor: "bg-green-100" },
+  goal_against: { label: "Goal Against", shortcut: "A", timelineType: "goal", color: "text-red-700", bgColor: "bg-red-100" },
+  save: { label: "Big Save", shortcut: "S", timelineType: "milestone", color: "text-teal", bgColor: "bg-teal/10" },
+  hit: { label: "Hit / Fight", shortcut: "H", timelineType: "shift", color: "text-orange", bgColor: "bg-orange/10" },
+  penalty: { label: "Penalty", shortcut: "P", timelineType: "penalty", color: "text-yellow-700", bgColor: "bg-yellow-100" },
+  timeout: { label: "Timeout", shortcut: "T", timelineType: "timeout", color: "text-purple-700", bgColor: "bg-purple-100" },
+  note: { label: "Note", shortcut: "N", timelineType: "note", color: "text-gray-700", bgColor: "bg-gray-100" },
+};

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Zap, FileText, RefreshCw, BarChart3, Radio } from "lucide-react";
+import { ChevronDown, ChevronUp, Zap, FileText, RefreshCw, BarChart3, Radio, Calendar } from "lucide-react";
 import HockeyRink from "@/components/HockeyRink";
-import type { Player, BroadcastMode, BroadcastDepth, BroadcastAudience } from "@/types/api";
+import type { Player, BroadcastMode, BroadcastDepth, BroadcastAudience, BroadcastScheduleGame } from "@/types/api";
 
 interface Props {
   homeTeam: string;
@@ -21,6 +21,8 @@ interface Props {
   onGenerateTool: (tool: string) => void;
   isGenerating: boolean;
   onPlayerClick?: (player: Player) => void;
+  scheduleGames?: BroadcastScheduleGame[];
+  onPickGame?: (game: BroadcastScheduleGame) => void;
 }
 
 function SegmentedGroup<T extends string>({
@@ -74,12 +76,39 @@ export default function GameContextRail({
   onGenerateTool,
   isGenerating,
   onPlayerClick,
+  scheduleGames,
+  onPickGame,
 }: Props) {
   const [homeExpanded, setHomeExpanded] = useState(true);
   const [awayExpanded, setAwayExpanded] = useState(true);
 
   return (
     <div className="sticky top-[7.5rem] h-[calc(100vh-7.5rem)] overflow-y-auto pb-4 space-y-3">
+      {/* Schedule Picker */}
+      {scheduleGames && scheduleGames.length > 0 && (
+        <div className="bg-white rounded-xl border border-teal/20 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Calendar size={12} className="text-teal" />
+            <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/60">Today&apos;s Games</span>
+          </div>
+          <div className="space-y-1">
+            {scheduleGames.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => onPickGame?.(g)}
+                className="w-full text-left px-2 py-1.5 rounded-lg text-[11px] hover:bg-teal/5 transition-colors border border-transparent hover:border-teal/10"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-navy">{g.away_team} <span className="text-muted/40">@</span> {g.home_team}</span>
+                  {g.game_date && <span className="text-muted/40 text-[10px]">{g.game_date}</span>}
+                </div>
+                {g.venue && <span className="text-[9px] text-muted/40">{g.venue}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Game Header Card */}
       <div className="bg-white rounded-xl border border-teal/20 p-3">
         <div className="flex items-center gap-2 mb-1.5">
