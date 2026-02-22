@@ -1212,6 +1212,7 @@ def init_db():
             FOREIGN KEY (org_id) REFERENCES organizations(id)
         )
     """)
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_org ON teams (name, org_id)")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS scout_notes (
@@ -4102,7 +4103,7 @@ def seed_teams():
     ]
     for name, league, city, abbr in gojhl_teams:
         conn.execute(
-            "INSERT INTO teams (id, org_id, name, league, city, abbreviation) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO teams (id, org_id, name, league, city, abbreviation) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (name, org_id) DO UPDATE SET league = EXCLUDED.league, city = EXCLUDED.city, abbreviation = EXCLUDED.abbreviation",
             (str(uuid.uuid4()), "__global__", name, league, city, abbr),
         )
     conn.commit()
@@ -4111,7 +4112,8 @@ def seed_teams():
 
 
 def deduplicate_teams():
-    """Remove duplicate teams — keep the version with logo_url or hockeytech_team_id, delete the other."""
+    """Remove duplicate teams — keep the version with logo_url or hockeytech_team_id, delete the other.
+    Then ensure unique index exists to prevent future duplicates."""
     conn = get_db()
     # Find teams with duplicate names (same org_id)
     dupes = conn.execute("""
@@ -4120,38 +4122,41 @@ def deduplicate_teams():
         GROUP BY name, org_id
         HAVING COUNT(*) > 1
     """).fetchall()
-    if not dupes:
-        conn.close()
-        return
     deleted = 0
-    for row in dupes:
-        team_name = row["name"] if isinstance(row, dict) or hasattr(row, 'keys') else row[0]
-        team_org = row["org_id"] if isinstance(row, dict) or hasattr(row, 'keys') else row[1]
-        # Get all rows for this team name + org
-        copies = conn.execute(
-            "SELECT id, logo_url, hockeytech_team_id FROM teams WHERE name = ? AND org_id = ?",
-            (team_name, team_org),
-        ).fetchall()
-        # Pick the keeper: prefer one with logo_url or hockeytech_team_id
-        keeper_id = None
-        for c in copies:
-            c_dict = dict(c)
-            if c_dict.get("logo_url") or c_dict.get("hockeytech_team_id"):
-                keeper_id = c_dict["id"]
-                break
-        # If none have logo/HT data, keep the first one
-        if not keeper_id:
-            keeper_id = dict(copies[0])["id"]
-        # Delete the rest
-        for c in copies:
-            c_id = dict(c)["id"]
-            if c_id != keeper_id:
-                conn.execute("DELETE FROM teams WHERE id = ?", (c_id,))
-                deleted += 1
-    conn.commit()
-    conn.close()
-    if deleted > 0:
+    if dupes:
+        for row in dupes:
+            team_name = row["name"] if isinstance(row, dict) or hasattr(row, 'keys') else row[0]
+            team_org = row["org_id"] if isinstance(row, dict) or hasattr(row, 'keys') else row[1]
+            # Get all rows for this team name + org
+            copies = conn.execute(
+                "SELECT id, logo_url, hockeytech_team_id FROM teams WHERE name = ? AND org_id = ?",
+                (team_name, team_org),
+            ).fetchall()
+            # Pick the keeper: prefer one with logo_url or hockeytech_team_id
+            keeper_id = None
+            for c in copies:
+                c_dict = dict(c)
+                if c_dict.get("logo_url") or c_dict.get("hockeytech_team_id"):
+                    keeper_id = c_dict["id"]
+                    break
+            # If none have logo/HT data, keep the first one
+            if not keeper_id:
+                keeper_id = dict(copies[0])["id"]
+            # Delete the rest
+            for c in copies:
+                c_id = dict(c)["id"]
+                if c_id != keeper_id:
+                    conn.execute("DELETE FROM teams WHERE id = ?", (c_id,))
+                    deleted += 1
+        conn.commit()
         logger.info("Deduplicated teams: removed %d duplicate entries", deleted)
+    # Ensure unique index exists (for existing DBs that predate this constraint)
+    try:
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_org ON teams (name, org_id)")
+        conn.commit()
+    except Exception as e:
+        logger.warning("Could not create unique index on teams: %s", e)
+    conn.close()
 
 
 def seed_drills():
@@ -6994,7 +6999,6 @@ seed_hockey_os()
 seed_leagues()
 migrate_leagues()
 seed_teams()
-deduplicate_teams()
 seed_drills()
 seed_drills_v2()
 seed_drills_pxi()
@@ -7006,6 +7010,9 @@ _seed_superadmin_user()
 # Seed skills library
 from seed_skills import seed_skills as _seed_skills_fn
 _seed_skills_fn()
+
+# Deduplicate teams AFTER all seeding is complete
+deduplicate_teams()
 
 
 # ── Auto-backup thread (SQLite only) ────────────────────────────────
@@ -15445,8 +15452,16 @@ class TeamCreateRequest(BaseModel):
 @app.post("/teams")
 async def create_team(body: TeamCreateRequest, token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
-    team_id = gen_id()
     conn = get_db()
+    # Check for existing team with same name in this org
+    existing = conn.execute(
+        "SELECT * FROM teams WHERE LOWER(name) = LOWER(?) AND org_id = ?",
+        (body.name, org_id),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return dict(existing)
+    team_id = gen_id()
     conn.execute(
         "INSERT INTO teams (id, org_id, name, league, city, abbreviation) VALUES (?, ?, ?, ?, ?, ?)",
         (team_id, org_id, body.name, body.league, body.city, body.abbreviation),
