@@ -823,6 +823,13 @@ export default function PlayerDetailPage() {
                 PDF
               </button>
               <Link
+                href={`/players/${playerId}/card`}
+                className="flex items-center gap-2 px-3 py-2 border border-teal/20 text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.03] transition-colors no-print"
+              >
+                <Eye size={14} />
+                Player Card
+              </Link>
+              <Link
                 href={`/reports/custom?player=${playerId}`}
                 className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors no-print"
               >

@@ -125,6 +125,7 @@ const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/players", label: "All Players", icon: Users },
   { href: "/players/manage", label: "Manage Players", icon: Settings },
   { href: "/scouting", label: "Scouting List", icon: Target },
+  { href: "/players/cards", label: "Player Cards", icon: Eye },
 ];
 
 // Scouting dropdown items (PRO only)
