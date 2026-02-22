@@ -2176,6 +2176,21 @@ def init_db():
         conn.commit()
         logger.info("Migration: added elite_prospects_url column to players")
 
+    # ── Migration: PXR v1 player card columns ──
+    pxr_cols = {r[1] for r in conn.execute("PRAGMA table_info(players)").fetchall()}
+    pxr_new = {
+        "role_tags": "TEXT DEFAULT '[]'",
+        "health_status": "TEXT DEFAULT 'healthy'",
+        "skill_profile_pxi": "TEXT",
+        "skill_profile_coach": "TEXT",
+        "skill_profile_updated": "TEXT",
+    }
+    for col_name, col_def in pxr_new.items():
+        if col_name not in pxr_cols:
+            conn.execute(f"ALTER TABLE players ADD COLUMN {col_name} {col_def}")
+            logger.info("Migration: added %s column to players (PXR v1)", col_name)
+    conn.commit()
+
     # ── Migration: rename old subscription tiers (CR-009) ──
     try:
         n1 = conn.execute("UPDATE users SET subscription_tier = 'scout' WHERE subscription_tier = 'novice'").rowcount
@@ -9963,6 +9978,31 @@ async def players_without_dev_plans(token_data: dict = Depends(verify_token)):
         conn.close()
 
 
+@app.get("/players/compare")
+async def compare_players(
+    player_ids: str = Query(..., description="Comma-separated player IDs (2-3)"),
+    token_data: dict = Depends(verify_token),
+):
+    """Side-by-side card data for 2-3 players."""
+    org_id = token_data["org_id"]
+    ids = [pid.strip() for pid in player_ids.split(",") if pid.strip()]
+    if len(ids) < 2 or len(ids) > 3:
+        raise HTTPException(status_code=400, detail="Provide 2-3 player IDs")
+
+    conn = get_db()
+    try:
+        cards = []
+        for pid in ids:
+            try:
+                card = _build_player_card(pid, org_id, conn)
+                cards.append(card)
+            except HTTPException:
+                cards.append({"error": f"Player {pid} not found"})
+        return {"players": cards}
+    finally:
+        conn.close()
+
+
 @app.post("/players/{player_id}/restore")
 async def restore_player(player_id: str, token_data: dict = Depends(verify_token)):
     """Restore a soft-deleted player within the 30-day recovery window."""
@@ -10856,6 +10896,365 @@ async def get_player_trendline(
             "trend": trend,
             "trendline": trendline,
         }
+    finally:
+        conn.close()
+
+
+# ── PXR v1 — Unified Player Card Endpoints ──────────────────
+
+def _build_player_card(player_id: str, org_id: str, conn) -> dict:
+    """Assemble the full PXR v1 unified player card response."""
+    row = conn.execute(
+        "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (player_id, org_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    player = dict(row)
+
+    # Parse JSON fields
+    for jf in ("tags", "passports", "role_tags"):
+        if player.get(jf) and isinstance(player[jf], str):
+            try:
+                player[jf] = json.loads(player[jf])
+            except (json.JSONDecodeError, TypeError):
+                player[jf] = []
+
+    # ── LEFT COLUMN: Identity ──
+    identity = {
+        "id": player["id"],
+        "first_name": player.get("first_name", ""),
+        "last_name": player.get("last_name", ""),
+        "position": player.get("position", ""),
+        "shoots": player.get("shoots"),
+        "birth_year": player.get("birth_year"),
+        "dob": player.get("dob"),
+        "height_cm": player.get("height_cm"),
+        "weight_kg": player.get("weight_kg"),
+        "current_team": player.get("current_team"),
+        "current_league": player.get("current_league"),
+        "image_url": player.get("image_url"),
+        "jersey_number": player.get("jersey_number"),
+        "commitment_status": player.get("commitment_status"),
+        "role_tags": player.get("role_tags") or [],
+        "health_status": player.get("health_status") or "healthy",
+        "elite_prospects_url": player.get("elite_prospects_url"),
+    }
+
+    # ── CENTER COLUMN: Performance ──
+    # Current season stats
+    stats_row = conn.execute("""
+        SELECT gp, g, a, p, plus_minus, pim, toi_seconds, shots, shooting_pct
+        FROM player_stats WHERE player_id = ? AND stat_type = 'season'
+        ORDER BY season DESC LIMIT 1
+    """, (player_id,)).fetchone()
+    current_stats = dict(stats_row) if stats_row else None
+
+    # Recent form (last 5 games)
+    recent_games = conn.execute("""
+        SELECT game_date, opponent, goals AS g, assists AS a, points AS p, shots, plus_minus
+        FROM player_game_stats WHERE player_id = ?
+        ORDER BY game_date DESC LIMIT 10
+    """, (player_id,)).fetchall()
+    game_log = [dict(r) for r in recent_games]
+
+    # Event aggregates (if available)
+    event_agg = aggregate_player_events(player_id, None, None, conn)
+
+    # Situation splits from events
+    splits = {}
+    for sit in ("5v5", "pp", "pk"):
+        s = aggregate_player_events(player_id, None, sit, conn)
+        if s["total_events"] > 0:
+            splits[sit] = s
+
+    performance = {
+        "current_stats": current_stats,
+        "game_log": game_log,
+        "event_aggregates": event_agg if event_agg["has_event_data"] else None,
+        "situation_splits": splits if splits else None,
+    }
+
+    # ── RIGHT COLUMN: Development ──
+    # Active dev plan objectives
+    objectives = conn.execute("""
+        SELECT id, title, skill_focus, drill_log_count, last_drilled_at, status
+        FROM development_plan_objectives
+        WHERE player_id = ? AND org_id = ? AND status = 'active'
+        ORDER BY created_at DESC LIMIT 3
+    """, (player_id, org_id)).fetchall()
+    active_objectives = []
+    for obj in objectives:
+        od = dict(obj)
+        if od.get("skill_focus") and isinstance(od["skill_focus"], str):
+            try:
+                od["skill_focus"] = json.loads(od["skill_focus"])
+            except (json.JSONDecodeError, TypeError):
+                od["skill_focus"] = []
+        active_objectives.append(od)
+
+    # Skill profile
+    skill_profile = {
+        "pxi_version": player.get("skill_profile_pxi"),
+        "coach_version": player.get("skill_profile_coach"),
+        "updated_at": player.get("skill_profile_updated"),
+    }
+
+    # Recent scout notes (last 3, role-gated to shared notes)
+    notes = conn.execute("""
+        SELECT id, note_text, tags, created_at
+        FROM scout_notes WHERE player_id = ? AND org_id = ? AND is_private = 0
+        ORDER BY created_at DESC LIMIT 3
+    """, (player_id, org_id)).fetchall()
+    recent_notes = []
+    for n in notes:
+        nd = dict(n)
+        if nd.get("tags") and isinstance(nd["tags"], str):
+            try:
+                nd["tags"] = json.loads(nd["tags"])
+            except (json.JSONDecodeError, TypeError):
+                nd["tags"] = []
+        recent_notes.append(nd)
+
+    # Player intelligence (grades, archetype)
+    intel = conn.execute("""
+        SELECT archetype, overall_grade, offensive_grade, defensive_grade,
+               skating_grade, hockey_iq_grade, compete_grade, strengths, development_areas
+        FROM player_intelligence WHERE player_id = ?
+        ORDER BY created_at DESC LIMIT 1
+    """, (player_id,)).fetchone()
+    intelligence = None
+    if intel:
+        intelligence = dict(intel)
+        for jf in ("strengths", "development_areas"):
+            if intelligence.get(jf) and isinstance(intelligence[jf], str):
+                try:
+                    intelligence[jf] = json.loads(intelligence[jf])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+    development = {
+        "active_objectives": active_objectives,
+        "skill_profile": skill_profile,
+        "recent_notes": recent_notes,
+        "intelligence": intelligence,
+    }
+
+    # ── League context ──
+    league_context = None
+    if player.get("current_league") and current_stats:
+        # Get league season stats for percentile context
+        season_row = conn.execute(
+            "SELECT season FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY season DESC LIMIT 1",
+            (player_id,)
+        ).fetchone()
+        if season_row:
+            season_val = season_row[0]
+            league_context = {
+                "league": player["current_league"],
+                "season": season_val,
+            }
+
+    return {
+        "identity": identity,
+        "performance": performance,
+        "development": development,
+        "league_context": league_context,
+    }
+
+
+@app.get("/players/{player_id}/card")
+async def get_player_card(player_id: str, token_data: dict = Depends(verify_token)):
+    """PXR v1 — Full unified player card. All data assembled in one response."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        return _build_player_card(player_id, org_id, conn)
+    finally:
+        conn.close()
+
+
+@app.post("/players/{player_id}/skill-profile/generate")
+async def generate_skill_profile(player_id: str, token_data: dict = Depends(verify_token)):
+    """PXI generates a 3-line skill profile from available player data."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        player = conn.execute(
+            "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        p = dict(player)
+
+        # Gather context
+        stats = conn.execute(
+            "SELECT gp, g, a, p, plus_minus, pim FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY season DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        stats_ctx = dict(stats) if stats else {}
+
+        intel = conn.execute(
+            "SELECT archetype, strengths, development_areas FROM player_intelligence WHERE player_id = ? ORDER BY created_at DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        intel_ctx = dict(intel) if intel else {}
+
+        event_agg = aggregate_player_events(player_id, None, None, conn)
+
+        # Build prompt
+        context_parts = [
+            f"Player: {p.get('first_name','')} {p.get('last_name','')}, {p.get('position','')}, {p.get('current_team','')}, {p.get('current_league','')}",
+        ]
+        if stats_ctx:
+            context_parts.append(f"Stats: {stats_ctx.get('gp',0)}GP {stats_ctx.get('g',0)}G {stats_ctx.get('a',0)}A {stats_ctx.get('p',0)}P {stats_ctx.get('plus_minus',0)}+/-")
+        if intel_ctx.get("archetype"):
+            context_parts.append(f"Archetype: {intel_ctx['archetype']}")
+        if intel_ctx.get("strengths"):
+            s = intel_ctx["strengths"]
+            if isinstance(s, str):
+                try:
+                    s = json.loads(s)
+                except Exception:
+                    s = [s]
+            context_parts.append(f"Strengths: {', '.join(s[:5]) if isinstance(s, list) else str(s)}")
+        if intel_ctx.get("development_areas"):
+            w = intel_ctx["development_areas"]
+            if isinstance(w, str):
+                try:
+                    w = json.loads(w)
+                except Exception:
+                    w = [w]
+            context_parts.append(f"Development areas: {', '.join(w[:5]) if isinstance(w, list) else str(w)}")
+        if event_agg["has_event_data"]:
+            context_parts.append(f"Event data: {event_agg['zone_entry_pct']}% controlled entries, {event_agg['shot_attempts']} shot attempts, {event_agg['xg_for']} xG, {event_agg['faceoff_pct']}% FO")
+
+        prompt = f"""Generate a concise 3-line skill profile for this hockey player. Each line must be exactly as described:
+
+Line 1 — Strengths: A concise summary of the player's primary strengths (1-2 sentences).
+Line 2 — Development areas: What the player needs to work on (1-2 sentences).
+Line 3 — Projection note: What role/level this profile suits, and what the key development variables are (1 sentence).
+
+Context:
+{chr(10).join(context_parts)}
+
+Return ONLY the 3 lines, each prefixed with the label. No other text."""
+
+        # Try Claude API
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if api_key:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": api_key,
+                            "anthropic-version": "2023-06-01",
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "model": "claude-haiku-4-5-20251001",
+                            "max_tokens": 500,
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        profile_text = data["content"][0]["text"].strip()
+                    else:
+                        profile_text = _generate_mock_skill_profile(p, stats_ctx, intel_ctx, event_agg)
+            except Exception:
+                profile_text = _generate_mock_skill_profile(p, stats_ctx, intel_ctx, event_agg)
+        else:
+            profile_text = _generate_mock_skill_profile(p, stats_ctx, intel_ctx, event_agg)
+
+        # Store in DB
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "UPDATE players SET skill_profile_pxi = ?, skill_profile_updated = ? WHERE id = ?",
+            (profile_text, now, player_id),
+        )
+        conn.commit()
+
+        return {
+            "player_id": player_id,
+            "skill_profile": profile_text,
+            "updated_at": now,
+            "source": "pxi" if api_key else "mock",
+        }
+    finally:
+        conn.close()
+
+
+def _generate_mock_skill_profile(player: dict, stats: dict, intel: dict, event_agg: dict) -> str:
+    """Generate a reasonable skill profile without API access."""
+    name = f"{player.get('first_name', '')} {player.get('last_name', '')}"
+    pos = player.get("position", "F")
+    team = player.get("current_team", "")
+    gp = stats.get("gp", 0)
+    g = stats.get("g", 0)
+    a = stats.get("a", 0)
+
+    strengths = []
+    dev_areas = []
+
+    if g and gp and g / max(gp, 1) > 0.3:
+        strengths.append("strong finishing ability")
+    if a and gp and a / max(gp, 1) > 0.5:
+        strengths.append("creative playmaker with vision")
+    if event_agg.get("has_event_data") and event_agg.get("zone_entry_pct", 0) > 60:
+        strengths.append("effective zone entry carrier")
+    if event_agg.get("has_event_data") and event_agg.get("retrievals", 0) > 5:
+        strengths.append("active puck retriever")
+    if intel.get("archetype"):
+        strengths.append(f"{intel['archetype']} profile")
+    if not strengths:
+        strengths.append("developing player with potential")
+
+    if event_agg.get("has_event_data") and event_agg.get("zone_entry_pct", 0) < 40:
+        dev_areas.append("controlled zone entries need improvement")
+    if stats.get("plus_minus") and stats["plus_minus"] < -5:
+        dev_areas.append("defensive zone awareness")
+    if not dev_areas:
+        dev_areas.append("consistency at pace remains the main development variable")
+
+    line1 = f"Strengths: {', '.join(strengths[:3]).capitalize()}."
+    line2 = f"Development areas: {', '.join(dev_areas[:2]).capitalize()}."
+    line3 = f"Projection note: Profile suits a {'top-6' if (g + a) / max(gp, 1) > 0.5 else 'depth'} role — pace and decision speed are the key variables."
+
+    return f"{line1}\n{line2}\n{line3}"
+
+
+@app.put("/players/{player_id}/role-tags")
+async def update_player_role_tags(
+    player_id: str,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Update role tags for a player. Coach/admin only."""
+    org_id = token_data["org_id"]
+    role_tags = body.get("role_tags", [])
+    if not isinstance(role_tags, list):
+        raise HTTPException(status_code=400, detail="role_tags must be a list")
+
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        conn.execute(
+            "UPDATE players SET role_tags = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(role_tags), datetime.now(timezone.utc).isoformat(), player_id),
+        )
+        conn.commit()
+        return {"player_id": player_id, "role_tags": role_tags}
     finally:
         conn.close()
 

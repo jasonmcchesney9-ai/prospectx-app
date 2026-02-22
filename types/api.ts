@@ -63,6 +63,12 @@ export interface Player {
   roster_status: string;
   jersey_number: string | null;
   created_at: string;
+  // PXR v1 fields
+  role_tags?: RoleTag[];
+  health_status?: string;
+  skill_profile_pxi?: string | null;
+  skill_profile_coach?: string | null;
+  skill_profile_updated?: string | null;
 }
 
 export interface RosterPlayer extends Player {
@@ -3042,4 +3048,111 @@ export interface PlayerEvent {
   source: "instat" | "gamesheet" | "manual" | "xml";
   raw_event_id: string | null;
   created_at: string;
+}
+
+// ── PXR v1 — Unified Player Card Types ──
+export interface RoleTag {
+  type: "line_pair" | "special_teams" | "system_role" | "status";
+  label: string;
+}
+
+export interface EventAggregates {
+  has_event_data: boolean;
+  zone_entries_total: number;
+  zone_entries_controlled: number;
+  zone_entry_pct: number;
+  zone_exits_total: number;
+  zone_exits_controlled: number;
+  zone_exit_pct: number;
+  retrievals: number;
+  shot_attempts: number;
+  xg_for: number;
+  chances_for: number;
+  faceoff_wins: number;
+  faceoff_total: number;
+  faceoff_pct: number;
+  total_events: number;
+  games_with_events: number;
+}
+
+export interface SkillProfile {
+  pxi_version: string | null;
+  coach_version: string | null;
+  updated_at: string | null;
+}
+
+export interface PlayerCardIdentity {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string;
+  shoots: string | null;
+  birth_year: number | null;
+  dob: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  current_team: string | null;
+  current_league: string | null;
+  image_url: string | null;
+  jersey_number: string | null;
+  commitment_status: string | null;
+  role_tags: RoleTag[];
+  health_status: string;
+  elite_prospects_url: string | null;
+}
+
+export interface PlayerCardPerformance {
+  current_stats: Record<string, number> | null;
+  game_log: Record<string, unknown>[];
+  event_aggregates: EventAggregates | null;
+  situation_splits: Record<string, EventAggregates> | null;
+}
+
+export interface PlayerCardDevelopment {
+  active_objectives: {
+    id: string;
+    title: string;
+    skill_focus: string[];
+    drill_log_count: number;
+    last_drilled_at: string | null;
+    status: string;
+  }[];
+  skill_profile: SkillProfile;
+  recent_notes: {
+    id: string;
+    note_text: string;
+    tags: string[];
+    created_at: string;
+  }[];
+  intelligence: Record<string, unknown> | null;
+}
+
+export interface PlayerCardData_V1 {
+  identity: PlayerCardIdentity;
+  performance: PlayerCardPerformance;
+  development: PlayerCardDevelopment;
+  league_context: {
+    league: string;
+    season: string;
+  } | null;
+}
+
+export interface TrendlinePoint {
+  index: number;
+  date: string;
+  opponent: string;
+  value: number;
+  rolling_avg: number;
+  event_data?: Record<string, number>;
+}
+
+export interface TrendlineResponse {
+  player_id: string;
+  metric: string;
+  games_requested: number;
+  games_found: number;
+  has_event_data: boolean;
+  event_games_found: number;
+  trend: string;
+  trendline: TrendlinePoint[];
 }
