@@ -306,7 +306,7 @@ export default function NavBar() {
           </Link>
 
           {/* ── Center Nav ── */}
-          <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
+          <div className="hidden md:flex items-center gap-1 flex-1 justify-center min-w-0">
             {navConfig.left.map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
