@@ -29611,6 +29611,181 @@ async def invite_family_member(request: Request, token_data: dict = Depends(veri
         conn.close()
 
 
+# ── Family Guide Content Library ─────────────────────────────
+
+FAMILY_GUIDE_SEED = [
+    # ── Nutrition ──
+    {"category": "nutrition", "age_band": "all", "title": "Everyday Fueling for Young Athletes",
+     "content": "Three meals and two snacks daily. Whole foods first — fruits, vegetables, lean protein, whole grains. Hydrate consistently throughout the day, not just at the rink. Avoid energy drinks under age 16. Limit sports drinks to game days only. No supplements without medical advice. Water is the default beverage."},
+    {"category": "nutrition", "age_band": "u13", "title": "Game Day Nutrition — U11 to U13",
+     "content": "Keep it simple. Familiar foods only — no new meals on game day. Eat 2-3 hours before game time. Good options: pasta with lean sauce, grilled chicken and rice, PB&J on whole wheat. Avoid heavy, fried, or greasy foods. Bring water and a light snack (banana, granola bar) for between periods. After the game: protein and carbs within 60 minutes — chocolate milk, turkey wrap, or yogurt with fruit."},
+    {"category": "nutrition", "age_band": "u15", "title": "Game Day Nutrition — U14 to U15",
+     "content": "Pre-game meal 3 hours before: balanced plate with carbs, protein, and vegetables. Examples: chicken stir-fry with rice, pasta with meat sauce and salad. 90 minutes before: light snack — banana, toast with honey, or sports bar. During game: water between periods, small sips. Post-game within 45 minutes: recovery meal with 3:1 carb-to-protein ratio. Chocolate milk, smoothie, or sandwich. Hydration target: half your body weight in ounces of water daily."},
+    {"category": "nutrition", "age_band": "u18", "title": "Game Day Nutrition — U16 to U18",
+     "content": "Pre-game meal 3-4 hours before: 60% carbs, 25% protein, 15% healthy fats. Hydrate starting 24 hours before game day. Pre-game snack 60-90 min before: easily digestible carbs (toast, fruit, rice cakes). During game: water or electrolyte drink, small consistent sips. Post-game: recovery window is critical — eat within 30 minutes. Aim for 20-25g protein plus carbs. Plan ahead: pack meals for tournament weekends. Hotel room snack list: nuts, dried fruit, protein bars, peanut butter, bread, bananas."},
+    {"category": "nutrition", "age_band": "all", "title": "Tournament Weekend Fueling Strategy",
+     "content": "Night before: carb-loading dinner — pasta, rice, or potatoes with lean protein. Morning of Day 1: eat early, eat familiar. Between games: light, easy-to-digest foods — sandwiches, wraps, fruit, granola bars. Avoid: fried food, heavy meals, candy, energy drinks. Hydrate between every game. Day 2-3: repeat the pattern. Sleep is as important as food — aim for 8-10 hours. Pack a cooler with pre-made meals to avoid relying on arena concessions."},
+    # ── Workout / Training ──
+    {"category": "workout", "age_band": "u13", "title": "Off-Ice Training — U11 and Under",
+     "content": "No structured strength training at this age. Focus on movement, agility, and fun. Multi-sport participation is strongly encouraged — soccer, swimming, baseball develop different movement patterns. Max 3 ice sessions per week. Off-ice activities: tag games, obstacle courses, balance drills, bodyweight movement (bear crawls, crab walks). Emphasize coordination and body awareness. No external load. Keep it playful."},
+    {"category": "workout", "age_band": "u13", "title": "Off-Ice Training — U13",
+     "content": "Bodyweight exercises only. Focus on agility, balance, and coordination. No external load (barbells, dumbbells). Good exercises: push-ups, squats, lunges, planks, single-leg balance, ladder drills, cone agility. Off-ice skating skills: edge work drills on inline skates or slide board. Sport sampling still recommended — variety prevents burnout and builds athletic foundation. 2-3 off-ice sessions per week maximum."},
+    {"category": "workout", "age_band": "u15", "title": "Off-Ice Training — U15",
+     "content": "Introduction to light resistance training. Focus on movement quality over load. Key exercises: goblet squats, push-ups, band pull-aparts, single-leg RDL, medicine ball throws. 2-3 strength sessions per week. Recovery emphasis — rest days matter. Learn proper form before adding weight. Include mobility work: hip flexor stretches, thoracic rotation, ankle mobility. Always warm up before training. Never train through pain. Sleep 8-10 hours — recovery is training."},
+    {"category": "workout", "age_band": "u18", "title": "Off-Ice Training — U18",
+     "content": "Progressive resistance training. Compound lifts: squat, deadlift, bench press, overhead press — with proper coaching. Position-specific conditioning: forwards need explosive skating and shot power, defensemen need lateral agility and core strength. Pre-season vs in-season differences: pre-season = build, in-season = maintain. 3-4 strength sessions per week in pre-season, 2 in-season. Recovery protocols: foam rolling, stretching, adequate sleep, nutrition timing. Track progress with simple logs."},
+    # ── Pathway / College ──
+    {"category": "pathway", "age_band": "u15", "title": "CHL Pathway — OHL, WHL, QMJHL",
+     "content": "The CHL (Canadian Hockey League) includes the OHL, WHL, and QMJHL. Players are drafted by CHL teams starting at age 15 (varies by league). The OHL Priority Selection typically occurs in April. Scouts evaluate players throughout the U15/U16 season. Playing in the CHL means forfeiting NCAA eligibility (you can still play U SPORTS in Canada). Education packages are provided — tuition covered for each year played. What scouts look for: skating, compete level, hockey sense, physical maturity, character. Realistic timeline: most drafted players have been on elite pathways since U13/U14."},
+    {"category": "pathway", "age_band": "u15", "title": "Junior A Pathway — GOJHL, BCHL, AJHL",
+     "content": "Junior A leagues (GOJHL, BCHL, AJHL, OJHL, etc.) are an excellent development pathway that preserves NCAA eligibility. Players typically join at ages 16-20. How to get noticed: attend camps and combines, play in showcases, have your coach reach out to Jr. A contacts. Jr. A combines education with competitive hockey — many players attend college or university while playing. Typical player profile: skilled, competitive, developing physically. Don't burn bridges — maintain relationships with coaches, be a good teammate, keep your social media clean."},
+    {"category": "pathway", "age_band": "u18", "title": "NCAA Hockey — Division I and Division III",
+     "content": "NCAA hockey is a top destination for development-minded players. Division I: ~60 programs, highly competitive, full and partial scholarships available. Division III: ~80+ programs, no athletic scholarships but strong academics and financial aid. Eligibility rules: maintain amateur status, register with NCAA Eligibility Center, meet academic standards (SAT/ACT, GPA requirements). Recruiting timeline: coaches can contact you starting June 15 after sophomore year (rules may vary). Campus visits matter. Academic performance is critical — many programs weight character and grades heavily. The average NCAA D1 player commits between ages 17-19."},
+    {"category": "pathway", "age_band": "u18", "title": "U SPORTS — Canadian University Hockey",
+     "content": "U SPORTS is the Canadian equivalent of NCAA. Strong programs across the country. Players who have played in the CHL are eligible. Scholarship options available through athletic and academic awards. Season runs October to March. Combines high-level hockey with a Canadian university degree. Many former CHL players continue their development here. Good option for players who want to stay in Canada for education."},
+    # ── Mental Performance ──
+    {"category": "mental", "age_band": "all", "title": "Pre-Game Routines That Work",
+     "content": "A good pre-game routine helps you focus and feel ready. Elements to include: arrive early and get organized, light dynamic warm-up, listen to music that puts you in the right headspace, visualization (picture yourself making plays), 3-5 deep breaths before stepping on the ice. What doesn't work: cramming new information, overthinking, negative self-talk. Keep your routine simple and consistent. Elite players don't wing it — they prepare the same way every time."},
+    {"category": "mental", "age_band": "all", "title": "Handling Mistakes — Reset Routines",
+     "content": "Every player makes mistakes. What separates good players from great ones is how fast they reset. The 10-second reset: take one deep breath, squeeze your stick hard for 2 seconds then release, focus on the next play — not the last one. Reframe errors as information, not failure. 'That play told me I need to look over my shoulder earlier.' Short-term memory is a hockey superpower. What elite players do: they move on immediately. The shift is over. The next one matters more."},
+    {"category": "mental", "age_band": "all", "title": "When Nerves Become a Problem",
+     "content": "Butterflies before a game are normal — they mean you care. Breathing tools: box breathing (4 seconds in, 4 hold, 4 out, 4 hold). Focus on what you can control: effort, attitude, preparation. When nerves go beyond normal: if your player is losing sleep, having stomach issues before every game, crying regularly, or expressing wanting to quit — those are signs to seek professional help. How to find a sport psychologist: ask your team, check your insurance, or contact your provincial/state hockey association for referrals. There is no shame in getting help — many NHL players work with mental performance coaches."},
+    # ── Gear ──
+    {"category": "gear", "age_band": "all", "title": "Equipment Priority Guide",
+     "content": "Tier 1 — Spend here: Skates and helmet. Fit over brand. Get professionally fitted. Replace helmet after any significant impact. Tier 2 — Important: Stick (right flex and length for your player), gloves (protection and feel), shoulder pads (fit, not fashion). Tier 3 — Adequate is fine: Shin guards, elbow pads, pants — protection matters more than brand at youth level. Fit checks: Skates — no toe room, heel lock. Helmet — 2-finger rule above eyebrows. Stick — chin height when standing on skates."},
+    {"category": "gear", "age_band": "all", "title": "Skate Sharpening and Replacement",
+     "content": "Sharpening frequency by level: house league — every 10-15 skates. Rep/travel — every 5-10 skates. Elite — every 3-5 skates or as needed. Hollow recommendation by age/weight: U11 (lighter players) — 5/8 inch. U13-U15 — 1/2 inch. U16+ — 1/2 to 7/16 inch (personal preference). When to replace skates: when your player has grown out of them, when blades are too worn to sharpen effectively, or when the boot has lost structural support. Invest in quality skates — they are the single most important piece of equipment."},
+    # ── Glossary ──
+    {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — Game Terms",
+     "content": "Forecheck: pressuring the other team in their own zone to win the puck back. Breakout: how a team moves the puck out of their defensive zone. Cycling: passing and moving in a circular pattern in the offensive zone to maintain possession. Transition: switching from defense to offense (or vice versa). PK (Penalty Kill): playing short-handed while a teammate serves a penalty. PP (Power Play): having an extra player on the ice due to an opponent's penalty. Faceoff: how play starts — two players compete for the puck at center ice or in the circles. Zone Entry: how a team moves the puck from the neutral zone into the offensive zone."},
+    {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — League Terms",
+     "content": "Jr. A: top tier of junior hockey that preserves NCAA eligibility (GOJHL, BCHL, AJHL, OJHL). Jr. B: developmental junior hockey, more accessible, still competitive. AAA: highest level of minor hockey — rep/travel. AA: second tier of competitive minor hockey. A / Rep: competitive level below AAA/AA. House League: recreational hockey, all skill levels. GOJHL: Greater Ontario Junior Hockey League (Jr. A in Ontario). OHL: Ontario Hockey League (Major Junior, part of CHL). WHL: Western Hockey League (Major Junior, part of CHL). QMJHL: Quebec Major Junior Hockey League (part of CHL). NCAA: National Collegiate Athletic Association — US college hockey. U SPORTS: Canadian university athletics organization."},
+    {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — Development Terms",
+     "content": "LTPD: Long-Term Player Development — Hockey Canada's framework for age-appropriate development. LTAD: Long-Term Athlete Development — the broader sports science framework LTPD is based on. ADM: American Development Model — USA Hockey's player development program. Birth Year: the year a player was born — determines age division. Overager: a player in the oldest year of their age group. Draft Eligible: a player old enough to be selected in a league's draft. Import Player: a player from outside the league's geographic region (rules vary by league). Age Out: when a player reaches the maximum age for their league."},
+]
+
+
+def _seed_guide_content():
+    """Seed the guide_content table with original content — skip if already seeded."""
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT COUNT(*) FROM guide_content").fetchone()[0]
+        if existing >= len(FAMILY_GUIDE_SEED):
+            logger.info("guide_content already seeded (%d entries), skipping", existing)
+            return
+        for item in FAMILY_GUIDE_SEED:
+            gid = str(uuid.uuid4())
+            conn.execute("""
+                INSERT OR IGNORE INTO guide_content (id, category, title, content, age_band, country, tags)
+                VALUES (?, ?, ?, ?, ?, 'all', ?)
+            """, (gid, item["category"], item["title"], item["content"],
+                  item.get("age_band", "all"), json.dumps([item["category"]])))
+        conn.commit()
+        logger.info("Seeded %d guide_content entries", len(FAMILY_GUIDE_SEED))
+    finally:
+        conn.close()
+
+# Seed guide content on startup
+_seed_guide_content()
+
+
+@app.get("/guide")
+async def list_guide_content(
+    category: str = None,
+    age_band: str = None,
+    search: str = None,
+    token_data: dict = Depends(verify_token),
+):
+    """List family guide content with optional filters."""
+    conn = get_db()
+    try:
+        query = "SELECT * FROM guide_content WHERE 1=1"
+        params: list = []
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if age_band:
+            query += " AND (age_band = ? OR age_band = 'all')"
+            params.append(age_band)
+        if search:
+            query += " AND (title LIKE ? OR content LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%"])
+        query += " ORDER BY category, title"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/guide/{guide_id}")
+async def get_guide_article(guide_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single guide article."""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM guide_content WHERE id = ?", (guide_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Guide article not found")
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@app.post("/guide/nutrition-planner")
+async def nutrition_game_day_planner(request: Request, token_data: dict = Depends(verify_token)):
+    """Generate a personalized game-day nutrition timeline based on game time and age."""
+    body = await request.json()
+    game_time = body.get("game_time", "19:00")
+    age_band = body.get("age_band", "u15")
+    restrictions = body.get("restrictions", [])
+
+    try:
+        hour, minute = map(int, game_time.split(":"))
+    except (ValueError, AttributeError):
+        hour, minute = 19, 0
+
+    def time_str(h, m):
+        h = h % 24
+        period = "AM" if h < 12 else "PM"
+        dh = h % 12 or 12
+        return f"{dh}:{m:02d} {period}"
+
+    if age_band in ("u11", "u13"):
+        timeline = [
+            {"time": time_str(8, 0), "item": "Breakfast", "detail": "Whole grain cereal or oatmeal with fruit and milk. Keep it familiar."},
+            {"time": time_str(hour - 4, minute), "item": "Pre-Game Meal", "detail": "Pasta with lean sauce, or PB&J on whole wheat. Simple, familiar foods."},
+            {"time": time_str(hour - 1, 30), "item": "Pre-Game Snack", "detail": "Banana, granola bar, or toast with honey. Small and easy to digest."},
+            {"time": time_str(hour, minute), "item": "Game Time", "detail": "Water between periods. Small sips — don't chug."},
+            {"time": time_str(hour + 2, minute), "item": "Post-Game", "detail": "Chocolate milk, yogurt with fruit, or a turkey sandwich. Eat within 60 minutes."},
+        ]
+    else:
+        timeline = [
+            {"time": time_str(8, 0), "item": "Breakfast", "detail": "Eggs, whole grain toast, fruit, and water. Set the foundation early."},
+            {"time": time_str(12, 0), "item": "Lunch", "detail": "Balanced plate: protein (chicken/fish), carbs (rice/pasta), vegetables. Hydrate."},
+            {"time": time_str(hour - 3, minute), "item": "Pre-Game Meal", "detail": "60% carbs, 25% protein, 15% fats. Examples: chicken stir-fry with rice, pasta with meat sauce."},
+            {"time": time_str(hour - 1, 30), "item": "Pre-Game Snack", "detail": "Easily digestible carbs: toast, rice cakes, banana, or sports bar."},
+            {"time": time_str(hour, minute), "item": "Game Time", "detail": "Water or electrolyte drink. Small sips between shifts and between periods."},
+            {"time": time_str(hour + 2, 0), "item": "Recovery Meal", "detail": "Within 30 minutes: 20-25g protein + carbs. Smoothie, chocolate milk, or sandwich."},
+            {"time": time_str(hour + 3, 0), "item": "Hydration Check", "detail": "Continue drinking water. Aim for clear or light yellow urine before bed."},
+        ]
+
+    restriction_note = ""
+    if restrictions:
+        restriction_note = f"Dietary notes: {', '.join(restrictions)}. Adjust meal choices accordingly — substitute as needed while maintaining the timing."
+
+    return {
+        "game_time": game_time,
+        "age_band": age_band,
+        "timeline": timeline,
+        "restriction_note": restriction_note,
+        "general_tips": [
+            "No new foods on game day — stick to familiar meals.",
+            "Hydrate starting the day before the game.",
+            "Avoid heavy, fried, or sugary foods before playing.",
+            "Pack meals and snacks in advance for away games.",
+        ],
+    }
+
+
 # ── Car Ride Script (After Game Help) ─────────────────────────
 
 CAR_RIDE_SCRIPTS = {
