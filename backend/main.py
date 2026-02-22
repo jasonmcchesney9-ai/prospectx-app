@@ -2301,7 +2301,7 @@ def init_db():
     # Auto-complete onboarding for existing users (they were already using the platform)
     existing_users = conn.execute("SELECT COUNT(*) as c FROM users WHERE onboarding_completed IS NULL OR onboarding_completed = 0").fetchone()["c"]
     if existing_users > 0:
-        conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at < CURRENT_TIMESTAMP")
+        conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at::timestamp < CURRENT_TIMESTAMP")
         conn.commit()
         logger.info("Migration: auto-completed onboarding for %d existing users", existing_users)
 
