@@ -30504,7 +30504,17 @@ async def migrate_data(
     try:
         # Disable FK constraints during migration
         conn.execute("PRAGMA foreign_keys=OFF")
-        # Execute the entire SQL script
+
+        # Drop ALL existing tables to avoid schema mismatch
+        # (Railway tables may have fewer columns than local)
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
+        ).fetchall()]
+        for t in tables:
+            conn.execute(f'DROP TABLE IF EXISTS [{t}]')
+        conn.commit()
+
+        # Execute the entire SQL script (creates tables + inserts data)
         conn.executescript(sql_text)
         conn.execute("PRAGMA foreign_keys=ON")
         conn.commit()
