@@ -29611,6 +29611,121 @@ async def invite_family_member(request: Request, token_data: dict = Depends(veri
         conn.close()
 
 
+# ── Car Ride Script (After Game Help) ─────────────────────────
+
+CAR_RIDE_SCRIPTS = {
+    "win_good": {
+        "title": "After a Win — Player Felt Good",
+        "opening": "Great game! Here are some conversation starters for the car ride home:",
+        "say_this": [
+            "What was the most fun part of the game for you?",
+            "I noticed you were really competing hard out there — that was great to see.",
+            "Who did something on your team tonight that you thought was really good?",
+        ],
+        "avoid_this": [
+            "Don't replay every goal or shift — let them enjoy the win.",
+            "Avoid comparing them to other players on the team.",
+            "Don't immediately jump to 'what you could improve.'",
+        ],
+        "parent_tip": "After a win, keep it light. Let your player enjoy the feeling. The coaching happens at practice, not in the car.",
+    },
+    "win_okay": {
+        "title": "After a Win — Player Seemed Flat",
+        "opening": "The team won, but your player might not feel like they contributed. Here's how to help:",
+        "say_this": [
+            "How did you feel about your game tonight?",
+            "You were part of the win — every shift matters, not just the scoresheet.",
+            "What's one thing you want to work on for next time?",
+        ],
+        "avoid_this": [
+            "Don't say 'Why didn't you score?' or 'You barely touched the puck.'",
+            "Don't compare their ice time to teammates.",
+            "Don't focus on what went wrong — focus on effort.",
+        ],
+        "parent_tip": "Some games, your player won't be 'on.' That's normal. Validate their effort and let them process.",
+    },
+    "loss_tough": {
+        "title": "After a Tough Loss",
+        "opening": "Losses are hard, especially for young players. Here's how to be supportive:",
+        "say_this": [
+            "What did you enjoy about playing tonight?",
+            "I could see you were working hard out there — that takes guts.",
+            "Is there anything you want to talk about, or do you just want some quiet time?",
+        ],
+        "avoid_this": [
+            "Don't say 'Why did you miss that shot?' or 'You should have...'",
+            "Don't blame the coach, the refs, or teammates.",
+            "Don't try to fix it right now — just listen.",
+        ],
+        "parent_tip": "After a tough loss, silence or music is often better than a talk. If they want to talk, listen more than you speak. Focus on effort, not outcome.",
+    },
+    "loss_mistake": {
+        "title": "After a Loss — Player Made a Key Mistake",
+        "opening": "When your player feels responsible for a loss, they need support, not solutions:",
+        "say_this": [
+            "Everyone makes mistakes — that's how you get better. The best players learn from them.",
+            "I'm proud of you for competing. One play doesn't define you.",
+            "What did you learn tonight that will help you next game?",
+        ],
+        "avoid_this": [
+            "Never replay the mistake or say 'If only you had...'",
+            "Don't minimize their feelings — 'It's just a game' doesn't help when they're hurting.",
+            "Don't bring it up again tomorrow — let them move on.",
+        ],
+        "parent_tip": "The car ride after a mistake-driven loss is one of the most important parenting moments in hockey. Your calm support teaches resilience. Coaches will handle the hockey; your job is to handle the human.",
+    },
+    "scratched": {
+        "title": "After Being Scratched / Low Ice Time",
+        "opening": "Being scratched or getting limited ice time is emotionally hard. Here's how to help:",
+        "say_this": [
+            "I know that was frustrating. It's okay to feel that way.",
+            "The coach has a plan — sometimes the best thing you can do is keep working hard in practice.",
+            "What are you going to focus on this week to show the coach what you can do?",
+        ],
+        "avoid_this": [
+            "Don't immediately criticize the coach's decision.",
+            "Don't promise to 'talk to the coach' unless your player asks you to.",
+            "Don't compare their ice time to other players in front of them.",
+        ],
+        "parent_tip": "Getting scratched builds character if handled well. Teach your player that adversity is part of the journey. Contact the coach privately and calmly if the pattern continues, but not in the heat of the moment.",
+    },
+}
+
+
+@app.get("/family/car-ride-scripts")
+async def get_car_ride_scripts(token_data: dict = Depends(verify_token)):
+    """Return all car ride script templates for parents."""
+    return {"scripts": CAR_RIDE_SCRIPTS}
+
+
+@app.post("/family/car-ride-script")
+async def generate_car_ride_script(request: Request, token_data: dict = Depends(verify_token)):
+    """Generate a personalized car ride script based on game outcome and player feeling."""
+    body = await request.json()
+    outcome = body.get("outcome", "loss_tough")  # win_good, win_okay, loss_tough, loss_mistake, scratched
+    player_name = body.get("player_name", "your player")
+    age_band = body.get("age_band", "u15")
+
+    script = CAR_RIDE_SCRIPTS.get(outcome, CAR_RIDE_SCRIPTS["loss_tough"])
+
+    # Personalize
+    personalized = {
+        **script,
+        "player_name": player_name,
+        "age_band": age_band,
+    }
+
+    # Add age-specific note
+    if age_band in ("u11", "u13"):
+        personalized["age_note"] = f"At {age_band.upper()} level, fun and development are the priority. Keep conversations light and positive."
+    elif age_band in ("u15", "u18"):
+        personalized["age_note"] = f"At {age_band.upper()} level, players are more self-aware. Give them space to process, and let them lead the conversation."
+    else:
+        personalized["age_note"] = "Respect your player's emotional state. Every player processes differently."
+
+    return personalized
+
+
 # ============================================================
 # MAIN
 # ============================================================

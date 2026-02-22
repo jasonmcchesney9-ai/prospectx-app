@@ -23,6 +23,7 @@ import GlossarySection from "@/components/player-guide/GlossarySection";
 import PXIQuickAsk from "@/components/player-guide/PXIQuickAsk";
 import ParentDoDontCard from "@/components/player-guide/ParentDoDontCard";
 import PressureConfidenceTool from "@/components/player-guide/PressureConfidenceTool";
+import CarRideScript from "@/components/player-guide/CarRideScript";
 
 /* ---------- Section definitions ---------- */
 interface GuideSection {
@@ -140,6 +141,11 @@ export default function PlayerGuidePage() {
         {/* Parent Do / Don't Tip Card */}
         <div className="mb-3">
           <ParentDoDontCard />
+        </div>
+
+        {/* Car Ride Script — After Game Help */}
+        <div className="mb-3">
+          <CarRideScript />
         </div>
 
         {/* 6 Content Sections */}
