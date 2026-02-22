@@ -167,6 +167,42 @@ MISSING DATA:
 - If an entire section cannot be completed due to missing data, state what's missing and what data would be needed."""
 
 # ─────────────────────────────────────────────────────────
+# A3) SCOUTING_LANGUAGE_RULES — shared behavioral rules for all player-facing prompts
+# ─────────────────────────────────────────────────────────
+SCOUTING_LANGUAGE_RULES = """═══ SCOUTING LANGUAGE RULES ═══
+Inject into behavioral rules for ALL player-facing prompts.
+
+1. COMPETE
+Never use 'compete' as a standalone grade or vague label.
+Always describe what the compete looks like: forechecking urgency, board battles,
+back-pressure habits, net-front presence, willingness to stay in battles after contact.
+
+2. HOCKEY SENSE
+Avoid generic 'high IQ / smart player' lines without examples.
+Tie hockey sense to situations: support routes, timing into space, reading numbers
+on the rush, puck decisions under pressure, awareness of weak-side options.
+
+3. PHYSICALITY
+Do not just say 'physical / not physical.'
+Describe the behavior: finishes checks or only leans, engages first in contact or
+arrives late, separates players from pucks, presence around the blue paint and net-front.
+
+4. SKATING
+Avoid 'good skater / average skater' with no detail.
+Specify key elements: first-step quickness, straight-line speed, edge work and agility,
+ability to change pace, how well the stride holds up late in shifts.
+
+5. SHOT AND PUCK SKILLS
+Don't just say 'good hands' or 'great shot.'
+Connect to use cases: handles in traffic vs only in space, can make plays off the wall,
+releases quickly off both feet, can beat goalies clean from distance vs relies on tips/rebounds.
+
+6. ROLE AND PROJECTION LANGUAGE
+Avoid labeling levels ('NHLer / not an NHLer') without context.
+Anchor projection in role and path: 'projects as a middle-six play-driver if strength
+and pace improve,' 'profiles as a depth energy winger with PK value.'"""
+
+# ─────────────────────────────────────────────────────────
 # B) PXI_MODE_BLOCKS — 10 mode-specific prompt blocks
 # ─────────────────────────────────────────────────────────
 PXI_MODE_BLOCKS = {
@@ -452,6 +488,10 @@ MODE_TEMPLATE_WIRING = {
     "role_adjustment":           {"primary": "coach",   "secondary": "analyst"},
     # Addendum 8 — Player Season Roadmap
     "player_season_roadmap":     {"primary": "coach",   "secondary": "analyst"},
+    # V1 Polish — New report types from ReportSpecs_v1
+    "next_season_projection":    {"primary": "analyst", "secondary": "gm"},
+    "metrics_dashboard":         {"primary": "analyst", "secondary": "scout"},
+    "free_agent_target":         {"primary": "gm",      "secondary": "scout"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -545,10 +585,10 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "TANDEM_OVERVIEW", "INDIVIDUAL_ASSESSMENTS", "WORKLOAD_ANALYSIS",
         "SITUATIONAL_DEPLOYMENT", "PERFORMANCE_TRIGGERS", "DEVELOPMENT_CONSIDERATIONS", "RECOMMENDATION",
     ],
-    # Phase 2 templates
+    # Phase 2 templates (updated to match ReportSpecs_v1)
     "pre_game_intel": [
-        "OPPONENT_SNAPSHOT", "KEY_MATCHUPS", "GOALTENDING_REPORT",
-        "SPECIAL_TEAMS_INTEL", "GAME_KEYS", "PRE_GAME_TALKING_POINTS", "LINEUP_RECOMMENDATIONS",
+        "HEADER", "SNAPSHOT", "TEAM_PROFILE", "SYSTEMS_AND_TENDENCIES",
+        "KEY_PLAYERS_TO_WATCH", "MATCHUP_PRIORITIES", "SITUATIONAL_NOTES",
     ],
     "player_guide_prep_college": [
         "PLAYER_PROFILE", "READINESS_ASSESSMENT", "PATHWAY_OPTIONS",
@@ -634,6 +674,35 @@ REQUIRED_SECTIONS_BY_TYPE = {
         "PP_PERFORMANCE_SUMMARY", "PP_FORMATION_STRUCTURE", "PP_ADJUSTMENT_NEEDS",
         "PK_PERFORMANCE_SUMMARY", "PK_STRUCTURE_TENDENCIES", "PK_ADJUSTMENT_NEEDS",
         "PERSONNEL_RECOMMENDATIONS", "TREND_ANALYSIS",
+    ],
+    # V1 Polish — New report types from ReportSpecs_v1
+    "next_season_projection": [
+        "HEADER_AND_DATA_QUALITY", "SNAPSHOT", "PERFORMANCE_TREND_REVIEW",
+        "NEXT_SEASON_ROLE_PROJECTION", "PRODUCTION_RANGE",
+        "DRIVERS_AND_RISK_FACTORS", "SYNTHESIS_AND_RECOMMENDATION",
+    ],
+    "metrics_dashboard": [
+        "HEADER_AND_DATA_QUALITY", "PRODUCTION_METRICS", "USAGE_AND_DEPLOYMENT",
+        "ON_ICE_IMPACT", "TREND_ANALYSIS", "SPECIAL_TEAMS_SUMMARY", "PEER_CONTEXT_SUMMARY",
+    ],
+    "free_agent_market": [
+        "HEADER", "MARKET_OVERVIEW", "CANDIDATE_TABLE", "TIERED_GROUPING",
+        "INDIVIDUAL_CANDIDATE_SNAPSHOTS", "SUGGESTED_NEXT_STEPS",
+    ],
+    "free_agent_target": [
+        "HEADER", "EXECUTIVE_SUMMARY", "PLAYER_EVALUATION", "STATISTICAL_PICTURE",
+        "NEXT_SEASON_PROJECTION", "ORG_FIT_ANALYSIS",
+        "MARKET_AND_CONTRACT_CONTEXT", "RECOMMENDATION",
+    ],
+    "league_benchmarks": [
+        "HEADER_AND_OVERALL_LEAGUE_RANK", "SUMMARY_SNAPSHOT", "CORE_METRICS_TABLE",
+        "SPECIAL_TEAMS_TABLE", "SITUATIONAL_BENCHMARKS",
+        "KEY_BENCHMARK_READS", "METRIC_PRIORITIES_FOR_COACHING_STAFF",
+    ],
+    "season_projection": [
+        "HEADER_AND_DATA_QUALITY", "SNAPSHOT", "POINTS_AND_STANDINGS_OUTLOOK",
+        "PLAYOFF_TIER_OUTCOME_BANDS", "DRIVERS_OF_THE_PROJECTION",
+        "RISK_AND_SWING_FACTORS", "SCENARIO_NOTES",
     ],
 }
 
@@ -925,6 +994,14 @@ Ideal systems: which tactical structures maximize this player.
 System mismatch: which structures hurt this player and why.
 Passport/import/eligibility notes where relevant.
 
+CHL/NCAA PATHWAY NOTE (conditional — include if CHL-eligible or current CHL):
+'Under the updated NCAA rules, CHL time no longer permanently blocks a college
+route. If this player's CHL benefits are kept to actual and necessary expenses,
+an NCAA move later in their junior window remains viable. For planning purposes,
+both CHL to pro and CHL to NCAA to pro paths should be considered, with
+compliance checked before any college transition is assumed.'
+If player is NOT CHL-relevant: omit this note entirely.
+
 SECTION 9 — STAFF ACTION CHECKLIST:
 Deployment rules: 3-6 specific, actionable bullets.
   Not 'manage his minutes' but 'cap at 17 min/game, never
@@ -939,6 +1016,14 @@ LEVEL ADAPTATION:
 U16/basic: Simplified metrics, usage tiers, qualitative tools assessment.
 Junior/advanced: Full TOI, CORSI, xG, micro-stats.
 Pro/NHL: Complete analytics, contract context, peer comparisons.
+
+BEHAVIORAL RULES:
+- If no game logs: open with 'Limited ProspectX game data available for this player.'
+- Apply SCOUTING_LANGUAGE_RULES throughout.
+- No overconfident projections: frame as likelihood plus conditions.
+- Only use comparables if clearly supported by data/notes. Avoid lazy superstar comps.
+- Always include all sections, even if shorter due to limited data.
+- Target 800-1,200 words. Hard cap 1,500 words.
 
 Generate all 9 sections in order.
 Max tokens: 12000. Prioritize depth in sections 1, 5, 7, 9.
@@ -1132,6 +1217,14 @@ VISUAL OVERPLAY CUES (required in Overplay Warnings):
 Observable in-game signs: hands on knees, slow first strides, delayed backcheck,
 extended shifts >60 sec, missed routes, turnovers in own end.
 
+BEHAVIORAL RULES:
+- If no game logs: open with 'Limited ProspectX game data available for this player.'
+- Apply SCOUTING_LANGUAGE_RULES for all trait and projection language.
+- Never use 'compete' as standalone grade — describe what it looks like on ice.
+- Do not invent specific systems or roles not supported by data.
+- Always produce all sections, even if only 1-2 bullets due to limited data.
+- Target 600-1,000 words. Hard cap 1,200 words.
+
 GENERATE ALL 13 SECTIONS IN ORDER.
 Reference TRUST_TIER_SYSTEM for tier assignment.
 Max tokens: 6000. Prioritize depth in sections 4, 5, 6, 13.
@@ -1162,6 +1255,13 @@ Heavy shot-blocking accumulation (injury risk)
 PARTNER COMPATIBILITY (replaces Linemate section):
 Best pairing archetypes: puck-mover + stabilizer, physical + mobility
 Do not pair: two high-risk activators, two slow-gap defenders against speed
+
+BEHAVIORAL RULES:
+- If no game logs: open with 'Limited ProspectX game data available for this player.'
+- Apply SCOUTING_LANGUAGE_RULES for all trait and projection language.
+- Add: 'Defensive-zone exits under pressure — does the defender initiate or wait? How do they handle a failed retrieval when the forecheck is on?'
+- Do not invent specific team systems or exact matchups if not in the data.
+- Target 600-1,000 words. Hard cap 1,200 words.
 
 GENERATE ALL 13 SECTIONS IN ORDER.
 Reference TRUST_TIER_SYSTEM for tier assignment.
@@ -1343,12 +1443,32 @@ TRANSLATION ANALYSIS (Section 7) — for each league:
 - Main limiting factor or risk
 - Confidence level: HIGH / MEDIUM / LOW
 
+BIAS DECLARATION (required in Header):
+'This evaluation grades each criterion independently from available data.
+Prior scouting conclusions have been noted but not used to anchor grades.'
+
+OBSERVATIONS VS INTERPRETATIONS:
+Two separate sections: what the data shows vs what it may mean.
+Never collapse observations and interpretations into the same sentence.
+
+CONFLICTING SIGNALS (mandatory section):
+List criteria where evidence points two directions.
+If none: state 'No conflicting signals identified.'
+
 BIAS CHECK (Section 9) — required closing section:
 Run this checklist explicitly:
 □ No inflated upside — ceiling mentioned only if data supports it
 □ No narrative fluff — every claim grounded in a number or observation
 □ Strengths and limitations balanced — limitations as prominent as strengths
 □ No intangibles without evidence — no character/leadership claims without data
+
+BEHAVIORAL RULES:
+- Reputation firewall: log prior reputation references in Bias Declaration and never reference again.
+- Confidence discipline: Low confidence = max 2 sentences on that criterion.
+- No archetype until Synthesis section — grade criteria independently first.
+- Conflicting Signals is mandatory — confirm 'none found' if clean.
+- Small sample flag: fewer than 5 game observations = [small sample] flag required.
+- Apply SCOUTING_LANGUAGE_RULES throughout.
 
 STYLE: Direct, professional hockey-ops language. Write for a video room.
 Avoid promotional language. If something is a risk, say it is a risk.
@@ -2543,6 +2663,354 @@ Generate all 8 sections. Max tokens: 5000.
 SPECIAL_TEAMS_AUDIT = SPECIAL_TEAMS_AUDIT_V2
 
 # ─────────────────────────────────────────────────────────
+# K20) PRE_GAME_INTEL_V1 — coach-facing pre-game brief
+# ─────────────────────────────────────────────────────────
+PRE_GAME_INTEL_V1 = '''
+PRE-GAME INTEL BRIEF — REQUIRED FORMAT
+=======================================
+Purpose: Concise, coach-ready pre-game document summarizing next opponent's
+tendencies, key players, and matchup priorities for tonight's game.
+Something a coach can read in 3-5 minutes and use directly in their meeting and on the bench.
+
+Audience: Head coach, assistants, goalie coach.
+Tone: Direct, practical, no fluff. Short sentences, hockey language, coach voice.
+POV: Neutral, optimized for 'what do we need to know and do tonight?'
+
+DATA INPUTS:
+- Team stats: GF/GA per game, shot attempts, PP%, PK%, SV%, FO%, home/road split.
+- Game logs: last 5-10 opponent games with score, date, home/away, shots, PP/PK results.
+- Line combinations and usage: common forward lines, D pairs, PP/PK units, TOI where available.
+- Key player data: top 5-7 players by ice time and production, goalie options with recent performance.
+- Qualitative notes (if present): systems notes, habits, physicality, compete level.
+- If some inputs are missing, note briefly and work with what exists.
+
+OUTPUT STRUCTURE:
+1. HEADER — Opponent / Date / Game# / Location / Record (Last 10)
+2. SNAPSHOT — 3-5 bullets: Identity and style, recent form, biggest threat and biggest vulnerability.
+3. TEAM_PROFILE — Offensive Profile, Defensive Profile, Special Teams, Goaltending — 2-4 bullets each.
+4. SYSTEMS_AND_TENDENCIES — Forecheck, Breakout, Neutral Zone, Offensive Zone Habits, Defensive Zone Habits — 1-2 bullets each.
+5. KEY_PLAYERS_TO_WATCH — 3-5 players: Name, Position, Line/Role, one-line strength, one coaching note.
+6. MATCHUP_PRIORITIES — 3-5 numbered instructions framed as direct coach actions.
+7. SITUATIONAL_NOTES — Period starts, home/road differences, performance when trailing/leading. (optional)
+
+BEHAVIORAL RULES:
+- Never invent specific systems if there is zero data; label as 'Not enough data to assess X. Default to our base plan.'
+- When data is noisy/small sample, say so ('Small sample (3 games), but...')
+- Always end with Matchup Priorities list, even if other sections are thin.
+- Prefer bullets over paragraphs; write so a coach can scan in 60-90 seconds.
+- If opponent has no game logs: open with 'Limited ProspectX data available for this opponent. Report generated from available context only.'
+- Apply SCOUTING_LANGUAGE_RULES when describing key players.
+- Target 500-900 words. Hard cap 1,200 words.
+
+Generate all 7 sections in order. Max tokens: 4000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K21) NEXT_SEASON_PROJECTION_V1 — player next-season projection
+# ─────────────────────────────────────────────────────────
+NEXT_SEASON_PROJECTION_V1 = '''
+NEXT SEASON PROJECTION — REQUIRED FORMAT
+==========================================
+Purpose: Clear, evidence-based projection of what a player is likely to be
+next season — role, usage, and expected production range. Built for contract
+talks, roster planning, and internal expectations.
+
+Audience: GM/AGM, Director of Hockey Ops, Head Coach.
+Tone: Measured, conservative, decision-focused. No hype, no hot takes.
+POV: Analyst laying out most likely next-season outcome plus upside/downside bands.
+
+DATA INPUTS:
+- Player context: Name, position, shot, age, size, team, league, contract status.
+- Historical: Last 2-3 seasons of GP, G, A, P, PPG, TOI, EV/PP/PK splits.
+- Recent trend: Last season split into segments. Injury flags, call-ups/send-downs, role shifts.
+- On-ice metrics if available: shot attempts, expected goals, zone starts, quality of competition.
+- Qualitative notes: development progress, work habits, physical maturation, system fit.
+
+OUTPUT STRUCTURE:
+1. HEADER_AND_DATA_QUALITY — Player info + data quality flag.
+2. SNAPSHOT — 3-4 bullets: Expected role, deployment changes, main drivers.
+3. PERFORMANCE_TREND_REVIEW — 3-5 bullets: year-over-year production, usage trend, meaningful mid-season changes.
+4. NEXT_SEASON_ROLE_PROJECTION — EV line/pair, special teams expectation, situational usage.
+5. PRODUCTION_RANGE — Base case / Upside case / Downside case — ranges not single points.
+6. DRIVERS_AND_RISK_FACTORS — 3-5 bullets: stabilizing vs volatile factors tagged explicitly.
+7. SYNTHESIS_AND_RECOMMENDATION — 2-3 bullets for hockey ops, confidence level with rationale.
+
+BEHAVIORAL RULES:
+- Always announce thin data: one season or partial season = wider ranges, conservative language.
+- Use ranges not absolutes: '15-20 goals, 40-50 points' with justification.
+- No long-term labels: keep strictly to next season.
+- If player is changing leagues: flag explicitly and widen all ranges. League transition is the biggest projection variable.
+- Apply SCOUTING_LANGUAGE_RULES for all trait language.
+- No certainty language. Use 'likely,' 'projects to,' 'reasonable to expect.'
+- Target 500-900 words. Hard cap 1,200 words.
+
+Generate all 7 sections in order. Max tokens: 4000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K22) PREP_COLLEGE_GUIDE_V1 — player/family prep/college guide
+# ─────────────────────────────────────────────────────────
+PREP_COLLEGE_GUIDE_V1 = '''
+PREP/COLLEGE PLAYER GUIDE — REQUIRED FORMAT
+=============================================
+Purpose: Clear, honest guide for a player and their family about their path
+to Prep/College hockey: where they stand now, what levels are realistic,
+and what they need to work on this year.
+
+Audience: Player (teen), parents/guardians, sometimes advisor/coach.
+Tone: Positive but honest, plain language, no heavy jargon. Encouraging, actionable, no false promises.
+POV: Trusted development advisor explaining options and next steps.
+
+DATA INPUTS:
+- Player basics: Name, position, shot, age, size, current team/league, grad year.
+- Performance: Current and recent seasons GP, G, A, P, PPG, usage, role.
+- Development intel: Key strengths and areas from internal reports, coach/scout notes.
+- Pathway context: Typical benchmarks for various destinations, existing interest notes.
+
+OUTPUT STRUCTURE:
+1. HEADER — Player / Position / Current Team / Grad Year
+2. WHERE_YOU_ARE_RIGHT_NOW — 3-5 bullets in plain language: current role, key strengths, main areas to work on.
+3. WHAT_LEVELS_FIT_YOU_TODAY — 2-4 bullets: realistic level bands, not guarantees, framed as ranges and possibilities.
+4. KEY_TRAITS_TO_BUILD — 4-6 bullets: on-ice, off-ice, mental/character.
+5. NEXT_6_TO_12_MONTHS_ACTION_PLAN — 4-7 concrete, controllable action bullets. No generic 'work hard' advice.
+6. EXPOSURE_AND_PATHWAY_STEPS — 3-6 bullets: showcases, camps, video, academic importance.
+7. CHL_NCAA_PATHWAY — Conditional section. See CHL/NCAA rules below.
+8. HONEST_REALITY_CHECK — 2-3 sentences: what is not realistic at this stage, with constructive framing.
+9. CLOSING_ENCOURAGEMENT — 2-3 bullets: focus on controllables, encourage ongoing check-ins.
+
+CHL/NCAA PATHWAY CONDITIONAL:
+If the player is CHL-relevant (current CHL or CHL-eligible):
+Include this section with the following language:
+'CHL and NCAA can now both be on your path. New NCAA rules mean playing in the
+CHL no longer automatically closes the door on college hockey. You can skate
+Major Junior and, as long as what you receive is limited to actual and necessary
+expenses, you can still be eligible to move into NCAA later. But you and your
+family need to work with your team and any interested schools to keep everything
+compliant.'
+If the player is NOT CHL-relevant: omit this section entirely.
+
+BEHAVIORAL RULES:
+- Plain-language filter: write so a smart 15-17 year old and their parents understand everything.
+- No promises: never guarantee specific teams, leagues, or scholarship outcomes.
+- Balanced honesty: pair every limitation with at least one constructive next step.
+- Apply SCOUTING_LANGUAGE_RULES (simplified): describe behaviors not labels.
+- Respectful tone: this may be shared directly with families.
+- Target 600-1,000 words. Hard cap 1,200 words.
+
+Generate all sections in order (skip CHL/NCAA if not applicable). Max tokens: 4000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K23) METRICS_DASHBOARD_V1 — structured metrics view
+# ─────────────────────────────────────────────────────────
+METRICS_DASHBOARD_V1 = '''
+PROSPECTX METRICS DASHBOARD — REQUIRED FORMAT
+===============================================
+Purpose: Structured, comprehensive metrics view for a single player surfacing
+every tracked stat in ProspectX with peer context and trend indicators.
+This is the data layer — not a narrative report.
+
+Audience: GM/AGM, analytics staff, Director of Scouting, development coaches.
+Tone: Precise, structured, minimal prose. Let the numbers do the work.
+POV: Data analyst presenting a complete picture with flagged outliers.
+
+DATA INPUTS:
+- Player basics, production stats, usage stats, on-ice impact, special teams, game log (last 10-15 games).
+- Peer benchmarks: league averages and quartile bands for same position, age band, role tier.
+- PXI may derive per-game and trend values from raw totals and game logs.
+- If advanced stats or peer benchmarks unavailable: display what exists,
+  mark missing as [Not Available] or [Not Tracked in ProspectX] vs [Not Available for this player/season].
+
+OUTPUT STRUCTURE:
+1. HEADER_AND_DATA_QUALITY — Player info + data quality flag.
+2. PRODUCTION_METRICS — Table: Metric / Value / Per-Game / Peer Band (Above/Average/Below) / Flag (trend arrow).
+3. USAGE_AND_DEPLOYMENT — Table: TOI splits, zone starts, competition. One interpretation line only if clear mismatch.
+4. ON_ICE_IMPACT — Table: Goals For%, Shot Attempts For%, Save%, Shooting%. If unavailable: [Not Available — requires game-level tracking data].
+5. TREND_ANALYSIS — Mini table: Season average vs Last 10 vs Trend arrow. 2-3 bullets max.
+6. SPECIAL_TEAMS_SUMMARY — Table with PP reliance flag if PP points > 35% of total.
+7. PEER_CONTEXT_SUMMARY — 3-5 bullets: overall rank vs peers, biggest positive outlier, biggest concern, data gap, metric to watch.
+
+BEHAVIORAL RULES:
+- Tables first, prose minimal. Sections 1-6 as structured tables.
+- Never estimate missing data. Mark as [Not Tracked] or [Not Available].
+- Peer bands require data. If sample too small: [Insufficient peer data].
+- Peer band fallback: if role tier unknown, fall back to league + position + age band only. Note once in header.
+- Trend flags are mechanical: >15% above = up arrow, >15% below = down arrow, within 15% = stable.
+- No projection language. Describes current state only.
+- Section 7 must not include forward-looking statements — current season only.
+- Apply SCOUTING_LANGUAGE_RULES if any trait language appears.
+- Tables not counted in word limit. Prose target 400-700 words. Hard cap 800 words.
+
+Generate all 7 sections in order. Max tokens: 5000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K24) FREE_AGENT_MARKET_V1 — market scan for available players
+# ─────────────────────────────────────────────────────────
+FREE_AGENT_MARKET_V1 = '''
+FREE AGENT MARKET SCAN — REQUIRED FORMAT
+==========================================
+Purpose: Structured, ranked list of free agent (or likely-available) players
+who fit your team's needs, cap slot, and role targets. Market scan, not a deep dive.
+Surfaces candidates, tags fit and risk, and points to which players deserve
+a full Free Agent Target Report.
+
+Audience: GM, AGM, pro scouting director, cap/analytics staff.
+Tone: Professional, concise, decision-focused. Mostly tables with short, sharp notes.
+POV: Front-office analyst presenting a board of options, not making the final decision.
+
+DATA INPUTS:
+- Team context: Your team, league, season, stated needs (position, handedness, age, role, budget, timeline).
+- Candidate pool: Players flagged as UFA/RFA, buyout candidates, likely non-tenders, reasonably available.
+- Per candidate: current team, league, contract status, production, usage, on-ice impact, age/size, role, key traits, risk band.
+- If contract data or injuries missing for certain players: flag clearly in output.
+
+OUTPUT STRUCTURE:
+1. HEADER — Team / League / Season / Market Focus / Data Quality
+2. MARKET_OVERVIEW — 3-6 bullets: Depth of market, typical price/term band, sweet spots, data gaps.
+3. CANDIDATE_TABLE — Rank / Player (name, position, shot, age) / Team-League / Role Tag / Fit Score (High/Med/Low) / Key Fit Notes / Risk Band / Contract Snapshot / Flag
+4. TIERED_GROUPING — Tier 1 Priority / Tier 2 Strong Options / Tier 3 Value Depth — one bullet per tier. (optional)
+5. INDIVIDUAL_CANDIDATE_SNAPSHOTS — Top 3-5 candidates: 3-5 bullets each: role/usage, key strengths, key risk, value note, CTA: 'Consider full Free Agent Target Report.'
+6. SUGGESTED_NEXT_STEPS — 3-5 front-office oriented bullets.
+
+BEHAVIORAL RULES:
+- Org context required: do not generate without positional need and at least one constraint.
+- Fit Score must match stated needs — not just 'good player.'
+- Never fabricate contract data. Use [Not Available] and avoid implying a number.
+- Market bands: Budget / Mid-range / Premium — assign based on production vs likely cost.
+- No long narrative — main artifact is the table and short summaries.
+- Apply SCOUTING_LANGUAGE_RULES for any player trait descriptions.
+- Prose target 400-800 words. Hard cap 1,000 words.
+
+Generate all 6 sections in order. Max tokens: 4000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K25) FREE_AGENT_TARGET_V1 — single-target acquisition analysis
+# ─────────────────────────────────────────────────────────
+FREE_AGENT_TARGET_V1 = '''
+FREE AGENT TARGET REPORT — REQUIRED FORMAT
+============================================
+Purpose: Full acquisition analysis on a single free agent target. Answers:
+'We like this player — should we actually move on him, and at what price and term range?'
+Combines player evaluation with market context and org fit.
+
+Audience: GM/AGM only. This report informs a real roster decision.
+Tone: Direct, measured, decision-focused. Surfaces both the case for and the case against.
+POV: Senior analyst presenting a complete picture before the GM picks up the phone.
+
+DATA INPUTS:
+Runs three underlying analyses:
+- Elite Player Profile — tools, traits, projection
+- ProspectX Metrics Dashboard — full statistical picture with peer context
+- Next Season Projection — production range and role expectation
+Plus: contract status, org fit context, age and term considerations.
+
+OUTPUT STRUCTURE:
+1. HEADER — Player / Position / Shot / Age / Last Team / Contract Status / Acquisition Context (UFA/RFA/Trade). Note which source reports had strong vs limited data.
+2. EXECUTIVE_SUMMARY — 4-5 bullets: What this player is, next season projection, org fit, market reality, overall recommendation (Pursue/Monitor/Pass).
+3. PLAYER_EVALUATION — Condensed from Elite Player Profile — key strengths, key limitations, projection. 300 words max.
+4. STATISTICAL_PICTURE — 3-5 bullets from Metrics Dashboard — no tables, prose summary only.
+5. NEXT_SEASON_PROJECTION — Base/upside/downside range. One paragraph maximum.
+6. ORG_FIT_ANALYSIS — Positional gap, style fit, timeline match, roster overlap concerns.
+7. MARKET_AND_CONTRACT_CONTEXT — Likely ask, value assessment, competing interest if known, recommended offer parameters.
+8. RECOMMENDATION — Pursue / Monitor / Pass — each with one-line rationale. Final: Confidence level (High/Med/Low) and what would change it.
+
+BEHAVIORAL RULES:
+- Always produce a recommendation. Even with thin data, give conservative recommendation with explicit uncertainty.
+- Market context required: if no contract data, keep value estimates wide. Never invent specific dollar figures.
+- Org fit requires org context: if no roster/system data, flag and keep fit analysis high level.
+- No certainty language. Use 'likely,' 'projects to,' 'reasonable to expect.'
+- Apply SCOUTING_LANGUAGE_RULES throughout player evaluation.
+- Target 800-1,200 words. Hard cap 1,500 words.
+
+Generate all 8 sections in order. Max tokens: 5000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K26) LEAGUE_BENCHMARKS_V1 — league-context team dashboard
+# ─────────────────────────────────────────────────────────
+LEAGUE_BENCHMARKS_V1 = '''
+LEAGUE BENCHMARKS — REQUIRED FORMAT
+=====================================
+Purpose: League-context dashboard for a team showing how it stacks up
+across key performance metrics. Answers: 'Where are we elite, average, or behind?'
+and 'Which areas matter most for our results?'
+
+Audience: Head coach, assistants, GM/AGM, analytics staff.
+Tone: Clear, concise, numbers-first with short plain-language reads.
+POV: Analyst laying out where the team sits vs league benchmarks — not prescribing systems changes.
+
+DATA INPUTS:
+- Team context: Team, league, season, conference/division.
+- Team stats: Record, goal differential, GF/GA per game, shot attempts, PP%, PK%, FO%, 5v5 goal share.
+- League distribution: League averages, top quartile, bottom quartile, rankings for each metric.
+- Situational splits if available: home/away, period, leading/trailing, back-to-back.
+
+OUTPUT STRUCTURE:
+1. HEADER_AND_OVERALL_LEAGUE_RANK — Team info + overall league rank.
+2. SUMMARY_SNAPSHOT — 4-6 bullets: Overall profile, biggest strengths, biggest weaknesses.
+3. CORE_METRICS_TABLE — Metric / Team Value / League Avg / Rank / Band (Top/Mid/Bottom). Include: GF/GP, GA/GP, Shot Attempts For%, Shots For/GP, Shots Against/GP.
+4. SPECIAL_TEAMS_TABLE — PP%, PK%, PP Goals For, PK Goals Against. One line if strong split.
+5. SITUATIONAL_BENCHMARKS — Home/Road, Leading/Trailing After 2, 1-Goal Record. If unavailable: state clearly.
+6. KEY_BENCHMARK_READS — 3-5 bullets tying metrics to bands.
+7. METRIC_PRIORITIES_FOR_COACHING_STAFF — 3-5 bullets: Focus areas framed as impact statements, not systems prescriptions.
+
+BEHAVIORAL RULES:
+- No system recommendations: stick to metrics and relative position vs league.
+- No projections: descriptive only. Avoid 'will regress/improve' — use 'currently above/below typical range.'
+- Peer band only where league has 8+ teams. If too small: mark [Not Reliable].
+- Use same metric names as ProspectX Metrics Dashboard for consistency.
+- Use [Not Tracked] vs [Not Available] to distinguish coverage gaps.
+- Prose target 400-800 words. Hard cap 1,000 words.
+
+Generate all 7 sections in order. Max tokens: 4000.
+'''
+
+# ─────────────────────────────────────────────────────────
+# K27) SEASON_PROJECTION_TEAM_V1 — team season projection
+# ─────────────────────────────────────────────────────────
+SEASON_PROJECTION_TEAM_V1 = '''
+SEASON PROJECTION (TEAM) — REQUIRED FORMAT
+============================================
+Purpose: Evidence-based outlook for the rest of this season: likely points range,
+standings band, playoff odds band, and key risk/drivers. Hockey-ops view grounded
+in current results and underlying metrics.
+
+Audience: GM/AGM, Head Coach, Hockey Ops, analytics.
+Tone: Measured, probabilistic, no guarantees. Plain language.
+POV: Analyst highlighting likely outcomes and what matters most.
+
+DATA INPUTS:
+- Team context: Team, league, season, conference/division, schedule format.
+- Current state: GP, record, points, points%, goal differential, league position.
+- Team metrics: GF/GA per game, GF% at 5v5, shot attempts, PP%, PK%, special teams net impact.
+- League benchmarks: averages and typical ranges for playoff vs non-playoff teams, historical thresholds.
+- Schedule data if accessible: games remaining, home/away split, strength of remaining opponents.
+
+OUTPUT STRUCTURE:
+1. HEADER_AND_DATA_QUALITY — Team info + data quality flag.
+2. SNAPSHOT — 3-5 bullets: Current situation, key strengths/weaknesses, high-level projection.
+3. POINTS_AND_STANDINGS_OUTLOOK — Most Likely / Optimistic / Conservative bands. Expected standings band. Note: indicative, not from a probability model.
+4. PLAYOFF_TIER_OUTCOME_BANDS — High/Medium/Low bands with one-line rationale. Not percentages unless system has probability models.
+5. DRIVERS_OF_THE_PROJECTION — 3-6 bullets: Each ties a clear metric to the projection.
+6. RISK_AND_SWING_FACTORS — 3-6 bullets: Upside levers and downside risks. Tag each as within team control vs external/variance.
+7. SCENARIO_NOTES — Directional impact statements only. (optional)
+
+BEHAVIORAL RULES:
+- Bands not precision: never output a single exact point total or finishing place.
+- Avoid specific percentages unless a proper probability model exists. Use High/Medium/Low.
+- No certainty language: avoid 'will make playoffs.' Use 'likely,' 'projects to,' 'reasonable path to.'
+- Current season only: no multi-year planning, no cap/contract talk.
+- Reference league bands from League Benchmarks when discussing strengths/weaknesses.
+- Scenario Notes: directional only — do not present as model outputs.
+- Transparency on limitations: if schedule strength or key metrics missing, say so and keep conclusions conservative.
+- Target 600-1,000 words. Hard cap 1,300 words.
+
+Generate all 7 sections in order. Max tokens: 5000.
+'''
+
+# ─────────────────────────────────────────────────────────
 # M) CONVERSATION_RULES — Bench Talk memory and context
 # ─────────────────────────────────────────────────────────
 CONVERSATION_RULES = """═══ CONVERSATION MEMORY ═══
@@ -2742,6 +3210,20 @@ Perspective: {resolved_perspective}
     if mode_block:
         parts.append(mode_block)
 
+    # Scouting Language Rules — inject for all player-facing report types
+    _PLAYER_FACING_TYPES = {
+        "pro_skater", "unified_prospect", "goalie", "elite_profile",
+        "forward_operating_profile", "defense_operating_profile",
+        "bias_controlled_eval", "agent_projection", "draft_comparative",
+        "development_roadmap", "season_progress", "family_card",
+        "agent_pack", "player_guide_prep_college", "in_season_projections",
+        "player_season_roadmap", "next_season_projection", "metrics_dashboard",
+        "free_agent_market", "free_agent_target", "trade_target",
+        "bench_card", "game_decision",
+    }
+    if report_type in _PLAYER_FACING_TYPES:
+        parts.append(SCOUTING_LANGUAGE_RULES)
+
     # Base report prompt (existing prompt from main.py)
     parts.append(base_prompt)
 
@@ -2759,8 +3241,12 @@ Perspective: {resolved_perspective}
     if report_type == "elite_profile":
         # Addendum 7 — Elite Profile V2 (self-contained 9-section Staff Mode)
         parts.append(ELITE_PROFILE_V2)
-    elif report_type in ("pro_skater", "development_roadmap", "player_guide_prep_college"):
+    elif report_type in ("pro_skater", "development_roadmap"):
         # Coach-facing action plans (top 3-5 priorities)
+        parts.append(DEVELOPMENT_ACTION_PLANS)
+    elif report_type == "player_guide_prep_college":
+        # Prep/College guide + development action plans
+        parts.append(PREP_COLLEGE_GUIDE_V1)
         parts.append(DEVELOPMENT_ACTION_PLANS)
     elif report_type == "family_card":
         # Parent-facing action plans (plain language, no metrics)
@@ -2806,6 +3292,21 @@ Perspective: {resolved_perspective}
     # Addendum 9 — Special Teams Audit V2
     elif report_type == "special_teams_audit":
         parts.append(SPECIAL_TEAMS_AUDIT_V2)
+    # V1 Polish — New report type constants from ReportSpecs_v1
+    elif report_type == "pre_game_intel":
+        parts.append(PRE_GAME_INTEL_V1)
+    elif report_type == "next_season_projection":
+        parts.append(NEXT_SEASON_PROJECTION_V1)
+    elif report_type == "metrics_dashboard":
+        parts.append(METRICS_DASHBOARD_V1)
+    elif report_type == "free_agent_market":
+        parts.append(FREE_AGENT_MARKET_V1)
+    elif report_type == "free_agent_target":
+        parts.append(FREE_AGENT_TARGET_V1)
+    elif report_type == "league_benchmarks":
+        parts.append(LEAGUE_BENCHMARKS_V1)
+    elif report_type == "season_projection":
+        parts.append(SEASON_PROJECTION_TEAM_V1)
 
     return "\n\n".join(parts)
 
@@ -2861,6 +3362,20 @@ Perspective: {resolved_perspective}
     if mode_block:
         parts.append(mode_block)
 
+    # Scouting Language Rules — inject for player-facing report types in Bench Talk
+    _PLAYER_FACING_TYPES = {
+        "pro_skater", "unified_prospect", "goalie", "elite_profile",
+        "forward_operating_profile", "defense_operating_profile",
+        "bias_controlled_eval", "agent_projection", "draft_comparative",
+        "development_roadmap", "season_progress", "family_card",
+        "agent_pack", "player_guide_prep_college", "in_season_projections",
+        "player_season_roadmap", "next_season_projection", "metrics_dashboard",
+        "free_agent_market", "free_agent_target", "trade_target",
+        "bench_card", "game_decision",
+    }
+    if report_type in _PLAYER_FACING_TYPES:
+        parts.append(SCOUTING_LANGUAGE_RULES)
+
     # Conversation context rules (Bench Talk)
     parts.append(CONVERSATION_RULES)
     parts.append(HANDOFF_RULES)
@@ -2886,7 +3401,10 @@ Perspective: {resolved_perspective}
     if report_type == "elite_profile":
         # Addendum 7 — Elite Profile V2 (self-contained 9-section Staff Mode)
         parts.append(ELITE_PROFILE_V2)
-    elif report_type in ("pro_skater", "development_roadmap", "player_guide_prep_college"):
+    elif report_type in ("pro_skater", "development_roadmap"):
+        parts.append(DEVELOPMENT_ACTION_PLANS)
+    elif report_type == "player_guide_prep_college":
+        parts.append(PREP_COLLEGE_GUIDE_V1)
         parts.append(DEVELOPMENT_ACTION_PLANS)
     elif report_type == "family_card":
         parts.append(PARENT_ACTION_PLANS)
@@ -2931,5 +3449,20 @@ Perspective: {resolved_perspective}
     # Addendum 9 — Special Teams Audit V2
     elif report_type == "special_teams_audit":
         parts.append(SPECIAL_TEAMS_AUDIT_V2)
+    # V1 Polish — New report type constants from ReportSpecs_v1
+    elif report_type == "pre_game_intel":
+        parts.append(PRE_GAME_INTEL_V1)
+    elif report_type == "next_season_projection":
+        parts.append(NEXT_SEASON_PROJECTION_V1)
+    elif report_type == "metrics_dashboard":
+        parts.append(METRICS_DASHBOARD_V1)
+    elif report_type == "free_agent_market":
+        parts.append(FREE_AGENT_MARKET_V1)
+    elif report_type == "free_agent_target":
+        parts.append(FREE_AGENT_TARGET_V1)
+    elif report_type == "league_benchmarks":
+        parts.append(LEAGUE_BENCHMARKS_V1)
+    elif report_type == "season_projection":
+        parts.append(SEASON_PROJECTION_TEAM_V1)
 
     return "\n\n".join(parts)
