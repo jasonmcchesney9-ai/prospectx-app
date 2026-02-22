@@ -23,6 +23,7 @@ import {
   TrendingUp,
   CheckCircle,
   Sparkles,
+  Pin,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -183,6 +184,26 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [teamDataLoading, setTeamDataLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // ── Wall Board (pinned players) ───────────────────────────
+  const [pinnedPlayers, setPinnedPlayers] = useState<Player[]>([]);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("prospectx_pinned_players");
+      if (!saved) return;
+      const ids: string[] = JSON.parse(saved);
+      if (!ids.length) return;
+      Promise.all(
+        ids.slice(0, 6).map((id) =>
+          api.get<Player>(`/players/${id}`).then((r) => r.data).catch(() => null)
+        )
+      ).then((results) => {
+        setPinnedPlayers(results.filter(Boolean) as Player[]);
+      });
+    } catch {
+      // Non-critical
+    }
+  }, []);
 
   // ── Load team-specific data (Wave 2) ─────────────────────
   const loadTeamData = useCallback(async (team: Team) => {
@@ -491,6 +512,35 @@ function Dashboard() {
 
               {/* RIGHT: Intelligence */}
               <div className="lg:col-span-2 space-y-5">
+                {/* Wall Board */}
+                <DashboardCard
+                  icon={<Pin size={15} className="text-orange" />}
+                  title="Wall Board"
+                  viewAllHref="/players"
+                  loading={false}
+                  empty={pinnedPlayers.length === 0}
+                  emptyIcon={<Pin size={24} className="text-muted/30" />}
+                  emptyText="Your Wall Board is empty. Pin players, reports, or game plans here for quick access."
+                >
+                  <div className="space-y-1">
+                    {pinnedPlayers.map((p) => (
+                      <Link key={p.id} href={`/players/${p.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+                        <span className="w-5 text-center">
+                          <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal/10 text-teal font-oswald">
+                            {p.position || "—"}
+                          </span>
+                        </span>
+                        <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
+                          {p.first_name} {p.last_name}
+                        </span>
+                        {p.current_team && (
+                          <span className="text-[10px] text-muted/60 truncate max-w-[80px]">{p.current_team}</span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </DashboardCard>
+
                 {/* Scouting List */}
                 <ScoutingListSection scoutingList={scoutingList} loading={loading} />
 

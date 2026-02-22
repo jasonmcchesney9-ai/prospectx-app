@@ -368,7 +368,7 @@ def _check_tier_permission(user_id: str, permission: str, conn) -> dict:
     Raises 403 if not allowed. Returns tier config dict."""
     row = conn.execute("SELECT subscription_tier FROM users WHERE id = ?", (user_id,)).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
     tier = row["subscription_tier"] or "rookie"
     tier_config = _get_tier_permissions(tier)
@@ -404,7 +404,7 @@ def _check_tier_limit(user_id: str, resource_type: str, conn) -> dict:
         (user_id,),
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
     tier = row["subscription_tier"] or "rookie"
     tier_config = _get_tier_permissions(tier)
@@ -474,7 +474,7 @@ def _check_email_verified(user_id: str, conn):
     """Raise 403 if user's email is not verified. Used to gate AI features."""
     row = conn.execute("SELECT email_verified FROM users WHERE id = ?", (user_id,)).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
     if not row["email_verified"]:
         raise HTTPException(status_code=403, detail={
             "error": "email_not_verified",
@@ -7160,7 +7160,7 @@ def _check_bench_talk_limit(user_id: str, conn) -> dict:
         (user_id,),
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
     tier = row["subscription_tier"] or "rookie"
     tier_config = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["rookie"])
@@ -7199,7 +7199,7 @@ def _check_report_limit(user_id: str, conn) -> dict:
         (user_id,),
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
     tier = row["subscription_tier"] or "rookie"
     tier_config = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["rookie"])
@@ -7682,7 +7682,7 @@ async def get_me(token_data: dict = Depends(verify_token)):
     row = conn.execute("SELECT * FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
     conn.close()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
     covered = None
     if row["covered_teams"]:
         try:
@@ -7832,7 +7832,7 @@ async def send_verification_email(token_data: dict = Depends(verify_token)):
     try:
         row = conn.execute("SELECT email, email_verified FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
         if row["email_verified"]:
             return {"message": "Email is already verified."}
 
@@ -7905,7 +7905,7 @@ async def get_subscription_usage(token_data: dict = Depends(verify_token)):
             (user_id,),
         ).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
         tier = row["subscription_tier"] or "rookie"
         tier_config = SUBSCRIPTION_TIERS.get(tier, SUBSCRIPTION_TIERS["rookie"])
@@ -8058,7 +8058,7 @@ async def admin_update_user_tier(user_id: str, req: AdminTierUpdateRequest,
         # Verify user belongs to same org
         row = conn.execute("SELECT id, org_id, email FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
         if row["org_id"] != org_id:
             raise HTTPException(status_code=403, detail="Cannot modify users outside your organization")
 
@@ -8308,7 +8308,7 @@ async def superadmin_update_user_tier(user_id: str, req: AdminTierUpdateRequest,
     try:
         row = conn.execute("SELECT id, email FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
         conn.execute(
             "UPDATE users SET subscription_tier = ?, subscription_started_at = ? WHERE id = ?",
@@ -8337,7 +8337,7 @@ async def superadmin_impersonate(user_id: str, token_data: dict = Depends(verify
     try:
         row = conn.execute("SELECT id, org_id, email, role FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
         if row["role"] == "superadmin":
             raise HTTPException(status_code=403, detail="Cannot impersonate another superadmin")
@@ -28005,7 +28005,7 @@ async def create_contact_request(body: ContactRequestCreate, token_data: dict = 
     requester = conn.execute("SELECT first_name, last_name, hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
     if not requester:
         conn.close()
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
 
     org = conn.execute("SELECT name FROM organizations WHERE id = ?", (org_id,)).fetchone()
     requester_name = f"{requester['first_name'] or ''} {requester['last_name'] or ''}".strip()
@@ -29252,7 +29252,7 @@ async def get_onboarding_state(token_data: dict = Depends(verify_token)):
     ).fetchone()
     conn.close()
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
     covered = None
     if row["covered_teams"]:
         try:
