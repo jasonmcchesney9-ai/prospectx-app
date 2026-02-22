@@ -2777,6 +2777,38 @@ def init_db():
             conn.execute(f"ALTER TABLE player_parents ADD COLUMN {col} {defn}")
     conn.commit()
 
+    # ── Table: broadcast_settings (per user per league) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS broadcast_settings (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            league TEXT NOT NULL,
+            settings_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(user_id, league)
+        )
+    """)
+
+    # ── Table: broadcast_run_of_show ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS broadcast_run_of_show (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            game_id TEXT,
+            item_type TEXT,
+            content TEXT NOT NULL,
+            source_id TEXT,
+            sequence_order INTEGER,
+            status TEXT DEFAULT 'pending',
+            pushed_by TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_ros_session ON broadcast_run_of_show(session_id)")
+    conn.commit()
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -28642,6 +28674,556 @@ Write approximately {fmt_cfg['word_target']} words. Use real player names and st
     except Exception as e:
         logger.error("Broadcast post-game error: %s", str(e))
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+# ── Broadcast: Schedule Picker ───────────────────────────────
+
+@app.get("/broadcast/games/today")
+async def broadcast_games_today(
+    league: str = None,
+    token_data: dict = Depends(verify_token),
+):
+    """Return today's games for schedule picker. Falls back to next 3 upcoming."""
+    conn = get_db()
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        query = "SELECT * FROM games WHERE game_date = ?"
+        params: list = [today]
+        if league:
+            query += " AND LOWER(league) = LOWER(?)"
+            params.append(league)
+        query += " ORDER BY game_date, home_team"
+        rows = conn.execute(query, params).fetchall()
+
+        if not rows:
+            # Fallback: next 3 upcoming games
+            query2 = "SELECT * FROM games WHERE game_date > ?"
+            params2: list = [today]
+            if league:
+                query2 += " AND LOWER(league) = LOWER(?)"
+                params2.append(league)
+            query2 += " ORDER BY game_date LIMIT 3"
+            rows = conn.execute(query2, params2).fetchall()
+
+        return {
+            "date": today,
+            "games": [
+                {
+                    "id": rd["id"],
+                    "home_team": rd["home_team"],
+                    "away_team": rd["away_team"],
+                    "game_date": rd["game_date"],
+                    "venue": rd.get("venue"),
+                    "status": rd.get("status", "scheduled"),
+                    "home_score": rd.get("home_score"),
+                    "away_score": rd.get("away_score"),
+                    "league": rd.get("league"),
+                }
+                for r in rows
+                for rd in [dict(r)]
+            ],
+        }
+    finally:
+        conn.close()
+
+
+# ── Broadcast: Settings (remembered per league) ──────────────
+
+@app.get("/broadcast/settings/{league}")
+async def get_broadcast_settings(league: str, token_data: dict = Depends(verify_token)):
+    """Get broadcaster's saved settings for a league."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT settings_json FROM broadcast_settings WHERE user_id = ? AND league = ?",
+            (user_id, league),
+        ).fetchone()
+        if row:
+            return json.loads(row["settings_json"])
+        return {}
+    finally:
+        conn.close()
+
+
+@app.put("/broadcast/settings/{league}")
+async def save_broadcast_settings(league: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Save broadcaster's settings for a league."""
+    user_id = token_data["user_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        settings_json = json.dumps(body)
+        existing = conn.execute(
+            "SELECT id FROM broadcast_settings WHERE user_id = ? AND league = ?",
+            (user_id, league),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE broadcast_settings SET settings_json = ?, updated_at = datetime('now') WHERE id = ?",
+                (settings_json, existing["id"]),
+            )
+        else:
+            sid = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO broadcast_settings (id, user_id, league, settings_json) VALUES (?, ?, ?, ?)",
+                (sid, user_id, league, settings_json),
+            )
+        conn.commit()
+        return {"status": "saved", "league": league}
+    finally:
+        conn.close()
+
+
+# ── Broadcast: Player Summary (lightweight drawer projection) ─
+
+_broadcast_summary_cache: dict = {}  # key → (data, expiry_time)
+_BROADCAST_CACHE_TTL = 300  # 5 minutes
+
+
+@app.get("/players/{player_id}/broadcast-summary")
+async def player_broadcast_summary(player_id: str, token_data: dict = Depends(verify_token)):
+    """Lightweight player summary for broadcast card drawer."""
+    cache_key = f"player_{player_id}"
+    now = time.time()
+    if cache_key in _broadcast_summary_cache:
+        cached_data, expiry = _broadcast_summary_cache[cache_key]
+        if now < expiry:
+            return cached_data
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Player not found")
+        p = _player_from_row(row)
+
+        # Quick stats
+        stats_row = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        quick_stats = {}
+        if stats_row:
+            sd = dict(stats_row)
+            quick_stats = {
+                "gp": sd["gp"], "goals": sd["g"], "assists": sd["a"],
+                "points": sd["p"], "plus_minus": sd.get("plus_minus", 0),
+            }
+
+        # Last 5 games
+        last_5 = conn.execute(
+            "SELECT game_date, opponent, goals AS g, assists AS a, points AS p FROM player_game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 5",
+            (player_id,),
+        ).fetchall()
+        last_5_games = [{"date": rd["game_date"], "opponent": rd.get("opponent", ""), "g": rd["g"], "a": rd["a"], "p": rd["p"]} for r in last_5 for rd in [dict(r)]]
+        quick_stats["last_5_games"] = last_5_games
+
+        # Role tags
+        role_tags = []
+        rt = p.get("role_tags")
+        if rt:
+            if isinstance(rt, str):
+                try:
+                    role_tags = json.loads(rt)
+                except (json.JSONDecodeError, TypeError):
+                    role_tags = []
+            elif isinstance(rt, list):
+                role_tags = rt
+
+        # Intelligence for skill profile
+        intel_row = conn.execute(
+            "SELECT archetype, strengths FROM player_intelligence WHERE player_id = ? ORDER BY created_at DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        skill_line = ""
+        archetype = p.get("archetype", "")
+        if intel_row:
+            id_row = dict(intel_row)
+            archetype = id_row.get("archetype") or archetype
+            strengths = id_row.get("strengths", "")
+            if strengths:
+                skill_line = strengths[:120]
+
+        # Story bites — generate from stats context (lightweight, no API call)
+        story_bites = []
+        if stats_row:
+            gp = stats_row["gp"] or 0
+            pts = stats_row["p"] or 0
+            if gp > 0:
+                ppg = round(pts / gp, 2)
+                story_bites.append({"type": "stat", "text": f"Averaging {ppg} points per game over {gp} games this season."})
+            goals = stats_row["g"] or 0
+            if goals >= 10:
+                story_bites.append({"type": "milestone", "text": f"Has hit {goals} goals on the season."})
+        if last_5_games:
+            recent_pts = sum(g["p"] for g in last_5_games)
+            if recent_pts >= 5:
+                story_bites.append({"type": "streak", "text": f"Hot streak — {recent_pts} points in last {len(last_5_games)} games."})
+
+        result = {
+            "id": player_id,
+            "name": f"{p.get('first_name', '')} {p.get('last_name', '')}".strip(),
+            "jersey_number": p.get("jersey_number"),
+            "position": p.get("position", ""),
+            "handedness": p.get("shoots", ""),
+            "age": p.get("age"),
+            "hometown": p.get("hometown", ""),
+            "current_team": p.get("current_team", ""),
+            "photo_url": p.get("image_url"),
+            "role_tags": role_tags,
+            "archetype": archetype,
+            "quick_stats": quick_stats,
+            "story_bites": story_bites,
+            "skill_profile_line": skill_line,
+        }
+        _broadcast_summary_cache[cache_key] = (result, now + _BROADCAST_CACHE_TTL)
+        return result
+    finally:
+        conn.close()
+
+
+# ── Broadcast: Team Summary (lightweight drawer projection) ──
+
+@app.get("/teams/{team_name}/broadcast-summary")
+async def team_broadcast_summary(team_name: str, token_data: dict = Depends(verify_token)):
+    """Lightweight team summary for broadcast card drawer."""
+    decoded = team_name.replace("%20", " ")
+    cache_key = f"team_{decoded.lower()}"
+    now = time.time()
+    if cache_key in _broadcast_summary_cache:
+        cached_data, expiry = _broadcast_summary_cache[cache_key]
+        if now < expiry:
+            return cached_data
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Team record from team_stats
+        team_row = conn.execute(
+            "SELECT * FROM teams WHERE LOWER(name) = LOWER(?) AND org_id = ?",
+            (decoded, org_id),
+        ).fetchone()
+        if not team_row:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        ts = conn.execute(
+            "SELECT * FROM team_stats WHERE LOWER(team_name) = LOWER(?) ORDER BY season DESC LIMIT 1",
+            (decoded,),
+        ).fetchone()
+
+        record = {"w": 0, "l": 0, "ot": 0, "pts": 0}
+        pp_pct = pk_pct = 0.0
+        if ts:
+            tsd = dict(ts)
+            ext = {}
+            if tsd.get("extended_stats"):
+                try:
+                    ext = json.loads(tsd["extended_stats"]) if isinstance(tsd["extended_stats"], str) else tsd["extended_stats"]
+                except (json.JSONDecodeError, TypeError):
+                    ext = {}
+            record = {
+                "w": tsd.get("w", 0) or ext.get("w", 0) or 0,
+                "l": tsd.get("l", 0) or ext.get("l", 0) or 0,
+                "ot": tsd.get("ot", 0) or ext.get("ot", 0) or 0,
+                "pts": tsd.get("pts", 0) or ext.get("pts", 0) or 0,
+            }
+            st = ext.get("special_teams", {})
+            pp_pct = tsd.get("pp_pct") or st.get("pp_pct", 0.0) or 0.0
+            pk_pct = tsd.get("pk_pct") or st.get("pk_pct", 0.0) or 0.0
+
+        # Last 10 results
+        last_10_rows = conn.execute(
+            """SELECT home_team, away_team, home_score, away_score FROM games
+               WHERE (LOWER(home_team) = LOWER(?) OR LOWER(away_team) = LOWER(?))
+               AND status = 'final'
+               ORDER BY game_date DESC LIMIT 10""",
+            (decoded, decoded),
+        ).fetchall()
+        last_10_chars = []
+        for g in last_10_rows:
+            is_home = g["home_team"] and g["home_team"].lower() == decoded.lower()
+            our_score = g["home_score"] if is_home else g["away_score"]
+            their_score = g["away_score"] if is_home else g["home_score"]
+            if our_score is not None and their_score is not None:
+                if our_score > their_score:
+                    last_10_chars.append("W")
+                elif our_score < their_score:
+                    last_10_chars.append("L")
+                else:
+                    last_10_chars.append("T")
+        last_10_str = "".join(last_10_chars) if last_10_chars else "N/A"
+
+        # Key streaks
+        key_streaks = []
+        if last_10_chars:
+            # Count current streak
+            if last_10_chars:
+                streak_char = last_10_chars[0]
+                streak_count = 0
+                for c in last_10_chars:
+                    if c == streak_char:
+                        streak_count += 1
+                    else:
+                        break
+                if streak_count >= 2:
+                    streak_label = "Win" if streak_char == "W" else "Loss" if streak_char == "L" else "Tie"
+                    key_streaks.append(f"{streak_count}-game {streak_label} streak")
+
+        # Top performers
+        top_rows = conn.execute(
+            """SELECT p.first_name, p.last_name, p.jersey_number, ps.p
+               FROM players p JOIN player_stats ps ON p.id = ps.player_id
+               WHERE LOWER(p.current_team) = LOWER(?) AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+               ORDER BY ps.p DESC LIMIT 5""",
+            (decoded,),
+        ).fetchall()
+        top_performers = [
+            {"name": f"{rd['first_name']} {rd['last_name']}".strip(), "jersey": rd.get("jersey_number", ""), "pts": rd["p"]}
+            for r in top_rows
+            for rd in [dict(r)]
+        ]
+
+        result = {
+            "id": team_row["id"] if team_row else "",
+            "name": decoded,
+            "logo_url": dict(team_row).get("logo_url") if team_row else None,
+            "record": record,
+            "last_10": last_10_str,
+            "pp_pct": round(pp_pct, 1),
+            "pk_pct": round(pk_pct, 1),
+            "pp_rank": None,
+            "pk_rank": None,
+            "key_streaks": key_streaks,
+            "top_performers": top_performers,
+        }
+        _broadcast_summary_cache[cache_key] = (result, now + _BROADCAST_CACHE_TTL)
+        return result
+    finally:
+        conn.close()
+
+
+# ── Broadcast: Micro-Stories (PXI-generated story bites) ─────
+
+@app.post("/players/{player_id}/micro-stories")
+async def player_micro_stories(player_id: str, token_data: dict = Depends(verify_token)):
+    """Generate 2-3 micro-stories for a player from stats, gamelog, and notes."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Player not found")
+        p = _player_from_row(row)
+        name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+
+        # Gather context
+        stats_row = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1", (player_id,),
+        ).fetchone()
+        game_rows = conn.execute(
+            "SELECT game_date, opponent, goals AS g, assists AS a, points AS p FROM player_game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 10",
+            (player_id,),
+        ).fetchall()
+        note_rows = conn.execute(
+            "SELECT note_text AS body, tags FROM scout_notes WHERE player_id = ? ORDER BY created_at DESC LIMIT 3",
+            (player_id,),
+        ).fetchall()
+
+        stats_context = dict(stats_row) if stats_row else {}
+        game_context = [dict(r) for r in game_rows]
+        note_context = [{"body": dict(r).get("note_text", dict(r).get("body", "")), "tags": dict(r).get("tags", "")} for r in note_rows]
+    finally:
+        conn.close()
+
+    client = get_anthropic_client()
+    if not client:
+        # Fallback: generate from stats only
+        bites = []
+        if stats_context:
+            gp = stats_context.get("gp", 0) or 0
+            pts = stats_context.get("p", 0) or 0
+            if gp > 0:
+                bites.append({"type": "stat", "text": f"{name} is averaging {round(pts/gp, 2)} points per game."})
+        return {"player_id": player_id, "story_bites": bites}
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            system="You are PXI, a hockey broadcast intelligence engine. Generate 2-3 micro-stories (story bites) for a player. Each is one sentence, spoken aloud by a broadcaster. Types: stat, streak, milestone, human_interest. Return JSON array: [{\"type\": \"stat|streak|milestone|human_interest\", \"text\": \"...\"}]. ONLY valid JSON.",
+            messages=[{"role": "user", "content": f"Player: {name}\nPosition: {p.get('position','')}\nStats: {json.dumps(stats_context, default=str)}\nRecent games: {json.dumps(game_context, default=str)}\nScout notes: {json.dumps(note_context, default=str)}\n\nGenerate 2-3 broadcast-ready micro-stories."}],
+        )
+        raw = _strip_json_fences(message.content[0].text.strip())
+        bites = json.loads(raw)
+        return {"player_id": player_id, "story_bites": bites}
+    except Exception as e:
+        logger.error("Micro-stories generation error for %s: %s", player_id, str(e))
+        return {"player_id": player_id, "story_bites": []}
+
+
+# ── Broadcast: Run of Show CRUD ──────────────────────────────
+
+@app.get("/broadcast/run-of-show/{session_id}")
+async def get_run_of_show(session_id: str, token_data: dict = Depends(verify_token)):
+    """Get ordered Run of Show items for a broadcast session."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM broadcast_run_of_show WHERE session_id = ? AND org_id = ? ORDER BY sequence_order",
+            (session_id, org_id),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/broadcast/run-of-show")
+async def add_run_of_show_item(request: Request, token_data: dict = Depends(verify_token)):
+    """Add an item to the Run of Show."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    conn = get_db()
+    try:
+        # Get next sequence order
+        max_seq = conn.execute(
+            "SELECT MAX(sequence_order) as mx FROM broadcast_run_of_show WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        next_seq = (max_seq["mx"] or 0) + 1 if max_seq else 1
+
+        item_id = str(uuid.uuid4())
+        conn.execute(
+            """INSERT INTO broadcast_run_of_show
+               (id, session_id, org_id, game_id, item_type, content, source_id, sequence_order, pushed_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (item_id, session_id, org_id, body.get("game_id"),
+             body.get("item_type", "cue"), body.get("content", ""),
+             body.get("source_id"), next_seq, user_id),
+        )
+        conn.commit()
+        return {"id": item_id, "sequence_order": next_seq, "status": "pending"}
+    finally:
+        conn.close()
+
+
+@app.put("/broadcast/run-of-show/{item_id}")
+async def update_run_of_show_item(item_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update a Run of Show item (status, order, content)."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM broadcast_run_of_show WHERE id = ? AND org_id = ?",
+            (item_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Run of Show item not found")
+
+        updates = []
+        params = []
+        for field in ("status", "sequence_order", "content", "item_type"):
+            if field in body:
+                updates.append(f"{field} = ?")
+                params.append(body[field])
+        if updates:
+            params.append(item_id)
+            conn.execute(f"UPDATE broadcast_run_of_show SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+        return {"status": "updated"}
+    finally:
+        conn.close()
+
+
+@app.delete("/broadcast/run-of-show/{item_id}")
+async def delete_run_of_show_item(item_id: str, token_data: dict = Depends(verify_token)):
+    """Remove an item from the Run of Show."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        conn.execute(
+            "DELETE FROM broadcast_run_of_show WHERE id = ? AND org_id = ?",
+            (item_id, org_id),
+        )
+        conn.commit()
+        return {"status": "deleted"}
+    finally:
+        conn.close()
+
+
+# ── Broadcast: Graphics Export ───────────────────────────────
+
+@app.post("/broadcast/graphics-export")
+async def broadcast_graphics_export(request: Request, token_data: dict = Depends(verify_token)):
+    """Export insight/stat card content for graphics system integration."""
+    body = await request.json()
+    content = body.get("content", {})
+    template_id = body.get("template_id", "default")
+    export_format = body.get("format", "json")  # json|plain|cg
+
+    headline = content.get("headline", content.get("headline_stat", ""))
+    stat_value = content.get("stat_value", content.get("headline_value", ""))
+    context = content.get("context", content.get("interpretation", content.get("insight", "")))
+    caption = content.get("caption", content.get("graphic_caption", ""))
+
+    if export_format == "plain":
+        result = f"{headline}\n{stat_value}\n{context}"
+    elif export_format == "cg":
+        result = f"TEMPLATE:{template_id}|HEADLINE:{headline}|STAT:{stat_value}|CONTEXT:{context}|CAPTION:{caption}"
+    else:
+        result = json.dumps({
+            "template_id": template_id,
+            "headline": headline,
+            "stat": stat_value,
+            "context": context,
+            "caption": caption,
+        })
+
+    return {"formatted": result, "format": export_format, "template_id": template_id}
+
+
+# ── Broadcast: Audience Language Generation Helper ───────────
+
+def _generate_audience_versions(client, content_type: str, raw_text: str, context: str) -> dict:
+    """Generate casual/informed/hardcore versions of broadcast content.
+    Returns dict with text_casual, text_informed, text_hardcore."""
+    if not client:
+        return {"text_casual": raw_text, "text_informed": raw_text, "text_hardcore": raw_text}
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1500,
+            system="""You adapt broadcast content for three audience levels. Return ONLY valid JSON.
+CASUAL: Explain hockey terms, focus on storylines, accessible language, no jargon.
+INFORMED: Standard hockey language, mix stats and narrative, assume basic knowledge.
+HARDCORE: Advanced metrics, tactical detail, statistical depth, assume expert knowledge.""",
+            messages=[{"role": "user", "content": f"""Rewrite this {content_type} for three audience levels.
+
+Original: {raw_text}
+Context: {context}
+
+Return JSON: {{"text_casual": "...", "text_informed": "...", "text_hardcore": "..."}}"""}],
+        )
+        raw = _strip_json_fences(message.content[0].text.strip())
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning("Audience version generation failed: %s", str(e))
+        return {"text_casual": raw_text, "text_informed": raw_text, "text_hardcore": raw_text}
 
 
 # ============================================================
