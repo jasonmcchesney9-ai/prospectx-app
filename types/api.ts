@@ -1781,6 +1781,8 @@ export interface PracticePlan {
   notes: string | null;
   status: "draft" | "active" | "completed";
   practice_date: string | null;
+  source?: "manual" | "pxi_generated" | "game_issue" | null;
+  game_issue_text?: string | null;
   drills?: PracticePlanDrill[];
   created_at: string;
   updated_at: string;

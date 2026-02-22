@@ -1944,6 +1944,17 @@ def init_db():
         conn.commit()
         logger.info("Migration: added practice_date column to practice_plans")
 
+    # ── Migration: source + game_issue_text on practice_plans (Spec B) ──
+    pp_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(practice_plans)").fetchall()}
+    if "source" not in pp_cols2:
+        conn.execute("ALTER TABLE practice_plans ADD COLUMN source TEXT DEFAULT 'manual'")
+        conn.commit()
+        logger.info("Migration: added source column to practice_plans")
+    if "game_issue_text" not in pp_cols2:
+        conn.execute("ALTER TABLE practice_plans ADD COLUMN game_issue_text TEXT")
+        conn.commit()
+        logger.info("Migration: added game_issue_text column to practice_plans")
+
     # ── Migration: Country framework columns on organizations ──
     org_cols = {r[1] for r in conn.execute("PRAGMA table_info(organizations)").fetchall()}
     for col_name, col_type in [
@@ -9732,6 +9743,15 @@ class PracticeCompleteRequest(BaseModel):
     absent_player_ids: List[str] = []
     session_note: Optional[str] = None
 
+class GameIssueGenerateRequest(BaseModel):
+    game_issue: str = Field(..., min_length=5, max_length=2000)
+    issue_category: Optional[str] = None
+    team_id: Optional[str] = None
+    ice_time_minutes: int = 60
+    roster_size: int = 18
+    goalies: int = 2
+    focus_override: List[str] = []
+
 # ── Player Search (autocomplete) ─────────────────────────────
 
 @app.get("/players/search")
@@ -11028,6 +11048,7 @@ def _get_plan_with_drills(conn, plan_id: str, org_id: str) -> Optional[dict]:
 async def list_practice_plans(
     team_name: Optional[str] = None,
     status: Optional[str] = None,
+    source: Optional[str] = None,
     search: Optional[str] = None,
     limit: int = 100,
     token_data: dict = Depends(verify_token),
@@ -11042,6 +11063,9 @@ async def list_practice_plans(
     if status:
         where.append("status = ?")
         params.append(status)
+    if source:
+        where.append("source = ?")
+        params.append(source)
     if search:
         where.append("(LOWER(title) LIKE ? OR LOWER(notes) LIKE ?)")
         params.extend([f"%{search.lower()}%", f"%{search.lower()}%"])
@@ -11420,6 +11444,315 @@ HOCKEY TERMINOLOGY:
     _increment_tracking(user_id, "practice_plans", conn)
 
     result = _get_plan_with_drills(conn, plan_id, org_id)
+    conn.close()
+    return result
+
+
+# ============================================================
+# PRACTICE PLAN FROM GAME ISSUE (Spec B)
+# ============================================================
+
+GAME_ISSUE_QUICK_PICKS = {
+    "zone_exits": {
+        "label": "Zone Exits / Breakouts",
+        "issues": [
+            "Struggling vs aggressive forecheck",
+            "D turning over on wall",
+            "Centers not supporting breakout",
+            "Icing problems",
+        ],
+    },
+    "zone_entries": {
+        "label": "Zone Entries",
+        "issues": [
+            "Dumping in too much",
+            "Getting denied at blue line",
+            "No controlled entries",
+            "Winger not driving net on entry",
+        ],
+    },
+    "defensive_zone": {
+        "label": "Defensive Zone",
+        "issues": [
+            "Giving up second chances",
+            "Losing net front battles",
+            "Weak side exposure on PP",
+            "D gap too wide",
+        ],
+    },
+    "forechecking": {
+        "label": "Forechecking",
+        "issues": [
+            "F1 not getting pressure",
+            "Losing puck battles in corners",
+            "Not converting turnovers to chances",
+        ],
+    },
+    "special_teams_pp": {
+        "label": "Special Teams - PP",
+        "issues": [
+            "Not generating shots",
+            "One-dimensional - always going to same option",
+            "Losing puck on entry",
+        ],
+    },
+    "special_teams_pk": {
+        "label": "Special Teams - PK",
+        "issues": [
+            "Giving up seam passes",
+            "Getting caught on faceoff losses",
+            "Allowing zone time",
+        ],
+    },
+    "neutral_zone": {
+        "label": "Neutral Zone",
+        "issues": [
+            "Getting caught in transition",
+            "Not winning races to pucks",
+            "Regroup breaking down",
+        ],
+    },
+    "compete": {
+        "label": "Compete / Battles",
+        "issues": [
+            "Losing board battles",
+            "Getting outworked in corners",
+            "No net-front presence",
+        ],
+    },
+}
+
+
+@app.get("/practice-plans/game-issue-options")
+async def get_game_issue_options(token_data: dict = Depends(verify_token)):
+    """Return quick-pick game issue categories and options."""
+    return GAME_ISSUE_QUICK_PICKS
+
+
+@app.post("/practice-plans/generate-from-issue", status_code=201)
+async def generate_practice_plan_from_issue(body: GameIssueGenerateRequest, token_data: dict = Depends(verify_token)):
+    """Generate a practice plan from a game issue description using PXI."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    # Tier limit check
+    limit_conn = get_db()
+    try:
+        _check_tier_limit(user_id, "practice_plans", limit_conn)
+    finally:
+        limit_conn.close()
+
+    conn = get_db()
+
+    # Gather team context if team_id provided
+    team_name = body.team_id or ""
+    roster_summary = []
+    team_system = None
+    age_level = "JUNIOR_COLLEGE_PRO"
+    fw_context = ""
+
+    if team_name:
+        roster_rows = conn.execute(
+            "SELECT first_name, last_name, position, shoots FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (org_id, team_name)
+        ).fetchall()
+        roster_summary = [f"{r['first_name']} {r['last_name']} ({r['position']}, {r['shoots'] or '?'})" for r in roster_rows]
+
+        ts_row = conn.execute(
+            "SELECT * FROM team_systems WHERE org_id = ? AND LOWER(team_name) = LOWER(?)", (org_id, team_name)
+        ).fetchone()
+        if ts_row:
+            team_system = dict(ts_row)
+
+        # Framework context
+        org_row = conn.execute("SELECT country, development_framework FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        org_country = org_row["country"] if org_row and org_row["country"] else "Canada"
+        org_framework = org_row["development_framework"] if org_row and org_row["development_framework"] else None
+        team_row = conn.execute(
+            "SELECT age_division, country FROM teams WHERE (org_id = ? OR org_id = '__global__') AND LOWER(name) = LOWER(?)",
+            (org_id, team_name)
+        ).fetchone()
+        team_age_div = None
+        if team_row:
+            team_age_div = team_row["age_division"]
+            if team_row["country"]:
+                org_country = team_row["country"]
+            if team_age_div:
+                age_level = team_age_div
+        fw_context = framework_context(org_country, team_age_div, org_framework) or ""
+
+    # Query available drills
+    drill_rows = conn.execute(
+        "SELECT * FROM drills WHERE (org_id IS NULL OR org_id = ?) ORDER BY category, name",
+        (org_id,)
+    ).fetchall()
+    available_drills = []
+    for dr in drill_rows:
+        d = _drill_row_to_dict(dr)
+        available_drills.append({
+            "id": d["id"], "name": d["name"], "category": d["category"],
+            "description": d["description"][:150], "duration_minutes": d["duration_minutes"],
+            "skill_focus": d["skill_focus"], "tags": d["tags"],
+        })
+
+    # Build prompt
+    issue_text = body.game_issue
+    if body.issue_category:
+        issue_text = f"[Category: {body.issue_category}] {issue_text}"
+    focus_override = ", ".join(body.focus_override) if body.focus_override else ""
+
+    system_prompt = """You are ProspectX Practice Intelligence — an elite hockey coaching assistant that builds targeted practice plans from game performance issues.
+
+A coach has described a problem they saw in a recent game. Your job is to:
+1. Diagnose the root cause of the game issue
+2. Select drills from the provided library that directly address the problem
+3. Build a complete, structured practice plan
+
+RESPONSE FORMAT — return ONLY valid JSON (no markdown, no extra text):
+{
+  "title": "Practice Plan: Fix [Issue] — [Team]",
+  "problem_diagnosis": "1-2 sentence root cause analysis of the game issue",
+  "practice_theme": "The overarching focus for today's session",
+  "phases": [
+    {
+      "phase": "warm_up",
+      "phase_label": "Warm Up",
+      "duration_minutes": 10,
+      "drills": [
+        {
+          "drill_id": "<id from available drills>",
+          "drill_name": "<name>",
+          "duration_minutes": 8,
+          "coaching_notes": "Specific coaching notes connecting this drill to the game issue"
+        }
+      ]
+    },
+    {"phase": "skill_work", "phase_label": "Technical Focus", ...},
+    {"phase": "systems", "phase_label": "Team Application", ...},
+    {"phase": "scrimmage", "phase_label": "Game Situations", ...},
+    {"phase": "cool_down", "phase_label": "Cool Down", ...}
+  ],
+  "coaching_summary": "2-3 sentence summary of how this practice addresses the game issue",
+  "key_coaching_cues": ["Cue 1", "Cue 2", "Cue 3"],
+  "follow_up": "Suggested drill focus for next practice if issue persists"
+}
+
+RULES:
+- Use ONLY drill_ids from the available drills list
+- Total drill times should sum close to the requested ice time
+- EVERY drill must connect to the game issue — explain the connection in coaching_notes
+- The skill_work phase should contain 2-3 drills directly addressing the technical breakdown
+- The systems phase should have a team drill applying the skill in game context
+- Key coaching cues should be things the coach emphasizes throughout the entire session
+- Be specific: "F1 must angle carrier to the wall, deny the middle lane" not "work on forechecking"
+- Reference the team's system when relevant"""
+
+    user_prompt = f"""GAME ISSUE: {body.game_issue}
+{f'ISSUE CATEGORY: {body.issue_category}' if body.issue_category else ''}
+{f'ADDITIONAL FOCUS: {focus_override}' if focus_override else ''}
+
+ICE TIME: {body.ice_time_minutes} minutes
+ROSTER SIZE: {body.roster_size} skaters, {body.goalies} goalies
+{f'TEAM: {team_name}' if team_name else 'No team specified'}
+{f'ROSTER: {chr(10).join(roster_summary[:20])}' if roster_summary else ''}
+{f"TEAM SYSTEM: Forecheck={team_system.get('forecheck','N/A')}, DZ={team_system.get('dz_structure','N/A')}, OZ={team_system.get('oz_setup','N/A')}, PP={team_system.get('pp_formation','N/A')}, PK={team_system.get('pk_formation','N/A')}" if team_system else ''}
+{fw_context}
+
+AVAILABLE DRILLS:
+{json.dumps(available_drills[:100], indent=1)}"""
+
+    # Call Claude (or mock)
+    plan_data = None
+    client = get_anthropic_client()
+    if client:
+        try:
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            response_text = message.content[0].text.strip()
+            if response_text.startswith("```"):
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
+            plan_data = json.loads(response_text)
+        except Exception as e:
+            logger.error("Game issue plan generation error: %s", e)
+
+    # Mock fallback
+    if not plan_data:
+        skill_drills = [d for d in available_drills if d["category"] in ("passing", "shooting", "skating", "defensive", "offensive")][:3]
+        system_drills = [d for d in available_drills if d["category"] in ("systems", "transition")][:1]
+        battle_drills = [d for d in available_drills if d["category"] in ("battle", "small_area_games")][:1]
+
+        def _mock(phase, label, drills_list, dur):
+            return {
+                "phase": phase, "phase_label": label, "duration_minutes": dur,
+                "drills": [{"drill_id": d["id"], "drill_name": d["name"],
+                            "duration_minutes": d["duration_minutes"],
+                            "coaching_notes": f"Address game issue: {body.game_issue[:50]}..."}
+                           for d in drills_list]
+            }
+        plan_data = {
+            "title": f"Practice Plan: Game Issue Fix — {team_name or 'Team'}",
+            "problem_diagnosis": f"Game issue identified: {body.game_issue[:100]}. Root cause analysis pending — edit coaching notes to customize.",
+            "practice_theme": "Targeted practice addressing recent game performance issue",
+            "phases": [
+                {"phase": "warm_up", "phase_label": "Warm Up", "duration_minutes": 10,
+                 "drills": [{"drill_id": None, "drill_name": "Dynamic warm-up skate", "duration_minutes": 10,
+                             "coaching_notes": "Easy skate, edge work, partner passing."}]},
+                _mock("skill_work", "Technical Focus", skill_drills, 20),
+                _mock("systems", "Team Application", system_drills, 15),
+                _mock("scrimmage", "Game Situations", battle_drills, 10),
+                {"phase": "cool_down", "phase_label": "Cool Down", "duration_minutes": 5,
+                 "drills": [{"drill_id": None, "drill_name": "Easy skate and stretch", "duration_minutes": 5,
+                             "coaching_notes": "Light skate, review key points from practice."}]},
+            ],
+            "coaching_summary": f"Practice targets the game issue: {body.game_issue[:80]}. Drills selected from the ProspectX library.",
+            "key_coaching_cues": ["Focus on the specific breakdown from the game", "Emphasize quality repetitions", "Connect drill execution to game situations"],
+            "follow_up": "If the issue persists, focus next practice on the same skill area with progressive complexity.",
+        }
+
+    # Create practice plan record
+    plan_id = gen_id()
+    now = datetime.utcnow().isoformat()
+    title = plan_data.get("title", f"Game Issue Plan — {team_name or 'Team'}")
+    conn.execute("""
+        INSERT INTO practice_plans (id, org_id, user_id, team_name, title, age_level,
+            duration_minutes, focus_areas, plan_data, notes, status, source, game_issue_text, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 'game_issue', ?, ?, ?)
+    """, (
+        plan_id, org_id, user_id, team_name or None, title, age_level,
+        body.ice_time_minutes, json.dumps(body.focus_override),
+        json.dumps(plan_data), None, body.game_issue, now, now
+    ))
+
+    # Create junction records for referenced drills
+    for phase_data in plan_data.get("phases", []):
+        for i, drill_entry in enumerate(phase_data.get("drills", [])):
+            drill_id = drill_entry.get("drill_id")
+            if drill_id:
+                conn.execute("""
+                    INSERT INTO practice_plan_drills (id, practice_plan_id, drill_id, phase,
+                        sequence_order, duration_minutes, coaching_notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    gen_id(), plan_id, drill_id, phase_data["phase"], i,
+                    drill_entry.get("duration_minutes", 10),
+                    drill_entry.get("coaching_notes")
+                ))
+
+    conn.commit()
+    _increment_tracking(user_id, "practice_plans", conn)
+
+    result = _get_plan_with_drills(conn, plan_id, org_id)
+    # Add extra fields from plan_data
+    if result and plan_data:
+        result["problem_diagnosis"] = plan_data.get("problem_diagnosis")
+        result["key_coaching_cues"] = plan_data.get("key_coaching_cues", [])
+        result["follow_up"] = plan_data.get("follow_up")
     conn.close()
     return result
 

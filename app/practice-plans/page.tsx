@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -20,6 +20,7 @@ export default function PracticePlansPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export default function PracticePlansPage() {
         const params = new URLSearchParams();
         if (search) params.set("search", search);
         if (statusFilter) params.set("status", statusFilter);
+        if (sourceFilter) params.set("source", sourceFilter);
         params.set("limit", "200");
         const { data } = await api.get<PracticePlan[]>(`/practice-plans?${params}`);
         setPlans(data);
@@ -39,7 +41,7 @@ export default function PracticePlansPage() {
     }
     const timer = setTimeout(load, 300);
     return () => clearTimeout(timer);
-  }, [search, statusFilter]);
+  }, [search, statusFilter, sourceFilter]);
 
   return (
     <ProtectedRoute>
@@ -55,13 +57,22 @@ export default function PracticePlansPage() {
               </p>
             )}
           </div>
-          <Link
-            href="/practice-plans/generate"
-            className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-          >
-            <Zap size={16} />
-            Generate Plan
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/practice-plans/from-game-issue"
+              className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors"
+            >
+              <AlertTriangle size={16} />
+              Build from Game Issue
+            </Link>
+            <Link
+              href="/practice-plans/generate"
+              className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+            >
+              <Zap size={16} />
+              Generate Plan
+            </Link>
+          </div>
         </div>
 
         {/* Filters */}
@@ -86,6 +97,16 @@ export default function PracticePlansPage() {
             <option value="active">Active</option>
             <option value="completed">Completed</option>
           </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white"
+          >
+            <option value="">All Sources</option>
+            <option value="manual">Manual</option>
+            <option value="pxi_generated">PXI Generated</option>
+            <option value="game_issue">Game Issue</option>
+          </select>
         </div>
 
         {/* Plans List */}
@@ -97,9 +118,9 @@ export default function PracticePlansPage() {
           <div className="text-center py-16 bg-white rounded-xl border border-teal/20">
             <ClipboardList size={32} className="mx-auto text-muted/40 mb-3" />
             <p className="text-muted text-sm mb-4">
-              {search || statusFilter ? "No plans match your filters." : "No practice plans yet."}
+              {search || statusFilter || sourceFilter ? "No plans match your filters." : "No practice plans yet."}
             </p>
-            {!search && !statusFilter && (
+            {!search && !statusFilter && !sourceFilter && (
               <Link
                 href="/practice-plans/generate"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
@@ -134,6 +155,12 @@ export default function PracticePlansPage() {
                           <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold ${sc.bg} ${sc.text}`}>
                             {sc.label}
                           </span>
+                          {plan.source === "game_issue" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold bg-orange/10 text-orange">
+                              <AlertTriangle size={9} />
+                              Game Issue
+                            </span>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted">
                           {plan.team_name && (
