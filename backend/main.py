@@ -2734,6 +2734,49 @@ def init_db():
             conn.execute(f"ALTER TABLE agent_clients ADD COLUMN {col} {defn}")
     conn.commit()
 
+    # ── Table: family_cards (monthly auto-generated) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS family_cards (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            month TEXT NOT NULL,
+            content_json TEXT,
+            coach_note TEXT,
+            generated_at TEXT NOT NULL,
+            pdf_url TEXT,
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_family_cards_player ON family_cards(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_family_cards_month ON family_cards(month)")
+    conn.commit()
+
+    # ── Table: guide_content (PXI-generated family guide articles) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS guide_content (
+            id TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            age_band TEXT DEFAULT 'all',
+            country TEXT DEFAULT 'all',
+            tags TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_guide_content_category ON guide_content(category)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_guide_content_age_band ON guide_content(age_band)")
+    conn.commit()
+
+    # ── Migrate player_parents: add access_level + relationship cols ──
+    pp_cols = {r[1] for r in conn.execute("PRAGMA table_info(player_parents)").fetchall()}
+    for col, defn in [("access_level", "TEXT DEFAULT 'full_parent'"),
+                       ("relationship", "TEXT DEFAULT 'parent'")]:
+        if col not in pp_cols:
+            conn.execute(f"ALTER TABLE player_parents ADD COLUMN {col} {defn}")
+    conn.commit()
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -29243,6 +29286,327 @@ async def agent_generate_pack(request: Request, token_data: dict = Depends(verif
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         return pack
+    finally:
+        conn.close()
+
+
+# ── Player / Family Guide Module ──────────────────────────────
+
+
+def _get_linked_player_ids(user_id: str, org_id: str, conn) -> set:
+    """Return player IDs linked to a parent/player user via linked_player_id and player_parents table."""
+    linked_ids: set = set()
+    user_row = conn.execute("SELECT linked_player_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user_row and user_row["linked_player_id"]:
+        linked_ids.add(user_row["linked_player_id"])
+    pp_rows = conn.execute(
+        "SELECT player_id FROM player_parents WHERE parent_id = ? AND org_id = ?",
+        (user_id, org_id)
+    ).fetchall()
+    for r in pp_rows:
+        linked_ids.add(r["player_id"])
+    return linked_ids
+
+
+@app.get("/family/dashboard/{player_id}")
+async def family_player_dashboard(player_id: str, token_data: dict = Depends(verify_token)):
+    """Enhanced family dashboard for a specific player — Next Up, This Month's Focus, From the Staff."""
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify access — parent must be linked to this player
+        linked_ids = _get_linked_player_ids(user_id, org_id, conn)
+        # Allow access for anyone in the org (coaches, parents, players themselves)
+        player = conn.execute("""
+            SELECT id, first_name, last_name, position, current_team, current_league,
+                   dob, image_url, jersey_number, shoots, height_cm, weight_kg
+            FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+        """, (player_id, org_id)).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        p = dict(player)
+
+        # ── Next Up: next game or practice ──
+        next_up = None
+        # Check game_plans for upcoming
+        upcoming_game = conn.execute("""
+            SELECT id, opponent, game_date, status FROM game_plans
+            WHERE org_id = ? AND game_date >= date('now')
+            ORDER BY game_date ASC LIMIT 1
+        """, (org_id,)).fetchone()
+        if upcoming_game:
+            next_up = {
+                "type": "game",
+                "id": upcoming_game["id"],
+                "opponent": upcoming_game["opponent"],
+                "date": upcoming_game["game_date"],
+                "status": upcoming_game["status"],
+            }
+
+        # ── This Month's Focus: current dev plan objectives ──
+        focus_items = []
+        plan_row = conn.execute("""
+            SELECT id, plan_data FROM development_plans
+            WHERE player_id = ? AND is_current = 1
+            ORDER BY version DESC LIMIT 1
+        """, (player_id,)).fetchone()
+        if plan_row and plan_row["plan_data"]:
+            try:
+                plan_data = json.loads(plan_row["plan_data"]) if isinstance(plan_row["plan_data"], str) else plan_row["plan_data"]
+                sections = plan_data.get("sections", []) if isinstance(plan_data, dict) else []
+                for sec in sections[:3]:
+                    if isinstance(sec, dict):
+                        focus_items.append({
+                            "title": sec.get("title", sec.get("section_title", "Focus Area")),
+                            "description": sec.get("summary", sec.get("content", ""))[:200],
+                        })
+            except Exception:
+                pass
+
+        # ── From the Staff: latest coach-approved scout note ──
+        staff_note = None
+        note_row = conn.execute("""
+            SELECT id, note_text, tags, created_at FROM scout_notes
+            WHERE player_id = ? AND org_id = ? AND is_private = 0
+            ORDER BY created_at DESC LIMIT 1
+        """, (player_id, org_id)).fetchone()
+        if note_row:
+            staff_note = {
+                "id": note_row["id"],
+                "text": note_row["note_text"][:300] if note_row["note_text"] else "",
+                "tags": json.loads(note_row["tags"]) if note_row["tags"] else [],
+                "date": note_row["created_at"],
+            }
+
+        # ── Stat snapshot: latest stats ──
+        stats = conn.execute("""
+            SELECT season, gp, g, a, p, plus_minus, pim, ppg, shots
+            FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        # ── Recent form: last 5 game stats ──
+        recent_games = conn.execute("""
+            SELECT game_date, opponent, goals, assists, points
+            FROM player_game_stats WHERE player_id = ?
+            ORDER BY game_date DESC LIMIT 5
+        """, (player_id,)).fetchall()
+
+        # ── Family cards for this player ──
+        latest_card = conn.execute("""
+            SELECT id, month, generated_at, coach_note FROM family_cards
+            WHERE player_id = ? AND org_id = ?
+            ORDER BY month DESC LIMIT 1
+        """, (player_id, org_id)).fetchone()
+
+        return {
+            "player": p,
+            "next_up": next_up,
+            "focus_items": focus_items,
+            "staff_note": staff_note,
+            "stats": dict(stats) if stats else None,
+            "recent_games": [dict(g) for g in recent_games],
+            "latest_family_card": dict(latest_card) if latest_card else None,
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/family-cards/generate")
+async def generate_family_card(request: Request, token_data: dict = Depends(verify_token)):
+    """Generate a monthly Family Card for a player."""
+    body = await request.json()
+    player_id = body.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id required")
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify player exists
+        player = conn.execute("""
+            SELECT id, first_name, last_name, position, current_team, current_league,
+                   dob, image_url, jersey_number
+            FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+        """, (player_id, org_id)).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        p = dict(player)
+        now = datetime.now(timezone.utc)
+        month_str = now.strftime("%Y-%m")
+
+        # Get latest stats
+        stats = conn.execute("""
+            SELECT season, gp, g, a, p, plus_minus, pim, ppg
+            FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        # Get dev plan focus areas
+        focus_areas = []
+        plan_row = conn.execute("""
+            SELECT plan_data FROM development_plans
+            WHERE player_id = ? AND is_current = 1 ORDER BY version DESC LIMIT 1
+        """, (player_id,)).fetchone()
+        if plan_row and plan_row["plan_data"]:
+            try:
+                pd_data = json.loads(plan_row["plan_data"]) if isinstance(plan_row["plan_data"], str) else plan_row["plan_data"]
+                for sec in (pd_data.get("sections", []) if isinstance(pd_data, dict) else [])[:3]:
+                    if isinstance(sec, dict):
+                        focus_areas.append(sec.get("title", "Focus Area"))
+            except Exception:
+                pass
+
+        # Get intelligence
+        intel = conn.execute("""
+            SELECT archetype, strengths, stat_signature
+            FROM player_intelligence WHERE player_id = ? ORDER BY created_at DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        # Build card content
+        s = dict(stats) if stats else {}
+        name = f"{p.get('first_name', '')} {p.get('last_name', '')}"
+        strengths_list = []
+        if intel and intel["strengths"]:
+            try:
+                strengths_list = json.loads(intel["strengths"]) if isinstance(intel["strengths"], str) else (intel["strengths"] or [])
+            except Exception:
+                pass
+
+        card_content = {
+            "player_name": name,
+            "player_position": p.get("position", ""),
+            "team": p.get("current_team", ""),
+            "league": p.get("current_league", ""),
+            "month": now.strftime("%B %Y"),
+            "image_url": p.get("image_url"),
+            "stat_highlights": [
+                {"label": "Games Played", "value": s.get("gp", 0)},
+                {"label": "Goals", "value": s.get("g", 0)},
+                {"label": "Assists", "value": s.get("a", 0)},
+                {"label": "Points", "value": s.get("p", 0)},
+            ],
+            "focus_areas": focus_areas if focus_areas else ["Skating development", "Compete level", "Hockey sense"],
+            "strengths": strengths_list[:3] if strengths_list else ["Work ethic", "Team player", "Coachable"],
+            "encouragement_tips": [
+                f"Keep encouraging {name.split()[0]} to enjoy the process — development takes time.",
+                "Focus on effort and attitude, not just stats or results.",
+                "Ask about the best part of practice or games — let them lead the conversation.",
+            ],
+            "archetype": intel["archetype"] if intel and intel["archetype"] else None,
+        }
+
+        card_id = str(uuid.uuid4())
+        conn.execute("""
+            INSERT INTO family_cards (id, player_id, org_id, month, content_json, generated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (card_id, player_id, org_id, month_str, json.dumps(card_content), now.isoformat()))
+        conn.commit()
+
+        return {"id": card_id, "month": month_str, "content": card_content, "generated_at": now.isoformat()}
+    finally:
+        conn.close()
+
+
+@app.get("/family-cards/{player_id}")
+async def list_family_cards(player_id: str, token_data: dict = Depends(verify_token)):
+    """List all family cards for a player."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT id, month, content_json, coach_note, generated_at, pdf_url
+            FROM family_cards WHERE player_id = ? AND org_id = ?
+            ORDER BY month DESC
+        """, (player_id, org_id)).fetchall()
+        result = []
+        for r in rows:
+            card = dict(r)
+            if card.get("content_json"):
+                try:
+                    card["content"] = json.loads(card["content_json"])
+                except Exception:
+                    card["content"] = None
+            del card["content_json"]
+            result.append(card)
+        return result
+    finally:
+        conn.close()
+
+
+@app.put("/family-cards/{card_id}/coach-note")
+async def update_family_card_coach_note(card_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Coach adds a personal note to a family card."""
+    body = await request.json()
+    note = body.get("coach_note", "").strip()
+    conn = get_db()
+    try:
+        # Verify card exists and user is in same org
+        card = conn.execute(
+            "SELECT id, org_id FROM family_cards WHERE id = ?", (card_id,)
+        ).fetchone()
+        if not card:
+            raise HTTPException(status_code=404, detail="Family card not found")
+        if card["org_id"] != token_data["org_id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        conn.execute("UPDATE family_cards SET coach_note = ? WHERE id = ?", (note, card_id))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.post("/family/invite")
+async def invite_family_member(request: Request, token_data: dict = Depends(verify_token)):
+    """Invite a family member to view a player — Full Parent, Player (13+), or View-Only."""
+    body = await request.json()
+    player_id = body.get("player_id")
+    invite_email = body.get("email")
+    access_level = body.get("access_level", "full_parent")
+    relationship = body.get("relationship", "parent")
+
+    if not player_id or not invite_email:
+        raise HTTPException(status_code=400, detail="player_id and email are required")
+    if access_level not in ("full_parent", "player_13plus", "view_only"):
+        raise HTTPException(status_code=400, detail="Invalid access_level. Must be: full_parent, player_13plus, view_only")
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify player exists
+        player = conn.execute(
+            "SELECT id FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        # Find or note the invited user
+        invited_user = conn.execute(
+            "SELECT id FROM users WHERE email = ? AND org_id = ?",
+            (invite_email.strip().lower(), org_id)
+        ).fetchone()
+
+        if invited_user:
+            # Check if already linked
+            existing = conn.execute(
+                "SELECT id FROM player_parents WHERE player_id = ? AND parent_id = ?",
+                (player_id, invited_user["id"])
+            ).fetchone()
+            if existing:
+                raise HTTPException(status_code=409, detail="User is already linked to this player")
+
+            link_id = str(uuid.uuid4())
+            conn.execute("""
+                INSERT INTO player_parents (id, player_id, parent_id, org_id, access_level, relationship)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (link_id, player_id, invited_user["id"], org_id, access_level, relationship))
+            conn.commit()
+            return {"id": link_id, "status": "linked", "message": f"User {invite_email} linked to player"}
+        else:
+            # User doesn't exist yet — return pending status
+            return {"status": "pending", "message": f"Invitation noted. {invite_email} will be linked when they create an account."}
     finally:
         conn.close()
 

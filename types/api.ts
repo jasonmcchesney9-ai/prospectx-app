@@ -2605,6 +2605,51 @@ export interface AgentMarketNote {
   created_at?: string;
 }
 
+// ── Player / Family Guide Types ──────────────────────────────
+export interface FamilyCard {
+  id: string;
+  month: string;
+  content: {
+    player_name: string;
+    player_position: string;
+    team: string;
+    league: string;
+    month: string;
+    image_url?: string | null;
+    stat_highlights: { label: string; value: number }[];
+    focus_areas: string[];
+    strengths: string[];
+    encouragement_tips: string[];
+    archetype?: string | null;
+  };
+  coach_note?: string | null;
+  generated_at: string;
+  pdf_url?: string | null;
+}
+
+export interface FamilyDashboard {
+  player: Player;
+  next_up: {
+    type: string;
+    id: string;
+    opponent: string;
+    date: string;
+    status: string;
+  } | null;
+  focus_items: { title: string; description: string }[];
+  staff_note: {
+    id: string;
+    text: string;
+    tags: string[];
+    date: string;
+  } | null;
+  stats: Record<string, unknown> | null;
+  recent_games: { game_date: string; opponent: string; goals: number; assists: number; points: number }[];
+  latest_family_card: { id: string; month: string; generated_at: string; coach_note?: string | null } | null;
+}
+
+export type FamilyAccessLevel = "full_parent" | "player_13plus" | "view_only";
+
 // ── Broadcast Hub Types ─────────────────────────────────────
 export type BroadcastMode = "broadcast" | "producer";
 export type BroadcastDepth = "quick" | "standard" | "deep";

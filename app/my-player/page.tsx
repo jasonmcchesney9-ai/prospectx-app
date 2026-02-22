@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -15,12 +15,16 @@ import {
   ChevronDown,
   X,
   ArrowRight,
+  Clock,
+  Target,
+  Users,
+  Star,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import api from "@/lib/api";
-import type { Player } from "@/types/api";
+import type { Player, FamilyDashboard } from "@/types/api";
 
 const LS_KEY = "prospectx_my_player_id";
 
@@ -65,6 +69,30 @@ export default function MyPlayerPage() {
     () => players.find((p) => p.id === selectedPlayerId) || null,
     [selectedPlayerId, players]
   );
+
+  // Dashboard data for selected player
+  const [dashboard, setDashboard] = useState<FamilyDashboard | null>(null);
+  const [dashLoading, setDashLoading] = useState(false);
+
+  const fetchDashboard = useCallback(async (pid: string) => {
+    setDashLoading(true);
+    try {
+      const { data } = await api.get<FamilyDashboard>(`/family/dashboard/${pid}`);
+      setDashboard(data);
+    } catch {
+      setDashboard(null);
+    } finally {
+      setDashLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedPlayerId) {
+      fetchDashboard(selectedPlayerId);
+    } else {
+      setDashboard(null);
+    }
+  }, [selectedPlayerId, fetchDashboard]);
 
   const filteredPlayers = useMemo(() => {
     if (!pickerSearch.trim()) return players.slice(0, 50);
@@ -260,30 +288,169 @@ export default function MyPlayerPage() {
           </div>
         )}
 
-        {/* Feature preview cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          {[
-            { icon: TrendingUp, title: "Stat Progression", desc: "Season-over-season tracking with visual trend charts" },
-            { icon: Calendar, title: "Game Schedule", desc: "Upcoming games, results, and game-by-game stats" },
-            { icon: BookOpen, title: "Development Plan", desc: "Personalized skill development roadmap from PXI" },
-            { icon: MessageSquare, title: "Coach Feedback", desc: "Notes and observations from coaches and scouts" },
-          ].map((item) => (
-            <div
-              key={item.title}
-              className="bg-white rounded-xl border border-teal/20 p-4 hover:border-teal/30 hover:shadow-sm transition-all opacity-60"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
-                  <item.icon size={18} className="text-teal" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-navy">{item.title}</h3>
-                  <p className="text-xs text-muted mt-0.5 leading-relaxed">{item.desc}</p>
-                </div>
+        {/* ── Dashboard Sections: Next Up / Focus / Staff / Stats ── */}
+        {selectedPlayer && (
+          <div className="space-y-4 mb-8">
+            {dashLoading ? (
+              <div className="bg-white rounded-xl border border-teal/20 p-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal mx-auto mb-3" />
+                <p className="text-xs text-muted font-oswald uppercase tracking-wider">Loading dashboard...</p>
               </div>
-            </div>
-          ))}
-        </div>
+            ) : (
+              <>
+                {/* ── Next Up ── */}
+                <div className="bg-white rounded-xl border border-teal/20 p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock size={16} className="text-teal" />
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">Next Up</h3>
+                  </div>
+                  {dashboard?.next_up ? (
+                    <div className="flex items-center gap-3 bg-teal/5 rounded-lg p-3">
+                      <Calendar size={20} className="text-teal shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-navy">
+                          vs {dashboard.next_up.opponent}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {new Date(dashboard.next_up.date).toLocaleDateString("en-US", {
+                            weekday: "long", month: "short", day: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted italic">No upcoming games scheduled.</p>
+                  )}
+                </div>
+
+                {/* ── This Month&apos;s Focus ── */}
+                <div className="bg-white rounded-xl border border-teal/20 p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target size={16} className="text-orange" />
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">This Month&apos;s Focus</h3>
+                  </div>
+                  {dashboard?.focus_items && dashboard.focus_items.length > 0 ? (
+                    <div className="space-y-2">
+                      {dashboard.focus_items.map((item, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-orange/5 rounded-lg p-3">
+                          <div className="w-6 h-6 rounded-full bg-orange/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <span className="text-[10px] font-bold text-orange">{i + 1}</span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-navy">{item.title}</p>
+                            {item.description && (
+                              <p className="text-xs text-muted mt-0.5 leading-relaxed">{item.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted italic">No development objectives set yet. Ask your coach about focus areas.</p>
+                  )}
+                </div>
+
+                {/* ── From the Staff ── */}
+                <div className="bg-white rounded-xl border border-teal/20 p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users size={16} className="text-navy" />
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">From the Staff</h3>
+                  </div>
+                  {dashboard?.staff_note ? (
+                    <div className="bg-navy/[0.03] rounded-lg p-3">
+                      <p className="text-sm text-navy/80 leading-relaxed">{dashboard.staff_note.text}</p>
+                      {dashboard.staff_note.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {dashboard.staff_note.tags.map((tag, i) => (
+                            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-navy/10 text-navy/60">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted/50 mt-2">
+                        {new Date(dashboard.staff_note.date).toLocaleDateString("en-US", {
+                          month: "short", day: "numeric",
+                        })}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted italic">No staff notes shared yet.</p>
+                  )}
+                </div>
+
+                {/* ── Stat Snapshot ── */}
+                {dashboard?.stats && (
+                  <div className="bg-white rounded-xl border border-teal/20 p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <TrendingUp size={16} className="text-teal" />
+                      <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">This Season</h3>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3">
+                      {[
+                        { label: "GP", value: (dashboard.stats as Record<string, number>).gp ?? 0 },
+                        { label: "G", value: (dashboard.stats as Record<string, number>).g ?? 0 },
+                        { label: "A", value: (dashboard.stats as Record<string, number>).a ?? 0 },
+                        { label: "PTS", value: (dashboard.stats as Record<string, number>).p ?? 0 },
+                      ].map((s) => (
+                        <div key={s.label} className="text-center bg-teal/5 rounded-lg p-2.5">
+                          <p className="text-lg font-bold text-navy font-oswald">{s.value}</p>
+                          <p className="text-[10px] text-muted font-oswald uppercase tracking-wider">{s.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {dashboard.recent_games.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">Recent Games</p>
+                        <div className="space-y-1">
+                          {dashboard.recent_games.slice(0, 3).map((g, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs bg-gray-50 rounded px-3 py-1.5">
+                              <span className="text-muted">{g.opponent || "Opponent"}</span>
+                              <span className="font-medium text-navy">{g.goals}G {g.assists}A = {g.points}P</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <Link
+                      href={`/players/${selectedPlayerId}`}
+                      className="inline-flex items-center gap-1 text-[10px] text-teal font-oswald uppercase tracking-wider mt-3 hover:underline"
+                    >
+                      <Star size={10} />
+                      View Full Stats
+                    </Link>
+                  </div>
+                )}
+
+                {/* ── Family Card Link ── */}
+                {dashboard?.latest_family_card ? (
+                  <div className="bg-white rounded-xl border border-teal/20 p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText size={16} className="text-orange" />
+                        <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold">Monthly Family Card</h3>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">
+                        {dashboard.latest_family_card.month}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted mt-2">
+                      Your latest Family Card was generated on{" "}
+                      {new Date(dashboard.latest_family_card.generated_at).toLocaleDateString("en-US", {
+                        month: "short", day: "numeric",
+                      })}
+                      {dashboard.latest_family_card.coach_note && " — includes a note from the coaching staff"}.
+                    </p>
+                  </div>
+                ) : selectedPlayer ? (
+                  <div className="bg-orange/5 rounded-xl border border-orange/20 p-5 text-center">
+                    <FileText size={24} className="mx-auto text-orange mb-2" />
+                    <p className="text-sm font-medium text-navy">No Family Card yet</p>
+                    <p className="text-xs text-muted mt-1">Generate your first Monthly Family Card to track progress.</p>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Link to Player Guide */}
         <Link
