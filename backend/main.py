@@ -131,7 +131,6 @@ logger = logging.getLogger("prospectx")
 # Database configuration — PostgreSQL (via DATABASE_URL) or SQLite fallback
 DATABASE_URL = os.getenv("DATABASE_URL")
 USE_PG = DATABASE_URL is not None
-print(f"USE_PG: {USE_PG}  DATABASE_URL set: {DATABASE_URL is not None}", flush=True)
 
 # SQLite fallback for local development
 _DATA_DIR = os.path.join(os.path.expanduser("~"), ".prospectx")
