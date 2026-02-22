@@ -713,13 +713,105 @@ async def global_exception_handler(request: Request, exc: Exception):
 # DATABASE
 # ============================================================
 
+class PgRow:
+    """Row object that supports both index (r[0]) and key (r['col']) access.
+
+    Mimics sqlite3.Row behaviour so all existing code works unchanged.
+    """
+    __slots__ = ("_keys", "_values", "_dict")
+
+    def __init__(self, cursor, values):
+        desc = cursor.description
+        self._keys = [d.name for d in desc]
+        self._values = list(values)
+        self._dict = dict(zip(self._keys, self._values))
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return self._dict[key]
+
+    def __contains__(self, key):
+        return key in self._dict
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+    def get(self, key, default=None):
+        return self._dict.get(key, default)
+
+    def keys(self):
+        return self._keys
+
+    def values(self):
+        return self._values
+
+    def items(self):
+        return self._dict.items()
+
+    def __repr__(self):
+        return f"PgRow({self._dict})"
+
+
+class PgCursorWrapper:
+    """Wraps a psycopg2 cursor so fetchone()/fetchall() return PgRow objects."""
+
+    def __init__(self, real_cursor):
+        self._cur = real_cursor
+
+    def execute(self, sql, params=None):
+        self._cur.execute(PgConnectionWrapper._convert_sql(sql), params)
+        return self
+
+    def executemany(self, sql, params_list):
+        self._cur.executemany(PgConnectionWrapper._convert_sql(sql), params_list)
+        return self
+
+    def fetchone(self):
+        row = self._cur.fetchone()
+        if row is None:
+            return None
+        return PgRow(self._cur, row)
+
+    def fetchall(self):
+        rows = self._cur.fetchall()
+        return [PgRow(self._cur, r) for r in rows]
+
+    def fetchmany(self, size=None):
+        rows = self._cur.fetchmany(size) if size else self._cur.fetchmany()
+        return [PgRow(self._cur, r) for r in rows]
+
+    @property
+    def description(self):
+        return self._cur.description
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+    def close(self):
+        self._cur.close()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        row = self._cur.fetchone()
+        if row is None:
+            raise StopIteration
+        return PgRow(self._cur, row)
+
+
 class PgConnectionWrapper:
     """Wraps psycopg2 connection to match sqlite3.Connection API.
 
     sqlite3 allows conn.execute() which auto-creates a cursor.
     psycopg2 requires cursor.execute(). This wrapper bridges the gap
     so all 1,089 conn.execute() calls work unchanged.
-    Also converts sqlite3.Row-style dict access to work with RealDictCursor.
+    Returns PgRow objects that support both r[0] and r['col'] access.
     """
 
     def __init__(self, dsn: str):
@@ -761,17 +853,17 @@ class PgConnectionWrapper:
         return sql
 
     def execute(self, sql, params=None):
-        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = self._conn.cursor()
         cur.execute(self._convert_sql(sql), params)
-        return cur
+        return PgCursorWrapper(cur)
 
     def executemany(self, sql, params_list):
-        cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = self._conn.cursor()
         cur.executemany(self._convert_sql(sql), params_list)
-        return cur
+        return PgCursorWrapper(cur)
 
     def cursor(self):
-        return self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        return PgCursorWrapper(self._conn.cursor())
 
     def commit(self):
         self._conn.commit()
@@ -803,16 +895,20 @@ def _get_table_columns(conn, table_name: str) -> set:
     """Return a set of column names for the given table.
 
     Works with both PostgreSQL (information_schema) and SQLite (PRAGMA table_info).
+    Returns empty set if the table does not exist.
     """
-    if USE_PG:
-        rows = conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
-            (table_name,),
-        ).fetchall()
-        return {r[0] if isinstance(r, (list, tuple)) else r["column_name"] for r in rows}
-    else:
-        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-        return {r[1] if isinstance(r, (list, tuple)) else r["name"] for r in rows}
+    try:
+        if USE_PG:
+            rows = conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+                (table_name,),
+            ).fetchall()
+            return {r["column_name"] for r in rows} if rows else set()
+        else:
+            rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+            return {r[1] if isinstance(r, (list, tuple)) else r["name"] for r in rows} if rows else set()
+    except Exception:
+        return set()
 
 
 @contextmanager
@@ -1209,7 +1305,7 @@ def init_db():
     """)
 
     # Migrate existing team_systems table — add Team Style columns if missing
-    ts_cols = _get_table_columns(c, "team_systems")
+    ts_cols = _get_table_columns(conn, "team_systems")
     if "pace" not in ts_cols:
         c.execute("ALTER TABLE team_systems ADD COLUMN pace TEXT DEFAULT ''")
     if "physicality" not in ts_cols:
@@ -1220,7 +1316,7 @@ def init_db():
 
     # ── Reports table migration: make player_id nullable, add team_name column ──
     # SQLite doesn't support ALTER COLUMN, so we check and recreate if needed
-    report_cols = _get_table_columns(c, "reports")
+    report_cols = _get_table_columns(conn, "reports")
     if "team_name" not in report_cols:
         logger.info("Migrating reports table: adding team_name column, making player_id nullable...")
         c.execute("""CREATE TABLE IF NOT EXISTS reports_new (
@@ -1769,7 +1865,10 @@ def init_db():
             logger.info("Migration: added %s column to users", col_name)
 
     # ── Migration: rename PXI chat tables to Bench Talk ──────────
-    existing_tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    if USE_PG:
+        existing_tables = [r["tablename"] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'").fetchall()]
+    else:
+        existing_tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
     rename_map = {
         "chat_conversations": "bench_talk_conversations",
         "chat_messages": "bench_talk_messages",
@@ -2096,8 +2195,8 @@ def init_db():
             opponent_name TEXT,
             is_home INTEGER,
             visibility TEXT DEFAULT 'ORG',
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute("""
@@ -2112,8 +2211,8 @@ def init_db():
             last_sync_at TEXT,
             sync_error TEXT,
             event_count INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_org ON events(org_id)")
@@ -2130,8 +2229,8 @@ def init_db():
             org_id TEXT,
             participant_ids TEXT NOT NULL,
             status TEXT DEFAULT 'active',
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute("""
@@ -2140,7 +2239,7 @@ def init_db():
             conversation_id TEXT NOT NULL REFERENCES msg_conversations(id),
             sender_id TEXT NOT NULL,
             content TEXT NOT NULL,
-            sent_at TEXT DEFAULT (datetime('now')),
+            sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
             read_at TEXT,
             is_system_message INTEGER DEFAULT 0
         )
@@ -2156,7 +2255,7 @@ def init_db():
             parent_id TEXT NOT NULL,
             status TEXT DEFAULT 'pending',
             message TEXT,
-            requested_at TEXT DEFAULT (datetime('now')),
+            requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
             resolved_at TEXT,
             cooldown_until TEXT
         )
@@ -2167,7 +2266,7 @@ def init_db():
             blocker_id TEXT NOT NULL,
             blocked_id TEXT NOT NULL,
             reason TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(blocker_id, blocked_id)
         )
     """)
@@ -2203,7 +2302,7 @@ def init_db():
     # Auto-complete onboarding for existing users (they were already using the platform)
     existing_users = conn.execute("SELECT COUNT(*) as c FROM users WHERE onboarding_completed IS NULL OR onboarding_completed = 0").fetchone()["c"]
     if existing_users > 0:
-        conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at < datetime('now', '-1 minute')")
+        conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at < CURRENT_TIMESTAMP")
         conn.commit()
         logger.info("Migration: auto-completed onboarding for %d existing users", existing_users)
 
@@ -2215,7 +2314,7 @@ def init_db():
             token_hash TEXT NOT NULL,
             expires_at TEXT NOT NULL,
             used INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
@@ -2555,8 +2654,8 @@ def init_db():
             plan_type TEXT NOT NULL DEFAULT 'in_season',
             sections TEXT NOT NULL DEFAULT '[]',
             summary TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (player_id) REFERENCES players(id)
         )
     """)
@@ -2599,7 +2698,7 @@ def init_db():
             player_id TEXT NOT NULL,
             parent_id TEXT NOT NULL,
             org_id TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(player_id, parent_id),
             FOREIGN KEY (player_id) REFERENCES players(id),
             FOREIGN KEY (parent_id) REFERENCES users(id)
@@ -2635,7 +2734,7 @@ def init_db():
             extended_stats TEXT,
             report_quality_score REAL,
             org_id TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_player ON player_stat_snapshots(player_id, snapshot_date)")
@@ -2656,7 +2755,7 @@ def init_db():
             positions TEXT,
             age_level TEXT DEFAULT 'all',
             video_url TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             org_id TEXT
         )
     """)
@@ -2675,7 +2774,7 @@ def init_db():
             positions TEXT,
             level TEXT DEFAULT 'elite',
             video_url TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             org_id TEXT
         )
     """)
@@ -2783,8 +2882,8 @@ def init_db():
             signed_date TEXT,
             pathway_notes TEXT,
             notes TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (agent_user_id) REFERENCES users(id),
             FOREIGN KEY (player_id) REFERENCES players(id),
             UNIQUE(agent_user_id, player_id)
@@ -2804,7 +2903,7 @@ def init_db():
             contact_name TEXT,
             note TEXT NOT NULL,
             follow_up_date TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (agent_user_id) REFERENCES users(id),
             FOREIGN KEY (player_id) REFERENCES players(id)
         )
@@ -2854,7 +2953,7 @@ def init_db():
             age_band TEXT DEFAULT 'all',
             country TEXT DEFAULT 'all',
             tags TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_guide_content_category ON guide_content(category)")
@@ -2876,8 +2975,8 @@ def init_db():
             user_id TEXT NOT NULL,
             league TEXT NOT NULL,
             settings_json TEXT DEFAULT '{}',
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, league)
         )
     """)
@@ -2895,7 +2994,7 @@ def init_db():
             sequence_order INTEGER,
             status TEXT DEFAULT 'pending',
             pushed_by TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_ros_session ON broadcast_run_of_show(session_id)")
@@ -7864,9 +7963,10 @@ async def forgot_password(req: ForgotPasswordRequest):
         user_id = row["id"]
 
         # Rate limit: don't generate a new token if one was created in the last 5 minutes
+        five_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         recent = conn.execute(
-            "SELECT id FROM password_reset_tokens WHERE user_id = ? AND created_at > datetime('now', '-5 minutes') AND used = 0",
-            (user_id,),
+            "SELECT id FROM password_reset_tokens WHERE user_id = ? AND created_at > ? AND used = 0",
+            (user_id, five_min_ago),
         ).fetchone()
         if recent:
             return {"message": "If that email is registered, a reset link has been sent."}
@@ -10154,13 +10254,24 @@ async def list_deleted_players(token_data: dict = Depends(verify_token)):
     conn = get_db()
     rows = conn.execute("""
         SELECT id, first_name, last_name, position, current_team, current_league,
-               deleted_at, deleted_reason, deleted_by,
-               CAST(julianday('now') - julianday(deleted_at) AS INTEGER) AS days_since_deleted
+               deleted_at, deleted_reason, deleted_by
         FROM players
         WHERE org_id = ? AND is_deleted = 1
         ORDER BY deleted_at DESC
     """, (org_id,)).fetchall()
     conn.close()
+    # Compute days_since_deleted in Python (cross-database compatible)
+    now = datetime.now(timezone.utc)
+    processed_rows = []
+    for r in rows:
+        d = dict(r)
+        try:
+            del_dt = datetime.fromisoformat(d.get("deleted_at", "").replace("Z", "+00:00"))
+            d["days_since_deleted"] = (now - del_dt).days
+        except (ValueError, TypeError):
+            d["days_since_deleted"] = 0
+        processed_rows.append(d)
+    rows = processed_rows
     result = []
     for r in rows:
         days = r["days_since_deleted"] or 0
@@ -10232,14 +10343,20 @@ async def restore_player(player_id: str, token_data: dict = Depends(verify_token
     org_id = token_data["org_id"]
     conn = get_db()
     player = conn.execute("""
-        SELECT id, first_name, last_name, deleted_at,
-               CAST(julianday('now') - julianday(deleted_at) AS INTEGER) AS days_since
+        SELECT id, first_name, last_name, deleted_at
         FROM players WHERE id = ? AND org_id = ? AND is_deleted = 1
     """, (player_id, org_id)).fetchone()
     if not player:
         conn.close()
         raise HTTPException(status_code=404, detail="Deleted player not found")
-    if (player["days_since"] or 0) > 30:
+    # Compute days_since in Python (cross-database compatible)
+    days_since = 0
+    try:
+        del_dt = datetime.fromisoformat(str(player["deleted_at"]).replace("Z", "+00:00"))
+        days_since = (datetime.now(timezone.utc) - del_dt).days
+    except (ValueError, TypeError):
+        pass
+    if days_since > 30:
         conn.close()
         raise HTTPException(status_code=400, detail="Recovery window expired (30 days)")
     conn.execute("""
@@ -10992,7 +11109,7 @@ async def get_player_trendline(
         if not game_rows:
             game_rows = conn.execute("""
                 SELECT created_at AS game_date, '' AS opponent, g, a, p,
-                       COALESCE(CAST(json_extract(extended_stats, '$.main.shots') AS INTEGER), 0) AS shots,
+                       0 AS shots, extended_stats,
                        plus_minus, pim, toi_seconds
                 FROM player_stats
                 WHERE player_id = ? AND stat_type = 'game'
@@ -11007,6 +11124,13 @@ async def get_player_trendline(
             a_val = d.get("a") or 0
             p_val = d.get("p") or (g_val + a_val)
             shots_val = d.get("shots") or 0
+            # Extract shots from extended_stats JSON if available (fallback path)
+            if not shots_val and d.get("extended_stats"):
+                try:
+                    ext = json.loads(d["extended_stats"]) if isinstance(d["extended_stats"], str) else d["extended_stats"]
+                    shots_val = int(ext.get("main", {}).get("shots", 0) or 0)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
             toi_val = d.get("toi_seconds") or 0
             boxscore_data.append({
                 "date": d.get("game_date") or "",
@@ -22163,10 +22287,10 @@ async def merge_players(
         INSERT INTO player_merges (id, org_id, primary_player_id, duplicate_player_ids,
             stats_moved, notes_moved, reports_moved, intel_moved, merged_by, merged_at,
             can_undo, undo_before)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1,
-            datetime('now', '+30 days'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
     """, (merge_id, org_id, keep_id, _json.dumps(merge_ids),
-          stats_moved, notes_moved, reports_moved, intel_moved, user_id))
+          stats_moved, notes_moved, reports_moved, intel_moved, user_id,
+          (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()))
 
     conn.commit()
     conn.close()
@@ -27371,7 +27495,7 @@ def _sync_ical_feed(conn, feed_id: str, org_id: str) -> dict:
         ical_text = resp.text
     except Exception as e:
         error_msg = f"Failed to fetch feed: {str(e)}"
-        conn.execute("UPDATE calendar_feeds SET sync_error = ?, updated_at = datetime('now') WHERE id = ?", (error_msg, feed_id))
+        conn.execute("UPDATE calendar_feeds SET sync_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (error_msg, feed_id))
         conn.commit()
         return {"synced_count": 0, "errors": [error_msg]}
 
@@ -27379,7 +27503,7 @@ def _sync_ical_feed(conn, feed_id: str, org_id: str) -> dict:
         cal = ICalendar.from_ical(ical_text)
     except Exception as e:
         error_msg = f"Failed to parse iCal: {str(e)}"
-        conn.execute("UPDATE calendar_feeds SET sync_error = ?, updated_at = datetime('now') WHERE id = ?", (error_msg, feed_id))
+        conn.execute("UPDATE calendar_feeds SET sync_error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (error_msg, feed_id))
         conn.commit()
         return {"synced_count": 0, "errors": [error_msg]}
 
@@ -27457,7 +27581,7 @@ def _sync_ical_feed(conn, feed_id: str, org_id: str) -> dict:
                 conn.execute("""
                     UPDATE events SET title = ?, start_time = ?, end_time = ?, location = ?,
                     description = ?, type = ?, opponent_name = ?, is_home = ?, timezone = ?,
-                    updated_at = datetime('now')
+                    updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """, (summary, start_str, end_str, location, description, event_type,
                       opponent, is_home, tz, existing["id"]))
@@ -27478,8 +27602,8 @@ def _sync_ical_feed(conn, feed_id: str, org_id: str) -> dict:
     # Update feed metadata
     event_count = conn.execute("SELECT COUNT(*) FROM events WHERE feed_id = ?", (feed_id,)).fetchone()[0]
     conn.execute("""
-        UPDATE calendar_feeds SET last_sync_at = datetime('now'), event_count = ?,
-        sync_error = NULL, updated_at = datetime('now')
+        UPDATE calendar_feeds SET last_sync_at = CURRENT_TIMESTAMP, event_count = ?,
+        sync_error = NULL, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
     """, (event_count, feed_id))
     conn.commit()
@@ -27587,7 +27711,7 @@ async def update_calendar_event(
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         vals = list(updates.values())
         vals.append(event_id)
-        conn.execute(f"UPDATE events SET {set_clause}, updated_at = datetime('now') WHERE id = ?", vals)
+        conn.execute(f"UPDATE events SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?", vals)
         conn.commit()
 
     row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
@@ -27992,7 +28116,7 @@ async def send_message(body: SendMessageRequest, token_data: dict = Depends(veri
         "INSERT INTO msg_messages (id, conversation_id, sender_id, content) VALUES (?, ?, ?, ?)",
         (msg_id, conversation_id, user_id, body.content.strip())
     )
-    conn.execute("UPDATE msg_conversations SET updated_at = datetime('now') WHERE id = ?", (conversation_id,))
+    conn.execute("UPDATE msg_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (conversation_id,))
     conn.commit()
 
     # Get sender name
@@ -28041,7 +28165,7 @@ async def get_messages(conversation_id: str, token_data: dict = Depends(verify_t
     # Mark unread messages as read (only if direct participant, not parent observer)
     if is_participant:
         conn.execute(
-            "UPDATE msg_messages SET read_at = datetime('now') WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
+            "UPDATE msg_messages SET read_at = CURRENT_TIMESTAMP WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
             (conversation_id, user_id)
         )
         conn.commit()
@@ -28279,7 +28403,7 @@ async def block_user(body: BlockUserRequest, token_data: dict = Depends(verify_t
         except (json.JSONDecodeError, TypeError):
             continue
         if user_id in pids and body.blocked_id in pids:
-            conn.execute("UPDATE msg_conversations SET status = 'blocked', updated_at = datetime('now') WHERE id = ?", (c["id"],))
+            conn.execute("UPDATE msg_conversations SET status = 'blocked', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (c["id"],))
 
     conn.commit()
     conn.close()
@@ -28839,7 +28963,7 @@ async def save_broadcast_settings(league: str, request: Request, token_data: dic
         ).fetchone()
         if existing:
             conn.execute(
-                "UPDATE broadcast_settings SET settings_json = ?, updated_at = datetime('now') WHERE id = ?",
+                "UPDATE broadcast_settings SET settings_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (settings_json, existing["id"]),
             )
         else:
@@ -29994,7 +30118,7 @@ async def family_player_dashboard(player_id: str, token_data: dict = Depends(ver
         # Check game_plans for upcoming
         upcoming_game = conn.execute("""
             SELECT id, opponent, game_date, status FROM game_plans
-            WHERE org_id = ? AND game_date >= date('now')
+            WHERE org_id = ? AND game_date >= CURRENT_DATE
             ORDER BY game_date ASC LIMIT 1
         """, (org_id,)).fetchone()
         if upcoming_game:
