@@ -462,6 +462,13 @@ export interface StatsImportResult {
   detected_opponent?: string;
   detected_date?: string;
   games_imported: number;
+  // XML import fields
+  events_imported?: number;
+  events_skipped?: number;
+  duplicates_skipped?: number;
+  players_matched?: number;
+  unmatched_players?: string[];
+  event_type_breakdown?: Record<string, number>;
 }
 
 /** @deprecated Use StatsImportResult instead */
@@ -3014,3 +3021,25 @@ export const SKILL_CATEGORIES = [
   "Off-Ice Training",
   "Drill Add-Ons",
 ] as const;
+
+// ── Player Events (XML/InStat event-level data) ──
+export interface PlayerEvent {
+  id: string;
+  player_id: string;
+  game_id: string | null;
+  org_id: string;
+  season: string | null;
+  period: number | null;
+  game_time: string | null;
+  event_type: "entry" | "exit" | "shot" | "pass" | "possession" | "retrieval" | "chance" | "clear" | "faceoff";
+  situation: "5v5" | "pp" | "pk" | "4v4" | "3v3" | "en" | null;
+  outcome: "success" | "fail" | "neutral" | null;
+  zone: "oz" | "nz" | "dz" | null;
+  x_coord: number | null;
+  y_coord: number | null;
+  xg_value: number | null;
+  tags: string[];
+  source: "instat" | "gamesheet" | "manual" | "xml";
+  raw_event_id: string | null;
+  created_at: string;
+}

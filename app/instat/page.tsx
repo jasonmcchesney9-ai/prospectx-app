@@ -31,6 +31,9 @@ const FILE_TYPE_LABELS: Record<string, { label: string; icon: typeof Users; colo
   team_skaters: { label: "Team Skater Stats", icon: Users, color: "text-navy" },
   team_goalies: { label: "Team Goalie Stats", icon: Shield, color: "text-navy" },
   lines: { label: "Line Combinations", icon: Layers, color: "text-orange" },
+  xml_instat: { label: "InStat XML Events", icon: Target, color: "text-teal" },
+  xml_gamesheet: { label: "GameSheet XML", icon: Calendar, color: "text-orange" },
+  xml_generic: { label: "XML Events", icon: Target, color: "text-navy" },
   unknown: { label: "Unknown Format", icon: AlertCircle, color: "text-red-500" },
 };
 
@@ -153,7 +156,7 @@ function InStatUploader() {
           <div>
             <h1 className="text-2xl font-bold font-oswald text-navy">Advanced Stats Import</h1>
             <p className="text-muted text-sm">
-              Upload XLSX stat exports — teams, skaters, goalies, or line combinations
+              Upload XLSX or XML stat exports — teams, skaters, goalies, lines, or event data
             </p>
           </div>
         </div>
@@ -211,6 +214,44 @@ function InStatUploader() {
                   </div>
                 )}
               </div>
+              {/* XML-specific: events imported + players matched */}
+              {result.events_imported != null && result.events_imported > 0 && (
+                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-white rounded-lg p-3 border border-green-100">
+                    <p className="text-2xl font-oswald font-bold text-teal">{result.events_imported}</p>
+                    <p className="text-xs text-muted uppercase tracking-wider">Events Imported</p>
+                  </div>
+                  {result.players_matched != null && result.players_matched > 0 && (
+                    <div className="bg-white rounded-lg p-3 border border-green-100">
+                      <p className="text-2xl font-oswald font-bold text-navy">{result.players_matched}</p>
+                      <p className="text-xs text-muted uppercase tracking-wider">Players Matched</p>
+                    </div>
+                  )}
+                  {result.events_skipped != null && result.events_skipped > 0 && (
+                    <div className="bg-white rounded-lg p-3 border border-green-100">
+                      <p className="text-2xl font-oswald font-bold text-orange">{result.events_skipped}</p>
+                      <p className="text-xs text-muted uppercase tracking-wider">Events Skipped</p>
+                    </div>
+                  )}
+                  {result.duplicates_skipped != null && result.duplicates_skipped > 0 && (
+                    <div className="bg-white rounded-lg p-3 border border-green-100">
+                      <p className="text-2xl font-oswald font-bold text-muted">{result.duplicates_skipped}</p>
+                      <p className="text-xs text-muted uppercase tracking-wider">Duplicates Skipped</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* XML-specific: event type breakdown */}
+              {result.event_type_breakdown && Object.keys(result.event_type_breakdown).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(result.event_type_breakdown).map(([type, count]) => (
+                    <span key={type} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-navy/[0.04] text-xs text-navy">
+                      <span className="font-oswald font-bold">{count}</span>
+                      <span className="text-muted">{type}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
               {result.errors.length > 0 && (
                 <div className="mt-3 text-xs text-orange">
                   <p className="font-semibold">{result.errors.length} warning(s):</p>
@@ -260,7 +301,7 @@ function InStatUploader() {
           {/* File Picker */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-navy mb-2">
-              Stats File (XLSX)
+              Stats File (XLSX / XML)
             </label>
             <div
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
@@ -293,10 +334,10 @@ function InStatUploader() {
                 <div>
                   <Upload size={32} className="mx-auto text-muted/40 mb-2" />
                   <p className="text-sm text-muted">
-                    Click to select or drop an .xlsx stats file
+                    Click to select or drop an .xlsx or .xml stats file
                   </p>
                   <p className="text-xs text-muted/60 mt-1">
-                    Supports: Games, Skaters, Goalies, Lines — season or single-game
+                    Supports: Games, Skaters, Goalies, Lines, InStat XML, GameSheet XML
                   </p>
                 </div>
               )}
@@ -304,7 +345,7 @@ function InStatUploader() {
             <input
               ref={fileRef}
               type="file"
-              accept=".xlsx,.xls,.xlsm"
+              accept=".xlsx,.xls,.xlsm,.xml"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -417,9 +458,9 @@ function InStatUploader() {
         <h3 className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider mb-3">
           Supported File Types
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <div>
-            <p className="font-medium text-navy">League Exports</p>
+            <p className="font-medium text-navy">League Exports (XLSX)</p>
             <ul className="text-muted text-xs mt-1 space-y-1">
               <li>• <strong>Teams</strong> — League team stats (100 columns)</li>
               <li>• <strong>Skaters</strong> — All league skaters (138 columns)</li>
@@ -427,16 +468,24 @@ function InStatUploader() {
             </ul>
           </div>
           <div>
-            <p className="font-medium text-navy">Team Exports</p>
+            <p className="font-medium text-navy">Team Exports (XLSX)</p>
             <ul className="text-muted text-xs mt-1 space-y-1">
               <li>• <strong>Skaters</strong> — Team skaters (147 columns)</li>
               <li>• <strong>Goalies</strong> — Team goalies (23 columns)</li>
               <li>• <strong>Lines</strong> — 5v5, Forwards, Defence, PP, PK combos</li>
             </ul>
           </div>
+          <div>
+            <p className="font-medium text-navy">Event Data (XML)</p>
+            <ul className="text-muted text-xs mt-1 space-y-1">
+              <li>• <strong>InStat</strong> — Zone entries/exits, shots, passes, xG</li>
+              <li>• <strong>GameSheet</strong> — Goals, assists, penalties, TOI</li>
+              <li>• <strong>Generic</strong> — Standard ProspectX event XML schema</li>
+            </ul>
+          </div>
         </div>
         <p className="text-xs text-muted mt-3">
-          Files are auto-detected by their column headers. Player profiles are automatically created if they don&apos;t exist.
+          XLSX files are auto-detected by column headers. XML source format is auto-detected. Players are matched by name + team.
         </p>
       </div>
     </div>

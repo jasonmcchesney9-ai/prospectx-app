@@ -33,6 +33,7 @@ if _this_dir not in sys.path:
 
 import csv
 import io
+import xml.etree.ElementTree as ET
 
 import glob
 import httpx
@@ -2630,6 +2631,36 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_objectives_plan ON development_plan_objectives(plan_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_objectives_player ON development_plan_objectives(player_id)")
+
+    # ── Player Events (XML/InStat event-level data) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_events (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            game_id TEXT,
+            org_id TEXT NOT NULL,
+            season TEXT,
+            period INTEGER,
+            game_time TEXT,
+            event_type TEXT NOT NULL,
+            situation TEXT,
+            outcome TEXT,
+            zone TEXT,
+            x_coord REAL,
+            y_coord REAL,
+            xg_value REAL,
+            tags TEXT DEFAULT '[]',
+            source TEXT DEFAULT 'instat',
+            raw_event_id TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (player_id) REFERENCES players(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_events_player ON player_events(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_events_game ON player_events(game_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_events_type ON player_events(event_type)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_player_events_raw ON player_events(raw_event_id, source) WHERE raw_event_id IS NOT NULL")
 
     conn.commit()
 
@@ -17506,6 +17537,435 @@ async def get_import_job(job_id: str, token_data: dict = Depends(verify_token)):
 # INSTAT ANALYTICS — IMPORT ENGINE
 # ============================================================
 
+
+# ── XML Import Helpers ─────────────────────────────────────
+
+# InStat action code → ProspectX event_type mapping
+INSTAT_ACTION_MAP: dict[str, str] = {
+    "entry": "entry", "zone_entry": "entry", "carry_in": "entry", "dump_in": "entry",
+    "exit": "exit", "zone_exit": "exit", "breakout": "exit",
+    "shot": "shot", "shot_attempt": "shot", "sog": "shot",
+    "pass": "pass", "key_pass": "pass", "pass_attempt": "pass",
+    "possession": "possession", "carry": "possession",
+    "retrieval": "retrieval", "puck_recovery": "retrieval", "loose_puck": "retrieval",
+    "chance": "chance", "scoring_chance": "chance", "expected_goal": "chance",
+    "clear": "clear", "clearance": "clear",
+    "faceoff": "faceoff", "fo": "faceoff", "faceoff_win": "faceoff", "faceoff_loss": "faceoff",
+}
+
+INSTAT_MANPOWER_MAP: dict[str, str] = {
+    "ev": "5v5", "even": "5v5", "5v5": "5v5", "5x5": "5v5",
+    "pp": "pp", "powerplay": "pp", "power_play": "pp",
+    "pk": "pk", "shorthanded": "pk", "penalty_kill": "pk",
+    "4v4": "4v4", "4x4": "4v4",
+    "3v3": "3v3", "3x3": "3v3",
+    "en": "en", "empty_net": "en",
+}
+
+
+def _detect_xml_source(root: ET.Element) -> str:
+    """Detect XML source format from root element tag and attributes."""
+    tag = root.tag.lower().split("}")[-1] if "}" in root.tag else root.tag.lower()
+    # InStat uses specific root elements
+    if tag in ("instat", "instatsport", "instatfootball", "instathockey", "export"):
+        return "instat"
+    if any(a in root.attrib for a in ("instat", "InStat")):
+        return "instat"
+    # GameSheet uses "game" or "gamesheet" root
+    if tag in ("game", "gamesheet", "gamesheetexport"):
+        return "gamesheet"
+    # Check for InStat-style child elements
+    child_tags = {c.tag.lower().split("}")[-1] if "}" in c.tag else c.tag.lower() for c in root}
+    if "actions" in child_tags or "events" in child_tags or "tracking" in child_tags:
+        return "instat"
+    if "boxscore" in child_tags or "scoring" in child_tags or "toi" in child_tags:
+        return "gamesheet"
+    return "generic"
+
+
+def _resolve_player_id(name: str, team: str, season: str, org_id: str, conn) -> Optional[str]:
+    """Resolve a player name to a player_id via fuzzy matching."""
+    if not name:
+        return None
+    parts = name.strip().split(maxsplit=1)
+    if len(parts) == 2:
+        first, last = parts
+    elif len(parts) == 1:
+        first, last = "", parts[0]
+    else:
+        return None
+    # Try exact match first
+    row = conn.execute(
+        "SELECT id FROM players WHERE org_id = ? AND LOWER(first_name) = ? AND LOWER(last_name) = ? AND (is_deleted = 0 OR is_deleted IS NULL) LIMIT 1",
+        (org_id, first.lower(), last.lower()),
+    ).fetchone()
+    if row:
+        return row[0]
+    # Try with team filter
+    if team:
+        row = conn.execute(
+            "SELECT id FROM players WHERE org_id = ? AND LOWER(last_name) = ? AND LOWER(current_team) = ? AND (is_deleted = 0 OR is_deleted IS NULL) LIMIT 1",
+            (org_id, last.lower(), team.lower()),
+        ).fetchone()
+        if row:
+            return row[0]
+    # Last name only fallback (single match)
+    rows = conn.execute(
+        "SELECT id FROM players WHERE org_id = ? AND LOWER(last_name) = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (org_id, last.lower()),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0][0]
+    return None
+
+
+def _parse_instat_xml(root: ET.Element, season: str, org_id: str, conn) -> dict:
+    """Parse InStat XML export into player_events records."""
+    events = []
+    unmatched = set()
+    skipped = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    # InStat exports may have events under <actions>, <events>, or directly under root
+    event_containers = root.findall(".//action") + root.findall(".//event") + root.findall(".//Action") + root.findall(".//Event")
+    if not event_containers:
+        # Try direct children
+        event_containers = [c for c in root if c.tag.lower() not in ("meta", "metadata", "header", "game", "teams", "players")]
+
+    game_id = root.get("gameID") or root.get("game_id") or root.get("gameId")
+
+    for elem in event_containers:
+        attr = {k.lower(): v for k, v in elem.attrib.items()}
+        text_children = {c.tag.lower(): (c.text or "").strip() for c in elem}
+        data = {**attr, **text_children}
+
+        player_name = data.get("playername") or data.get("player_name") or data.get("player") or ""
+        team_name = data.get("team") or data.get("teamname") or data.get("team_name") or ""
+        action_type = (data.get("actiontype") or data.get("action_type") or data.get("type") or data.get("event_type") or "").lower().replace(" ", "_")
+        mapped_type = INSTAT_ACTION_MAP.get(action_type)
+        if not mapped_type:
+            skipped += 1
+            continue
+
+        player_id = _resolve_player_id(player_name, team_name, season, org_id, conn)
+        if not player_id:
+            unmatched.add(player_name or "(unnamed)")
+            skipped += 1
+            continue
+
+        raw_id = data.get("id") or data.get("eventid") or data.get("event_id") or data.get("actionid")
+        success_val = (data.get("success") or data.get("outcome") or data.get("result") or "").lower()
+        outcome = "success" if success_val in ("1", "true", "yes", "success", "win") else ("fail" if success_val in ("0", "false", "no", "fail", "loss") else "neutral")
+
+        # Special handling for faceoffs
+        if action_type in ("faceoff_loss",):
+            outcome = "fail"
+        elif action_type in ("faceoff_win",):
+            outcome = "success"
+
+        manpower = (data.get("manpower") or data.get("situation") or data.get("strength") or "").lower().replace(" ", "_")
+        situation = INSTAT_MANPOWER_MAP.get(manpower, "5v5")
+
+        zone_val = (data.get("zone") or "").upper()
+        zone = {"OZ": "oz", "NZ": "nz", "DZ": "dz", "O": "oz", "N": "nz", "D": "dz"}.get(zone_val)
+
+        period = None
+        try:
+            period = int(data.get("period") or data.get("per") or 0) or None
+        except (ValueError, TypeError):
+            pass
+
+        game_time = data.get("time") or data.get("game_time") or data.get("gametime")
+
+        x = None
+        y = None
+        try:
+            x = float(data.get("xpos") or data.get("x_coord") or data.get("x") or "")
+        except (ValueError, TypeError):
+            pass
+        try:
+            y = float(data.get("ypos") or data.get("y_coord") or data.get("y") or "")
+        except (ValueError, TypeError):
+            pass
+
+        xg = None
+        try:
+            xg = float(data.get("xgoal") or data.get("xg") or data.get("xg_value") or "")
+        except (ValueError, TypeError):
+            pass
+
+        tags_list = []
+        raw_tags = data.get("tags") or data.get("tag")
+        if raw_tags:
+            try:
+                tags_list = json.loads(raw_tags)
+            except (json.JSONDecodeError, TypeError):
+                tags_list = [t.strip() for t in raw_tags.split(",") if t.strip()]
+
+        events.append({
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "game_id": game_id or data.get("gameid") or data.get("game_id"),
+            "org_id": org_id,
+            "season": season,
+            "period": period,
+            "game_time": game_time,
+            "event_type": mapped_type,
+            "situation": situation,
+            "outcome": outcome,
+            "zone": zone,
+            "x_coord": x,
+            "y_coord": y,
+            "xg_value": xg,
+            "tags": json.dumps(tags_list),
+            "source": "instat",
+            "raw_event_id": raw_id,
+            "created_at": now,
+        })
+
+    return {"events": events, "unmatched_players": list(unmatched), "skipped": skipped}
+
+
+def _parse_gamesheet_xml(root: ET.Element, season: str, org_id: str, conn) -> dict:
+    """Parse GameSheet XML export — focuses on goals, assists, penalties, TOI."""
+    events = []
+    unmatched = set()
+    skipped = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    game_id = root.get("id") or root.get("gameId") or root.get("game_id")
+
+    # GameSheet: look for <scoring>, <goals>, <penalties>, <boxscore>
+    for goal in root.findall(".//goal") + root.findall(".//Goal"):
+        attr = {k.lower(): v for k, v in goal.attrib.items()}
+        text_children = {c.tag.lower(): (c.text or "").strip() for c in goal}
+        data = {**attr, **text_children}
+
+        scorer = data.get("scorer") or data.get("player") or data.get("playername") or ""
+        team_name = data.get("team") or ""
+        player_id = _resolve_player_id(scorer, team_name, season, org_id, conn)
+        if not player_id:
+            unmatched.add(scorer or "(unnamed)")
+            skipped += 1
+            continue
+
+        period = None
+        try:
+            period = int(data.get("period") or 0) or None
+        except (ValueError, TypeError):
+            pass
+
+        manpower = (data.get("strength") or data.get("situation") or "").lower()
+        situation = INSTAT_MANPOWER_MAP.get(manpower, "5v5")
+
+        events.append({
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "game_id": game_id,
+            "org_id": org_id,
+            "season": season,
+            "period": period,
+            "game_time": data.get("time") or data.get("game_time"),
+            "event_type": "shot",  # goals are successful shots
+            "situation": situation,
+            "outcome": "success",
+            "zone": "oz",
+            "x_coord": None,
+            "y_coord": None,
+            "xg_value": None,
+            "tags": json.dumps(["goal"]),
+            "source": "gamesheet",
+            "raw_event_id": data.get("id") or data.get("goalid"),
+            "created_at": now,
+        })
+
+        # Also record assists
+        for assist_key in ("assist1", "assist2", "a1", "a2"):
+            assist_name = data.get(assist_key)
+            if assist_name:
+                a_pid = _resolve_player_id(assist_name, team_name, season, org_id, conn)
+                if a_pid:
+                    events.append({
+                        "id": str(uuid.uuid4()),
+                        "player_id": a_pid,
+                        "game_id": game_id,
+                        "org_id": org_id,
+                        "season": season,
+                        "period": period,
+                        "game_time": data.get("time"),
+                        "event_type": "pass",
+                        "situation": situation,
+                        "outcome": "success",
+                        "zone": "oz",
+                        "x_coord": None,
+                        "y_coord": None,
+                        "xg_value": None,
+                        "tags": json.dumps(["assist"]),
+                        "source": "gamesheet",
+                        "raw_event_id": None,
+                        "created_at": now,
+                    })
+
+    for penalty in root.findall(".//penalty") + root.findall(".//Penalty"):
+        attr = {k.lower(): v for k, v in penalty.attrib.items()}
+        text_children = {c.tag.lower(): (c.text or "").strip() for c in penalty}
+        data = {**attr, **text_children}
+
+        player_name = data.get("player") or data.get("playername") or ""
+        team_name = data.get("team") or ""
+        player_id = _resolve_player_id(player_name, team_name, season, org_id, conn)
+        if not player_id:
+            unmatched.add(player_name or "(unnamed)")
+            skipped += 1
+            continue
+
+        events.append({
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "game_id": game_id,
+            "org_id": org_id,
+            "season": season,
+            "period": None,
+            "game_time": data.get("time"),
+            "event_type": "clear",  # closest generic type for penalties
+            "situation": "5v5",
+            "outcome": "fail",
+            "zone": None,
+            "x_coord": None,
+            "y_coord": None,
+            "xg_value": None,
+            "tags": json.dumps(["penalty", data.get("infraction") or data.get("type") or "minor"]),
+            "source": "gamesheet",
+            "raw_event_id": data.get("id"),
+            "created_at": now,
+        })
+
+    return {"events": events, "unmatched_players": list(unmatched), "skipped": skipped}
+
+
+def _parse_generic_xml(root: ET.Element, season: str, org_id: str, conn) -> dict:
+    """Parse generic hockey XML — expects <event> elements with standard attributes."""
+    events = []
+    unmatched = set()
+    skipped = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    for elem in root.iter("event"):
+        attr = {k.lower(): v for k, v in elem.attrib.items()}
+        text_children = {c.tag.lower(): (c.text or "").strip() for c in elem}
+        data = {**attr, **text_children}
+
+        player_name = data.get("player") or data.get("player_name") or ""
+        team_name = data.get("team") or ""
+        event_type = (data.get("type") or data.get("event_type") or "").lower().replace(" ", "_")
+        mapped_type = INSTAT_ACTION_MAP.get(event_type, event_type)
+
+        valid_types = {"entry", "exit", "shot", "pass", "possession", "retrieval", "chance", "clear", "faceoff"}
+        if mapped_type not in valid_types:
+            skipped += 1
+            continue
+
+        player_id = _resolve_player_id(player_name, team_name, season, org_id, conn)
+        if not player_id:
+            unmatched.add(player_name or "(unnamed)")
+            skipped += 1
+            continue
+
+        outcome_val = (data.get("outcome") or data.get("result") or "neutral").lower()
+
+        events.append({
+            "id": str(uuid.uuid4()),
+            "player_id": player_id,
+            "game_id": data.get("game_id") or data.get("gameid"),
+            "org_id": org_id,
+            "season": season,
+            "period": int(data.get("period") or 0) or None,
+            "game_time": data.get("time") or data.get("game_time"),
+            "event_type": mapped_type,
+            "situation": INSTAT_MANPOWER_MAP.get((data.get("situation") or "").lower(), "5v5"),
+            "outcome": outcome_val if outcome_val in ("success", "fail", "neutral") else "neutral",
+            "zone": {"oz": "oz", "nz": "nz", "dz": "dz"}.get((data.get("zone") or "").lower()),
+            "x_coord": float(data["x"]) if data.get("x") else None,
+            "y_coord": float(data["y"]) if data.get("y") else None,
+            "xg_value": float(data["xg"]) if data.get("xg") else None,
+            "tags": json.dumps([]),
+            "source": "xml",
+            "raw_event_id": data.get("id"),
+            "created_at": now,
+        })
+
+    return {"events": events, "unmatched_players": list(unmatched), "skipped": skipped}
+
+
+def _import_xml_events(content: bytes, season: str, org_id: str) -> dict:
+    """Main XML import entry point — detect source, parse, bulk insert with duplicate guard."""
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid XML: {str(e)}")
+
+    source = _detect_xml_source(root)
+    conn = get_db()
+    try:
+        if source == "instat":
+            result = _parse_instat_xml(root, season, org_id, conn)
+        elif source == "gamesheet":
+            result = _parse_gamesheet_xml(root, season, org_id, conn)
+        else:
+            result = _parse_generic_xml(root, season, org_id, conn)
+
+        events = result["events"]
+        inserted = 0
+        duplicates = 0
+
+        for ev in events:
+            # Duplicate guard: skip if raw_event_id + source already exists
+            if ev["raw_event_id"]:
+                existing = conn.execute(
+                    "SELECT 1 FROM player_events WHERE raw_event_id = ? AND source = ? LIMIT 1",
+                    (ev["raw_event_id"], ev["source"]),
+                ).fetchone()
+                if existing:
+                    duplicates += 1
+                    continue
+
+            conn.execute("""
+                INSERT INTO player_events (id, player_id, game_id, org_id, season, period, game_time,
+                    event_type, situation, outcome, zone, x_coord, y_coord, xg_value, tags, source,
+                    raw_event_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                ev["id"], ev["player_id"], ev["game_id"], ev["org_id"], ev["season"],
+                ev["period"], ev["game_time"], ev["event_type"], ev["situation"],
+                ev["outcome"], ev["zone"], ev["x_coord"], ev["y_coord"], ev["xg_value"],
+                ev["tags"], ev["source"], ev["raw_event_id"], ev["created_at"],
+            ))
+            inserted += 1
+
+        conn.commit()
+
+        # Count events by type for summary
+        type_counts: dict[str, int] = {}
+        for ev in events:
+            t = ev["event_type"]
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        # Count unique players matched
+        matched_players = len({ev["player_id"] for ev in events})
+
+        return {
+            "xml_source": source,
+            "events_imported": inserted,
+            "events_skipped": result["skipped"] + duplicates,
+            "duplicates_skipped": duplicates,
+            "players_matched": matched_players,
+            "unmatched_players": result["unmatched_players"],
+            "event_type_breakdown": type_counts,
+        }
+    finally:
+        conn.close()
+
+
 @app.post("/instat/import")
 async def instat_import(
     file: UploadFile = File(...),
@@ -17530,8 +17990,8 @@ async def instat_import(
         perm_conn.close()
 
     fname = (file.filename or "").lower()
-    if not any(fname.endswith(ext) for ext in (".csv", ".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="File must be .csv, .xlsx, or .xls")
+    if not any(fname.endswith(ext) for ext in (".csv", ".xlsx", ".xls", ".xlsm", ".xml")):
+        raise HTTPException(status_code=400, detail="File must be .csv, .xlsx, .xls, or .xml")
 
     content = await file.read()
 
@@ -17551,6 +18011,30 @@ async def instat_import(
         _increment_tracking(user_id, "uploads", track_conn)
     finally:
         track_conn.close()
+
+    # ── XML file: route to XML event import pipeline ──
+    if fname.endswith(".xml"):
+        if not season:
+            now = datetime.now()
+            year = now.year
+            season = f"{year-1}-{year}" if now.month < 9 else f"{year}-{year+1}"
+        logger.info("XML import: fname=%s, season=%s, org=%s", fname, season, org_id)
+        xml_result = _import_xml_events(content, season, org_id)
+        return {
+            "file_type": f"xml_{xml_result['xml_source']}",
+            "total_rows": xml_result["events_imported"] + xml_result["events_skipped"],
+            "players_created": 0,
+            "players_updated": 0,
+            "stats_imported": 0,
+            "games_imported": 0,
+            "events_imported": xml_result["events_imported"],
+            "events_skipped": xml_result["events_skipped"],
+            "duplicates_skipped": xml_result["duplicates_skipped"],
+            "players_matched": xml_result["players_matched"],
+            "unmatched_players": xml_result["unmatched_players"],
+            "event_type_breakdown": xml_result["event_type_breakdown"],
+            "errors": [f"Unmatched player: {p}" for p in xml_result["unmatched_players"]],
+        }
 
     rows = _parse_file_to_rows(content, fname)
     if not rows:
