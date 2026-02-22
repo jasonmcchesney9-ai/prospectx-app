@@ -10616,6 +10616,250 @@ async def get_player_recent_form(player_id: str,
         conn.close()
 
 
+# ── Event Aggregates + Trendline ─────────────────────────────
+
+def aggregate_player_events(player_id: str, season: Optional[str], situation: Optional[str], conn) -> dict:
+    """Compute summary stats from player_events table. Always computed on-demand, never stored."""
+    where = ["player_id = ?"]
+    params: list = [player_id]
+    if season:
+        where.append("season = ?")
+        params.append(season)
+    if situation:
+        where.append("situation = ?")
+        params.append(situation)
+    wc = " AND ".join(where)
+
+    row = conn.execute(f"""
+        SELECT
+            COUNT(*) FILTER (WHERE event_type = 'entry') AS zone_entries_total,
+            COUNT(*) FILTER (WHERE event_type = 'entry' AND outcome = 'success') AS zone_entries_controlled,
+            COUNT(*) FILTER (WHERE event_type = 'exit') AS zone_exits_total,
+            COUNT(*) FILTER (WHERE event_type = 'exit' AND outcome = 'success') AS zone_exits_controlled,
+            COUNT(*) FILTER (WHERE event_type = 'retrieval') AS retrievals,
+            COUNT(*) FILTER (WHERE event_type = 'shot') AS shot_attempts,
+            COALESCE(SUM(CASE WHEN event_type = 'shot' THEN xg_value ELSE 0 END), 0.0) AS xg_for,
+            COUNT(*) FILTER (WHERE event_type = 'chance') AS chances_for,
+            COUNT(*) FILTER (WHERE event_type = 'faceoff' AND outcome = 'success') AS faceoff_wins,
+            COUNT(*) FILTER (WHERE event_type = 'faceoff') AS faceoff_total,
+            COUNT(*) AS total_events,
+            COUNT(DISTINCT game_id) AS games_with_events
+        FROM player_events WHERE {wc}
+    """, params).fetchone()
+
+    if not row or row[10] == 0:  # total_events
+        return {
+            "has_event_data": False,
+            "zone_entries_total": 0, "zone_entries_controlled": 0, "zone_entry_pct": 0.0,
+            "zone_exits_total": 0, "zone_exits_controlled": 0, "zone_exit_pct": 0.0,
+            "retrievals": 0, "shot_attempts": 0, "xg_for": 0.0,
+            "chances_for": 0, "faceoff_wins": 0, "faceoff_total": 0, "faceoff_pct": 0.0,
+            "total_events": 0, "games_with_events": 0,
+        }
+
+    d = dict(row)
+    ent_t = d["zone_entries_total"] or 0
+    ent_c = d["zone_entries_controlled"] or 0
+    ext_t = d["zone_exits_total"] or 0
+    ext_c = d["zone_exits_controlled"] or 0
+    fo_w = d["faceoff_wins"] or 0
+    fo_t = d["faceoff_total"] or 0
+
+    return {
+        "has_event_data": True,
+        "zone_entries_total": ent_t,
+        "zone_entries_controlled": ent_c,
+        "zone_entry_pct": round(ent_c / ent_t * 100, 1) if ent_t > 0 else 0.0,
+        "zone_exits_total": ext_t,
+        "zone_exits_controlled": ext_c,
+        "zone_exit_pct": round(ext_c / ext_t * 100, 1) if ext_t > 0 else 0.0,
+        "retrievals": d["retrievals"] or 0,
+        "shot_attempts": d["shot_attempts"] or 0,
+        "xg_for": round(d["xg_for"] or 0.0, 3),
+        "chances_for": d["chances_for"] or 0,
+        "faceoff_wins": fo_w,
+        "faceoff_total": fo_t,
+        "faceoff_pct": round(fo_w / fo_t * 100, 1) if fo_t > 0 else 0.0,
+        "total_events": d["total_events"] or 0,
+        "games_with_events": d["games_with_events"] or 0,
+    }
+
+
+@app.get("/players/{player_id}/event-aggregates")
+async def get_player_event_aggregates(
+    player_id: str,
+    season: Optional[str] = Query(None),
+    situation: Optional[str] = Query(None, description="5v5|pp|pk|4v4|3v3|en"),
+    token_data: dict = Depends(verify_token),
+):
+    """Return on-demand event aggregates for a player from player_events table."""
+    conn = get_db()
+    try:
+        agg = aggregate_player_events(player_id, season, situation, conn)
+        return agg
+    finally:
+        conn.close()
+
+
+@app.get("/players/{player_id}/trendline")
+async def get_player_trendline(
+    player_id: str,
+    metric: str = Query("ppg", description="ppg|gpg|apg|shots|zone_entry_pct|coach_rating|toi"),
+    games: int = Query(10, ge=5, le=50, description="Number of games to show"),
+    situation: Optional[str] = Query(None, description="5v5|pp|pk"),
+    token_data: dict = Depends(verify_token),
+):
+    """
+    Return trendline data for charting. Uses boxscore stats when no event data,
+    event aggregates when available. Situation filter on event data only.
+    """
+    conn = get_db()
+    try:
+        # 1. Get boxscore game data (always available)
+        game_rows = conn.execute("""
+            SELECT game_date, opponent, goals AS g, assists AS a, points AS p,
+                   shots, plus_minus, pim, toi_seconds
+            FROM player_game_stats
+            WHERE player_id = ?
+            ORDER BY game_date DESC
+            LIMIT ?
+        """, (player_id, games)).fetchall()
+
+        # Fallback to player_stats game rows
+        if not game_rows:
+            game_rows = conn.execute("""
+                SELECT created_at AS game_date, '' AS opponent, g, a, p,
+                       COALESCE(CAST(json_extract(extended_stats, '$.main.shots') AS INTEGER), 0) AS shots,
+                       plus_minus, pim, toi_seconds
+                FROM player_stats
+                WHERE player_id = ? AND stat_type = 'game'
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (player_id, games)).fetchall()
+
+        boxscore_data = []
+        for r in game_rows:
+            d = dict(r)
+            g_val = d.get("g") or 0
+            a_val = d.get("a") or 0
+            p_val = d.get("p") or (g_val + a_val)
+            shots_val = d.get("shots") or 0
+            toi_val = d.get("toi_seconds") or 0
+            boxscore_data.append({
+                "date": d.get("game_date") or "",
+                "opponent": d.get("opponent") or "",
+                "g": g_val, "a": a_val, "p": p_val,
+                "shots": shots_val, "plus_minus": d.get("plus_minus") or 0,
+                "toi_seconds": toi_val,
+                "ppg": p_val,  # per-game is already 1 game
+                "gpg": g_val,
+                "apg": a_val,
+            })
+
+        # Reverse to chronological order
+        boxscore_data.reverse()
+
+        # 2. Check for event data (per-game aggregates from player_events)
+        event_params: list = [player_id]
+        event_where = "player_id = ?"
+        if situation:
+            event_where += " AND situation = ?"
+            event_params.append(situation)
+
+        event_games = conn.execute(f"""
+            SELECT game_id,
+                COUNT(*) FILTER (WHERE event_type = 'entry') AS entries_total,
+                COUNT(*) FILTER (WHERE event_type = 'entry' AND outcome = 'success') AS entries_controlled,
+                COUNT(*) FILTER (WHERE event_type = 'shot') AS shot_attempts,
+                COALESCE(SUM(CASE WHEN event_type = 'shot' THEN xg_value ELSE 0 END), 0.0) AS xg,
+                COUNT(*) FILTER (WHERE event_type = 'retrieval') AS retrievals,
+                COUNT(*) FILTER (WHERE event_type = 'faceoff' AND outcome = 'success') AS fo_wins,
+                COUNT(*) FILTER (WHERE event_type = 'faceoff') AS fo_total
+            FROM player_events
+            WHERE {event_where} AND game_id IS NOT NULL
+            GROUP BY game_id
+            ORDER BY MIN(created_at) DESC
+            LIMIT ?
+        """, event_params + [games]).fetchall()
+
+        has_event_data = len(event_games) > 0
+        event_by_game = {}
+        for er in event_games:
+            d = dict(er)
+            gid = d["game_id"]
+            ent_t = d["entries_total"] or 0
+            ent_c = d["entries_controlled"] or 0
+            fo_t = d["fo_total"] or 0
+            fo_w = d["fo_wins"] or 0
+            event_by_game[gid] = {
+                "zone_entry_pct": round(ent_c / ent_t * 100, 1) if ent_t > 0 else 0.0,
+                "entries_controlled": ent_c,
+                "entries_total": ent_t,
+                "shot_attempts": d["shot_attempts"] or 0,
+                "xg": round(d["xg"] or 0.0, 3),
+                "retrievals": d["retrievals"] or 0,
+                "faceoff_pct": round(fo_w / fo_t * 100, 1) if fo_t > 0 else 0.0,
+            }
+
+        # 3. Build trendline points
+        trendline = []
+        for i, bd in enumerate(boxscore_data):
+            point = {
+                "index": i,
+                "date": bd["date"],
+                "opponent": bd["opponent"],
+                "value": bd.get(metric, 0),
+            }
+            # Merge event data if available for this game
+            if has_event_data:
+                # Try to match boxscore game to event game (by position since game_ids may differ)
+                if i < len(event_games):
+                    egd = list(event_by_game.values())
+                    if i < len(egd):
+                        point["event_data"] = egd[-(i + 1)] if i < len(egd) else None
+                        if metric == "zone_entry_pct" and point.get("event_data"):
+                            point["value"] = point["event_data"]["zone_entry_pct"]
+            trendline.append(point)
+
+        # 4. Compute rolling average (5-game window)
+        values = [t["value"] for t in trendline]
+        rolling = []
+        window = min(5, len(values))
+        for i in range(len(values)):
+            start = max(0, i - window + 1)
+            chunk = values[start:i + 1]
+            rolling.append(round(sum(chunk) / len(chunk), 2))
+
+        for i, t in enumerate(trendline):
+            t["rolling_avg"] = rolling[i]
+
+        # 5. Trend indicator
+        if len(values) >= 5:
+            recent_5 = sum(values[-5:]) / 5
+            prior_5 = sum(values[-10:-5]) / 5 if len(values) >= 10 else sum(values[:len(values) - 5]) / max(1, len(values) - 5)
+            if recent_5 > prior_5 * 1.1:
+                trend = "Trending up past 5 games"
+            elif recent_5 < prior_5 * 0.9:
+                trend = "Dip in last 3-5 games"
+            else:
+                trend = "Flat"
+        else:
+            trend = "Insufficient data for trend"
+
+        return {
+            "player_id": player_id,
+            "metric": metric,
+            "games_requested": games,
+            "games_found": len(boxscore_data),
+            "has_event_data": has_event_data,
+            "event_games_found": len(event_games),
+            "trend": trend,
+            "trendline": trendline,
+        }
+    finally:
+        conn.close()
+
+
 # ── Line Combinations CRUD ───────────────────────────────────
 
 def _line_row_to_dict(row) -> dict:
