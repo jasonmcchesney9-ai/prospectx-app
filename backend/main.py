@@ -19416,7 +19416,7 @@ async def health_check():
     return {
         "status": "healthy",
         "database": db_status,
-        "db_type": "sqlite",
+        "db_type": "postgresql" if USE_PG else "sqlite",
         "timestamp": now_iso(),
         "version": "1.0.0",
     }
