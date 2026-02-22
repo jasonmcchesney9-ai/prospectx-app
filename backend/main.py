@@ -30484,6 +30484,48 @@ async def generate_car_ride_script(request: Request, token_data: dict = Depends(
 
 
 # ============================================================
+# TEMPORARY: Data Migration Endpoint (remove after use)
+# ============================================================
+
+@app.post("/superadmin/migrate-data")
+async def migrate_data(
+    file: UploadFile = File(...),
+    token_data: dict = Depends(verify_token),
+):
+    """One-shot migration: upload a .sql file of INSERT OR IGNORE statements.
+    Superadmin only. Remove this endpoint after migration is complete."""
+    if token_data.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin only")
+
+    content = await file.read()
+    sql_text = content.decode("utf-8")
+
+    conn = get_db()
+    try:
+        # Execute the entire SQL script
+        conn.executescript(sql_text)
+        conn.commit()
+
+        # Count key tables to verify
+        counts = {}
+        for table in ["players", "teams", "player_stats", "reports", "drills",
+                       "player_intelligence", "line_combinations", "games",
+                       "skill_lessons", "hockey_terms", "scout_notes",
+                       "report_templates", "player_stats_history", "player_game_stats"]:
+            try:
+                row = conn.execute(f"SELECT COUNT(*) FROM [{table}]").fetchone()
+                counts[table] = row[0] if row else 0
+            except Exception:
+                counts[table] = "error"
+
+        return {"status": "success", "counts": counts}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+    finally:
+        conn.close()
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
