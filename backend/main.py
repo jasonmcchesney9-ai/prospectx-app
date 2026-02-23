@@ -24594,6 +24594,40 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
         "results": results,
     }
 
+    # ── PXR 1C: Post-sync duplicate suggestions ──
+    if created > 0:
+        try:
+            dup_conn = get_db()
+            # Find players that share last_name + DOB but have different IDs
+            dupes = dup_conn.execute("""
+                SELECT p1.id AS id1, p1.first_name AS fn1, p1.last_name AS ln1,
+                       p1.current_team AS team1, p1.dob,
+                       p2.id AS id2, p2.first_name AS fn2, p2.last_name AS ln2,
+                       p2.current_team AS team2
+                FROM players p1
+                JOIN players p2 ON p1.last_name = p2.last_name
+                    AND p1.dob = p2.dob AND p1.dob IS NOT NULL AND p1.dob != ''
+                    AND p1.id < p2.id
+                WHERE p1.org_id = ? AND p2.org_id = ?
+                    AND (p1.is_deleted = 0 OR p1.is_deleted IS NULL)
+                    AND (p2.is_deleted = 0 OR p2.is_deleted IS NULL)
+                ORDER BY p1.last_name
+                LIMIT 20
+            """, (org_id, org_id)).fetchall()
+            dup_conn.close()
+
+            if dupes:
+                roster_result["suggested_merges"] = [
+                    {
+                        "player_a": {"id": d["id1"], "name": f"{d['fn1']} {d['ln1']}", "team": d["team1"]},
+                        "player_b": {"id": d["id2"], "name": f"{d['fn2']} {d['ln2']}", "team": d["team2"]},
+                        "match_reason": f"Same last name + DOB ({d['dob']})",
+                    }
+                    for d in dupes
+                ]
+        except Exception:
+            pass  # Don't let dupe scan failure break sync
+
     # Optionally sync stats after roster
     if sync_stats:
         try:
