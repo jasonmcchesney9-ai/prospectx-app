@@ -457,6 +457,11 @@ function PxrOpsTab() {
   const [shResult, setShResult] = useState<SyncHistoryEntry[] | null>(null);
   const [shError, setShError] = useState("");
 
+  // Normalize Seasons state
+  const [nsLoading, setNsLoading] = useState(false);
+  const [nsResult, setNsResult] = useState<{ status: string; total_rows_fixed: number; tables_updated: Record<string, { rows_fixed?: number; error?: string }> } | null>(null);
+  const [nsError, setNsError] = useState("");
+
   const handleNormalizeLeagues = async () => {
     setNlLoading(true);
     setNlResult(null);
@@ -499,6 +504,21 @@ function PxrOpsTab() {
       setShError(typeof msg === "string" ? msg : JSON.stringify(msg));
     } finally {
       setShLoading(false);
+    }
+  };
+
+  const handleNormalizeSeasons = async () => {
+    setNsLoading(true);
+    setNsResult(null);
+    setNsError("");
+    try {
+      const { data } = await api.post("/admin/normalize-seasons");
+      setNsResult(data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to normalize seasons";
+      setNsError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setNsLoading(false);
     }
   };
 
@@ -552,15 +572,17 @@ function PxrOpsTab() {
           </button>
         </div>
 
-        {/* Normalize Seasons — disabled until PXR v1.1 S3 */}
-        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col opacity-50">
+        {/* Normalize Seasons */}
+        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col">
           <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">Normalize Seasons</h3>
           <p className="text-xs text-muted mb-4 flex-1">Fix season string formats across all stat tables.</p>
           <button
-            disabled={true}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-gray-400 rounded-lg cursor-not-allowed"
+            onClick={handleNormalizeSeasons}
+            disabled={nsLoading}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-teal rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50"
           >
-            Coming in PXR v1.1
+            {nsLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Run Normalize
           </button>
         </div>
       </div>
@@ -679,6 +701,28 @@ function PxrOpsTab() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Normalize Seasons Result */}
+      {nsError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{nsError}</div>
+      )}
+      {nsResult && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle2 size={16} />
+            <span className="font-semibold">Fixed {nsResult.total_rows_fixed} rows across {Object.keys(nsResult.tables_updated).length} tables</span>
+          </div>
+          {nsResult.tables_updated && Object.keys(nsResult.tables_updated).length > 0 && (
+            <div className="mt-2 text-xs space-y-1">
+              {Object.entries(nsResult.tables_updated).map(([table, info]) => (
+                <div key={table}>
+                  {table}: {info.error ? <span className="text-red-600">{info.error}</span> : `${info.rows_fixed || 0} rows fixed`}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

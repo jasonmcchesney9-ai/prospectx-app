@@ -21546,6 +21546,58 @@ async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token))
     return await admin_normalize_leagues(token_data)
 
 
+@app.post("/admin/normalize-seasons")
+async def admin_normalize_seasons(token_data: dict = Depends(verify_token)):
+    """Normalize ALL season strings across stat tables using _normalize_season().
+    One-pass fix. PXR v1.1 S3."""
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?",
+                        (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    SEASON_TABLES = [
+        "player_stats",
+        "player_game_stats",
+        "goalie_stats",
+        "team_stats",
+        "player_stats_history",
+    ]
+
+    tables_updated = {}
+    total_fixed = 0
+
+    for table in SEASON_TABLES:
+        try:
+            distinct = conn.execute(
+                f"SELECT DISTINCT season FROM {table} WHERE season IS NOT NULL AND season != ''"
+            ).fetchall()
+            table_fixed = 0
+            for row in distinct:
+                original = row["season"] if hasattr(row, "keys") else row[0]
+                normalized = _normalize_season(original)
+                if normalized != original:
+                    result = conn.execute(
+                        f"UPDATE {table} SET season = ? WHERE season = ?",
+                        (normalized, original)
+                    )
+                    table_fixed += result.rowcount
+            tables_updated[table] = {"rows_fixed": table_fixed}
+            total_fixed += table_fixed
+        except Exception as e:
+            tables_updated[table] = {"error": str(e)}
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "complete",
+        "tables_updated": tables_updated,
+        "total_rows_fixed": total_fixed,
+    }
+
+
 @app.get("/admin/sync-history")
 async def admin_sync_history(
     league: Optional[str] = None,
