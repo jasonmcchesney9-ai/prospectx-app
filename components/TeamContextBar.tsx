@@ -2,6 +2,7 @@
 
 import { Building2, ChevronDown, CheckCircle, Calendar, AlertCircle } from "lucide-react";
 import { assetUrl } from "@/lib/api";
+import { leagueAbbr } from "@/lib/leagues";
 import type { Team, HTGame, HTStandings, GamePlan, Player } from "@/types/api";
 
 interface TeamContextBarProps {
@@ -127,7 +128,7 @@ export default function TeamContextBar({
             <div className="flex items-center gap-2 mt-0.5">
               {activeTeam.league && (
                 <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-[10px] uppercase tracking-wider">
-                  {activeTeam.league}
+                  {leagueAbbr(activeTeam.league)}
                 </span>
               )}
               {teamStandings && (
