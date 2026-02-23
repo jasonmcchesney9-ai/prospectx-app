@@ -1103,6 +1103,108 @@ def _normalize_league_safe(raw: str | None, form: str = "abbreviation") -> str |
         return raw.strip()
 
 
+# ── PXR: Shared Player Data Repoint Helper ───────────────────
+# Used by both POST /players/merge and POST /admin/player-dedup-execute
+# to ensure identical 19-table coverage.
+
+def _repoint_player_data(conn, from_id: str, to_id: str) -> dict:
+    """Repoint all player-related data from one player to another.
+
+    PXR utility — deduplicates stats before repointing, then moves
+    all FK references from `from_id` → `to_id` across 19 tables.
+
+    Returns dict with counts: stats_moved, notes_moved, reports_moved,
+    intel_moved, other_moved.
+    """
+    counts = {"stats_moved": 0, "notes_moved": 0, "reports_moved": 0,
+              "intel_moved": 0, "other_moved": 0}
+
+    # ── Stats dedup: delete from_id rows where to_id already has same (season, stat_type) ──
+    conn.execute("""
+        DELETE FROM player_stats
+        WHERE player_id = ?
+          AND (season, COALESCE(stat_type, '')) IN (
+              SELECT season, COALESCE(stat_type, '')
+              FROM player_stats WHERE player_id = ?
+          )
+    """, (from_id, to_id))
+    result = conn.execute(
+        "UPDATE player_stats SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["stats_moved"] += result.rowcount
+
+    # ── Game stats dedup: delete from_id rows where to_id already has same (game_date, opponent) ──
+    conn.execute("""
+        DELETE FROM player_game_stats
+        WHERE player_id = ?
+          AND (game_date, COALESCE(opponent, '')) IN (
+              SELECT game_date, COALESCE(opponent, '')
+              FROM player_game_stats WHERE player_id = ?
+          )
+    """, (from_id, to_id))
+    result = conn.execute(
+        "UPDATE player_game_stats SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["stats_moved"] += result.rowcount
+
+    # ── Goalie stats dedup: delete from_id rows where to_id already has same season ──
+    conn.execute("""
+        DELETE FROM goalie_stats
+        WHERE player_id = ?
+          AND season IN (
+              SELECT season FROM goalie_stats WHERE player_id = ?
+          )
+    """, (from_id, to_id))
+    result = conn.execute(
+        "UPDATE goalie_stats SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["stats_moved"] += result.rowcount
+
+    # ── Scout notes ──
+    result = conn.execute(
+        "UPDATE scout_notes SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["notes_moved"] += result.rowcount
+
+    # ── Reports ──
+    result = conn.execute(
+        "UPDATE reports SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["reports_moved"] += result.rowcount
+
+    # ── Intelligence ──
+    result = conn.execute(
+        "UPDATE player_intelligence SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["intel_moved"] += result.rowcount
+
+    # ── All other FK tables (13 remaining) ──
+    other_tables = [
+        "player_stats_history", "player_archetypes", "system_adherence",
+        "player_corrections", "development_plans", "player_parents",
+        "player_stat_snapshots", "player_drill_logs", "player_events",
+        "family_cards", "scouting_list", "instat_player_stats",
+        "instat_player_game_log",
+    ]
+    for tbl in other_tables:
+        try:
+            result = conn.execute(
+                f"UPDATE {tbl} SET player_id = ? WHERE player_id = ?",
+                (to_id, from_id)
+            )
+            counts["other_moved"] += result.rowcount
+        except Exception:
+            pass  # Table might not exist yet — harmless
+
+    return counts
+
+
 def _get_age_group(birth_year: int | None) -> str | None:
     """Classify player into age group based on birth year."""
     if not birth_year:
@@ -20443,93 +20545,13 @@ async def admin_player_dedup_execute(
             group_other_moved = 0
 
             for junk_id in junk_ids:
-                # ── Special handling for player_stats: avoid duplicate (player_id, season, stat_type) ──
-                # Delete junk rows where keeper already has that season+stat_type combo
-                conn.execute("""
-                    DELETE FROM player_stats
-                    WHERE player_id = ?
-                      AND (season, COALESCE(stat_type, '')) IN (
-                          SELECT season, COALESCE(stat_type, '')
-                          FROM player_stats WHERE player_id = ?
-                      )
-                """, (junk_id, keeper_id))
-
-                # Now repoint remaining player_stats
-                result = conn.execute(
-                    "UPDATE player_stats SET player_id = ? WHERE player_id = ?",
-                    (keeper_id, junk_id)
-                )
-                group_stats_moved += result.rowcount
-
-                # ── Special handling for player_game_stats: avoid dupe (player_id, game_date, opponent) ──
-                conn.execute("""
-                    DELETE FROM player_game_stats
-                    WHERE player_id = ?
-                      AND (game_date, COALESCE(opponent, '')) IN (
-                          SELECT game_date, COALESCE(opponent, '')
-                          FROM player_game_stats WHERE player_id = ?
-                      )
-                """, (junk_id, keeper_id))
-
-                result = conn.execute(
-                    "UPDATE player_game_stats SET player_id = ? WHERE player_id = ?",
-                    (keeper_id, junk_id)
-                )
-                group_stats_moved += result.rowcount
-
-                # ── Special handling for goalie_stats: avoid dupe (player_id, season) ──
-                conn.execute("""
-                    DELETE FROM goalie_stats
-                    WHERE player_id = ?
-                      AND season IN (
-                          SELECT season FROM goalie_stats WHERE player_id = ?
-                      )
-                """, (junk_id, keeper_id))
-
-                result = conn.execute(
-                    "UPDATE goalie_stats SET player_id = ? WHERE player_id = ?",
-                    (keeper_id, junk_id)
-                )
-                group_stats_moved += result.rowcount
-
-                # ── Repoint scout_notes ──
-                result = conn.execute(
-                    "UPDATE scout_notes SET player_id = ? WHERE player_id = ?",
-                    (keeper_id, junk_id)
-                )
-                group_notes_moved += result.rowcount
-
-                # ── Repoint reports ──
-                result = conn.execute(
-                    "UPDATE reports SET player_id = ? WHERE player_id = ?",
-                    (keeper_id, junk_id)
-                )
-                group_reports_moved += result.rowcount
-
-                # ── Repoint player_intelligence ──
-                result = conn.execute(
-                    "UPDATE player_intelligence SET player_id = ? WHERE player_id = ?",
-                    (keeper_id, junk_id)
-                )
-                group_intel_moved += result.rowcount
-
-                # ── Repoint all other FK tables ──
-                other_tables = [
-                    "player_stats_history", "player_archetypes", "system_adherence",
-                    "player_corrections", "development_plans", "player_parents",
-                    "player_stat_snapshots", "player_drill_logs", "player_events",
-                    "family_cards", "scouting_list", "instat_player_stats",
-                    "instat_player_game_log",
-                ]
-                for tbl in other_tables:
-                    try:
-                        result = conn.execute(
-                            f"UPDATE {tbl} SET player_id = ? WHERE player_id = ?",
-                            (keeper_id, junk_id)
-                        )
-                        group_other_moved += result.rowcount
-                    except Exception:
-                        pass  # Table might not exist yet — harmless
+                # ── Repoint all 19 tables via shared PXR helper ──
+                rc = _repoint_player_data(conn, junk_id, keeper_id)
+                group_stats_moved += rc["stats_moved"]
+                group_notes_moved += rc["notes_moved"]
+                group_reports_moved += rc["reports_moved"]
+                group_intel_moved += rc["intel_moved"]
+                group_other_moved += rc["other_moved"]
 
                 # ── Soft-delete the junk player row ──
                 conn.execute("""
@@ -23407,35 +23429,16 @@ async def merge_players(
     notes_moved = 0
     reports_moved = 0
     intel_moved = 0
+    other_moved = 0
 
     for mid in merge_ids:
-        # Reassign stats
-        result = conn.execute(
-            "UPDATE player_stats SET player_id = ? WHERE player_id = ?",
-            (keep_id, mid)
-        )
-        stats_moved += result.rowcount
-
-        # Reassign scout notes
-        result = conn.execute(
-            "UPDATE scout_notes SET player_id = ? WHERE player_id = ?",
-            (keep_id, mid)
-        )
-        notes_moved += result.rowcount
-
-        # Reassign reports
-        result = conn.execute(
-            "UPDATE reports SET player_id = ? WHERE player_id = ?",
-            (keep_id, mid)
-        )
-        reports_moved += result.rowcount
-
-        # Reassign intelligence records
-        result = conn.execute(
-            "UPDATE player_intelligence SET player_id = ? WHERE player_id = ?",
-            (keep_id, mid)
-        )
-        intel_moved += result.rowcount
+        # ── Repoint all 19 tables via shared PXR helper (with stats dedup) ──
+        rc = _repoint_player_data(conn, mid, keep_id)
+        stats_moved += rc["stats_moved"]
+        notes_moved += rc["notes_moved"]
+        reports_moved += rc["reports_moved"]
+        intel_moved += rc["intel_moved"]
+        other_moved += rc["other_moved"]
 
         # Soft-delete the merged player record (instead of hard delete)
         conn.execute("""
@@ -23445,23 +23448,51 @@ async def merge_players(
             WHERE id = ?
         """, (keep_id, mid))
 
+    # ── Auto-union tags if not explicitly provided ──
+    import json as _json
+    if "tags" not in update_fields:
+        # Collect tags from keeper + all donors (before soft-delete hides them)
+        keeper_row = conn.execute("SELECT tags FROM players WHERE id = ?", (keep_id,)).fetchone()
+        keeper_tags = []
+        if keeper_row and keeper_row["tags"]:
+            try:
+                keeper_tags = _json.loads(keeper_row["tags"]) if isinstance(keeper_row["tags"], str) else keeper_row["tags"]
+            except Exception:
+                keeper_tags = []
+        all_tags = set(keeper_tags) if isinstance(keeper_tags, list) else set()
+        for mid in merge_ids:
+            donor_row = conn.execute("SELECT tags FROM players WHERE id = ?", (mid,)).fetchone()
+            if donor_row and donor_row["tags"]:
+                try:
+                    dtags = _json.loads(donor_row["tags"]) if isinstance(donor_row["tags"], str) else donor_row["tags"]
+                    if isinstance(dtags, list):
+                        all_tags.update(dtags)
+                except Exception:
+                    pass
+        if all_tags:
+            update_fields["tags"] = sorted(all_tags)
+
     # Optionally update fields on the kept player
     allowed_fields = {"first_name", "last_name", "position", "shoots", "dob",
                       "current_team", "current_league", "height_cm", "weight_kg",
-                      "birth_year", "age_group", "draft_eligible_year", "league_tier"}
+                      "birth_year", "age_group", "draft_eligible_year", "league_tier",
+                      "tags", "image_url", "archetype", "passports"}
     updates = []
     params = []
     for field, value in update_fields.items():
         if field in allowed_fields:
             updates.append(f"{field} = ?")
-            params.append(value)
+            # JSON-encode list/dict fields
+            if field in ("tags", "passports") and isinstance(value, (list, dict)):
+                params.append(_json.dumps(value))
+            else:
+                params.append(value)
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")
         params.append(keep_id)
         conn.execute(f"UPDATE players SET {', '.join(updates)} WHERE id = ?", params)
 
     # Insert audit record into player_merges
-    import json as _json
     user_id = token_data["user_id"]
     merge_id = str(uuid.uuid4())
     conn.execute("""
@@ -23485,6 +23516,7 @@ async def merge_players(
         "notes_moved": notes_moved,
         "reports_moved": reports_moved,
         "intel_moved": intel_moved,
+        "other_moved": other_moved,
     }
 
 
