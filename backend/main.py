@@ -20446,9 +20446,10 @@ async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token))
     ]
 
     # Tables that store full names: old_value → Greater Ontario Hockey League
+    # Include abbreviation variants too (GOJHL/GOHL) since these tables use full names
     FULLNAME_UPDATES = [
-        ("teams", "league", ["Greater Ontario Junior Hockey League"]),
-        ("players", "current_league", ["Greater Ontario Junior Hockey League"]),
+        ("teams", "league", ["Greater Ontario Junior Hockey League", "GOHL", "GOJHL"]),
+        ("players", "current_league", ["Greater Ontario Junior Hockey League", "GOJHL", "GOHL"]),
     ]
 
     summary = {}
