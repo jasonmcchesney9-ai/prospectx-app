@@ -2727,6 +2727,13 @@ def init_db():
         conn.commit()
         logger.info("Migration: added manual_override column to players (PXR 3B)")
 
+    # ── Migration: PXR 3D — data_snapshot column on player_merges ──
+    pm_cols = _get_table_columns(conn, "player_merges")
+    if "data_snapshot" not in pm_cols:
+        conn.execute("ALTER TABLE player_merges ADD COLUMN data_snapshot TEXT")
+        conn.commit()
+        logger.info("Migration: added data_snapshot column to player_merges (PXR 3D)")
+
     # ── Migration: rename old subscription tiers (CR-009) ──
     try:
         n1 = conn.execute("UPDATE users SET subscription_tier = 'scout' WHERE subscription_tier = 'novice'").rowcount
@@ -23607,6 +23614,23 @@ async def merge_players(
     intel_moved = 0
     other_moved = 0
 
+    # ── PXR 3D: Snapshot donor data before repoint for undo capability ──
+    import json as _json3d
+    data_snapshot = {}
+    for mid in merge_ids:
+        donor_snap = {}
+        for tbl in ("player_stats", "player_game_stats", "goalie_stats",
+                     "scout_notes", "reports", "player_intelligence"):
+            try:
+                rows = conn.execute(
+                    f"SELECT id FROM {tbl} WHERE player_id = ?", (mid,)
+                ).fetchall()
+                if rows:
+                    donor_snap[tbl] = [r["id"] for r in rows]
+            except Exception:
+                pass
+        data_snapshot[mid] = donor_snap
+
     for mid in merge_ids:
         # ── Repoint all 19 tables via shared PXR helper (with stats dedup) ──
         rc = _repoint_player_data(conn, mid, keep_id)
@@ -23671,17 +23695,18 @@ async def merge_players(
         params.append(keep_id)
         conn.execute(f"UPDATE players SET {', '.join(updates)} WHERE id = ?", params)
 
-    # Insert audit record into player_merges
+    # Insert audit record into player_merges (PXR 3D: include data_snapshot)
     user_id = token_data["user_id"]
     merge_id = str(uuid.uuid4())
     conn.execute("""
         INSERT INTO player_merges (id, org_id, primary_player_id, duplicate_player_ids,
             stats_moved, notes_moved, reports_moved, intel_moved, merged_by, merged_at,
-            can_undo, undo_before)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+            can_undo, undo_before, data_snapshot)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?, ?)
     """, (merge_id, org_id, keep_id, _json.dumps(merge_ids),
           stats_moved, notes_moved, reports_moved, intel_moved, user_id,
-          (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()))
+          (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+          _json3d.dumps(data_snapshot)))
 
     conn.commit()
     conn.close()
@@ -23770,6 +23795,37 @@ async def undo_merge(merge_id: str, token_data: dict = Depends(verify_token)):
         """, (did, org_id))
         restored += result.rowcount
 
+    # ── PXR 3D: Reverse data repointing using snapshot ──
+    stats_reversed = False
+    reversal_counts = {}
+    try:
+        snapshot_raw = merge["data_snapshot"]
+    except (KeyError, IndexError):
+        snapshot_raw = None
+    if snapshot_raw:
+        try:
+            snapshot = _json.loads(snapshot_raw) if isinstance(snapshot_raw, str) else snapshot_raw
+            for donor_id, tables in snapshot.items():
+                donor_counts = {}
+                for tbl, record_ids in tables.items():
+                    if not record_ids:
+                        continue
+                    placeholders = ", ".join("?" for _ in record_ids)
+                    try:
+                        result = conn.execute(
+                            f"UPDATE {tbl} SET player_id = ? WHERE id IN ({placeholders})",
+                            [donor_id] + record_ids
+                        )
+                        if result.rowcount > 0:
+                            donor_counts[tbl] = result.rowcount
+                    except Exception:
+                        pass
+                if donor_counts:
+                    reversal_counts[donor_id] = donor_counts
+            stats_reversed = bool(reversal_counts)
+        except Exception:
+            pass  # Snapshot parsing failed — player records still restored
+
     # Mark merge as undone
     conn.execute(
         "UPDATE player_merges SET undone_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -23782,7 +23838,8 @@ async def undo_merge(merge_id: str, token_data: dict = Depends(verify_token)):
         "status": "undone",
         "merge_id": merge_id,
         "players_restored": restored,
-        "note": "Player records restored. Stats/notes/reports remain with the primary player.",
+        "stats_reversed": stats_reversed,
+        "reversal_detail": reversal_counts if reversal_counts else None,
     }
 
 
