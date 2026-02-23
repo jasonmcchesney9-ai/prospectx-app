@@ -1103,6 +1103,73 @@ def _normalize_league_safe(raw: str | None, form: str = "abbreviation") -> str |
         return raw.strip()
 
 
+# ── PXR v1.1: Season Normalization ───────────────────────────
+# Known league name prefixes that appear in season strings
+_SEASON_LEAGUE_PREFIXES = [
+    "GOJHL", "GOHL", "CCHL", "MHL", "NOJHL", "OHL", "WHL",
+    "QMJHL", "OJHL", "BCHL", "SJHL", "MJHL", "NAHL", "USHL",
+    "AJHL", "PJHL", "KIJHL", "VIJHL",
+]
+
+def _normalize_season(raw: str) -> str:
+    """Normalize a season string to canonical form.
+
+    Canonical formats:
+      "2025-26"              (regular season)
+      "2025-26 Preseason"    (preseason)
+      "2025-26 Playoffs"     (playoffs)
+
+    Returns raw unchanged if unparseable (never rejects).
+    """
+    if not raw or not raw.strip():
+        return raw or ""
+
+    s = raw.strip()
+
+    # 1. Strip known league prefixes/infixes
+    for prefix in _SEASON_LEAGUE_PREFIXES:
+        s = re.sub(r'\b' + re.escape(prefix) + r'\b', '', s, flags=re.IGNORECASE)
+
+    # 2. Detect season type
+    s_lower = s.lower()
+    if "preseason" in s_lower or "pre-season" in s_lower or "pre season" in s_lower:
+        season_type = "Preseason"
+    elif "playoff" in s_lower:
+        season_type = "Playoffs"
+    else:
+        season_type = ""  # regular
+
+    # 3. Strip season type words and decorators
+    s = re.sub(r'(?i)\b(regular|pre-?season|playoffs?|season)\b', '', s)
+    s = s.replace("|", "").strip()
+    s = re.sub(r'\s+', ' ', s).strip(" -\u2013\u2014")
+
+    # 4. Extract year pattern
+    # Pattern A: "YYYY-YYYY" or "YYYY - YYYY" -> "YYYY-YY"
+    m = re.search(r'(\d{4})\s*[-\u2013\u2014]\s*(\d{4})', s)
+    if m:
+        y1, y2 = int(m.group(1)), int(m.group(2))
+        base = f"{y1}-{str(y2)[-2:]}"
+        return f"{base} {season_type}".strip()
+
+    # Pattern B: "YYYY-YY" -> keep as-is
+    m = re.search(r'(\d{4})\s*[-\u2013\u2014]\s*(\d{2})\b', s)
+    if m:
+        base = f"{m.group(1)}-{m.group(2)}"
+        return f"{base} {season_type}".strip()
+
+    # Pattern C: standalone "YYYY" -> "YYYY-YY" (assume season starts in that year)
+    m = re.search(r'\b(20\d{2})\b', s)
+    if m:
+        y = int(m.group(1))
+        base = f"{y}-{str(y + 1)[-2:]}"
+        return f"{base} {season_type}".strip()
+
+    # 5. Unparseable - return raw, log warning
+    logger.warning("Unparseable season string: %r", raw)
+    return raw.strip()
+
+
 # ── PXR: Shared Player Data Repoint Helper ───────────────────
 # Used by both POST /players/merge and POST /admin/player-dedup-execute
 # to ensure identical 19-table coverage.
