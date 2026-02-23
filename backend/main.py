@@ -20770,13 +20770,14 @@ async def admin_league_aliases(token_data: dict = Depends(verify_token)):
     return result
 
 
-@app.post("/admin/normalize-leagues-gohl")
-async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token)):
-    """Normalize all GOJHL / Greater Ontario Junior Hockey League strings
-    to their canonical GOHL equivalents.
+@app.post("/admin/normalize-leagues")
+async def admin_normalize_leagues(token_data: dict = Depends(verify_token)):
+    """Normalize ALL known league alias variants across ALL tables using
+    the LEAGUE_CANONICAL alias map from PXR 2A.
 
-    Abbreviation tables: GOJHL|gojhl → GOHL
-    Full-name tables:    Greater Ontario Junior Hockey League → Greater Ontario Hockey League
+    Tables that store abbreviations get canonical abbreviations.
+    Tables that store full names get canonical full names.
+    Replaces the old GOHL-only endpoint.
     """
     conn = get_db()
     user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
@@ -20784,54 +20785,79 @@ async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token))
         conn.close()
         raise HTTPException(status_code=403, detail="Admin only")
 
-    CANONICAL_ABBREV = "GOHL"
-    CANONICAL_FULL = "Greater Ontario Hockey League"
+    # Build reverse map: for each canonical league, collect all known aliases
+    from collections import defaultdict
+    aliases_by_canon: dict[str, set[str]] = defaultdict(set)
+    for alias_key, canon_abbr in _LEAGUE_LOOKUP.items():
+        # alias_key is uppercased; recover original-case variants
+        aliases_by_canon[canon_abbr].add(alias_key)
+    # Add legacy aliases in their original case
+    for legacy, canon in _LEAGUE_LEGACY_ALIASES.items():
+        aliases_by_canon[canon].add(legacy)
 
-    # Tables that store abbreviations: old_value → GOHL
-    ABBREV_UPDATES = [
-        ("player_stats_history", "league", ["GOJHL", "gojhl"]),
-        ("player_game_stats", "league", ["GOJHL", "gojhl"]),
-        ("team_stats", "league", ["GOJHL", "gojhl"]),
-        ("games", "league", ["GOJHL", "gojhl"]),
-        ("broadcast_settings", "league", ["GOJHL", "gojhl"]),
+    # Tables that store abbreviations
+    ABBREV_TABLES = [
+        ("player_stats_history", "league"),
+        ("player_game_stats", "league"),
+        ("team_stats", "league"),
+        ("games", "league"),
+        ("broadcast_settings", "league"),
+        ("player_stats", "league"),
     ]
 
-    # Tables that store full names: old_value → Greater Ontario Hockey League
-    # Include abbreviation variants too (GOJHL/GOHL) since these tables use full names
-    FULLNAME_UPDATES = [
-        ("teams", "league", ["Greater Ontario Junior Hockey League", "GOHL", "GOJHL"]),
-        ("players", "current_league", ["Greater Ontario Junior Hockey League", "GOJHL", "GOHL"]),
+    # Tables that store full names
+    FULLNAME_TABLES = [
+        ("teams", "league"),
+        ("players", "current_league"),
     ]
 
     summary = {}
+    total_fixed = 0
 
-    for table, col, old_values in ABBREV_UPDATES:
+    for table, col in ABBREV_TABLES:
         table_results = {}
-        for old_val in old_values:
-            try:
-                result = conn.execute(
-                    f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
-                    (CANONICAL_ABBREV, old_val)
-                )
-                if result.rowcount > 0:
-                    table_results[old_val] = result.rowcount
-            except Exception as e:
-                table_results[old_val] = f"error: {str(e)}"
+        for canon_abbr, aliases in aliases_by_canon.items():
+            canonical = LEAGUE_CANONICAL[canon_abbr][0]  # abbreviation
+            for alias in aliases:
+                if alias == canonical.upper():
+                    continue  # Skip identity
+                try:
+                    # Try both the alias as-is and its original case
+                    for variant in {alias, alias.upper(), alias.lower(), alias.title()}:
+                        if variant == canonical:
+                            continue
+                        result = conn.execute(
+                            f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
+                            (canonical, variant)
+                        )
+                        if result.rowcount > 0:
+                            table_results[variant] = result.rowcount
+                            total_fixed += result.rowcount
+                except Exception as e:
+                    table_results[alias] = f"error: {str(e)}"
         if table_results:
             summary[f"{table}.{col}"] = table_results
 
-    for table, col, old_values in FULLNAME_UPDATES:
+    for table, col in FULLNAME_TABLES:
         table_results = {}
-        for old_val in old_values:
-            try:
-                result = conn.execute(
-                    f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
-                    (CANONICAL_FULL, old_val)
-                )
-                if result.rowcount > 0:
-                    table_results[old_val] = result.rowcount
-            except Exception as e:
-                table_results[old_val] = f"error: {str(e)}"
+        for canon_abbr, aliases in aliases_by_canon.items():
+            canonical_full = LEAGUE_CANONICAL[canon_abbr][1]  # full name
+            for alias in aliases:
+                if alias == canonical_full.upper():
+                    continue
+                try:
+                    for variant in {alias, alias.upper(), alias.lower(), alias.title()}:
+                        if variant == canonical_full:
+                            continue
+                        result = conn.execute(
+                            f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
+                            (canonical_full, variant)
+                        )
+                        if result.rowcount > 0:
+                            table_results[variant] = result.rowcount
+                            total_fixed += result.rowcount
+                except Exception as e:
+                    table_results[alias] = f"error: {str(e)}"
         if table_results:
             summary[f"{table}.{col}"] = table_results
 
@@ -20839,10 +20865,16 @@ async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token))
     conn.close()
 
     return {
-        "canonical_abbreviation": CANONICAL_ABBREV,
-        "canonical_full_name": CANONICAL_FULL,
+        "total_fixed": total_fixed,
         "updates": summary,
     }
+
+
+# Keep old endpoint as alias for backward compatibility
+@app.post("/admin/normalize-leagues-gohl")
+async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token)):
+    """Deprecated — redirects to generic /admin/normalize-leagues."""
+    return await admin_normalize_leagues(token_data)
 
 
 @app.get("/admin/sync-history")
@@ -31136,7 +31168,7 @@ def get_pro_analysis(entry_id: str, token_data: dict = Depends(verify_token)):
 # ── Agent / Advisor Module ────────────────────────────────────
 
 AGENT_LEAGUE_CONTEXTS = {
-    "gojhl": "GOJHL",
+    "gojhl": "GOHL",
     "ohl": "OHL",
     "ojhl": "OJHL",
     "whl": "WHL",
@@ -31832,8 +31864,8 @@ FAMILY_GUIDE_SEED = [
     # ── Pathway / College ──
     {"category": "pathway", "age_band": "u15", "title": "CHL Pathway — OHL, WHL, QMJHL",
      "content": "The CHL (Canadian Hockey League) includes the OHL, WHL, and QMJHL. Players are drafted by CHL teams starting at age 15 (varies by league). The OHL Priority Selection typically occurs in April. Scouts evaluate players throughout the U15/U16 season. Playing in the CHL means forfeiting NCAA eligibility (you can still play U SPORTS in Canada). Education packages are provided — tuition covered for each year played. What scouts look for: skating, compete level, hockey sense, physical maturity, character. Realistic timeline: most drafted players have been on elite pathways since U13/U14."},
-    {"category": "pathway", "age_band": "u15", "title": "Junior A Pathway — GOJHL, BCHL, AJHL",
-     "content": "Junior A leagues (GOJHL, BCHL, AJHL, OJHL, etc.) are an excellent development pathway that preserves NCAA eligibility. Players typically join at ages 16-20. How to get noticed: attend camps and combines, play in showcases, have your coach reach out to Jr. A contacts. Jr. A combines education with competitive hockey — many players attend college or university while playing. Typical player profile: skilled, competitive, developing physically. Don't burn bridges — maintain relationships with coaches, be a good teammate, keep your social media clean."},
+    {"category": "pathway", "age_band": "u15", "title": "Junior A Pathway — GOHL, BCHL, AJHL",
+     "content": "Junior A leagues (GOHL, BCHL, AJHL, OJHL, etc.) are an excellent development pathway that preserves NCAA eligibility. Players typically join at ages 16-20. How to get noticed: attend camps and combines, play in showcases, have your coach reach out to Jr. A contacts. Jr. A combines education with competitive hockey — many players attend college or university while playing. Typical player profile: skilled, competitive, developing physically. Don't burn bridges — maintain relationships with coaches, be a good teammate, keep your social media clean."},
     {"category": "pathway", "age_band": "u18", "title": "NCAA Hockey — Division I and Division III",
      "content": "NCAA hockey is a top destination for development-minded players. Division I: ~60 programs, highly competitive, full and partial scholarships available. Division III: ~80+ programs, no athletic scholarships but strong academics and financial aid. Eligibility rules: maintain amateur status, register with NCAA Eligibility Center, meet academic standards (SAT/ACT, GPA requirements). Recruiting timeline: coaches can contact you starting June 15 after sophomore year (rules may vary). Campus visits matter. Academic performance is critical — many programs weight character and grades heavily. The average NCAA D1 player commits between ages 17-19."},
     {"category": "pathway", "age_band": "u18", "title": "U SPORTS — Canadian University Hockey",
@@ -31854,7 +31886,7 @@ FAMILY_GUIDE_SEED = [
     {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — Game Terms",
      "content": "Forecheck: pressuring the other team in their own zone to win the puck back. Breakout: how a team moves the puck out of their defensive zone. Cycling: passing and moving in a circular pattern in the offensive zone to maintain possession. Transition: switching from defense to offense (or vice versa). PK (Penalty Kill): playing short-handed while a teammate serves a penalty. PP (Power Play): having an extra player on the ice due to an opponent's penalty. Faceoff: how play starts — two players compete for the puck at center ice or in the circles. Zone Entry: how a team moves the puck from the neutral zone into the offensive zone."},
     {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — League Terms",
-     "content": "Jr. A: top tier of junior hockey that preserves NCAA eligibility (GOJHL, BCHL, AJHL, OJHL). Jr. B: developmental junior hockey, more accessible, still competitive. AAA: highest level of minor hockey — rep/travel. AA: second tier of competitive minor hockey. A / Rep: competitive level below AAA/AA. House League: recreational hockey, all skill levels. GOJHL: Greater Ontario Junior Hockey League (Jr. A in Ontario). OHL: Ontario Hockey League (Major Junior, part of CHL). WHL: Western Hockey League (Major Junior, part of CHL). QMJHL: Quebec Major Junior Hockey League (part of CHL). NCAA: National Collegiate Athletic Association — US college hockey. U SPORTS: Canadian university athletics organization."},
+     "content": "Jr. A: top tier of junior hockey that preserves NCAA eligibility (GOHL, BCHL, AJHL, OJHL). Jr. B: developmental junior hockey, more accessible, still competitive. AAA: highest level of minor hockey — rep/travel. AA: second tier of competitive minor hockey. A / Rep: competitive level below AAA/AA. House League: recreational hockey, all skill levels. GOHL: Greater Ontario Hockey League (Jr. A in Ontario). OHL: Ontario Hockey League (Major Junior, part of CHL). WHL: Western Hockey League (Major Junior, part of CHL). QMJHL: Quebec Major Junior Hockey League (part of CHL). NCAA: National Collegiate Athletic Association — US college hockey. U SPORTS: Canadian university athletics organization."},
     {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — Development Terms",
      "content": "LTPD: Long-Term Player Development — Hockey Canada's framework for age-appropriate development. LTAD: Long-Term Athlete Development — the broader sports science framework LTPD is based on. ADM: American Development Model — USA Hockey's player development program. Birth Year: the year a player was born — determines age division. Overager: a player in the oldest year of their age group. Draft Eligible: a player old enough to be selected in a league's draft. Import Player: a player from outside the league's geographic region (rules vary by league). Age Out: when a player reaches the maximum age for their league."},
 ]
