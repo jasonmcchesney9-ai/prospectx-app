@@ -3506,12 +3506,8 @@ def seed_glossary_v2():
 
 
 def seed_templates():
-    """Seed the 19 report templates if they don't exist yet."""
+    """Seed the 19 core report templates. Per-type idempotent — skips types that already exist."""
     conn = get_db()
-    count = conn.execute("SELECT COUNT(*) FROM report_templates").fetchone()[0]
-    if count > 0:
-        conn.close()
-        return
 
     templates = [
         ("Pro/Amateur Skater Report", "pro_skater"),
@@ -3535,15 +3531,20 @@ def seed_templates():
         ("Goalie Tandem Optimization", "goalie_tandem"),
     ]
 
+    added = 0
     for name, rtype in templates:
-        conn.execute(
-            "INSERT INTO report_templates (id, template_name, report_type, is_global, prompt_text) VALUES (?, ?, ?, 1, ?)",
-            (str(uuid.uuid4()), name, rtype, f"You are an elite hockey scout. Generate a {name} for the given player."),
-        )
+        existing = conn.execute("SELECT 1 FROM report_templates WHERE report_type = ?", (rtype,)).fetchone()
+        if not existing:
+            conn.execute(
+                "INSERT INTO report_templates (id, template_name, report_type, is_global, prompt_text) VALUES (?, ?, ?, 1, ?)",
+                (str(uuid.uuid4()), name, rtype, f"You are an elite hockey scout. Generate a {name} for the given player."),
+            )
+            added += 1
 
-    conn.commit()
+    if added:
+        conn.commit()
+        logger.info("Seeded %d report templates", added)
     conn.close()
-    logger.info("Seeded %d report templates", len(templates))
 
 
 def seed_new_templates():
