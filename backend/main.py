@@ -23456,7 +23456,7 @@ async def analytics_team_rankings(
         JOIN player_stats ps ON p.id = ps.player_id
         WHERE {" AND ".join(where)}
         GROUP BY p.current_team
-        HAVING qualified_players >= 1
+        HAVING COUNT(DISTINCT CASE WHEN ps.gp >= 5 THEN p.id END) >= 1
         ORDER BY total_points DESC
     """, params).fetchall()
     conn.close()
@@ -23763,13 +23763,13 @@ def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: 
     5. CompeteMetric     — Physical engagement, discipline, toughness
     6. HockeyIQMetric    — Smart play indicators (efficiency, +/-, situation reads)
     """
-    gp = max(player_stats.get("gp", 1), 1)
-    g = player_stats.get("g", 0)
-    a = player_stats.get("a", 0)
-    p = player_stats.get("p", 0)
-    pm = player_stats.get("plus_minus", 0)
-    pim = player_stats.get("pim", 0)
-    shots = player_stats.get("sog", 0) or player_stats.get("shots", 0) or 0
+    gp = max(player_stats.get("gp") or 1, 1)
+    g = player_stats.get("g") or 0
+    a = player_stats.get("a") or 0
+    p = player_stats.get("p") or 0
+    pm = player_stats.get("plus_minus") or 0
+    pim = player_stats.get("pim") or 0
+    shots = player_stats.get("sog") or player_stats.get("shots") or 0
     shoot_pct = player_stats.get("shooting_pct", None)
 
     # Per-game rates
