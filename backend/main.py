@@ -20375,11 +20375,10 @@ async def admin_player_dedup_preview(token_data: dict = Depends(verify_token)):
     - Keeper: prefer hockeytech_id > clean team/league > earliest
     - Junk: classified by reason (schedule_garbage, old_league_name, hollow_record, etc.)
     """
+    # PXR 1D: Open to org admins (was email-gated to jason@prospectx.com)
+    _require_admin(token_data)
+
     conn = get_db()
-    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
-    if not user or user["email"] != "jason@prospectx.com":
-        conn.close()
-        raise HTTPException(status_code=403, detail="Admin only")
 
     # Find groups: same first_name + last_name + org_id + current_team with COUNT > 1
     dupe_groups = conn.execute("""
@@ -20530,11 +20529,10 @@ async def admin_player_dedup_execute(
     """
     import json as _json
 
+    # PXR 1D: Open to org admins (was email-gated to jason@prospectx.com)
+    _require_admin(token_data)
+
     conn = get_db()
-    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
-    if not user or user["email"] != "jason@prospectx.com":
-        conn.close()
-        raise HTTPException(status_code=403, detail="Admin only")
 
     user_id = token_data["user_id"]
     org_id = token_data["org_id"]
