@@ -567,7 +567,7 @@ function Dashboard() {
                           <span className="font-oswald text-navy/80 w-14 text-right">
                             {l.g}G-{l.a}A—<strong>{l.p}</strong>
                           </span>
-                          <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
+                          <span className="font-oswald text-teal font-bold w-8 text-right">{(l.ppg ?? 0).toFixed(2)}</span>
                         </Link>
                       ))}
                       <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
@@ -649,7 +649,7 @@ function Dashboard() {
                           <span className="font-oswald text-navy/80 w-14 text-right">
                             {l.g}G-{l.a}A—<strong>{l.p}</strong>
                           </span>
-                          <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
+                          <span className="font-oswald text-teal font-bold w-8 text-right">{(l.ppg ?? 0).toFixed(2)}</span>
                         </Link>
                       ))}
                     </div>
@@ -728,7 +728,7 @@ function Dashboard() {
                       <span className="font-oswald text-navy/80 w-14 text-right">
                         {l.g}G-{l.a}A—<strong>{l.p}</strong>
                       </span>
-                      <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
+                      <span className="font-oswald text-teal font-bold w-8 text-right">{(l.ppg ?? 0).toFixed(2)}</span>
                     </Link>
                   ))}
                   <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
@@ -863,7 +863,7 @@ function Dashboard() {
                       <span className="font-oswald text-navy/80 w-14 text-right">
                         {l.g}G-{l.a}A—<strong>{l.p}</strong>
                       </span>
-                      <span className="font-oswald text-teal font-bold w-8 text-right">{l.ppg.toFixed(2)}</span>
+                      <span className="font-oswald text-teal font-bold w-8 text-right">{(l.ppg ?? 0).toFixed(2)}</span>
                     </Link>
                   ))}
                   <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
@@ -1191,7 +1191,7 @@ function FamilyPlayerSpotlight({ scoringLeaders, loading }: { scoringLeaders: Sc
             <p className="text-[9px] text-muted uppercase">PTS</p>
           </div>
           <div>
-            <p className="text-lg font-oswald font-bold text-orange">{myPlayer.ppg.toFixed(2)}</p>
+            <p className="text-lg font-oswald font-bold text-orange">{(myPlayer.ppg ?? 0).toFixed(2)}</p>
             <p className="text-[9px] text-muted uppercase">P/G</p>
           </div>
         </div>

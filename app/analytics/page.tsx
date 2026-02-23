@@ -660,7 +660,7 @@ function PPGDistributionChart({ data }: { data: ScoringDistribution[] }) {
                     {p.position} &middot; {p.current_team || "—"}
                   </p>
                   <p className="mt-1">
-                    {p.g}G - {p.a}A - {p.p}P ({p.ppg.toFixed(2)} PPG)
+                    {p.g}G - {p.a}A - {p.p}P ({(p.ppg ?? 0).toFixed(2)} PPG)
                   </p>
                 </div>
               );
@@ -914,7 +914,7 @@ function LeaderboardTable({ leaders }: { leaders: ScoringLeader[] }) {
                   {l.p}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-teal font-medium">
-                  {l.ppg.toFixed(2)}
+                  {(l.ppg ?? 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums">
                   <span

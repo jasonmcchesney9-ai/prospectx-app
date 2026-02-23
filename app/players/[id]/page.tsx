@@ -3019,8 +3019,8 @@ function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: str
   const CIRCUMFERENCE = 2 * Math.PI * ARC_R;
 
   const tiles: { key: string; label: string; arcVal: number; display: string; color: string; IconComp: typeof Zap }[] = [
-    { key: "ppg", label: "PPG", arcVal: Math.min(99, Math.round((ppg / 1.5) * 99)), display: ppg.toFixed(2), color: "#18B3A6", IconComp: Zap },
-    { key: "gpg", label: "GPG", arcVal: Math.min(99, Math.round((gpg / 0.6) * 99)), display: gpg.toFixed(2), color: "#ef4444", IconComp: Target },
+    { key: "ppg", label: "PPG", arcVal: Math.min(99, Math.round((ppg / 1.5) * 99)), display: (ppg ?? 0).toFixed(2), color: "#18B3A6", IconComp: Zap },
+    { key: "gpg", label: "GPG", arcVal: Math.min(99, Math.round((gpg / 0.6) * 99)), display: (gpg ?? 0).toFixed(2), color: "#ef4444", IconComp: Target },
     { key: "shot", label: "SHOT", arcVal: shootPct !== null ? Math.min(99, Math.round((shootPct / 20) * 99)) : 0, display: shootPct !== null ? `${shootPct.toFixed(0)}%` : "—", color: "#3b82f6", IconComp: Activity },
     { key: "off", label: "OFF", arcVal: offenseIndex, display: `${offenseIndex}`, color: "#F36F21", IconComp: Flame },
     { key: "2way", label: "2WAY", arcVal: twoWayIndex, display: `${twoWayIndex}`, color: "#0F2A3D", IconComp: Shield },
