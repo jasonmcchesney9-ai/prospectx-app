@@ -19848,6 +19848,227 @@ async def admin_player_dupes(token_data: dict = Depends(verify_token)):
     }
 
 
+def _is_schedule_garbage(league: str) -> bool:
+    """Detect league values that are actually game schedule data, not real leagues."""
+    if not league:
+        return False
+    # Pattern: "Team A-Team B" or "Team A-Team B  DD-Mon-YYYY"
+    if "-" in league:
+        parts = league.split("-")
+        # If any part looks like a team name (more than 2 chars, not a known league abbreviation)
+        # and there are exactly 2-3 parts, it's likely a schedule matchup
+        if len(parts) >= 2 and all(len(p.strip()) > 2 for p in parts[:2]):
+            # Check it's not a known hyphenated league name
+            known_hyphenated = {"LHJMQ", "NOJHL", "KIJHL", "VIJHL"}
+            if league.upper().strip() not in known_hyphenated:
+                return True
+    # Contains a date pattern (e.g., "07-Feb-2026", "2026-02-07")
+    import re
+    if re.search(r'\d{1,2}-[A-Za-z]{3}-\d{4}', league) or re.search(r'\d{4}-\d{2}-\d{2}', league):
+        return True
+    return False
+
+
+def _is_old_league_name(league: str) -> bool:
+    """Detect deprecated league names that have been rebranded."""
+    if not league:
+        return False
+    old_names = {
+        "gojhl", "greater ontario junior hockey league",
+    }
+    return league.strip().lower() in old_names
+
+
+def _classify_junk_reason(row: dict) -> str:
+    """Classify why a non-keeper row is junk."""
+    league = row.get("current_league") or ""
+    team = row.get("current_team") or ""
+    ht_id = row.get("hockeytech_id")
+
+    if _is_schedule_garbage(league):
+        return "schedule_garbage"
+    if _is_old_league_name(league):
+        return "old_league_name"
+    if not team and not league and not ht_id:
+        return "hollow_record"
+    if not team and not ht_id:
+        return "no_team_no_ht"
+    if not ht_id and league:
+        return "no_ht_id"
+    return "duplicate"
+
+
+def _pick_keeper(rows: list[dict]) -> dict:
+    """Pick the keeper from a list of duplicate player rows.
+
+    Priority 1: Has hockeytech_id → earliest created_at → smallest id
+    Priority 2: Has non-null team + sane league → earliest created_at → smallest id
+    Priority 3: Fallback → earliest created_at → smallest id
+    """
+    def sort_key(r):
+        return (r.get("created_at") or "9999", r.get("id") or "zzzz")
+
+    # Priority 1: rows with hockeytech_id
+    ht_rows = [r for r in rows if r.get("hockeytech_id")]
+    if ht_rows:
+        return min(ht_rows, key=sort_key)
+
+    # Priority 2: rows with a real team and sane league
+    clean_rows = [r for r in rows
+                  if r.get("current_team")
+                  and not _is_schedule_garbage(r.get("current_league") or "")
+                  and not _is_old_league_name(r.get("current_league") or "")]
+    if clean_rows:
+        return min(clean_rows, key=sort_key)
+
+    # Priority 3: fallback
+    return min(rows, key=sort_key)
+
+
+@app.get("/admin/player-dedup-preview")
+async def admin_player_dedup_preview(token_data: dict = Depends(verify_token)):
+    """Preview player dedup merge plan — read-only, no changes made.
+
+    Applies the merge plan from deduplicate_players() docstring:
+    - Scope: same org_id + same current_team, COUNT > 1
+    - Keeper: prefer hockeytech_id > clean team/league > earliest
+    - Junk: classified by reason (schedule_garbage, old_league_name, hollow_record, etc.)
+    """
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    # Find groups: same first_name + last_name + org_id + current_team with COUNT > 1
+    dupe_groups = conn.execute("""
+        SELECT first_name, last_name, org_id, current_team, COUNT(*) as cnt
+        FROM players
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+          AND current_team IS NOT NULL AND current_team != ''
+        GROUP BY first_name, last_name, org_id, current_team
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC, last_name, first_name
+    """).fetchall()
+
+    # Also find groups where current_team is NULL but same name+org has multiple rows
+    null_team_groups = conn.execute("""
+        SELECT first_name, last_name, org_id, COUNT(*) as cnt
+        FROM players
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+          AND (current_team IS NULL OR current_team = '')
+        GROUP BY first_name, last_name, org_id
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC, last_name, first_name
+    """).fetchall()
+
+    preview = []
+    total_junk = 0
+
+    # Process same-team groups
+    for dg in dupe_groups:
+        fn = dg["first_name"] if hasattr(dg, 'keys') else dg[0]
+        ln = dg["last_name"] if hasattr(dg, 'keys') else dg[1]
+        org = dg["org_id"] if hasattr(dg, 'keys') else dg[2]
+        team = dg["current_team"] if hasattr(dg, 'keys') else dg[3]
+
+        rows = conn.execute("""
+            SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
+            FROM players
+            WHERE first_name = ? AND last_name = ? AND org_id = ?
+              AND current_team = ?
+              AND (is_deleted = 0 OR is_deleted IS NULL)
+            ORDER BY created_at
+        """, (fn, ln, org, team)).fetchall()
+        rows_dicts = [dict(r) for r in rows]
+        if len(rows_dicts) < 2:
+            continue
+
+        keeper = _pick_keeper(rows_dicts)
+        junk = []
+        for r in rows_dicts:
+            if r["id"] != keeper["id"]:
+                junk.append({
+                    "id": r["id"],
+                    "current_team": r.get("current_team"),
+                    "current_league": r.get("current_league"),
+                    "hockeytech_id": r.get("hockeytech_id"),
+                    "created_at": r.get("created_at"),
+                    "reason": _classify_junk_reason(r),
+                })
+                total_junk += 1
+
+        preview.append({
+            "first_name": fn,
+            "last_name": ln,
+            "org_id": org,
+            "current_team": team,
+            "keeper": {
+                "id": keeper["id"],
+                "current_team": keeper.get("current_team"),
+                "current_league": keeper.get("current_league"),
+                "hockeytech_id": keeper.get("hockeytech_id"),
+                "created_at": keeper.get("created_at"),
+            },
+            "junk": junk,
+        })
+
+    # Process null-team groups (all rows have no team — likely all junk except maybe one)
+    for ntg in null_team_groups:
+        fn = ntg["first_name"] if hasattr(ntg, 'keys') else ntg[0]
+        ln = ntg["last_name"] if hasattr(ntg, 'keys') else ntg[1]
+        org = ntg["org_id"] if hasattr(ntg, 'keys') else ntg[2]
+
+        rows = conn.execute("""
+            SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
+            FROM players
+            WHERE first_name = ? AND last_name = ? AND org_id = ?
+              AND (current_team IS NULL OR current_team = '')
+              AND (is_deleted = 0 OR is_deleted IS NULL)
+            ORDER BY created_at
+        """, (fn, ln, org)).fetchall()
+        rows_dicts = [dict(r) for r in rows]
+        if len(rows_dicts) < 2:
+            continue
+
+        keeper = _pick_keeper(rows_dicts)
+        junk = []
+        for r in rows_dicts:
+            if r["id"] != keeper["id"]:
+                junk.append({
+                    "id": r["id"],
+                    "current_team": r.get("current_team"),
+                    "current_league": r.get("current_league"),
+                    "hockeytech_id": r.get("hockeytech_id"),
+                    "created_at": r.get("created_at"),
+                    "reason": _classify_junk_reason(r),
+                })
+                total_junk += 1
+
+        preview.append({
+            "first_name": fn,
+            "last_name": ln,
+            "org_id": org,
+            "current_team": None,
+            "keeper": {
+                "id": keeper["id"],
+                "current_team": keeper.get("current_team"),
+                "current_league": keeper.get("current_league"),
+                "hockeytech_id": keeper.get("hockeytech_id"),
+                "created_at": keeper.get("created_at"),
+            },
+            "junk": junk,
+        })
+
+    conn.close()
+    return {
+        "preview_groups": len(preview),
+        "total_junk_rows": total_junk,
+        "note": "DRY RUN — no changes made. Review keeper/junk classification before executing.",
+        "groups": preview,
+    }
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
