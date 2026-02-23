@@ -595,17 +595,11 @@ function PxrOpsTab() {
         <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle2 size={16} />
-            <span className="font-semibold">Fixed {nlResult.total_fixed} rows</span>
+            <span className="font-semibold">Normalize Leagues Complete</span>
           </div>
-          {nlResult.updates && Object.keys(nlResult.updates).length > 0 && (
-            <div className="mt-2 text-xs space-y-1">
-              {Object.entries(nlResult.updates || {}).map(([league, count]) => (
-                <div key={league} className="text-sm">
-                  {league}: {count as number} rows fixed
-                </div>
-              ))}
-            </div>
-          )}
+          <pre className="text-xs text-left mt-2 bg-gray-50 p-2 rounded overflow-auto">
+            {JSON.stringify(nlResult, null, 2)}
+          </pre>
         </div>
       )}
 
