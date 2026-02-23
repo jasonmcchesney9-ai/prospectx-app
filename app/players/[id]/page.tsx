@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowRightLeft,
   FileText,
   Upload,
   Zap,
@@ -205,6 +206,15 @@ export default function PlayerDetailPage() {
   const [editRefTeams, setEditRefTeams] = useState<TeamReference[]>([]);
   const [customLeague, setCustomLeague] = useState(false);
   const [customTeam, setCustomTeam] = useState(false);
+
+  // Transfer modal
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferLeague, setTransferLeague] = useState("");
+  const [transferTeam, setTransferTeam] = useState("");
+  const [transferNote, setTransferNote] = useState("");
+  const [transferCustomLeague, setTransferCustomLeague] = useState(false);
+  const [transferCustomTeam, setTransferCustomTeam] = useState(false);
+  const [submittingTransfer, setSubmittingTransfer] = useState(false);
 
   // CSV upload
   const [uploading, setUploading] = useState(false);
@@ -464,7 +474,7 @@ export default function PlayerDetailPage() {
 
   // Load reference data for league/team dropdowns when edit opens
   useEffect(() => {
-    if (!editingBio || editLeagues.length > 0) return;
+    if ((!editingBio && !showTransferModal) || editLeagues.length > 0) return;
     Promise.all([
       api.get<League[]>("/leagues"),
       api.get<TeamReference[]>("/teams/reference"),
@@ -479,11 +489,15 @@ export default function PlayerDetailPage() {
         if (player.current_team && !teamInList) setCustomTeam(true);
       }
     }).catch(() => { /* Non-critical — fallback to text inputs */ });
-  }, [editingBio]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editingBio, showTransferModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter teams by selected league
   const filteredEditTeams = editFields.current_league
     ? editRefTeams.filter((t) => t.league === editFields.current_league)
+    : editRefTeams;
+
+  const filteredTransferTeams = transferLeague
+    ? editRefTeams.filter((t) => t.league === transferLeague)
     : editRefTeams;
 
   const handleSaveEdit = async () => {
@@ -518,6 +532,32 @@ export default function PlayerDetailPage() {
       setEditError(msg);
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!transferTeam.trim()) return;
+    setSubmittingTransfer(true);
+    try {
+      await api.post(`/players/${playerId}/transfer`, {
+        new_team: transferTeam.trim(),
+        new_league: transferLeague.trim() || null,
+        note: transferNote.trim() || null,
+      });
+      const { data } = await api.get<Player>(`/players/${playerId}`);
+      setPlayer(data);
+      setShowTransferModal(false);
+      setTransferTeam("");
+      setTransferLeague("");
+      setTransferNote("");
+      setTransferCustomLeague(false);
+      setTransferCustomTeam(false);
+      toast.success(`Transferred to ${transferTeam.trim()}`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Transfer failed";
+      toast.error(msg);
+    } finally {
+      setSubmittingTransfer(false);
     }
   };
 
@@ -1156,6 +1196,21 @@ export default function PlayerDetailPage() {
                       </span>
                     </div>
                   )}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => {
+                        setTransferLeague(player.current_league || "");
+                        setTransferTeam("");
+                        setTransferNote("");
+                        setTransferCustomLeague(false);
+                        setTransferCustomTeam(false);
+                        setShowTransferModal(true);
+                      }}
+                      className="text-[10px] text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+                    >
+                      <ArrowRightLeft size={10} /> Change Team
+                    </button>
+                  </div>
                   {player.league_tier && player.league_tier !== "Unknown" && (
                     <div className="flex justify-between">
                       <span className="text-muted">League Tier</span>
@@ -2810,6 +2865,126 @@ export default function PlayerDetailPage() {
             <p>Exported {new Date().toLocaleDateString()}</p>
           </div>
         </div>
+
+        {/* Transfer Modal */}
+        {showTransferModal && player && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center no-print" onClick={() => setShowTransferModal(false)}>
+            <div className="bg-white rounded-xl border border-border shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-oswald uppercase tracking-wider text-navy mb-1">Change Team</h3>
+              <p className="text-xs text-muted mb-4">
+                Transfer <span className="font-semibold">{player.first_name} {player.last_name}</span> from{" "}
+                <span className="font-semibold">{player.current_team || "no team"}</span>
+              </p>
+
+              {/* League */}
+              <div className="mb-3">
+                <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">New League</label>
+                {transferCustomLeague ? (
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={transferLeague}
+                      onChange={(e) => setTransferLeague(e.target.value)}
+                      placeholder="Enter league name"
+                      className="flex-1 border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    />
+                    <button type="button" onClick={() => { setTransferCustomLeague(false); setTransferLeague(player.current_league || ""); }} className="text-[10px] text-teal hover:underline px-1 shrink-0">List</button>
+                  </div>
+                ) : (
+                  <select
+                    value={transferLeague}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setTransferCustomLeague(true);
+                        setTransferLeague("");
+                        setTransferCustomTeam(true);
+                        setTransferTeam("");
+                      } else {
+                        setTransferLeague(e.target.value);
+                        setTransferTeam("");
+                        setTransferCustomTeam(false);
+                      }
+                    }}
+                    className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                  >
+                    <option value="">Select league...</option>
+                    {editLeagues.map((lg) => (
+                      <option key={lg.id} value={lg.name}>{lg.name}</option>
+                    ))}
+                    <option value="__custom__">Custom...</option>
+                  </select>
+                )}
+              </div>
+
+              {/* Team */}
+              <div className="mb-3">
+                <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">New Team</label>
+                {transferCustomTeam ? (
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={transferTeam}
+                      onChange={(e) => setTransferTeam(e.target.value)}
+                      placeholder="Enter team name"
+                      className="flex-1 border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    />
+                    {!transferCustomLeague && (
+                      <button type="button" onClick={() => { setTransferCustomTeam(false); setTransferTeam(""); }} className="text-[10px] text-teal hover:underline px-1 shrink-0">List</button>
+                    )}
+                  </div>
+                ) : (
+                  <select
+                    value={transferTeam}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setTransferCustomTeam(true);
+                        setTransferTeam("");
+                      } else {
+                        setTransferTeam(e.target.value);
+                      }
+                    }}
+                    className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                  >
+                    <option value="">Select team...</option>
+                    {filteredTransferTeams.map((t) => (
+                      <option key={t.id} value={t.name}>{t.name}{t.city ? ` (${t.city})` : ""}</option>
+                    ))}
+                    <option value="__custom__">Custom...</option>
+                  </select>
+                )}
+              </div>
+
+              {/* Note */}
+              <div className="mb-4">
+                <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Note (optional)</label>
+                <input
+                  type="text"
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder="e.g. Mid-season trade, called up from Jr. B"
+                  className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowTransferModal(false)}
+                  className="flex-1 py-2 border border-border rounded text-sm font-oswald uppercase tracking-wider text-muted hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTransfer}
+                  disabled={submittingTransfer || !transferTeam.trim()}
+                  className="flex-1 py-2 bg-teal text-white rounded text-sm font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {submittingTransfer ? <><Loader2 size={14} className="animate-spin" /> Transferring...</> : <><ArrowRightLeft size={14} /> Transfer</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </ProtectedRoute>
   );

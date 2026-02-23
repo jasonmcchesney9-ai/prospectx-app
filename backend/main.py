@@ -2057,8 +2057,26 @@ def init_db():
         )
     """)
 
+    # ── Player team history (transfer audit trail) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_team_history (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            old_team TEXT,
+            old_league TEXT,
+            new_team TEXT NOT NULL,
+            new_league TEXT,
+            note TEXT,
+            changed_by TEXT NOT NULL,
+            changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+
     # Indexes for new tables
     for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_team_history_player ON player_team_history(player_id)",
         "CREATE INDEX IF NOT EXISTS idx_corrections_player ON player_corrections(player_id)",
         "CREATE INDEX IF NOT EXISTS idx_corrections_org ON player_corrections(org_id, status)",
         "CREATE INDEX IF NOT EXISTS idx_corrections_user ON player_corrections(user_id)",
@@ -10644,6 +10662,86 @@ async def patch_player(
     row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
     conn.close()
     return dict(row)
+
+
+@app.post("/players/{player_id}/transfer")
+async def transfer_player(
+    player_id: str,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Transfer a player to a new team. Records audit trail in player_team_history.
+
+    Body: { "new_team": str, "new_league": str|null, "note": str|null }
+    """
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    new_team = (body.get("new_team") or "").strip()
+    new_league = (body.get("new_league") or "").strip() or None
+    note = (body.get("note") or "").strip() or None
+
+    if not new_team:
+        raise HTTPException(status_code=400, detail="new_team is required")
+
+    conn = get_db()
+    player = conn.execute(
+        "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (player_id, org_id),
+    ).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    old_team = player["current_team"]
+    old_league = player["current_league"]
+
+    if new_team == old_team and (new_league or old_league) == old_league:
+        conn.close()
+        raise HTTPException(status_code=400, detail="New team/league is the same as current")
+
+    # Update player record
+    league_tier = _get_league_tier(new_league) if new_league else player["league_tier"]
+    conn.execute("""
+        UPDATE players
+        SET current_team = ?, current_league = ?, league_tier = ?, updated_at = ?
+        WHERE id = ?
+    """, (new_team, new_league or old_league, league_tier, now_iso(), player_id))
+
+    # Insert audit record
+    transfer_id = gen_id()
+    conn.execute("""
+        INSERT INTO player_team_history (id, player_id, org_id, old_team, old_league, new_team, new_league, note, changed_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (transfer_id, player_id, org_id, old_team, old_league, new_team, new_league or old_league, note, user_id))
+
+    conn.commit()
+    updated = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
+    conn.close()
+
+    return {
+        "player": _player_from_row(updated),
+        "transfer_id": transfer_id,
+        "old_team": old_team,
+        "old_league": old_league,
+        "new_team": new_team,
+        "new_league": new_league or old_league,
+    }
+
+
+@app.get("/players/{player_id}/transfers")
+async def get_player_transfers(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get transfer history for a player."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT h.*, u.first_name as changed_by_name, u.last_name as changed_by_last
+        FROM player_team_history h
+        LEFT JOIN users u ON h.changed_by = u.id
+        WHERE h.player_id = ? AND h.org_id = ?
+        ORDER BY h.changed_at DESC
+    """, (player_id, org_id)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 @app.put("/players/{player_id}", response_model=PlayerResponse)
