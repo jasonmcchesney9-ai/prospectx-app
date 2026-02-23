@@ -18803,6 +18803,67 @@ async def pxr_reference_systems():
     return {"systems": systems}
 
 
+def _filter_glossary_for_context(user_message: str, all_terms: list, max_results: int = 20) -> str:
+    """Keyword-match user message against glossary terms, return compact JSON of matches."""
+    if not all_terms:
+        return ""
+    msg_lower = user_message.lower()
+    msg_words = set(msg_lower.split())
+
+    matched = []
+    for t in all_terms:
+        term_lower = t["term"].lower()
+        aliases = t.get("aliases", [])
+        # Direct term match (whole word or substring)
+        if term_lower in msg_lower:
+            matched.append(t)
+            continue
+        # Check aliases
+        if any(a.lower() in msg_lower for a in aliases if a):
+            matched.append(t)
+            continue
+        # Word overlap with term name
+        term_words = set(term_lower.split())
+        if msg_words & term_words:
+            matched.append(t)
+
+    if not matched:
+        return ""  # No glossary injection — saves tokens
+    matched = matched[:max_results]
+    compact = [{"term": t["term"], "definition": t["definition"],
+                "category": t.get("category", "")}
+               for t in matched]
+    return "\nGlossary context:\n" + json.dumps(compact, default=str)
+
+
+@app.get("/pxr/reference/glossary")
+async def pxr_reference_glossary(category: Optional[str] = None):
+    """Return hockey terminology glossary (global reference data, no auth)."""
+    conn = get_db()
+    if category:
+        rows = conn.execute("SELECT * FROM hockey_terms WHERE category = ? ORDER BY term", (category,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM hockey_terms ORDER BY category, term").fetchall()
+    conn.close()
+    terms = []
+    for r in rows:
+        aliases = []
+        if r["aliases"]:
+            try:
+                aliases = json.loads(r["aliases"]) if isinstance(r["aliases"], str) else r["aliases"]
+            except Exception:
+                aliases = []
+        terms.append({
+            "term_id": r["id"],
+            "term": r["term"],
+            "category": r["category"],
+            "definition": r["definition"],
+            "aliases": aliases if isinstance(aliases, list) else [],
+            "usage_notes": r["usage_context"] or "",
+        })
+    return {"terms": terms}
+
+
 @app.get("/hockey-os/team-systems")
 async def list_team_systems(token_data: dict = Depends(verify_token)):
     """Get all team system profiles for the org."""
@@ -27705,9 +27766,24 @@ async def send_bench_talk_message(
                 "weaknesses": _parse_multi_value(r["weaknesses"]),
             } for r in sys_rows]
             systems_context_str = _filter_systems_for_context(req.message, all_systems, max_results=10)
+            # Glossary: keyword-match user message, inject relevant terms
+            glossary_rows = pxr_conn.execute("SELECT * FROM hockey_terms ORDER BY category, term").fetchall()
+            all_terms = []
+            for gr in glossary_rows:
+                aliases = []
+                if gr["aliases"]:
+                    try:
+                        aliases = json.loads(gr["aliases"]) if isinstance(gr["aliases"], str) else gr["aliases"]
+                    except Exception:
+                        aliases = []
+                all_terms.append({
+                    "term": gr["term"], "category": gr["category"] or "",
+                    "definition": gr["definition"] or "", "aliases": aliases,
+                })
+            glossary_context_str = _filter_glossary_for_context(req.message, all_terms, max_results=20)
             pxr_conn.close()
         except Exception as e:
-            logger.warning("PXR systems context injection failed: %s", e)
+            logger.warning("PXR reference context injection failed: %s", e)
 
         system_prompt = BENCH_TALK_SYSTEM_PROMPT.format(
             current_date=datetime.now().strftime("%B %d, %Y"),
