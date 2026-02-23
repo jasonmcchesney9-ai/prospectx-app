@@ -20419,6 +20419,80 @@ async def admin_league_aliases(token_data: dict = Depends(verify_token)):
     return result
 
 
+@app.post("/admin/normalize-leagues-gohl")
+async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token)):
+    """Normalize all GOJHL / Greater Ontario Junior Hockey League strings
+    to their canonical GOHL equivalents.
+
+    Abbreviation tables: GOJHL|gojhl → GOHL
+    Full-name tables:    Greater Ontario Junior Hockey League → Greater Ontario Hockey League
+    """
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    CANONICAL_ABBREV = "GOHL"
+    CANONICAL_FULL = "Greater Ontario Hockey League"
+
+    # Tables that store abbreviations: old_value → GOHL
+    ABBREV_UPDATES = [
+        ("player_stats_history", "league", ["GOJHL", "gojhl"]),
+        ("player_game_stats", "league", ["GOJHL", "gojhl"]),
+        ("team_stats", "league", ["GOJHL", "gojhl"]),
+        ("games", "league", ["GOJHL", "gojhl"]),
+        ("broadcast_settings", "league", ["GOJHL", "gojhl"]),
+    ]
+
+    # Tables that store full names: old_value → Greater Ontario Hockey League
+    FULLNAME_UPDATES = [
+        ("teams", "league", ["Greater Ontario Junior Hockey League"]),
+        ("players", "current_league", ["Greater Ontario Junior Hockey League"]),
+    ]
+
+    summary = {}
+
+    for table, col, old_values in ABBREV_UPDATES:
+        table_results = {}
+        for old_val in old_values:
+            try:
+                result = conn.execute(
+                    f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
+                    (CANONICAL_ABBREV, old_val)
+                )
+                if result.rowcount > 0:
+                    table_results[old_val] = result.rowcount
+            except Exception as e:
+                table_results[old_val] = f"error: {str(e)}"
+        if table_results:
+            summary[f"{table}.{col}"] = table_results
+
+    for table, col, old_values in FULLNAME_UPDATES:
+        table_results = {}
+        for old_val in old_values:
+            try:
+                result = conn.execute(
+                    f"UPDATE {table} SET {col} = ? WHERE {col} = ?",
+                    (CANONICAL_FULL, old_val)
+                )
+                if result.rowcount > 0:
+                    table_results[old_val] = result.rowcount
+            except Exception as e:
+                table_results[old_val] = f"error: {str(e)}"
+        if table_results:
+            summary[f"{table}.{col}"] = table_results
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "canonical_abbreviation": CANONICAL_ABBREV,
+        "canonical_full_name": CANONICAL_FULL,
+        "updates": summary,
+    }
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
