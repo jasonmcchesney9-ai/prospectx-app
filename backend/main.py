@@ -24075,9 +24075,9 @@ async def bulk_assign_league(
     token_data: dict = Depends(verify_token),
 ):
     """Assign league to players based on their team membership.
-    Uses the reference teams table to look up the league for each team.
+    Uses global + org-specific teams to look up the league for each team.
 
-    Body: { "league": "GOHL" }  — optional, if not provided uses reference_teams table
+    Body: { "league": "GOHL" }  — optional, if not provided uses teams table
     """
     org_id = token_data["org_id"]
     league = request.get("league")
@@ -24091,9 +24091,10 @@ async def bulk_assign_league(
         )
         updated = result.rowcount
     else:
-        # Smart: look up league from reference_teams table by team name
+        # Smart: look up league from teams table (global + org) by team name
         ref_teams = conn.execute(
-            "SELECT name, league FROM reference_teams"
+            "SELECT name, league FROM teams WHERE org_id = '__global__' OR org_id = ?",
+            (org_id,)
         ).fetchall()
         team_league_map = {r["name"].lower(): r["league"] for r in ref_teams}
 
@@ -24133,13 +24134,16 @@ async def auto_assign_teams_from_stats(
 
     For each player, finds the most recent stat row that has a data_source containing
     team information, and updates the player's current_team accordingly.
-    Also uses the reference_teams table to assign leagues.
+    Also uses the teams table (global + org) to assign leagues.
     """
     org_id = token_data["org_id"]
     conn = get_db()
 
-    # Build team-to-league lookup from reference teams
-    ref_teams = conn.execute("SELECT name, league FROM reference_teams").fetchall()
+    # Build team-to-league lookup from global + org teams
+    ref_teams = conn.execute(
+        "SELECT name, league FROM teams WHERE org_id = '__global__' OR org_id = ?",
+        (org_id,)
+    ).fetchall()
     team_league_map = {}
     for r in ref_teams:
         team_league_map[r["name"].lower()] = r["league"]
