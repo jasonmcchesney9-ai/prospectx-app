@@ -10277,7 +10277,7 @@ async def list_players(
             where_clauses.append("ps.p >= ?")
             params.append(min_points)
         if min_ppg:
-            where_clauses.append("ps.gp > 0 AND (CAST(ps.p AS REAL) / ps.gp) >= ?")
+            where_clauses.append("ps.gp > 0 AND (CAST(ps.p AS NUMERIC) / ps.gp) >= ?")
             params.append(min_ppg)
         if overall_grade:
             where_clauses.append("pi.overall_grade = ?")
@@ -10290,7 +10290,7 @@ async def list_players(
         sort_map = {
             "name": "p.last_name", "last_name": "p.last_name", "first_name": "p.first_name",
             "gp": "ps.gp", "g": "ps.g", "goals": "ps.g", "a": "ps.a", "assists": "ps.a",
-            "p": "ps.p", "points": "ps.p", "ppg": "CAST(ps.p AS REAL) / NULLIF(ps.gp, 0)",
+            "p": "ps.p", "points": "ps.p", "ppg": "CAST(ps.p AS NUMERIC) / NULLIF(ps.gp, 0)",
             "grade": "pi.overall_grade", "overall_grade": "pi.overall_grade",
             "team": "p.current_team", "position": "p.position",
         }
@@ -10456,7 +10456,7 @@ async def list_player_cards(
         where_clauses.append("ps.p >= ?")
         params.append(min_points)
     if min_ppg:
-        where_clauses.append("ps.gp > 0 AND (CAST(ps.p AS REAL) / ps.gp) >= ?")
+        where_clauses.append("ps.gp > 0 AND (CAST(ps.p AS NUMERIC) / ps.gp) >= ?")
         params.append(min_ppg)
     # Intelligence-based filters
     if overall_grade:
@@ -10474,7 +10474,7 @@ async def list_player_cards(
         "gp": "COALESCE(ps.gp, 0)", "g": "COALESCE(ps.g, 0)", "goals": "COALESCE(ps.g, 0)",
         "a": "COALESCE(ps.a, 0)", "assists": "COALESCE(ps.a, 0)",
         "p": "COALESCE(ps.p, 0)", "points": "COALESCE(ps.p, 0)",
-        "ppg": "CASE WHEN COALESCE(ps.gp, 0) > 0 THEN CAST(ps.p AS REAL) / ps.gp ELSE 0 END",
+        "ppg": "CASE WHEN COALESCE(ps.gp, 0) > 0 THEN CAST(ps.p AS NUMERIC) / ps.gp ELSE 0 END",
         "grade": "pi.overall_grade", "overall_grade": "pi.overall_grade",
         "team": "p.current_team", "position": "p.position",
     }
@@ -10510,7 +10510,7 @@ async def list_player_cards(
                    SUM(gp) AS gp, SUM(g) AS g, SUM(a) AS a, SUM(p) AS p,
                    SUM(plus_minus) AS plus_minus, SUM(pim) AS pim,
                    SUM(COALESCE(sog, 0)) AS sog,
-                   CASE WHEN SUM(COALESCE(sog, 0)) > 0 THEN CAST(SUM(g) AS REAL) / SUM(sog) * 100 ELSE NULL END AS shooting_pct
+                   CASE WHEN SUM(COALESCE(sog, 0)) > 0 THEN CAST(SUM(g) AS NUMERIC) / SUM(sog) * 100 ELSE NULL END AS shooting_pct
             FROM player_stats
             WHERE stat_type = 'season'
             GROUP BY player_id
@@ -10528,7 +10528,7 @@ async def list_player_cards(
         SELECT ps.player_id, p.position,
                ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
                COALESCE(ps.sog, 0) AS sog,
-               CASE WHEN COALESCE(ps.sog, 0) > 0 THEN CAST(ps.g AS REAL) / ps.sog * 100 ELSE NULL END AS shooting_pct
+               CASE WHEN COALESCE(ps.sog, 0) > 0 THEN CAST(ps.g AS NUMERIC) / ps.sog * 100 ELSE NULL END AS shooting_pct
         FROM player_stats ps
         JOIN players p ON ps.player_id = p.id
         WHERE p.org_id = ? AND ps.stat_type = 'season' AND ps.gp >= 5
@@ -17242,7 +17242,7 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
                 team_aggs = conn.execute("""
                     SELECT p.current_team, COUNT(DISTINCT p.id) as roster_size,
                            SUM(ps.g) as total_goals, SUM(ps.a) as total_assists, SUM(ps.p) as total_points,
-                           AVG(CASE WHEN ps.gp > 0 THEN CAST(ps.p AS FLOAT) / ps.gp END) as avg_ppg,
+                           AVG(CASE WHEN ps.gp > 0 THEN CAST(ps.p AS NUMERIC) / ps.gp END) as avg_ppg,
                            AVG(ps.plus_minus) as avg_pm
                     FROM players p
                     JOIN player_stats ps ON p.id = ps.player_id
@@ -23255,9 +23255,9 @@ async def analytics_scoring_leaders(
     rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
                ps.season, ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
-               ROUND(CAST(ps.p AS REAL) / ps.gp, 2) as ppg,
-               ROUND(CAST(ps.g AS REAL) / ps.gp, 2) as gpg,
-               ROUND(CAST(ps.a AS REAL) / ps.gp, 2) as apg
+               ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) as ppg,
+               ROUND(CAST(ps.g AS NUMERIC) / ps.gp, 2) as gpg,
+               ROUND(CAST(ps.a AS NUMERIC) / ps.gp, 2) as apg
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
         WHERE {" AND ".join(where)}
@@ -23327,8 +23327,8 @@ async def analytics_team_rankings(
                SUM(ps.g) as total_goals,
                SUM(ps.a) as total_assists,
                SUM(ps.p) as total_points,
-               ROUND(AVG(CASE WHEN ps.gp >= 5 THEN CAST(ps.p AS REAL) / ps.gp END), 2) as avg_ppg,
-               ROUND(AVG(ps.plus_minus), 1) as avg_plus_minus,
+               ROUND(AVG(CASE WHEN ps.gp >= 5 THEN CAST(ps.p AS NUMERIC) / ps.gp END), 2) as avg_ppg,
+               ROUND(CAST(AVG(ps.plus_minus) AS NUMERIC), 1) as avg_plus_minus,
                SUM(ps.pim) as total_pim
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
@@ -23366,8 +23366,8 @@ async def analytics_player_compare(
         # Best season stats
         stats = conn.execute("""
             SELECT season, gp, g, a, p, plus_minus, pim,
-                   ROUND(CAST(p AS REAL) / NULLIF(gp, 0), 2) as ppg,
-                   ROUND(CAST(g AS REAL) / NULLIF(gp, 0), 2) as gpg,
+                   ROUND(CAST(p AS NUMERIC) / NULLIF(gp, 0), 2) as ppg,
+                   ROUND(CAST(g AS NUMERIC) / NULLIF(gp, 0), 2) as gpg,
                    shooting_pct
             FROM player_stats WHERE player_id=? AND gp >= 5
             ORDER BY p DESC LIMIT 1
@@ -23421,17 +23421,17 @@ async def analytics_position_stats(
     rows = conn.execute(f"""
         SELECT p.position,
                COUNT(DISTINCT p.id) as player_count,
-               ROUND(AVG(ps.gp), 1) as avg_gp,
-               ROUND(AVG(ps.g), 1) as avg_g,
-               ROUND(AVG(ps.a), 1) as avg_a,
-               ROUND(AVG(ps.p), 1) as avg_p,
-               ROUND(AVG(CAST(ps.p AS REAL) / NULLIF(ps.gp, 0)), 2) as avg_ppg,
-               ROUND(AVG(CAST(ps.g AS REAL) / NULLIF(ps.gp, 0)), 2) as avg_gpg,
-               ROUND(AVG(ps.plus_minus), 1) as avg_plus_minus,
-               ROUND(AVG(ps.pim), 1) as avg_pim,
+               ROUND(CAST(AVG(ps.gp) AS NUMERIC), 1) as avg_gp,
+               ROUND(CAST(AVG(ps.g) AS NUMERIC), 1) as avg_g,
+               ROUND(CAST(AVG(ps.a) AS NUMERIC), 1) as avg_a,
+               ROUND(CAST(AVG(ps.p) AS NUMERIC), 1) as avg_p,
+               ROUND(AVG(CAST(ps.p AS NUMERIC) / NULLIF(ps.gp, 0)), 2) as avg_ppg,
+               ROUND(AVG(CAST(ps.g AS NUMERIC) / NULLIF(ps.gp, 0)), 2) as avg_gpg,
+               ROUND(CAST(AVG(ps.plus_minus) AS NUMERIC), 1) as avg_plus_minus,
+               ROUND(CAST(AVG(ps.pim) AS NUMERIC), 1) as avg_pim,
                MAX(ps.g) as max_goals,
                MAX(ps.p) as max_points,
-               MAX(CAST(ps.p AS REAL) / NULLIF(ps.gp, 0)) as max_ppg
+               MAX(CAST(ps.p AS NUMERIC) / NULLIF(ps.gp, 0)) as max_ppg
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
         WHERE {" AND ".join(where)}
@@ -23496,7 +23496,7 @@ async def analytics_archetype_breakdown(
 
     rows = conn.execute(f"""
         SELECT pi.archetype, COUNT(DISTINCT pi.player_id) as count,
-               ROUND(AVG(pi.archetype_confidence), 2) as avg_confidence
+               ROUND(CAST(AVG(pi.archetype_confidence) AS NUMERIC), 2) as avg_confidence
         FROM player_intelligence pi
         JOIN players p ON p.id = pi.player_id
         WHERE {" AND ".join(where)}
@@ -23534,8 +23534,8 @@ async def analytics_scoring_distribution(
     rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
                ps.gp, ps.g, ps.a, ps.p, ps.plus_minus,
-               ROUND(CAST(ps.p AS REAL) / ps.gp, 3) as ppg,
-               ROUND(CAST(ps.g AS REAL) / ps.gp, 3) as gpg
+               ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 3) as ppg,
+               ROUND(CAST(ps.g AS NUMERIC) / ps.gp, 3) as gpg
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
         WHERE {" AND ".join(where)}
@@ -26453,7 +26453,7 @@ def _pt_query_players(params: dict, org_id: str) -> tuple[dict, dict]:
                    p.archetype, p.image_url,
                    ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
                    ps.shots, ps.shooting_pct,
-                   CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS REAL) / ps.gp, 2) ELSE 0 END as ppg
+                   CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) ELSE 0 END as ppg
             FROM players p
             LEFT JOIN player_stats ps ON p.id = ps.player_id AND ps.stat_type = 'season'
             WHERE p.org_id = ?
@@ -26989,14 +26989,14 @@ def _pt_league_leaders(params: dict, org_id: str) -> tuple[dict, dict]:
             "goals": "ps.g",
             "assists": "ps.a",
             "points": "ps.p",
-            "ppg": "CASE WHEN ps.gp > 0 THEN CAST(ps.p AS REAL) / ps.gp ELSE 0 END",
+            "ppg": "CASE WHEN ps.gp > 0 THEN CAST(ps.p AS NUMERIC) / ps.gp ELSE 0 END",
         }
         order_col = stat_col_map.get(stat, "ps.p")
 
         query = f"""
             SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
                    ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
-                   CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS REAL) / ps.gp, 2) ELSE 0 END as ppg
+                   CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) ELSE 0 END as ppg
             FROM players p
             JOIN player_stats ps ON p.id = ps.player_id AND ps.stat_type = 'season'
             WHERE p.org_id = ? AND p.current_league LIKE ?
@@ -29043,7 +29043,7 @@ async def get_bench_talk_context(req: BenchTalkContextRequest, token_data: dict 
                        p.archetype, p.image_url, p.birth_year, p.age_group,
                        p.draft_eligible_year, p.league_tier, p.created_at,
                        ps.gp, ps.g, ps.a, ps.p,
-                       CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS REAL) / ps.gp, 2) ELSE 0 END as ppg
+                       CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) ELSE 0 END as ppg
                 FROM players p
                 LEFT JOIN player_stats ps ON p.id = ps.player_id AND ps.stat_type = 'season'
                 WHERE p.id IN ({placeholders}) AND p.org_id = ?
