@@ -20069,6 +20069,303 @@ async def admin_player_dedup_preview(token_data: dict = Depends(verify_token)):
     }
 
 
+@app.post("/admin/player-dedup-execute")
+async def admin_player_dedup_execute(
+    limit: int = 50,
+    token_data: dict = Depends(verify_token),
+):
+    """Execute player dedup merge in batches.
+
+    Same group logic as /admin/player-dedup-preview:
+    - Picks keeper via _pick_keeper()
+    - Classifies junk via _classify_junk_reason()
+    - Repoints all related data from junk → keeper
+    - Soft-deletes junk rows
+    - Inserts audit record in player_merges
+    - Returns summary JSON
+
+    Query params:
+        limit: max groups to process (default 50)
+    """
+    import json as _json
+
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    user_id = token_data["user_id"]
+    org_id = token_data["org_id"]
+
+    # ── Collect all duplicate groups (same logic as preview) ──
+    dupe_groups = conn.execute("""
+        SELECT first_name, last_name, org_id, current_team, COUNT(*) as cnt
+        FROM players
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+          AND current_team IS NOT NULL AND current_team != ''
+        GROUP BY first_name, last_name, org_id, current_team
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC, last_name, first_name
+    """).fetchall()
+
+    null_team_groups = conn.execute("""
+        SELECT first_name, last_name, org_id, COUNT(*) as cnt
+        FROM players
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+          AND (current_team IS NULL OR current_team = '')
+        GROUP BY first_name, last_name, org_id
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC, last_name, first_name
+    """).fetchall()
+
+    # Build unified group list: (first_name, last_name, org_id, team_filter_sql, team_params)
+    all_groups = []
+    for dg in dupe_groups:
+        fn = dg["first_name"] if hasattr(dg, 'keys') else dg[0]
+        ln = dg["last_name"] if hasattr(dg, 'keys') else dg[1]
+        org = dg["org_id"] if hasattr(dg, 'keys') else dg[2]
+        team = dg["current_team"] if hasattr(dg, 'keys') else dg[3]
+        all_groups.append((fn, ln, org, "AND current_team = ?", [team]))
+
+    for ntg in null_team_groups:
+        fn = ntg["first_name"] if hasattr(ntg, 'keys') else ntg[0]
+        ln = ntg["last_name"] if hasattr(ntg, 'keys') else ntg[1]
+        org = ntg["org_id"] if hasattr(ntg, 'keys') else ntg[2]
+        all_groups.append((fn, ln, org, "AND (current_team IS NULL OR current_team = '')", []))
+
+    # Apply limit
+    groups_to_process = all_groups[:limit]
+
+    # ── Tables with player_id FK that need repointing ──
+    REPOINT_TABLES = [
+        "player_stats",
+        "player_game_stats",
+        "player_stats_history",
+        "scout_notes",
+        "reports",
+        "player_intelligence",
+        "player_archetypes",
+        "system_adherence",
+        "goalie_stats",
+        "player_corrections",
+        "development_plans",
+        "player_parents",
+        "player_stat_snapshots",
+        "player_drill_logs",
+        "player_events",
+        "family_cards",
+        "scouting_list",
+        "instat_player_stats",
+        "instat_player_game_log",
+    ]
+
+    # ── Dedup tables where we need to avoid duplicate key conflicts ──
+    # player_stats: might have overlapping (player_id, season, stat_type)
+    # player_game_stats: might have overlapping (player_id, game_date, opponent)
+    # For these, delete the junk player's row if keeper already has one for that key
+
+    summary = {
+        "groups_processed": 0,
+        "junk_rows_deleted": 0,
+        "total_data_repointed": 0,
+        "stats_moved": 0,
+        "notes_moved": 0,
+        "reports_moved": 0,
+        "intel_moved": 0,
+        "other_moved": 0,
+        "merge_records_created": 0,
+        "errors": [],
+        "samples": [],  # first 5 groups for verification
+    }
+
+    for fn, ln, grp_org, team_sql, team_params in groups_to_process:
+        try:
+            # Fetch rows for this group
+            rows = conn.execute(f"""
+                SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
+                FROM players
+                WHERE first_name = ? AND last_name = ? AND org_id = ?
+                  {team_sql}
+                  AND (is_deleted = 0 OR is_deleted IS NULL)
+                ORDER BY created_at
+            """, [fn, ln, grp_org] + team_params).fetchall()
+            rows_dicts = [dict(r) for r in rows]
+
+            if len(rows_dicts) < 2:
+                continue
+
+            keeper = _pick_keeper(rows_dicts)
+            keeper_id = keeper["id"]
+            junk_ids = [r["id"] for r in rows_dicts if r["id"] != keeper_id]
+
+            if not junk_ids:
+                continue
+
+            group_stats_moved = 0
+            group_notes_moved = 0
+            group_reports_moved = 0
+            group_intel_moved = 0
+            group_other_moved = 0
+
+            for junk_id in junk_ids:
+                # ── Special handling for player_stats: avoid duplicate (player_id, season, stat_type) ──
+                # Delete junk rows where keeper already has that season+stat_type combo
+                conn.execute("""
+                    DELETE FROM player_stats
+                    WHERE player_id = ?
+                      AND (season, COALESCE(stat_type, '')) IN (
+                          SELECT season, COALESCE(stat_type, '')
+                          FROM player_stats WHERE player_id = ?
+                      )
+                """, (junk_id, keeper_id))
+
+                # Now repoint remaining player_stats
+                result = conn.execute(
+                    "UPDATE player_stats SET player_id = ? WHERE player_id = ?",
+                    (keeper_id, junk_id)
+                )
+                group_stats_moved += result.rowcount
+
+                # ── Special handling for player_game_stats: avoid dupe (player_id, game_date, opponent) ──
+                conn.execute("""
+                    DELETE FROM player_game_stats
+                    WHERE player_id = ?
+                      AND (game_date, COALESCE(opponent, '')) IN (
+                          SELECT game_date, COALESCE(opponent, '')
+                          FROM player_game_stats WHERE player_id = ?
+                      )
+                """, (junk_id, keeper_id))
+
+                result = conn.execute(
+                    "UPDATE player_game_stats SET player_id = ? WHERE player_id = ?",
+                    (keeper_id, junk_id)
+                )
+                group_stats_moved += result.rowcount
+
+                # ── Special handling for goalie_stats: avoid dupe (player_id, season) ──
+                conn.execute("""
+                    DELETE FROM goalie_stats
+                    WHERE player_id = ?
+                      AND season IN (
+                          SELECT season FROM goalie_stats WHERE player_id = ?
+                      )
+                """, (junk_id, keeper_id))
+
+                result = conn.execute(
+                    "UPDATE goalie_stats SET player_id = ? WHERE player_id = ?",
+                    (keeper_id, junk_id)
+                )
+                group_stats_moved += result.rowcount
+
+                # ── Repoint scout_notes ──
+                result = conn.execute(
+                    "UPDATE scout_notes SET player_id = ? WHERE player_id = ?",
+                    (keeper_id, junk_id)
+                )
+                group_notes_moved += result.rowcount
+
+                # ── Repoint reports ──
+                result = conn.execute(
+                    "UPDATE reports SET player_id = ? WHERE player_id = ?",
+                    (keeper_id, junk_id)
+                )
+                group_reports_moved += result.rowcount
+
+                # ── Repoint player_intelligence ──
+                result = conn.execute(
+                    "UPDATE player_intelligence SET player_id = ? WHERE player_id = ?",
+                    (keeper_id, junk_id)
+                )
+                group_intel_moved += result.rowcount
+
+                # ── Repoint all other FK tables ──
+                other_tables = [
+                    "player_stats_history", "player_archetypes", "system_adherence",
+                    "player_corrections", "development_plans", "player_parents",
+                    "player_stat_snapshots", "player_drill_logs", "player_events",
+                    "family_cards", "scouting_list", "instat_player_stats",
+                    "instat_player_game_log",
+                ]
+                for tbl in other_tables:
+                    try:
+                        result = conn.execute(
+                            f"UPDATE {tbl} SET player_id = ? WHERE player_id = ?",
+                            (keeper_id, junk_id)
+                        )
+                        group_other_moved += result.rowcount
+                    except Exception:
+                        pass  # Table might not exist yet — harmless
+
+                # ── Soft-delete the junk player row ──
+                conn.execute("""
+                    UPDATE players SET
+                        is_deleted = 1,
+                        is_merged = 1,
+                        merged_into = ?,
+                        merged_at = CURRENT_TIMESTAMP,
+                        deleted_at = CURRENT_TIMESTAMP,
+                        deleted_reason = 'dedup_merge'
+                    WHERE id = ?
+                """, (keeper_id, junk_id))
+
+            # ── Insert audit record ──
+            merge_id = str(uuid.uuid4())
+            conn.execute("""
+                INSERT INTO player_merges (id, org_id, primary_player_id, duplicate_player_ids,
+                    stats_moved, notes_moved, reports_moved, intel_moved, merged_by, merged_at,
+                    can_undo, undo_before)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+            """, (merge_id, grp_org, keeper_id, _json.dumps(junk_ids),
+                  group_stats_moved, group_notes_moved, group_reports_moved,
+                  group_intel_moved, user_id,
+                  (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()))
+
+            summary["groups_processed"] += 1
+            summary["junk_rows_deleted"] += len(junk_ids)
+            summary["stats_moved"] += group_stats_moved
+            summary["notes_moved"] += group_notes_moved
+            summary["reports_moved"] += group_reports_moved
+            summary["intel_moved"] += group_intel_moved
+            summary["other_moved"] += group_other_moved
+            summary["total_data_repointed"] += (
+                group_stats_moved + group_notes_moved + group_reports_moved +
+                group_intel_moved + group_other_moved
+            )
+            summary["merge_records_created"] += 1
+
+            # Save sample for first 5
+            if len(summary["samples"]) < 5:
+                junk_info = []
+                for jid in junk_ids:
+                    jr = next((r for r in rows_dicts if r["id"] == jid), {})
+                    junk_info.append({
+                        "id": jid,
+                        "reason": _classify_junk_reason(jr),
+                        "league": jr.get("current_league"),
+                    })
+                summary["samples"].append({
+                    "name": f"{fn} {ln}",
+                    "keeper_id": keeper_id,
+                    "keeper_ht_id": keeper.get("hockeytech_id"),
+                    "junk_count": len(junk_ids),
+                    "junk": junk_info,
+                })
+
+        except Exception as e:
+            summary["errors"].append(f"{fn} {ln}: {str(e)}")
+            if len(summary["errors"]) > 10:
+                summary["errors"].append("... (truncated)")
+                break
+
+    conn.commit()
+    conn.close()
+
+    summary["remaining_groups"] = len(all_groups) - len(groups_to_process)
+    summary["limit_used"] = limit
+    return summary
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
