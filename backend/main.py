@@ -968,6 +968,141 @@ def _get_league_tier(league_name: str | None) -> str | None:
     return "Unknown"
 
 
+# ── PXR: League Alias Map ────────────────────────────────────
+# Maps every known league string (abbreviation, full name, legacy variant)
+# to its canonical (abbreviation, full_name) pair.
+# Source of truth: seed_leagues() / leagues table.
+# Add new aliases here when leagues rebrand or new variants appear.
+
+LEAGUE_CANONICAL: dict[str, tuple[str, str]] = {
+    # --- Professional ---
+    "AHL":  ("AHL", "American Hockey League"),
+    "ECHL": ("ECHL", "ECHL"),
+    "SPHL": ("SPHL", "Southern Professional Hockey League"),
+    "PWHL": ("PWHL", "Professional Women's Hockey League"),
+    "NHL":  ("NHL", "National Hockey League"),
+    "KHL":  ("KHL", "Kontinental Hockey League"),
+    "SHL":  ("SHL", "Swedish Hockey League"),
+    # --- Major Junior (CHL) ---
+    "OHL":   ("OHL", "Ontario Hockey League"),
+    "WHL":   ("WHL", "Western Hockey League"),
+    "QMJHL": ("QMJHL", "Quebec Major Junior Hockey League"),
+    "CHL":   ("CHL", "Canadian Hockey League"),
+    "LHJMQ": ("QMJHL", "Quebec Major Junior Hockey League"),  # French abbreviation
+    # --- Junior A ---
+    "OJHL":  ("OJHL", "Ontario Junior Hockey League"),
+    "BCHL":  ("BCHL", "British Columbia Hockey League"),
+    "USHL":  ("USHL", "United States Hockey League"),
+    "AJHL":  ("AJHL", "Alberta Junior Hockey League"),
+    "CCHL":  ("CCHL", "Central Canada Hockey League"),
+    "NOJHL": ("NOJHL", "Northern Ontario Junior Hockey League"),
+    "SJHL":  ("SJHL", "Saskatchewan Junior Hockey League"),
+    "MHL":   ("MHL", "Maritime Hockey League"),
+    "MJHL":  ("MJHL", "Manitoba Junior Hockey League"),
+    "NAHL":  ("NAHL", "North American Hockey League"),
+    # --- Junior B ---
+    "GOHL":  ("GOHL", "Greater Ontario Hockey League"),
+    "KIJHL": ("KIJHL", "Kootenay International Junior Hockey League"),
+    "PJHL":  ("PJHL", "Provincial Junior Hockey League"),
+    "VIJHL": ("VIJHL", "Vancouver Island Junior Hockey League"),
+    "GMHL":  ("GMHL", "Greater Metro Junior A Hockey League"),
+    "WOAA":  ("WOAA", "Western Ontario Athletic Association"),
+    "SIJHL": ("SIJHL", "Superior International Junior Hockey League"),
+    # --- College / Other ---
+    "NCAA":  ("NCAA", "National Collegiate Athletic Association"),
+    "USHS":  ("USHS", "US High School"),
+    "AAA":   ("AAA", "AAA Minor Hockey"),
+}
+
+# Legacy / variant aliases → canonical abbreviation key
+_LEAGUE_LEGACY_ALIASES: dict[str, str] = {
+    # GOJHL → GOHL rebrand
+    "GOJHL": "GOHL",
+    "gojhl": "GOHL",
+    "Greater Ontario Junior Hockey League": "GOHL",
+    # QMJHL French variant
+    "LHJMQ": "QMJHL",
+    # Common full-name lookups (case-sensitive entries; case-insensitive handled below)
+    "Ontario Hockey League": "OHL",
+    "Western Hockey League": "WHL",
+    "Quebec Major Junior Hockey League": "QMJHL",
+    "Ontario Junior Hockey League": "OJHL",
+    "British Columbia Hockey League": "BCHL",
+    "United States Hockey League": "USHL",
+    "Alberta Junior Hockey League": "AJHL",
+    "Central Canada Hockey League": "CCHL",
+    "Northern Ontario Junior Hockey League": "NOJHL",
+    "Saskatchewan Junior Hockey League": "SJHL",
+    "Maritime Hockey League": "MHL",
+    "Manitoba Junior Hockey League": "MJHL",
+    "North American Hockey League": "NAHL",
+    "Greater Ontario Hockey League": "GOHL",
+    "Provincial Junior Hockey League": "PJHL",
+    "Kootenay International Junior Hockey League": "KIJHL",
+    "Vancouver Island Junior Hockey League": "VIJHL",
+    "American Hockey League": "AHL",
+    "Southern Professional Hockey League": "SPHL",
+    "Professional Women's Hockey League": "PWHL",
+    "National Hockey League": "NHL",
+    "National Collegiate Athletic Association": "NCAA",
+    "AAA Minor Hockey": "AAA",
+    "US High School": "USHS",
+    "ECHL": "ECHL",
+}
+
+# Build a fast case-insensitive lookup (uppercased key → canonical abbreviation)
+_LEAGUE_LOOKUP: dict[str, str] = {}
+for _abbr in LEAGUE_CANONICAL:
+    _LEAGUE_LOOKUP[_abbr.upper()] = _abbr
+for _alias, _canon in _LEAGUE_LEGACY_ALIASES.items():
+    _LEAGUE_LOOKUP[_alias.upper()] = _canon
+# Also add all full names from LEAGUE_CANONICAL as lookups
+for _abbr, (_canon_abbr, _full) in LEAGUE_CANONICAL.items():
+    if _full:
+        _LEAGUE_LOOKUP[_full.upper()] = _canon_abbr
+
+
+def _normalize_league(raw: str | None, form: str = "abbreviation") -> str | None:
+    """Normalize a league string to its canonical form.
+
+    PXR utility — single source of truth for league name resolution.
+
+    Args:
+        raw:  Any league string (abbreviation, full name, legacy variant).
+        form: "abbreviation" → returns e.g. "GOHL"
+              "full"         → returns e.g. "Greater Ontario Hockey League"
+
+    Returns:
+        Canonical string, or None if raw is None/empty.
+
+    Raises:
+        ValueError: If the string is non-empty but not recognized.
+    """
+    if not raw or not raw.strip():
+        return None
+    key = raw.strip().upper()
+    canon_abbr = _LEAGUE_LOOKUP.get(key)
+    if canon_abbr is None:
+        raise ValueError(f"Unknown league: {raw!r}")
+    entry = LEAGUE_CANONICAL.get(canon_abbr)
+    if entry is None:
+        raise ValueError(f"Unknown league: {raw!r}")
+    if form == "full":
+        return entry[1]
+    return entry[0]  # abbreviation
+
+
+def _normalize_league_safe(raw: str | None, form: str = "abbreviation") -> str | None:
+    """Like _normalize_league but returns the raw value (unchanged) for unknown leagues
+    instead of raising. Use this on write paths where we want to warn, not reject."""
+    if not raw or not raw.strip():
+        return None
+    try:
+        return _normalize_league(raw, form)
+    except ValueError:
+        return raw.strip()
+
+
 def _get_age_group(birth_year: int | None) -> str | None:
     """Classify player into age group based on birth year."""
     if not birth_year:
