@@ -2720,6 +2720,13 @@ def init_db():
             logger.info("Migration: added %s column to players (PXR v1)", col_name)
     conn.commit()
 
+    # ── Migration: PXR 3B — manual_override column on players ──
+    mo_cols = _get_table_columns(conn, "players")
+    if "manual_override" not in mo_cols:
+        conn.execute("ALTER TABLE players ADD COLUMN manual_override INTEGER DEFAULT 0")
+        conn.commit()
+        logger.info("Migration: added manual_override column to players (PXR 3B)")
+
     # ── Migration: rename old subscription tiers (CR-009) ──
     try:
         n1 = conn.execute("UPDATE users SET subscription_tier = 'scout' WHERE subscription_tier = 'novice'").rowcount
@@ -10946,7 +10953,7 @@ async def patch_player(
 
     allowed = {"first_name", "last_name", "dob", "position", "shoots", "height_cm", "weight_kg",
                "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status",
-               "roster_status", "jersey_number"}
+               "roster_status", "jersey_number", "manual_override"}
     sets = []
     params = []
     for field, value in updates.items():
@@ -10974,6 +10981,12 @@ async def patch_player(
                 break
         sets.append("league_tier = ?")
         params.append(_get_league_tier(updates["current_league"]))
+
+    # PXR 3B: Auto-set manual_override when bio fields are edited
+    bio_fields = {"position", "shoots", "height_cm", "weight_kg", "current_team", "current_league", "dob"}
+    if bio_fields & set(updates.keys()):
+        sets.append("manual_override = ?")
+        params.append(1)
 
     sets.append("updated_at = ?")
     params.append(now_iso())
@@ -24412,20 +24425,31 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
             ).fetchone()
 
             if existing:
-                # Update bio fields
-                conn.execute("""
-                    UPDATE players SET
-                        current_team = ?, current_league = ?, position = ?, shoots = ?,
-                        height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
-                        dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
-                        birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
-                        league_tier = COALESCE(?, league_tier), hockeytech_league = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                """, (team_name, league_name, position, shoots, height_cm, weight_kg,
-                      dob, photo_url, birth_year, age_group, league_tier, league, now, existing[0]))
-                updated += 1
-                results.append({"name": f"{first} {last}", "action": "updated", "player_id": existing[0]})
+                # PXR 3B: Check manual_override — skip bio updates if set
+                mo_row = conn.execute("SELECT manual_override FROM players WHERE id = ?", (existing[0],)).fetchone()
+                if mo_row and mo_row["manual_override"]:
+                    # Only update HT link fields, not bio
+                    conn.execute("""
+                        UPDATE players SET hockeytech_league = ?, updated_at = ?
+                        WHERE id = ?
+                    """, (league, now, existing[0]))
+                    updated += 1
+                    results.append({"name": f"{first} {last}", "action": "updated (override protected)", "player_id": existing[0]})
+                else:
+                    # Update bio fields
+                    conn.execute("""
+                        UPDATE players SET
+                            current_team = ?, current_league = ?, position = ?, shoots = ?,
+                            height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
+                            dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
+                            birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
+                            league_tier = COALESCE(?, league_tier), hockeytech_league = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                    """, (team_name, league_name, position, shoots, height_cm, weight_kg,
+                          dob, photo_url, birth_year, age_group, league_tier, league, now, existing[0]))
+                    updated += 1
+                    results.append({"name": f"{first} {last}", "action": "updated", "player_id": existing[0]})
                 continue
 
             # 2. Fuzzy match by name + DOB
@@ -24446,21 +24470,32 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     break
 
             if matched_id:
-                # Link and update
-                conn.execute("""
-                    UPDATE players SET
-                        hockeytech_id = ?, hockeytech_league = ?,
-                        current_team = ?, current_league = ?, position = ?, shoots = ?,
-                        height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
-                        dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
-                        birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
-                        league_tier = COALESCE(?, league_tier),
-                        updated_at = ?
-                    WHERE id = ?
-                """, (ht_id, league, team_name, league_name, position, shoots, height_cm, weight_kg,
-                      dob, photo_url, birth_year, age_group, league_tier, now, matched_id))
-                updated += 1
-                results.append({"name": f"{first} {last}", "action": "linked+updated", "player_id": matched_id})
+                # PXR 3B: Check manual_override — skip bio updates if set
+                mo_row = conn.execute("SELECT manual_override FROM players WHERE id = ?", (matched_id,)).fetchone()
+                if mo_row and mo_row["manual_override"]:
+                    # Link HT ID only, don't overwrite bio
+                    conn.execute("""
+                        UPDATE players SET hockeytech_id = ?, hockeytech_league = ?, updated_at = ?
+                        WHERE id = ?
+                    """, (ht_id, league, now, matched_id))
+                    updated += 1
+                    results.append({"name": f"{first} {last}", "action": "linked (override protected)", "player_id": matched_id})
+                else:
+                    # Link and update
+                    conn.execute("""
+                        UPDATE players SET
+                            hockeytech_id = ?, hockeytech_league = ?,
+                            current_team = ?, current_league = ?, position = ?, shoots = ?,
+                            height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
+                            dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
+                            birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
+                            league_tier = COALESCE(?, league_tier),
+                            updated_at = ?
+                        WHERE id = ?
+                    """, (ht_id, league, team_name, league_name, position, shoots, height_cm, weight_kg,
+                          dob, photo_url, birth_year, age_group, league_tier, now, matched_id))
+                    updated += 1
+                    results.append({"name": f"{first} {last}", "action": "linked+updated", "player_id": matched_id})
                 continue
 
             # 3. Create new player
