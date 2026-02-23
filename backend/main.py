@@ -19659,13 +19659,14 @@ async def admin_team_dupes(token_data: dict = Depends(verify_token)):
 
 @app.get("/admin/player-dupes")
 async def admin_player_dupes(token_data: dict = Depends(verify_token)):
-    """Diagnostic: show duplicate players by first_name + last_name."""
+    """Diagnostic: show duplicate players by first_name + last_name with full row details."""
     conn = get_db()
     user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
     if not user or user["email"] != "jason@prospectx.com":
         conn.close()
         raise HTTPException(status_code=403, detail="Admin only")
-    dupes = conn.execute("""
+    # Find duplicate name groups
+    dupe_names = conn.execute("""
         SELECT first_name, last_name, COUNT(*) as player_count
         FROM players
         WHERE (is_deleted = 0 OR is_deleted IS NULL)
@@ -19674,11 +19675,39 @@ async def admin_player_dupes(token_data: dict = Depends(verify_token)):
         ORDER BY COUNT(*) DESC, last_name, first_name
     """).fetchall()
     total = conn.execute("SELECT COUNT(*) as c FROM players WHERE (is_deleted = 0 OR is_deleted IS NULL)").fetchone()["c"]
+    # For each dupe group, fetch the individual rows
+    groups = []
+    for dn in dupe_names:
+        fn = dn["first_name"] if hasattr(dn, 'keys') else dn[0]
+        ln = dn["last_name"] if hasattr(dn, 'keys') else dn[1]
+        cnt = dn["player_count"] if hasattr(dn, 'keys') else dn[2]
+        rows = conn.execute("""
+            SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
+            FROM players
+            WHERE first_name = ? AND last_name = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+            ORDER BY org_id, current_team, created_at
+        """, (fn, ln)).fetchall()
+        # Classify: same_org_and_team = likely true dupe
+        orgs_teams = set()
+        for r in rows:
+            rd = dict(r)
+            orgs_teams.add((rd.get("org_id", ""), rd.get("current_team", "")))
+        groups.append({
+            "first_name": fn,
+            "last_name": ln,
+            "player_count": cnt,
+            "likely_true_dupe": len(orgs_teams) < cnt,
+            "rows": [dict(r) for r in rows],
+        })
     conn.close()
+    # Summary counts
+    true_dupes = [g for g in groups if g["likely_true_dupe"]]
     return {
         "total_active_players": total,
-        "duplicate_name_groups": len(dupes),
-        "duplicates": [dict(r) for r in dupes],
+        "duplicate_name_groups": len(groups),
+        "likely_true_duplicates": len(true_dupes),
+        "likely_different_players": len(groups) - len(true_dupes),
+        "groups": groups,
     }
 
 
