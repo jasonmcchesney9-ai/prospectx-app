@@ -19657,6 +19657,31 @@ async def admin_team_dupes(token_data: dict = Depends(verify_token)):
     }
 
 
+@app.get("/admin/player-dupes")
+async def admin_player_dupes(token_data: dict = Depends(verify_token)):
+    """Diagnostic: show duplicate players by first_name + last_name."""
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+    dupes = conn.execute("""
+        SELECT first_name, last_name, COUNT(*) as player_count
+        FROM players
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+        GROUP BY first_name, last_name
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC, last_name, first_name
+    """).fetchall()
+    total = conn.execute("SELECT COUNT(*) as c FROM players WHERE (is_deleted = 0 OR is_deleted IS NULL)").fetchone()["c"]
+    conn.close()
+    return {
+        "total_active_players": total,
+        "duplicate_name_groups": len(dupes),
+        "duplicates": [dict(r) for r in dupes],
+    }
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
