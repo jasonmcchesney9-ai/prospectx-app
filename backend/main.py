@@ -1205,6 +1205,62 @@ def _repoint_player_data(conn, from_id: str, to_id: str) -> dict:
     return counts
 
 
+def _resolve_intel_conflicts(conn, player_id: str) -> int:
+    """After merge, if a player has multiple intel records, keep only the best one.
+
+    PXR utility — scores each intel record by counting non-NR grades across
+    6 grade columns. Keeps the record with the highest score (ties broken by
+    newest created_at). Deletes the rest.
+
+    Returns the number of shadow records deleted.
+    """
+    GRADE_COLS = ["overall_grade", "offensive_grade", "defensive_grade",
+                  "skating_grade", "hockey_iq_grade", "compete_grade"]
+
+    rows = conn.execute(
+        "SELECT id, version, created_at, "
+        + ", ".join(GRADE_COLS)
+        + " FROM player_intelligence WHERE player_id = ? ORDER BY version DESC",
+        (player_id,)
+    ).fetchall()
+
+    if len(rows) <= 1:
+        return 0  # No conflict
+
+    # Score each record: count of non-NR, non-NULL, non-empty grades
+    def _grade_score(row):
+        score = 0
+        for col in GRADE_COLS:
+            val = row[col]
+            if val and str(val).strip().upper() not in ("NR", "N/R", ""):
+                score += 1
+        return score
+
+    # Pick best: highest grade score, then newest created_at
+    best = max(rows, key=lambda r: (_grade_score(r), r["created_at"] or ""))
+    best_id = best["id"]
+
+    # Delete all others
+    shadow_ids = [r["id"] for r in rows if r["id"] != best_id]
+    if shadow_ids:
+        placeholders = ", ".join("?" for _ in shadow_ids)
+        conn.execute(
+            f"DELETE FROM player_intelligence WHERE id IN ({placeholders})",
+            shadow_ids,
+        )
+
+    # Re-number the kept record to version = max_deleted_version + 1
+    # so it's the highest version if new intel is generated later
+    max_version = max(r["version"] for r in rows)
+    if best["version"] != max_version:
+        conn.execute(
+            "UPDATE player_intelligence SET version = ? WHERE id = ?",
+            (max_version + 1, best_id),
+        )
+
+    return len(shadow_ids)
+
+
 def _get_age_group(birth_year: int | None) -> str | None:
     """Classify player into age group based on birth year."""
     if not birth_year:
@@ -20580,6 +20636,9 @@ async def admin_player_dedup_execute(
                     WHERE id = ?
                 """, (keeper_id, junk_id))
 
+            # ── PXR 1B: Resolve intel conflicts after repoint ──
+            _resolve_intel_conflicts(conn, keeper_id)
+
             # ── Insert audit record ──
             merge_id = str(uuid.uuid4())
             conn.execute("""
@@ -23463,6 +23522,9 @@ async def merge_players(
             WHERE id = ?
         """, (keep_id, mid))
 
+    # ── PXR 1B: Resolve intel conflicts (keep best non-NR record, delete shadows) ──
+    intel_shadows_deleted = _resolve_intel_conflicts(conn, keep_id)
+
     # ── Auto-union tags if not explicitly provided ──
     import json as _json
     if "tags" not in update_fields:
@@ -23532,6 +23594,7 @@ async def merge_players(
         "reports_moved": reports_moved,
         "intel_moved": intel_moved,
         "other_moved": other_moved,
+        "intel_shadows_deleted": intel_shadows_deleted,
     }
 
 
