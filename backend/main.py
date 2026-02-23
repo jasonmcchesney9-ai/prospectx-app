@@ -15806,7 +15806,7 @@ async def generate_team_intelligence(team_name: str, token_data: dict = Depends(
     # Get team stats
     stats = conn.execute(
         """SELECT p.first_name, p.last_name, p.position, p.archetype,
-                  ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim
+                  ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim
            FROM players p
            LEFT JOIN (
                SELECT player_id, gp, g, a, p, plus_minus, pim,
@@ -15973,7 +15973,7 @@ async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(
 
     rows = conn.execute("""
         SELECT p.*,
-               ps.gp, ps.g, ps.a, ps.p AS pts, ps.plus_minus, ps.pim, ps.season,
+               ps.gp, ps.g, ps.a, ps.p AS pts, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim, ps.season,
                gs.gp as g_gp, gs.ga as g_ga, gs.sv as g_sv, gs.gaa, gs.sv_pct
         FROM players p
         LEFT JOIN (
@@ -15997,7 +15997,7 @@ async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(
         d = _player_from_row(r)
         d["stats"] = {
             "gp": r["gp"], "g": r["g"], "a": r["a"], "p": r["pts"],
-            "plus_minus": r["plus_minus"], "pim": r["pim"], "season": r["season"],
+            "plus_minus": r["plus_minus"] or 0, "pim": r["pim"] or 0, "season": r["season"],
         } if r["gp"] else None
         d["goalie_stats"] = {
             "gp": r["g_gp"], "ga": r["g_ga"], "sv": r["g_sv"],
@@ -17226,7 +17226,7 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             if team_league:
                 league_players = conn.execute("""
                     SELECT p.first_name, p.last_name, p.position, p.current_team, p.birth_year, p.age_group,
-                           ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim, ps.season
+                           ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim, ps.season
                     FROM players p
                     JOIN player_stats ps ON p.id = ps.player_id
                     WHERE p.org_id = ? AND LOWER(p.current_league) = LOWER(?)
@@ -23254,7 +23254,7 @@ async def analytics_scoring_leaders(
 
     rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
-               ps.season, ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
+               ps.season, ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim,
                ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) as ppg,
                ROUND(CAST(ps.g AS NUMERIC) / ps.gp, 2) as gpg,
                ROUND(CAST(ps.a AS NUMERIC) / ps.gp, 2) as apg
@@ -23967,7 +23967,7 @@ async def get_player_indices(player_id: str, token_data: dict = Depends(verify_t
 
     # Get all league stats for percentile calculations
     league_rows = conn.execute("""
-        SELECT p.position, ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
+        SELECT p.position, ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim,
                ps.shots, ps.sog, ps.shooting_pct, ps.extended_stats
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
@@ -24027,7 +24027,7 @@ async def get_league_indices(
 
     rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
-               ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
+               ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim,
                ps.shots, ps.sog, ps.shooting_pct, ps.extended_stats, ps.season
         FROM players p
         JOIN player_stats ps ON p.id = ps.player_id
@@ -26451,7 +26451,7 @@ def _pt_query_players(params: dict, org_id: str) -> tuple[dict, dict]:
             SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.dob, p.shoots, p.height_cm, p.weight_kg,
                    p.archetype, p.image_url,
-                   ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
+                   ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim,
                    ps.shots, ps.shooting_pct,
                    CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) ELSE 0 END as ppg
             FROM players p
@@ -26995,7 +26995,7 @@ def _pt_league_leaders(params: dict, org_id: str) -> tuple[dict, dict]:
 
         query = f"""
             SELECT p.id, p.first_name, p.last_name, p.position, p.current_team,
-                   ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim,
+                   ps.gp, ps.g, ps.a, ps.p, COALESCE(ps.plus_minus, 0) as plus_minus, COALESCE(ps.pim, 0) as pim,
                    CASE WHEN ps.gp > 0 THEN ROUND(CAST(ps.p AS NUMERIC) / ps.gp, 2) ELSE 0 END as ppg
             FROM players p
             JOIN player_stats ps ON p.id = ps.player_id AND ps.stat_type = 'season'
