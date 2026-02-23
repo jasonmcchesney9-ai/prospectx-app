@@ -11,6 +11,7 @@ import {
   Trash2,
   RefreshCw,
   Crown,
+  Wrench,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -18,7 +19,7 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import type { AdminUser, AdminStats, AdminErrorLog } from "@/types/api";
 
-type Tab = "users" | "platform" | "errors";
+type Tab = "users" | "platform" | "errors" | "pxr_ops";
 
 const TIER_OPTIONS = [
   { value: "rookie", label: "Rookie", color: "text-gray-600" },
@@ -419,6 +420,271 @@ function ErrorsTab() {
   );
 }
 
+// ── PXR Ops Tab ──────────────────────────────────────
+interface LeagueAliasEntry {
+  league: string;
+  count: number;
+}
+
+interface SyncHistoryEntry {
+  id: string;
+  sync_type: string;
+  league: string;
+  team_id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  players_created: number;
+  players_updated: number;
+  players_linked: number;
+  stats_upserted: number;
+  errors: string | null;
+}
+
+function PxrOpsTab() {
+  // Normalize Leagues state
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlResult, setNlResult] = useState<{ status: string; total_fixed: number; updates: Record<string, number> } | null>(null);
+  const [nlError, setNlError] = useState("");
+
+  // League Aliases state
+  const [laLoading, setLaLoading] = useState(false);
+  const [laResult, setLaResult] = useState<Record<string, LeagueAliasEntry[]> | null>(null);
+  const [laError, setLaError] = useState("");
+
+  // Sync History state
+  const [shLoading, setShLoading] = useState(false);
+  const [shResult, setShResult] = useState<SyncHistoryEntry[] | null>(null);
+  const [shError, setShError] = useState("");
+
+  const handleNormalizeLeagues = async () => {
+    setNlLoading(true);
+    setNlResult(null);
+    setNlError("");
+    try {
+      const { data } = await api.post("/admin/normalize-leagues");
+      setNlResult(data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to normalize leagues";
+      setNlError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setNlLoading(false);
+    }
+  };
+
+  const handleCheckAliases = async () => {
+    setLaLoading(true);
+    setLaResult(null);
+    setLaError("");
+    try {
+      const { data } = await api.get("/admin/league-aliases");
+      setLaResult(data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to check aliases";
+      setLaError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setLaLoading(false);
+    }
+  };
+
+  const handleSyncHistory = async () => {
+    setShLoading(true);
+    setShResult(null);
+    setShError("");
+    try {
+      const { data } = await api.get("/admin/sync-history?limit=10");
+      setShResult(data.history || data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load sync history";
+      setShError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setShLoading(false);
+    }
+  };
+
+  const hasDrift = laResult
+    ? Object.values(laResult).some((entries) => entries.length > 0)
+    : false;
+
+  return (
+    <div className="space-y-6">
+      {/* Action Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Normalize Leagues */}
+        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col">
+          <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">Normalize Leagues</h3>
+          <p className="text-xs text-muted mb-4 flex-1">Fix league name drift across all tables using canonical alias map.</p>
+          <button
+            onClick={handleNormalizeLeagues}
+            disabled={nlLoading}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-teal rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50"
+          >
+            {nlLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Run Normalize
+          </button>
+        </div>
+
+        {/* Check League Aliases */}
+        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col">
+          <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">Check League Aliases</h3>
+          <p className="text-xs text-muted mb-4 flex-1">Scan all tables for non-canonical league values.</p>
+          <button
+            onClick={handleCheckAliases}
+            disabled={laLoading}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-navy rounded-lg hover:bg-navy/90 transition-colors disabled:opacity-50"
+          >
+            {laLoading ? <Loader2 size={14} className="animate-spin" /> : <Shield size={14} />}
+            Check Aliases
+          </button>
+        </div>
+
+        {/* Sync History */}
+        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col">
+          <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">Sync History</h3>
+          <p className="text-xs text-muted mb-4 flex-1">View recent HockeyTech sync operations and outcomes.</p>
+          <button
+            onClick={handleSyncHistory}
+            disabled={shLoading}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-navy rounded-lg hover:bg-navy/90 transition-colors disabled:opacity-50"
+          >
+            {shLoading ? <Loader2 size={14} className="animate-spin" /> : <BarChart3 size={14} />}
+            Load History
+          </button>
+        </div>
+
+        {/* Normalize Seasons — disabled until PXR v1.1 S3 */}
+        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col opacity-50">
+          <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">Normalize Seasons</h3>
+          <p className="text-xs text-muted mb-4 flex-1">Fix season string formats across all stat tables.</p>
+          <button
+            disabled={true}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-gray-400 rounded-lg cursor-not-allowed"
+          >
+            Coming in PXR v1.1
+          </button>
+        </div>
+      </div>
+
+      {/* Normalize Leagues Result */}
+      {nlError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{nlError}</div>
+      )}
+      {nlResult && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle2 size={16} />
+            <span className="font-semibold">Fixed {nlResult.total_fixed} rows</span>
+          </div>
+          {nlResult.updates && Object.keys(nlResult.updates).length > 0 && (
+            <div className="mt-2 text-xs space-y-1">
+              {Object.entries(nlResult.updates).map(([table, count]) => (
+                <div key={table}>{table}: {count} rows updated</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* League Aliases Result */}
+      {laError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{laError}</div>
+      )}
+      {laResult && (
+        <div className={`${hasDrift ? "bg-yellow-50 border-yellow-200" : "bg-green-50 border-green-200"} border rounded-xl p-4`}>
+          <div className="flex items-center gap-2 mb-3">
+            {hasDrift ? (
+              <AlertTriangle size={16} className="text-yellow-600" />
+            ) : (
+              <CheckCircle2 size={16} className="text-green-600" />
+            )}
+            <span className={`text-sm font-semibold ${hasDrift ? "text-yellow-700" : "text-green-700"}`}>
+              {hasDrift ? "League drift detected" : "No league drift — all canonical"}
+            </span>
+          </div>
+          {hasDrift && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-yellow-300">
+                    <th className="text-left px-3 py-2 font-semibold text-navy">Table.Column</th>
+                    <th className="text-left px-3 py-2 font-semibold text-navy">League Value</th>
+                    <th className="text-right px-3 py-2 font-semibold text-navy">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(laResult).map(([key, entries]) =>
+                    entries.map((entry, i) => (
+                      <tr key={`${key}-${i}`} className="border-b border-yellow-200/50">
+                        <td className="px-3 py-1.5 font-mono text-navy">{key}</td>
+                        <td className="px-3 py-1.5 text-yellow-700">{entry.league}</td>
+                        <td className="px-3 py-1.5 text-right font-semibold text-navy">{entry.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sync History Result */}
+      {shError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{shError}</div>
+      )}
+      {shResult && (
+        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-navy/5 border-b border-teal/20">
+                  <th className="text-left px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">Type</th>
+                  <th className="text-left px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">League</th>
+                  <th className="text-center px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">Status</th>
+                  <th className="text-left px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">Started</th>
+                  <th className="text-center px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">Created</th>
+                  <th className="text-center px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">Updated</th>
+                  <th className="text-left px-3 py-2 font-semibold text-navy text-xs uppercase tracking-wider">Errors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shResult.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6 text-center text-muted text-sm">No sync history found</td>
+                  </tr>
+                ) : (
+                  shResult.map((entry) => {
+                    const statusColors: Record<string, string> = {
+                      completed: "bg-green-100 text-green-700",
+                      running: "bg-yellow-100 text-yellow-700",
+                      failed: "bg-red-100 text-red-700",
+                    };
+                    return (
+                      <tr key={entry.id} className="border-b border-teal/10 hover:bg-navy/[0.02] transition-colors">
+                        <td className="px-3 py-2 text-xs text-navy">{entry.sync_type}</td>
+                        <td className="px-3 py-2 text-xs text-navy">{entry.league}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[entry.status] || "bg-gray-100 text-gray-700"}`}>
+                            {entry.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted">{formatTime(entry.started_at)}</td>
+                        <td className="px-3 py-2 text-center text-xs font-semibold text-navy">{entry.players_created}</td>
+                        <td className="px-3 py-2 text-center text-xs font-semibold text-navy">{entry.players_updated}</td>
+                        <td className="px-3 py-2 text-xs text-red-600 max-w-[200px] truncate">{entry.errors || "—"}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Admin Page ──────────────────────────────────
 function AdminDashboard() {
   const [tab, setTab] = useState<Tab>("users");
@@ -439,6 +705,7 @@ function AdminDashboard() {
     { key: "users", label: "Users", icon: Users },
     { key: "platform", label: "Platform", icon: BarChart3 },
     { key: "errors", label: "Errors", icon: AlertTriangle },
+    { key: "pxr_ops", label: "PXR Ops", icon: Wrench },
   ];
 
   return (
@@ -476,6 +743,7 @@ function AdminDashboard() {
       {tab === "users" && <UsersTab />}
       {tab === "platform" && <PlatformTab />}
       {tab === "errors" && <ErrorsTab />}
+      {tab === "pxr_ops" && <PxrOpsTab />}
     </div>
   );
 }
