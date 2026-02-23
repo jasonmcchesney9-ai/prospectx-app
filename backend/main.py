@@ -10687,7 +10687,8 @@ async def create_player(player: PlayerCreate, token_data: dict = Depends(verify_
             draft_eligible_year = birth_year + 18
         except (ValueError, IndexError):
             pass
-    league_tier = _get_league_tier(player.current_league)
+    normalized_league = _normalize_league_safe(player.current_league, "full")
+    league_tier = _get_league_tier(normalized_league)
 
     user_id = token_data["user_id"]
     conn.execute("""
@@ -10699,7 +10700,7 @@ async def create_player(player: PlayerCreate, token_data: dict = Depends(verify_
     """, (
         player_id, org_id, player.first_name, player.last_name, player.dob,
         player.position.upper(), player.shoots, player.height_cm, player.weight_kg,
-        player.current_team, player.current_league,
+        player.current_team, normalized_league,
         json.dumps(player.passports or []), player.notes, json.dumps(player.tags or []),
         player.archetype, player.image_url,
         birth_year, age_group, draft_eligible_year, league_tier,
@@ -10887,6 +10888,12 @@ async def patch_player(
         except (ValueError, IndexError):
             pass
     if "current_league" in updates:
+        updates["current_league"] = _normalize_league_safe(updates["current_league"], "full")
+        # Re-set the value in sets/params (it was already appended above)
+        for idx, s in enumerate(sets):
+            if s == "current_league = ?":
+                params[idx] = updates["current_league"]
+                break
         sets.append("league_tier = ?")
         params.append(_get_league_tier(updates["current_league"]))
 
@@ -10914,7 +10921,8 @@ async def transfer_player(
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
     new_team = (body.get("new_team") or "").strip()
-    new_league = (body.get("new_league") or "").strip() or None
+    raw_league = (body.get("new_league") or "").strip() or None
+    new_league = _normalize_league_safe(raw_league, "full") if raw_league else None
     note = (body.get("note") or "").strip() or None
 
     if not new_team:
@@ -11001,7 +11009,8 @@ async def update_player(player_id: str, player: PlayerCreate, token_data: dict =
             draft_eligible_year = birth_year + 18
         except (ValueError, IndexError):
             pass
-    league_tier = _get_league_tier(player.current_league)
+    normalized_league = _normalize_league_safe(player.current_league, "full")
+    league_tier = _get_league_tier(normalized_league)
 
     conn.execute("""
         UPDATE players SET first_name=?, last_name=?, dob=?, position=?, shoots=?, height_cm=?, weight_kg=?,
@@ -11011,7 +11020,7 @@ async def update_player(player_id: str, player: PlayerCreate, token_data: dict =
         WHERE id = ? AND org_id = ?
     """, (
         player.first_name, player.last_name, player.dob, player.position.upper(), player.shoots,
-        player.height_cm, player.weight_kg, player.current_team, player.current_league,
+        player.height_cm, player.weight_kg, player.current_team, normalized_league,
         json.dumps(player.passports or []), player.notes, json.dumps(player.tags or []),
         player.archetype, player.image_url,
         birth_year, age_group, draft_eligible_year, league_tier,
@@ -18860,6 +18869,11 @@ async def preview_import(
             if not rd.get("season"):
                 rd["season"] = season_override
 
+    # Normalize league values (PXR 2B)
+    for rd in rows_data:
+        if rd.get("current_league"):
+            rd["current_league"] = _normalize_league_safe(rd["current_league"], "full")
+
     # Fetch existing players for duplicate detection
     conn = get_db()
     existing = conn.execute("SELECT id, first_name, last_name, dob, position, current_team FROM players WHERE org_id = ?", (org_id,)).fetchall()
@@ -19721,7 +19735,7 @@ def _import_league_teams(rows, season, org_id, team_name_override=None):
             else:
                 conn.execute(
                     "INSERT INTO team_stats (id, org_id, team_name, league, season, extended_stats, data_source) VALUES (?, ?, ?, ?, ?, ?, 'instat')",
-                    (gen_id(), org_id, team_name, "GOHL", season, json.dumps(extended))
+                    (gen_id(), org_id, team_name, _normalize_league_safe("GOHL"), season, json.dumps(extended))
                 )
             stats_imported += 1
         except Exception as e:
@@ -19833,7 +19847,7 @@ def _import_league_skaters(rows, season, org_id):
                        current_team, current_league, dob)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (player_id, org_id, first_name, last_name, position,
-                     bio.get("shoots", ""), team, "GOHL", bio.get("dob", ""))
+                     bio.get("shoots", ""), team, _normalize_league_safe("GOHL", "full"), bio.get("dob", ""))
                 )
                 # Add to existing list for matching remaining rows (include DOB for future matching)
                 existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
@@ -19945,7 +19959,7 @@ def _import_league_goalies(rows, season, org_id):
                        current_team, current_league, dob)
                        VALUES (?, ?, ?, ?, 'G', ?, ?, ?, ?)""",
                     (player_id, org_id, first_name, last_name,
-                     bio.get("shoots", ""), team, "GOHL", bio.get("dob", ""))
+                     bio.get("shoots", ""), team, _normalize_league_safe("GOHL", "full"), bio.get("dob", ""))
                 )
                 existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
                                      "current_team": team, "position": "G", "dob": bio.get("dob", "")})
@@ -24188,8 +24202,9 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
     if not roster:
         raise HTTPException(status_code=404, detail="Empty roster returned from HockeyTech")
 
-    # Get league display name for current_league field
-    league_name = HT_LEAGUES.get(league, {}).get("name", league.upper())
+    # Get league display name for current_league field, normalized via PXR 2B
+    ht_display_name = HT_LEAGUES.get(league, {}).get("name", league.upper())
+    league_name = _normalize_league_safe(ht_display_name, "full")
 
     created, updated, skipped = 0, 0, 0
     results = []
