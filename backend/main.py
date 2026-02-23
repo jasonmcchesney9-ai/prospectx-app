@@ -18864,6 +18864,156 @@ async def pxr_reference_glossary(category: Optional[str] = None):
     return {"terms": terms}
 
 
+@app.get("/pxr/reference/benchmarks")
+async def pxr_reference_benchmarks(
+    player_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    """Return player canonical profile, cohort benchmarks, and data quality checks."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    # 1. Look up player
+    player = conn.execute(
+        "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (player_id, org_id)
+    ).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # 2. Compute age from dob
+    age = None
+    age_note = None
+    dob_str = player["dob"]
+    if dob_str:
+        try:
+            dob_date = datetime.strptime(dob_str[:10], "%Y-%m-%d").date()
+            today = datetime.now().date()
+            age = (today - dob_date).days // 365
+        except Exception:
+            age_note = "birth_date could not be parsed"
+    else:
+        age_note = "birth_date not available"
+
+    # 3. Build player_canonical
+    player_canonical = {
+        "name": f"{player['first_name']} {player['last_name']}",
+        "position": player["position"] or "",
+        "shoots": player["shoots"] or "",
+        "height_cm": player["height_cm"],
+        "weight_kg": player["weight_kg"],
+        "birth_date": dob_str or None,
+        "age": age,
+        "current_team": player["current_team"] or "",
+        "current_league": player["current_league"] or "",
+    }
+    if age_note:
+        player_canonical["age_note"] = age_note
+
+    # 4. Query cohort stats — all players in same league + position with gp >= 10
+    league = player["current_league"] or ""
+    position = player["position"] or ""
+    cohort_rows = conn.execute("""
+        SELECT ps.player_id, ps.gp, ps.g, ps.a, ps.p, ps.plus_minus, ps.pim, ps.sog, ps.shooting_pct
+        FROM player_stats ps
+        JOIN players p ON ps.player_id = p.id
+        WHERE p.current_league = ?
+          AND p.position = ?
+          AND ps.gp >= 10
+          AND ps.stat_type = 'season'
+          AND p.org_id = ?
+          AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        ORDER BY ps.created_at DESC
+    """, (league, position, org_id)).fetchall()
+
+    # Deduplicate: keep most recent stat row per player
+    seen_players = set()
+    cohort = []
+    for row in cohort_rows:
+        pid = row["player_id"]
+        if pid not in seen_players:
+            seen_players.add(pid)
+            cohort.append(dict(row))
+
+    # 5. Compute benchmarks in Python
+    benchmarks = None
+    if len(cohort) >= 3:
+        cohort_ppg = sorted([r["p"] / r["gp"] for r in cohort if r["gp"] and r["gp"] > 0])
+        cohort_gpg = sorted([r["g"] / r["gp"] for r in cohort if r["gp"] and r["gp"] > 0])
+        cohort_apg = sorted([r["a"] / r["gp"] for r in cohort if r["gp"] and r["gp"] > 0])
+
+        def _percentile_value(sorted_vals, pct):
+            if not sorted_vals:
+                return 0.0
+            idx = int(len(sorted_vals) * pct)
+            idx = min(idx, len(sorted_vals) - 1)
+            return round(sorted_vals[idx], 2)
+
+        # 6. Get player's own stats for percentile computation
+        player_stats_row = conn.execute(
+            "SELECT * FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY created_at DESC LIMIT 1",
+            (player_id,)
+        ).fetchone()
+
+        player_ppg = 0.0
+        player_percentile = 0
+        if player_stats_row and player_stats_row["gp"] and player_stats_row["gp"] > 0:
+            player_ppg = round(player_stats_row["p"] / player_stats_row["gp"], 2)
+            player_percentile = _calc_percentile(player_ppg, cohort_ppg)
+
+        benchmarks = {
+            "ppg": {"median": _percentile_value(cohort_ppg, 0.50), "p75": _percentile_value(cohort_ppg, 0.75), "p90": _percentile_value(cohort_ppg, 0.90)},
+            "gpg": {"median": _percentile_value(cohort_gpg, 0.50), "p75": _percentile_value(cohort_gpg, 0.75), "p90": _percentile_value(cohort_gpg, 0.90)},
+            "apg": {"median": _percentile_value(cohort_apg, 0.50), "p75": _percentile_value(cohort_apg, 0.75), "p90": _percentile_value(cohort_apg, 0.90)},
+            "player_ppg": player_ppg,
+            "player_percentile": player_percentile,
+        }
+
+    # 7. Data quality checks on game logs
+    game_logs = conn.execute(
+        "SELECT * FROM player_game_stats WHERE player_id = ?", (player_id,)
+    ).fetchall()
+    conn.close()
+
+    flags = []
+    for gl in game_logs:
+        goals = gl["goals"] or 0
+        pim_val = gl["pim"] or 0
+        pts = gl["points"] or 0
+        game_date = gl.get("game_date", "unknown")
+        if goals >= 8:
+            flags.append(f"game_log_team_totals_detected: {goals} goals on {game_date}")
+        if pim_val >= 50:
+            flags.append(f"game_log_team_totals_detected: {pim_val} PIM on {game_date}")
+        if pts >= 10:
+            flags.append(f"game_log_team_totals_detected: {pts} points on {game_date}")
+
+    data_quality = {
+        "status": "warning" if flags else "ok",
+        "flags": flags,
+        "game_logs_checked": len(game_logs),
+    }
+
+    # Build cohort info
+    cohort_info = None
+    if len(cohort) >= 3:
+        cohort_info = {
+            "league": league,
+            "position": position,
+            "season": "2025-26",
+            "sample_size": len(cohort),
+            "min_gp": 10,
+        }
+
+    return {
+        "player_canonical": player_canonical,
+        "cohort": cohort_info,
+        "benchmarks": benchmarks,
+        "data_quality": data_quality,
+    }
+
+
 @app.get("/hockey-os/team-systems")
 async def list_team_systems(token_data: dict = Depends(verify_token)):
     """Get all team system profiles for the org."""
