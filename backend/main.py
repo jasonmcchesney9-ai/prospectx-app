@@ -17845,6 +17845,14 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                 input_data["recommended_drills"] = drill_list
                 drill_prompt_addon = DRILL_REPORT_PROMPT_SECTION
 
+            # ── PXR Reference Bridge: inject context into report input_data ──
+            try:
+                pxr_context = _build_pxr_context(request.player_id, org_id, player, conn)
+                if pxr_context:
+                    input_data["pxr_context"] = pxr_context
+            except Exception as e:
+                logger.warning("PXR context injection failed for report: %s", e)
+
             report_type_name = template["template_name"]
 
             # Build the system context block for the prompt — resolve codes to full tactical descriptions
@@ -17901,6 +17909,16 @@ Generate a **{report_type_name}** for the player below. Your report must be:
 - Archetype-aware: The player's archetype may be compound (e.g., "Two-Way Playmaking Forward") indicating multiple dimensions. Analyze ALL archetype traits — if the archetype says "Two-Way Playmaking Forward" you must evaluate both the 200-foot game AND the playmaking IQ separately, then synthesize how these traits combine
 - Hockey vernacular: Use authentic hockey language when describing players — call a goal-scorer a "sniper" or "trigger man," a physical player a "grinder" or "mucker," a fast player has "wheels." Reference PP/PK formation roles (bumper, flank, QB, net-front). Use forecheck roles (F1/F2/F3). Describe a player's special teams fit by naming specific formations (1-3-1 flank, umbrella point, diamond PK high man). Use archetype terms: power forward, stay-at-home D, puck-moving D, two-way center, energy forward, shutdown D.
 {system_context_block}
+PXR REFERENCE CONTEXT (when present in input):
+If the input data includes "pxr_context", use it as follows:
+- player_canonical: Use for ALL physical profile statements (height, weight, position, shoots, birth_date). NEVER derive these from stat rows.
+- league_context: Use for ALL league tier/pathway descriptions. Reference tier_numeric and path_notes.
+- benchmarks: Use to justify "elite", "above average", "middle-six" claims with percentile data. Reference median/p75/p90 values.
+- data_quality: If status="ok", proceed normally. If status="warning", note the warning and use season stats + benchmarks only — do NOT reference individual game logs. If status="error", flag data as unreliable.
+- systems_context: Use when discussing system fit or tactical adjustments.
+- glossary_context: Use these definitions when using hockey jargon.
+If any pxr_context block is null or missing, skip it gracefully — do not mention its absence.
+
 PROGRESSION & RECENT FORM DATA (when available in input):
 If the input data includes "historical_progression" (season-over-season snapshots), use it to:
 - Analyze year-over-year stat trends in the PROJECTION section (is the player improving, plateauing, or declining?)
@@ -19012,6 +19030,264 @@ async def pxr_reference_benchmarks(
         "benchmarks": benchmarks,
         "data_quality": data_quality,
     }
+
+
+# ── PXR Reference: League Context constants + cache ──
+TIER_NUMERIC = {
+    "professional": 1, "major_junior": 2, "junior_a": 3,
+    "junior_b": 4, "college": 5, "high_school": 6, "minor": 7,
+}
+
+LEVEL_PATH_NOTES = {
+    "professional": ["Pro league — NHL/AHL affiliate system"],
+    "major_junior": ["CHL pathway — primary route to NHL Draft", "Players aged 16-20, highly scouted"],
+    "junior_a": ["Junior A — strong development alternative to CHL", "NCAA eligibility preserved", "Feeder to college and pro"],
+    "junior_b": ["Junior B — developmental tier below Junior A", "Feeder to Junior A and college programs", "Strong for late-blooming prospects"],
+    "college": ["NCAA/USports — combines athletics and academics", "Players aged 18-24"],
+    "high_school": ["High school hockey — early development stage"],
+    "minor": ["Minor hockey — youth development pathway"],
+}
+
+LEVEL_AGE_RANGES = {
+    "professional": {"min": 20, "max": 38},
+    "major_junior": {"min": 16, "max": 20},
+    "junior_a": {"min": 16, "max": 20},
+    "junior_b": {"min": 16, "max": 20},
+    "college": {"min": 18, "max": 24},
+    "high_school": {"min": 14, "max": 18},
+    "minor": {"min": 8, "max": 18},
+}
+
+_league_context_cache: dict = {}
+_league_context_cache_ts: dict = {}
+LEAGUE_CACHE_TTL = 1800  # 30 minutes
+
+
+@app.get("/pxr/reference/league-context")
+async def pxr_reference_league_context(league_id: str):
+    """Return league context with tier, pathway notes, and age ranges (global, no auth)."""
+    # Check cache
+    if league_id in _league_context_cache and time.time() - _league_context_cache_ts.get(league_id, 0) < LEAGUE_CACHE_TTL:
+        return _league_context_cache[league_id]
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM leagues WHERE abbreviation = ? OR name = ?", (league_id, league_id)
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"League '{league_id}' not found")
+
+    level = row["level"] or ""
+    result = {
+        "league_id": row["abbreviation"],
+        "canonical_name": row["name"],
+        "short_name": row["abbreviation"],
+        "country": row["country"] or "",
+        "level": level,
+        "tier_numeric": TIER_NUMERIC.get(level, 99),
+        "path_notes": LEVEL_PATH_NOTES.get(level, []),
+        "age_range": LEVEL_AGE_RANGES.get(level, {"min": 0, "max": 99}),
+    }
+
+    # Cache it
+    _league_context_cache[league_id] = result
+    _league_context_cache_ts[league_id] = time.time()
+    return result
+
+
+def _build_pxr_context(player_id: str, org_id: str, player: dict, conn) -> dict:
+    """Build PXR reference context for report generation.
+
+    Internally computes benchmarks, league-context, filtered systems, and glossary.
+    Returns a dict to inject into input_data, or None on complete failure.
+    """
+    pxr = {}
+
+    # 1. Player canonical
+    age = None
+    age_note = None
+    dob_str = player.get("dob")
+    if dob_str:
+        try:
+            dob_date = datetime.strptime(dob_str[:10], "%Y-%m-%d").date()
+            today = datetime.now().date()
+            age = (today - dob_date).days // 365
+        except Exception:
+            age_note = "birth_date could not be parsed"
+    else:
+        age_note = "birth_date not available"
+
+    player_canonical = {
+        "name": f"{player.get('first_name', '')} {player.get('last_name', '')}",
+        "position": player.get("position", ""),
+        "shoots": player.get("shoots", ""),
+        "height_cm": player.get("height_cm"),
+        "weight_kg": player.get("weight_kg"),
+        "birth_date": dob_str or None,
+        "age": age,
+        "current_team": player.get("current_team", ""),
+        "current_league": player.get("current_league", ""),
+    }
+    if age_note:
+        player_canonical["age_note"] = age_note
+    pxr["player_canonical"] = player_canonical
+
+    # 2. League context (cached)
+    league = player.get("current_league", "")
+    if league:
+        try:
+            # Check cache first
+            if league in _league_context_cache and time.time() - _league_context_cache_ts.get(league, 0) < LEAGUE_CACHE_TTL:
+                pxr["league_context"] = _league_context_cache[league]
+            else:
+                lrow = conn.execute(
+                    "SELECT * FROM leagues WHERE abbreviation = ? OR name = ?", (league, league)
+                ).fetchone()
+                if lrow:
+                    level = lrow["level"] or ""
+                    lc = {
+                        "league_id": lrow["abbreviation"],
+                        "canonical_name": lrow["name"],
+                        "short_name": lrow["abbreviation"],
+                        "country": lrow["country"] or "",
+                        "level": level,
+                        "tier_numeric": TIER_NUMERIC.get(level, 99),
+                        "path_notes": LEVEL_PATH_NOTES.get(level, []),
+                        "age_range": LEVEL_AGE_RANGES.get(level, {"min": 0, "max": 99}),
+                    }
+                    _league_context_cache[league] = lc
+                    _league_context_cache_ts[league] = time.time()
+                    pxr["league_context"] = lc
+        except Exception:
+            pass
+
+    # 3. Benchmarks (cohort)
+    position = player.get("position", "")
+    if league and position:
+        try:
+            cohort_rows = conn.execute("""
+                SELECT ps.player_id, ps.gp, ps.g, ps.a, ps.p
+                FROM player_stats ps
+                JOIN players p ON ps.player_id = p.id
+                WHERE p.current_league = ?
+                  AND p.position = ?
+                  AND ps.gp >= 10
+                  AND ps.stat_type = 'season'
+                  AND p.org_id = ?
+                  AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+                ORDER BY ps.created_at DESC
+            """, (league, position, org_id)).fetchall()
+
+            seen = set()
+            cohort = []
+            for row in cohort_rows:
+                pid = row["player_id"]
+                if pid not in seen:
+                    seen.add(pid)
+                    cohort.append(dict(row))
+
+            if len(cohort) >= 3:
+                cohort_ppg = sorted([r["p"] / r["gp"] for r in cohort if r["gp"] and r["gp"] > 0])
+                cohort_gpg = sorted([r["g"] / r["gp"] for r in cohort if r["gp"] and r["gp"] > 0])
+                cohort_apg = sorted([r["a"] / r["gp"] for r in cohort if r["gp"] and r["gp"] > 0])
+
+                def _pv(vals, pct):
+                    if not vals:
+                        return 0.0
+                    idx = min(int(len(vals) * pct), len(vals) - 1)
+                    return round(vals[idx], 2)
+
+                ps_row = conn.execute(
+                    "SELECT gp, p FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY created_at DESC LIMIT 1",
+                    (player_id,)
+                ).fetchone()
+
+                player_ppg = 0.0
+                player_pct = 0
+                if ps_row and ps_row["gp"] and ps_row["gp"] > 0:
+                    player_ppg = round(ps_row["p"] / ps_row["gp"], 2)
+                    player_pct = _calc_percentile(player_ppg, cohort_ppg)
+
+                pxr["benchmarks"] = {
+                    "cohort": {"league": league, "position": position, "sample_size": len(cohort), "min_gp": 10},
+                    "ppg": {"median": _pv(cohort_ppg, 0.50), "p75": _pv(cohort_ppg, 0.75), "p90": _pv(cohort_ppg, 0.90)},
+                    "gpg": {"median": _pv(cohort_gpg, 0.50), "p75": _pv(cohort_gpg, 0.75), "p90": _pv(cohort_gpg, 0.90)},
+                    "apg": {"median": _pv(cohort_apg, 0.50), "p75": _pv(cohort_apg, 0.75), "p90": _pv(cohort_apg, 0.90)},
+                    "player_ppg": player_ppg,
+                    "player_percentile": player_pct,
+                }
+        except Exception:
+            pass
+
+    # 4. Data quality
+    try:
+        game_logs = conn.execute(
+            "SELECT goals, pim, points, game_date FROM player_game_stats WHERE player_id = ?", (player_id,)
+        ).fetchall()
+        flags = []
+        for gl in game_logs:
+            goals = gl["goals"] or 0
+            pim_val = gl["pim"] or 0
+            pts = gl["points"] or 0
+            gd = gl["game_date"] or "unknown"
+            if goals >= 8:
+                flags.append(f"game_log_team_totals_detected: {goals} goals on {gd}")
+            if pim_val >= 50:
+                flags.append(f"game_log_team_totals_detected: {pim_val} PIM on {gd}")
+            if pts >= 10:
+                flags.append(f"game_log_team_totals_detected: {pts} points on {gd}")
+        pxr["data_quality"] = {
+            "status": "warning" if flags else "ok",
+            "flags": flags,
+            "game_logs_checked": len(game_logs),
+        }
+    except Exception:
+        pass
+
+    # 5. Filtered systems context (top 5, one per phase)
+    try:
+        sys_rows = conn.execute("SELECT * FROM systems_library ORDER BY system_type, code").fetchall()
+        phase_seen = set()
+        top5 = []
+        for r in sys_rows:
+            phase = r["system_type"]
+            if phase not in phase_seen:
+                phase_seen.add(phase)
+                top5.append({
+                    "name": r["name"], "phase": phase,
+                    "description": (r["description"] or "")[:200],
+                })
+            if len(top5) >= 5:
+                break
+        if top5:
+            pxr["systems_context"] = top5
+    except Exception:
+        pass
+
+    # 6. Filtered glossary (position-relevant, max 20)
+    try:
+        glossary_rows = conn.execute("SELECT term, category, definition FROM hockey_terms ORDER BY category, term").fetchall()
+        position_categories = {
+            "C": ["offense", "faceoffs", "two-way", "skating"],
+            "LW": ["offense", "skating", "shooting"],
+            "RW": ["offense", "skating", "shooting"],
+            "D": ["defense", "skating", "transition"],
+            "G": ["goaltending"],
+        }
+        relevant_cats = position_categories.get(position, [])
+        terms = []
+        for gr in glossary_rows:
+            cat = (gr["category"] or "").lower()
+            if any(rc in cat for rc in relevant_cats) and len(terms) < 20:
+                terms.append({"term": gr["term"], "definition": (gr["definition"] or "")[:150]})
+        if terms:
+            pxr["glossary_context"] = terms
+    except Exception:
+        pass
+
+    return pxr if pxr else None
 
 
 @app.get("/hockey-os/team-systems")
