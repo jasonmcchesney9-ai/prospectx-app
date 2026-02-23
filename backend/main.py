@@ -4176,6 +4176,143 @@ def deduplicate_teams():
     conn.close()
 
 
+def deduplicate_players():
+    """DESIGN ONLY — NOT YET IMPLEMENTED. Do not call this function.
+
+    Player Deduplication Merge Plan
+    ===============================
+
+    Context (from /admin/player-dupes diagnostic, Feb 22 2026):
+    - 12,129 active players
+    - 2,694 duplicate name groups (first_name + last_name with COUNT > 1)
+    - 1,245 groups classified as "likely true duplicates" (same org + same team)
+    - 1,449 groups are name collisions across different teams/leagues (leave alone)
+
+    Model example — Braeden Burke x5:
+      ✅ KEEPER:  ht_id=18453, team=Chatham Maroons, league=GOHL, created=Feb 13 (HT sync)
+      ❌ JUNK:    team=Chatham Maroons, league=GOJHL (old name), no ht_id, created=Feb 21
+      ❌ JUNK:    team=Burlington, league=OJHL, no ht_id, created=Feb 21 (different team — transfer?)
+      ❌ JUNK:    team=None, league="Chatham Maroons-Strathroy Rockets", no ht_id (schedule garbage)
+      ❌ JUNK:    team=None, league="Chatham Maroons-Strathroy Rockets  07-Feb-2026" (schedule garbage)
+
+    ─── STEP 1: SCOPE ───
+    Only process groups where likely_true_dupe = True (same org_id + same current_team
+    appears more than once). Leave cross-team name collisions untouched — those may be
+    different people, or transfers that should remain as separate records.
+
+    ─── STEP 2: PICK THE KEEPER ───
+    For each true-duplicate group, select ONE keeper row using this priority:
+
+    Priority 1 — Has hockeytech_id (non-null).
+      • If multiple rows have hockeytech_id, pick the one with the earliest created_at.
+      • If still tied, pick the one with the smallest id (deterministic tiebreaker).
+
+    Priority 2 — No rows have hockeytech_id.
+      • Pick the row with a non-null, non-empty current_team AND a sane current_league
+        (not containing a date, not containing a hyphenated team matchup like
+        "Team A-Team B", not null).
+      • Among those, pick earliest created_at, then smallest id.
+
+    Priority 3 — Fallback.
+      • If all rows are equally junk (no HT ID, no clean team/league), pick the
+        earliest created_at, then smallest id.
+
+    ─── STEP 3: CLASSIFY JUNK ROWS ───
+    Every non-keeper row in the group is classified as junk. Common junk patterns:
+
+    a) Schedule garbage: current_league contains a hyphen separating two team names
+       (e.g., "Chatham Maroons-Strathroy Rockets") or contains a date string.
+       current_team is often null. These were likely imported from game schedule
+       data that was misinterpreted as player records.
+
+    b) Old league name: current_league = "Greater Ontario Junior Hockey League" or
+       "GOJHL" — the league rebranded to GOHL. These are stale copies from before
+       the rename.
+
+    c) No metadata: hockeytech_id is null, current_team is null or empty, league is
+       null. These are hollow records with just a name and nothing else.
+
+    d) Transfer shadows: same name, different team. These are NOT junk — they may
+       represent a real player who was traded or moved up. The scope filter in Step 1
+       should exclude these, but if one slips through (e.g., team name spelled
+       slightly differently), do NOT merge it. Skip the group if ambiguous.
+
+    ─── STEP 4: REPOINT ATTACHED DATA ───
+    Before soft-deleting junk rows, migrate any attached data to the keeper:
+
+    Table                   FK column       Dedup strategy
+    ─────────────────────── ─────────────── ────────────────────────────────────
+    player_stats            player_id       UPDATE SET player_id = keeper_id.
+                                            If keeper already has a stat row for
+                                            the same season+stat_type, keep the
+                                            one with more games played (gp), or
+                                            the HT-sourced one (data_source =
+                                            'hockeytech'), and delete the other.
+
+    player_game_stats       player_id       UPDATE SET player_id = keeper_id.
+                                            Deduplicate by (game_date, opponent)
+                                            — if both keeper and junk have stats
+                                            for the same game, keep the one with
+                                            data_source = 'hockeytech' or the
+                                            one with more complete data (non-null
+                                            shots, pim, etc.). Delete the other.
+
+    scout_notes             player_id       UPDATE SET player_id = keeper_id.
+                                            No dedup needed — notes are additive.
+
+    reports                 player_id       UPDATE SET player_id = keeper_id.
+                                            No dedup needed — reports are unique
+                                            documents.
+
+    player_intelligence     player_id       UPDATE SET player_id = keeper_id.
+                                            If both exist, keep the keeper's
+                                            version (more likely to be current).
+
+    player_metrics          player_id       UPDATE SET player_id = keeper_id.
+                                            Same as intelligence — keep keeper's.
+
+    player_corrections      player_id       UPDATE SET player_id = keeper_id.
+                                            No dedup needed.
+
+    line_combinations       (various slot   These reference player_id in slot
+                            columns like    columns (lw_id, c_id, rw_id, etc.).
+                            lw_id, c_id)    UPDATE each slot column where value
+                                            matches a junk player_id → keeper_id.
+
+    scouting_list_players   player_id       UPDATE SET player_id = keeper_id.
+                                            No dedup needed.
+
+    ─── STEP 5: SOFT-DELETE JUNK ROWS ───
+    For each junk row:
+      UPDATE players SET is_deleted = 1, deleted_at = NOW(),
+        deleted_reason = 'dedup_merge', deleted_by = 'system'
+      WHERE id = <junk_id>
+
+    Do NOT hard-delete. The 30-day recovery window applies.
+
+    ─── STEP 6: AUDIT TRAIL ───
+    Insert a record into player_merges for each merge:
+      - keeper_id = keeper player id
+      - merged_id = junk player id
+      - merged_by = 'system_dedup'
+      - merged_at = NOW()
+      - merge_reason = 'automated_dedup_<reason>' (e.g., 'automated_dedup_ht_match',
+        'automated_dedup_schedule_garbage', 'automated_dedup_old_league_name')
+
+    This allows undo via the existing POST /merges/{id}/undo endpoint.
+
+    ─── SAFETY RAILS ───
+    • Run in dry-run mode first: log what WOULD be merged without executing.
+    • Never merge across different org_ids.
+    • Never merge if the group has ambiguous team assignments (e.g., 2 rows with
+      different non-null current_team values that don't fuzzy-match each other).
+    • Log every merge action with before/after state.
+    • Expose a /admin/player-dedup-preview endpoint that shows the merge plan
+      before execution, so Jason can review before pulling the trigger.
+    """
+    raise NotImplementedError("Design only — do not call. See docstring for merge plan.")
+
+
 def seed_drills():
     """Seed 44 original hockey drills across 13 categories with age-appropriate tagging."""
     conn = get_db()
