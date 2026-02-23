@@ -15545,6 +15545,7 @@ async def get_team_roster_with_stats(team_name: str, token_data: dict = Depends(
             FROM goalie_stats
         ) gs ON p.id = gs.player_id AND gs.rn = 1
         WHERE p.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+          AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
         ORDER BY p.position, p.last_name
     """, (org_id, decoded_name)).fetchall()
     conn.close()
