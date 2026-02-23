@@ -505,7 +505,7 @@ def _increment_tracking(user_id: str, resource_type: str, conn):
         INSERT INTO usage_tracking (id, user_id, month, {col}, updated_at)
         VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id, month) DO UPDATE SET
-            {col} = COALESCE({col}, 0) + 1,
+            {col} = COALESCE(usage_tracking.{col}, 0) + 1,
             updated_at = CURRENT_TIMESTAMP
     """, (gen_id(), user_id, current_month))
 
