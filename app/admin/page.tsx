@@ -599,8 +599,10 @@ function PxrOpsTab() {
           </div>
           {nlResult.updates && Object.keys(nlResult.updates).length > 0 && (
             <div className="mt-2 text-xs space-y-1">
-              {Object.entries(nlResult.updates).map(([table, count]) => (
-                <div key={table}>{table}: {count} rows updated</div>
+              {Object.entries(nlResult.updates || {}).map(([league, count]) => (
+                <div key={league} className="text-sm">
+                  {league}: {count as number} rows fixed
+                </div>
               ))}
             </div>
           )}
