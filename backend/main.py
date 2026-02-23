@@ -20366,6 +20366,59 @@ async def admin_player_dedup_execute(
     return summary
 
 
+@app.get("/admin/league-aliases")
+async def admin_league_aliases(token_data: dict = Depends(verify_token)):
+    """Scan all tables with league columns and report distinct values + counts.
+
+    Read-only diagnostics — no updates.
+    """
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    # All tables/columns that store league strings
+    LEAGUE_COLUMNS = [
+        ("teams", "league"),
+        ("players", "current_league"),
+        ("player_stats_history", "league"),
+        ("player_game_stats", "league"),
+        ("team_stats", "league"),
+        ("games", "league"),
+        ("events", "league_name"),
+        ("instat_league_skater_stats", "league_name"),
+        ("instat_league_team_stats", "league_name"),
+        ("broadcast_settings", "league"),
+        ("leagues", "name"),
+        ("leagues", "abbreviation"),
+    ]
+
+    result = {}
+    for entry in LEAGUE_COLUMNS:
+        if entry is None:
+            continue
+        table, col = entry
+        try:
+            rows = conn.execute(f"""
+                SELECT {col} as league, COUNT(*) as count
+                FROM {table}
+                WHERE {col} IS NOT NULL AND {col} != ''
+                GROUP BY {col}
+                ORDER BY count DESC
+            """).fetchall()
+            result[f"{table}.{col}"] = [
+                {"league": r["league"] if hasattr(r, "keys") else r[0],
+                 "count": r["count"] if hasattr(r, "keys") else r[1]}
+                for r in rows
+            ]
+        except Exception as e:
+            result[f"{table}.{col}"] = {"error": str(e)}
+
+    conn.close()
+    return result
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
