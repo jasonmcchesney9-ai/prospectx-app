@@ -15056,7 +15056,7 @@ async def ingest_stats(
         if year_match:
             y = int(year_match.group(1))
             # Hockey seasons span two years; if month is before August, it's previous year's season
-            default_season = f"{y-1}-{y}"
+            default_season = _normalize_season(f"{y-1}-{y}")
 
         logger.info("InStat game log detected for player %s %s — %d rows, season guess: %s",
                      player["first_name"], player["last_name"], len(all_rows), default_season or "unknown")
@@ -15291,7 +15291,7 @@ async def ingest_stats(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             gen_id(), pid,
-            row.get("season", ""),
+            _normalize_season(row.get("season", "")),
             row.get("stat_type", "season"),
             _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
             g, a, p,
@@ -15337,6 +15337,7 @@ async def upload_stats(
     Unified stat normalizer endpoint. Accepts InStat Excel exports,
     auto-detects file type, maps to ProspectX standard schema.
     """
+    season = _normalize_season(season)
     org_id = token_data["org_id"]
 
     fname = file.filename or ""
@@ -19598,7 +19599,7 @@ async def preview_import(
             "p": row.get("p") or row.get("pts") or row.get("points") or row.get("tp") or None,
             "plus_minus": row.get("plus_minus") or row.get("+/_") or row.get("plusminus") or row.get("+/−") or row.get("+/") or None,
             "pim": row.get("pim") or row.get("penalty_minutes") or row.get("pen") or None,
-            "season": row.get("season") or row.get("year") or None,
+            "season": _normalize_season(row.get("season") or row.get("year") or ""),
         })
 
     # Apply team/league override for team roster imports
@@ -19611,6 +19612,7 @@ async def preview_import(
             if not rd.get("current_league"):
                 rd["current_league"] = league_override
     if season_override:
+        season_override = _normalize_season(season_override)
         for rd in rows_data:
             if not rd.get("season"):
                 rd["season"] = season_override
@@ -19757,7 +19759,7 @@ async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: di
                         conn.execute("""
                             INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
                             VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                        """, (gen_id(), player_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
+                        """, (gen_id(), player_id, _normalize_season(rd.get("season", "")), safe_int(rd.get("gp")) or 0,
                               g, a, p, safe_int(rd.get("plus_minus")) or 0,
                               safe_int(rd.get("pim")) or 0, now))
 
@@ -19803,7 +19805,7 @@ async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: di
                         conn.execute("""
                             INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
                             VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                        """, (gen_id(), player_id, rd.get("season", ""), safe_int(rd.get("gp")) or 0,
+                        """, (gen_id(), player_id, _normalize_season(rd.get("season", "")), safe_int(rd.get("gp")) or 0,
                               g, a, p, safe_int(rd.get("plus_minus")) or 0,
                               safe_int(rd.get("pim")) or 0, now))
                 except Exception as e:
@@ -20442,6 +20444,7 @@ def _import_league_teams(rows, season, org_id, team_name_override=None):
     all rows are assigned to that team. Otherwise, the team name is extracted
     from each row using common column name patterns.
     """
+    season = _normalize_season(season)
     conn = get_db()
     stats_imported = 0
     errors = []
@@ -25523,7 +25526,7 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
     season_name = ""
     for s in seasons:
         if s.get("id") == season_id:
-            season_name = s.get("name", str(season_id))
+            season_name = _normalize_season(s.get("name", str(season_id)))
             break
 
     # Fetch stats from HT
@@ -25748,7 +25751,7 @@ async def ht_sync_gamelog(league: str, player_id: str, season_id: Optional[int] 
         season_name = ""
         for s in seasons:
             if s.get("id") == season_id:
-                season_name = s.get("name", str(season_id))
+                season_name = _normalize_season(s.get("name", str(season_id)))
                 break
 
         # Fetch parsed game log
