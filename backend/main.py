@@ -18709,6 +18709,100 @@ async def list_glossary(category: Optional[str] = None):
     return [dict(r) for r in rows]
 
 
+# ============================================================
+# PXR Reference Bridge — R2/R3/R4/R5
+# ============================================================
+
+def _parse_multi_value(text: str) -> list:
+    """Parse a semicolon/newline-separated string into a list. Returns [] for empty/None."""
+    if not text or not text.strip():
+        return []
+    for sep in (";", "\n"):
+        if sep in text:
+            return [s.strip() for s in text.split(sep) if s.strip()]
+    return [text.strip()]
+
+
+def _extract_system_tags(name: str, description: str) -> list:
+    """Extract keyword tags from system name and description."""
+    tag_keywords = [
+        "aggressive", "conservative", "speed", "physical", "puck",
+        "neutral", "defensive", "offensive", "trap", "pressure",
+        "transition", "cycle", "stretch", "dump", "chip",
+    ]
+    text = f"{name} {description}".lower()
+    return [t for t in tag_keywords if t in text]
+
+
+def _filter_systems_for_context(user_message: str, all_systems: list, max_results: int = 10) -> str:
+    """Keyword-match user message against systems, return compact JSON of matches."""
+    if not all_systems:
+        return ""
+    msg_lower = user_message.lower()
+    msg_words = set(msg_lower.split())
+
+    scored = []
+    for s in all_systems:
+        name_words = set(s["name"].lower().split())
+        desc_lower = s.get("description", "").lower()
+        tag_set = set(s.get("tags", []))
+        # Score: word overlap with name, tags, and description keywords
+        score = len(msg_words & name_words) * 3
+        score += len(msg_words & tag_set) * 2
+        for w in msg_words:
+            if len(w) > 3 and w in desc_lower:
+                score += 1
+        # Also match phase names
+        phase = s.get("phase", "").lower().replace("_", " ")
+        for w in msg_words:
+            if w in phase:
+                score += 2
+        if score > 0:
+            scored.append((score, s))
+
+    if scored:
+        scored.sort(key=lambda x: x[0], reverse=True)
+        matched = [s for _, s in scored[:max_results]]
+    else:
+        # No match — inject one per phase as general context
+        phases = {}
+        for s in all_systems:
+            p = s.get("phase", "")
+            if p not in phases:
+                phases[p] = s
+            if len(phases) >= 5:
+                break
+        matched = list(phases.values())
+
+    if not matched:
+        return ""
+    compact = [{"name": s["name"], "phase": s["phase"], "description": s.get("description", ""),
+                "strengths": s.get("strengths", []), "weaknesses": s.get("weaknesses", [])}
+               for s in matched]
+    return "\nSystems context:\n" + json.dumps(compact, default=str)
+
+
+@app.get("/pxr/reference/systems")
+async def pxr_reference_systems():
+    """Return all tactical systems from systems_library (global reference data, no auth)."""
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM systems_library ORDER BY system_type, code").fetchall()
+    conn.close()
+    systems = []
+    for r in rows:
+        systems.append({
+            "system_id": r["id"],
+            "name": r["name"],
+            "phase": r["system_type"],
+            "description": r["description"] or "",
+            "tags": _extract_system_tags(r["name"], r["description"] or ""),
+            "strengths": _parse_multi_value(r["strengths"]),
+            "weaknesses": _parse_multi_value(r["weaknesses"]),
+            "ideal_personnel": _parse_multi_value(r["ideal_personnel"]),
+        })
+    return {"systems": systems}
+
+
 @app.get("/hockey-os/team-systems")
 async def list_team_systems(token_data: dict = Depends(verify_token)):
     """Get all team system profiles for the org."""
@@ -25523,8 +25617,15 @@ A (Elite NHL) → B+ (Solid NHL) → B (Depth NHL) → B- (NHL Fringe/AHL Top) �
 - Be condescending — a parent asking about their kid deserves the same respect as a pro scout
 - Refuse off-topic questions — help out, then steer back to hockey
 
+# PXR REFERENCE DATA
+You may receive systems_context and/or glossary_context below. When present:
+- systems_context: Use these tactical systems when discussing system fit, role usage, or tactical adjustments. Prefer these over general hockey knowledge.
+- glossary_context: Use these definitions when using hockey jargon. Prefer these over your own general knowledge.
+
 Current date: {current_date}
-"""
+
+# PXR REFERENCE CONTEXT (injected per-request when relevant)
+{systems_context}{glossary_context}"""
 
 # Role-specific instruction blocks — NOW SERVED BY pxi_prompt_core.PXI_MODE_BLOCKS
 # The old BENCH_TALK_ROLE_INSTRUCTIONS dict has been replaced by 10 PXI mode blocks
@@ -27589,11 +27690,32 @@ async def send_bench_talk_message(
             # Keep first message for topic context + last (MAX_MESSAGES - 1) messages
             messages = [messages[0]] + messages[-(MAX_MESSAGES - 1):]
 
+        # ── PXR Reference Bridge: filtered context injection ──
+        systems_context_str = ""
+        glossary_context_str = ""
+        try:
+            pxr_conn = get_db()
+            # Systems: keyword-match user message, inject relevant systems
+            sys_rows = pxr_conn.execute("SELECT * FROM systems_library ORDER BY system_type, code").fetchall()
+            all_systems = [{
+                "name": r["name"], "phase": r["system_type"],
+                "description": r["description"] or "",
+                "tags": _extract_system_tags(r["name"], r["description"] or ""),
+                "strengths": _parse_multi_value(r["strengths"]),
+                "weaknesses": _parse_multi_value(r["weaknesses"]),
+            } for r in sys_rows]
+            systems_context_str = _filter_systems_for_context(req.message, all_systems, max_results=10)
+            pxr_conn.close()
+        except Exception as e:
+            logger.warning("PXR systems context injection failed: %s", e)
+
         system_prompt = BENCH_TALK_SYSTEM_PROMPT.format(
             current_date=datetime.now().strftime("%B %d, %Y"),
             user_first_name=user_first_name,
             hockey_role_label=hockey_role_label,
             role_instructions=role_instructions,
+            systems_context=systems_context_str,
+            glossary_context=glossary_context_str,
         )
 
         # First API call (may include tool use)
