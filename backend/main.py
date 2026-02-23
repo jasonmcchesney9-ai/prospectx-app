@@ -2259,6 +2259,27 @@ def init_db():
         )
     """)
 
+    # ── PXR 3A: sync_history table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sync_history (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            sync_type TEXT NOT NULL,
+            league TEXT,
+            team_id TEXT,
+            team_name TEXT,
+            started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT,
+            status TEXT DEFAULT 'running',
+            players_created INTEGER DEFAULT 0,
+            players_updated INTEGER DEFAULT 0,
+            players_linked INTEGER DEFAULT 0,
+            stats_upserted INTEGER DEFAULT 0,
+            errors TEXT DEFAULT '[]',
+            triggered_by TEXT
+        )
+    """)
+
     # ── NEW: game_plans table ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS game_plans (
@@ -20824,6 +20845,44 @@ async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token))
     }
 
 
+@app.get("/admin/sync-history")
+async def admin_sync_history(
+    league: Optional[str] = None,
+    sync_type: Optional[str] = None,
+    limit: int = 20,
+    token_data: dict = Depends(verify_token),
+):
+    """View recent sync operations with outcomes. Admin ops endpoint (PXR 3A)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    query = "SELECT * FROM sync_history WHERE org_id = ?"
+    params: list = [org_id]
+    if league:
+        query += " AND league = ?"
+        params.append(league)
+    if sync_type:
+        query += " AND sync_type = ?"
+        params.append(sync_type)
+    query += " ORDER BY started_at DESC LIMIT ?"
+    params.append(limit)
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    results = []
+    for r in rows:
+        d = dict(r)
+        if isinstance(d.get("errors"), str):
+            try:
+                d["errors"] = json.loads(d["errors"])
+            except Exception:
+                pass
+        results.append(d)
+
+    return results
+
+
 @app.get("/admin/backup-db")
 async def backup_database(token_data: dict = Depends(verify_token)):
     """Download the full SQLite database. Admin only."""
@@ -24272,8 +24331,19 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
 
     created, updated, skipped = 0, 0, 0
     results = []
+    sync_errors = []
     team_name_synced = ""
     logo_synced = False
+
+    # ── PXR 3A: Record sync start ──
+    sync_id = str(uuid.uuid4())
+    sync_conn = get_db()
+    sync_conn.execute("""
+        INSERT INTO sync_history (id, org_id, sync_type, league, team_id, team_name, triggered_by)
+        VALUES (?, ?, 'roster', ?, ?, ?, ?)
+    """, (sync_id, org_id, league, str(team_id), "", user_id))
+    sync_conn.commit()
+    sync_conn.close()
 
     with safe_db() as conn:
         now = datetime.now(timezone.utc).isoformat()
@@ -24464,6 +24534,25 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
             roster_result["stats_sync"] = stats_result
         except Exception as e:
             roster_result["stats_sync_error"] = str(e)
+            sync_errors.append(f"stats_sync: {e}")
+
+    # ── PXR 3A: Record sync completion ──
+    try:
+        s_conn = get_db()
+        s_conn.execute("""
+            UPDATE sync_history SET completed_at = ?, status = ?, team_name = ?,
+                players_created = ?, players_updated = ?, players_linked = ?,
+                errors = ?
+            WHERE id = ?
+        """, (datetime.now(timezone.utc).isoformat(),
+              "error" if sync_errors else "completed",
+              team_name_synced, created, updated, updated,
+              json.dumps(sync_errors) if sync_errors else "[]",
+              sync_id))
+        s_conn.commit()
+        s_conn.close()
+    except Exception:
+        pass  # Don't let sync history failure break the actual sync
 
     return roster_result
 
@@ -24642,6 +24731,18 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
     synced_goalies = 0
     snapshots_created = 0
     skipped = 0
+    stat_sync_errors = []
+
+    # ── PXR 3A: Record stat sync start ──
+    stat_sync_id = str(uuid.uuid4())
+    try:
+        conn.execute("""
+            INSERT INTO sync_history (id, org_id, sync_type, league, team_id, triggered_by)
+            VALUES (?, ?, 'stats', ?, ?, ?)
+        """, (stat_sync_id, org_id, league, str(team_id), user_id))
+        conn.commit()
+    except Exception:
+        pass
 
     try:
         # Get all HT-linked players for this org
@@ -24768,6 +24869,23 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
 
     logger.info("HT stats sync: %d skaters, %d goalies, %d snapshots for team %d (%s)",
                 synced_skaters, synced_goalies, snapshots_created, team_id, league)
+
+    # ── PXR 3A: Record stat sync completion ──
+    try:
+        s_conn = get_db()
+        s_conn.execute("""
+            UPDATE sync_history SET completed_at = ?, status = ?,
+                stats_upserted = ?, errors = ?
+            WHERE id = ?
+        """, (datetime.now(timezone.utc).isoformat(),
+              "error" if stat_sync_errors else "completed",
+              synced_skaters + synced_goalies,
+              json.dumps(stat_sync_errors) if stat_sync_errors else "[]",
+              stat_sync_id))
+        s_conn.commit()
+        s_conn.close()
+    except Exception:
+        pass
 
     return {
         "synced_skaters": synced_skaters,
