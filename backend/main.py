@@ -8144,17 +8144,17 @@ class StatsResponse(BaseModel):
     game_id: Optional[str] = None
     season: Optional[str] = None
     stat_type: str
-    gp: int
-    g: int
-    a: int
-    p: int
-    plus_minus: int
-    pim: int
-    toi_seconds: int
-    pp_toi_seconds: int
-    pk_toi_seconds: int
-    shots: int
-    sog: int
+    gp: Optional[int] = 0
+    g: Optional[int] = 0
+    a: Optional[int] = 0
+    p: Optional[int] = 0
+    plus_minus: Optional[int] = 0
+    pim: Optional[int] = 0
+    toi_seconds: Optional[int] = 0
+    pp_toi_seconds: Optional[int] = 0
+    pk_toi_seconds: Optional[int] = 0
+    shots: Optional[int] = 0
+    sog: Optional[int] = 0
     shooting_pct: Optional[float] = None
     microstats: Optional[Dict[str, Any]] = None
     created_at: str
@@ -10571,9 +10571,9 @@ async def list_player_cards(
         if r["stat_gp"] >= 5:
             try:
                 player_stats_dict = {
-                    "gp": r["stat_gp"], "g": r["stat_g"], "a": r["stat_a"], "p": r["stat_p"],
-                    "plus_minus": r["stat_plus_minus"], "pim": r["stat_pim"],
-                    "sog": r["stat_sog"], "shooting_pct": r["stat_shooting_pct"],
+                    "gp": r["stat_gp"] or 0, "g": r["stat_g"] or 0, "a": r["stat_a"] or 0, "p": r["stat_p"] or 0,
+                    "plus_minus": r["stat_plus_minus"] or 0, "pim": r["stat_pim"] or 0,
+                    "sog": r["stat_sog"] or 0, "shooting_pct": r["stat_shooting_pct"],
                 }
                 metrics = _compute_prospectx_indices(player_stats_dict, r["position"], league_stats)
                 card["metrics"] = {k: v["value"] for k, v in metrics.items()}
@@ -16723,8 +16723,8 @@ async def _generate_custom_report(request, org_id: str, user_id: str, conn):
                 p_stats = []
                 for sr in stats_rows:
                     p_stats.append({
-                        "season": sr["season"], "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
-                        "plus_minus": sr["plus_minus"], "pim": sr["pim"], "shots": sr["shots"], "sog": sr["sog"],
+                        "season": sr["season"], "gp": sr["gp"] or 0, "g": sr["g"] or 0, "a": sr["a"] or 0, "p": sr["p"] or 0,
+                        "plus_minus": sr["plus_minus"] or 0, "pim": sr["pim"] or 0, "shots": sr["shots"] or 0, "sog": sr["sog"] or 0,
                     })
                 roster_with_stats.append({"player": p, "stats": p_stats})
 
@@ -16880,11 +16880,11 @@ Today's date is {datetime.now().date().isoformat()}."""
         for sr in stats_rows:
             stat_entry = {
                 "season": sr["season"], "stat_type": sr["stat_type"],
-                "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
-                "plus_minus": sr["plus_minus"], "pim": sr["pim"],
-                "shots": sr["shots"], "sog": sr["sog"],
+                "gp": sr["gp"] or 0, "g": sr["g"] or 0, "a": sr["a"] or 0, "p": sr["p"] or 0,
+                "plus_minus": sr["plus_minus"] or 0, "pim": sr["pim"] or 0,
+                "shots": sr["shots"] or 0, "sog": sr["sog"] or 0,
                 "shooting_pct": sr["shooting_pct"],
-                "toi_seconds": sr["toi_seconds"],
+                "toi_seconds": sr["toi_seconds"] or 0,
             }
             ext_raw = _row_get(sr, "extended_stats")
             if ext_raw:
@@ -17176,8 +17176,8 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             for sr in stats_rows:
                 p_stats.append({
                     "season": sr["season"], "stat_type": sr["stat_type"],
-                    "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
-                    "plus_minus": sr["plus_minus"], "pim": sr["pim"],
+                    "gp": sr["gp"] or 0, "g": sr["g"] or 0, "a": sr["a"] or 0, "p": sr["p"] or 0,
+                    "plus_minus": sr["plus_minus"] or 0, "pim": sr["pim"] or 0,
                 })
             p_entry = {
                 "name": f"{p['first_name']} {p['last_name']}",
@@ -25908,13 +25908,13 @@ def _pt_query_players(params: dict, org_id: str) -> tuple[dict, dict]:
                 "dob": r["dob"],
                 "shoots": r["shoots"],
                 "archetype": r["archetype"],
-                "gp": r["gp"],
-                "g": r["g"],
-                "a": r["a"],
-                "p": r["p"],
-                "plus_minus": r["plus_minus"],
-                "pim": r["pim"],
-                "ppg": r["ppg"],
+                "gp": r["gp"] or 0,
+                "g": r["g"] or 0,
+                "a": r["a"] or 0,
+                "p": r["p"] or 0,
+                "plus_minus": r["plus_minus"] or 0,
+                "pim": r["pim"] or 0,
+                "ppg": r["ppg"] or 0,
                 "shooting_pct": r["shooting_pct"],
             })
             player_ids.append(r["id"])
@@ -26157,11 +26157,11 @@ def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, pl
         for sr in stats_rows:
             stat_entry = {
                 "season": sr["season"], "stat_type": sr["stat_type"],
-                "gp": sr["gp"], "g": sr["g"], "a": sr["a"], "p": sr["p"],
-                "plus_minus": sr["plus_minus"], "pim": sr["pim"],
-                "shots": sr["shots"], "sog": sr["sog"],
+                "gp": sr["gp"] or 0, "g": sr["g"] or 0, "a": sr["a"] or 0, "p": sr["p"] or 0,
+                "plus_minus": sr["plus_minus"] or 0, "pim": sr["pim"] or 0,
+                "shots": sr["shots"] or 0, "sog": sr["sog"] or 0,
                 "shooting_pct": sr["shooting_pct"],
-                "toi_seconds": sr["toi_seconds"],
+                "toi_seconds": sr["toi_seconds"] or 0,
             }
             ext_raw = _row_get(sr, "extended_stats")
             if ext_raw:
@@ -30029,10 +30029,10 @@ def _gather_broadcast_data(team_name: str, org_id: str, conn) -> dict:
         stats = {}
         if stats_row:
             stats = {
-                "season": stats_row["season"], "gp": stats_row["gp"],
-                "g": stats_row["g"], "a": stats_row["a"], "p": stats_row["p"],
-                "plus_minus": stats_row["plus_minus"], "pim": stats_row["pim"],
-                "shots": stats_row["shots"],
+                "season": stats_row["season"], "gp": stats_row["gp"] or 0,
+                "g": stats_row["g"] or 0, "a": stats_row["a"] or 0, "p": stats_row["p"] or 0,
+                "plus_minus": stats_row["plus_minus"] or 0, "pim": stats_row["pim"] or 0,
+                "shots": stats_row["shots"] or 0,
             }
         result.append({
             "name": f"{p.get('first_name', '')} {p.get('last_name', '')}".strip(),
