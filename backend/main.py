@@ -13917,6 +13917,17 @@ def _parse_pct(val) -> float | None:
         return None
 
 
+def _parse_score(s) -> tuple:
+    """Parse InStat score string like '4:3' into (goals_for, goals_against) integers."""
+    if not s or str(s).strip() in ('-', ''):
+        return None, None
+    try:
+        parts = str(s).strip().split(':')
+        return int(parts[0]), int(parts[1])
+    except (ValueError, IndexError, TypeError):
+        return None, None
+
+
 def _instat_val(val, default=None):
     """Sanitize InStat field value: converts '-', '', '[object Object]', 'nan', 'None' to default.
     Returns float for numeric strings, original string for non-numeric."""
@@ -14659,6 +14670,10 @@ def _norm_process_team_game(conn, org_id, season, row_dict, unmapped):
     # Handle pk_goals_against — may not be directly in the map
     pk_goals_against = None  # Not always available in InStat export
 
+    # Parse score "4:3" into goals_for/goals_against if goals column is empty
+    score_gf, score_ga = _parse_score(mapped.get("score"))
+    goals = mapped.get("goals") if mapped.get("goals") is not None else score_gf
+
     conn.execute("""
         INSERT OR REPLACE INTO instat_team_game_log (
             id, org_id, game_date, opponent, score,
@@ -14674,7 +14689,7 @@ def _norm_process_team_game(conn, org_id, season, row_dict, unmapped):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         row_id, org_id, game_date, opponent, mapped.get("score"),
-        mapped.get("goals"), mapped.get("penalties"), mapped.get("penalties_drawn"),
+        goals, mapped.get("penalties"), mapped.get("penalties_drawn"),
         mapped.get("fo_pct"), mapped.get("hits"),
         mapped.get("shots"), mapped.get("shots_on_goal"), mapped.get("corsi_pct"),
         mapped.get("xg"), mapped.get("opp_xg"), mapped.get("net_xg"),
