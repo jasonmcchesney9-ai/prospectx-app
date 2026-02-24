@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Link from "next/link";
 import {
   Upload,
   FileSpreadsheet,
@@ -10,6 +11,7 @@ import {
   ArrowRight,
   Database,
   Shield,
+  Video,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -61,6 +63,9 @@ export default function ImportsPage() {
       <NavBar />
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <StatNormalizerUploader />
+        <div className="mt-10">
+          <GameSheetsUploader />
+        </div>
         {isAdmin && (
           <div className="mt-10">
             <DatabaseRestorer />
@@ -318,6 +323,272 @@ function StatNormalizerUploader() {
               <>
                 <Upload size={18} />
                 Upload &amp; Process
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Game Sheets Uploader ────────────────────────────── */
+
+const GS_LEAGUE_OPTIONS = [
+  { value: "GOJHL", label: "GOJHL" },
+  { value: "OJHL", label: "OJHL" },
+  { value: "OHL", label: "OHL" },
+  { value: "WHL", label: "WHL" },
+  { value: "QMJHL", label: "QMJHL" },
+  { value: "PWHL", label: "PWHL" },
+];
+
+interface GsImportResult {
+  status: string;
+  game: { date: string; home_team: string; away_team: string; score: string };
+  counts: { events_total: number; players_resolved: number; players_unresolved: number; unresolved_names: string[] };
+}
+
+function GameSheetsUploader() {
+  const [file, setFile] = useState<File | null>(null);
+  const [league, setLeague] = useState("GOJHL");
+  const [season, setSeason] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    return now.getMonth() < 8 ? `${y - 1}-${String(y).slice(-2)}` : `${y}-${String(y + 1).slice(-2)}`;
+  });
+  const [videoUrl, setVideoUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<GsImportResult | null>(null);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    setError("");
+    setResult(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("league", league);
+      fd.append("season", season);
+      if (videoUrl.trim()) fd.append("video_url", videoUrl.trim());
+
+      const { data } = await api.post<GsImportResult>("/instat/import-xml", fd, { timeout: 300000 });
+      setResult(data);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (err as { message?: string })?.message ||
+        "Import failed";
+      setError(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const reset = () => {
+    setFile(null);
+    setResult(null);
+    setError("");
+    setVideoUrl("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center">
+            <Video size={20} className="text-teal" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold font-oswald text-navy">Game Sheets</h2>
+            <p className="text-muted text-sm">
+              Upload a tagged game file (.xml) to import events for Video Sessions and game film review
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Success Result */}
+      {result && (
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-5">
+          <div className="flex items-start gap-3">
+            <CheckCircle size={20} className="text-green-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-green-800 text-sm">
+                Imported {result.counts.events_total} events from {result.game.home_team} vs {result.game.away_team} ({result.game.date})
+              </p>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <p className="text-2xl font-oswald font-bold text-teal">{result.counts.events_total}</p>
+                  <p className="text-xs text-muted uppercase tracking-wider">Events</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <p className="text-2xl font-oswald font-bold text-navy">{result.counts.players_resolved}</p>
+                  <p className="text-xs text-muted uppercase tracking-wider">Players Matched</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <p className="text-2xl font-oswald font-bold text-orange">{result.counts.players_unresolved}</p>
+                  <p className="text-xs text-muted uppercase tracking-wider">Unresolved</p>
+                </div>
+              </div>
+              {result.counts.unresolved_names.length > 0 && (
+                <div className="mt-3 bg-orange/5 border border-orange/20 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-orange mb-1">
+                    These players could not be matched — check spelling or add them in Manage Players:
+                  </p>
+                  <ul className="text-xs text-muted space-y-0.5">
+                    {result.counts.unresolved_names.map((n, i) => (
+                      <li key={i}>• {n}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="mt-4 flex gap-4 flex-wrap">
+                <Link href="/video-sessions" className="inline-flex items-center gap-1.5 text-sm text-teal hover:underline">
+                  <ArrowRight size={14} />
+                  Video Sessions
+                </Link>
+                <button onClick={reset} className="text-sm text-navy hover:underline">
+                  Import Another File
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <AlertCircle size={18} className="text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-red-700 font-medium text-sm">Import Error</p>
+            <p className="text-red-600 text-xs mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Form */}
+      {!result && (
+        <div className="bg-white rounded-xl border border-border p-6">
+          {/* File Picker */}
+          <div className="mb-5">
+            <label className="block text-sm font-semibold text-navy mb-2">
+              Game File (.xml)
+            </label>
+            <div
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                file ? "border-teal bg-teal/5" : "border-teal/20 hover:border-teal/50"
+              }`}
+              onClick={() => fileRef.current?.click()}
+            >
+              {file ? (
+                <div className="flex items-center justify-center gap-3">
+                  <Video size={24} className="text-teal" />
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-navy">{file.name}</p>
+                    <p className="text-xs text-muted">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      reset();
+                    }}
+                    className="text-xs text-muted hover:text-red-500 ml-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <Upload size={32} className="mx-auto mb-2 text-teal/40" />
+                  <p className="text-sm text-muted">
+                    Click to select an <span className="font-semibold text-navy">.xml</span> tagged game file
+                  </p>
+                  <p className="text-xs text-muted/60 mt-1">One game per file — imports all tagged events with timestamps</p>
+                </div>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xml"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setFile(f);
+                  setError("");
+                  setResult(null);
+                }
+              }}
+            />
+          </div>
+
+          {/* League + Season */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+            <div>
+              <label className="block text-sm font-semibold text-navy mb-2">League</label>
+              <select
+                value={league}
+                onChange={(e) => setLeague(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+              >
+                {GS_LEAGUE_OPTIONS.map((l) => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-navy mb-2">Season</label>
+              <input
+                type="text"
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                placeholder="e.g. 2025-26"
+              />
+            </div>
+          </div>
+
+          {/* Video URL (optional) */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-navy mb-2">
+              Video URL <span className="text-muted font-normal">(optional)</span>
+            </label>
+            <input
+              type="url"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+              placeholder="https://youtu.be/... or direct video link"
+            />
+            <p className="text-xs text-muted/60 mt-1">
+              If you have game video, paste the URL here. It will be linked to these events for playback in Video Sessions.
+            </p>
+          </div>
+
+          {/* Upload Button */}
+          <button
+            onClick={handleUpload}
+            disabled={!file || uploading}
+            className="w-full bg-teal text-white font-semibold py-2.5 rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {uploading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Importing...
+              </>
+            ) : (
+              <>
+                <Upload size={18} />
+                Upload &amp; Import
               </>
             )}
           </button>
