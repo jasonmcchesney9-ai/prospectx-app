@@ -42,7 +42,7 @@ import httpx
 import jwt
 import shutil
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, status
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -3417,6 +3417,65 @@ def init_db():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_ros_session ON broadcast_run_of_show(session_id)")
+
+    # ── Table: game_events (InStat XML per-event tagging data) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_events (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            game_id TEXT,
+            player_id TEXT,
+            team_name TEXT,
+            opponent_name TEXT,
+            league TEXT,
+            season TEXT,
+            game_date TEXT,
+            period INTEGER,
+            start_s INTEGER,
+            end_s INTEGER,
+            pos_x REAL,
+            pos_y REAL,
+            action TEXT NOT NULL,
+            result TEXT,
+            zone TEXT,
+            short_description TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_events_org ON game_events(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_events_player ON game_events(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_events_game ON game_events(game_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_events_action ON game_events(action)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_events_date ON game_events(game_date)")
+
+    # ── Table: video_sessions (user-curated event playlists) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS video_sessions (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            created_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_org ON video_sessions(org_id)")
+
+    # ── Table: video_session_events (ordered events in a session) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS video_session_events (
+            session_id TEXT NOT NULL,
+            event_id TEXT NOT NULL,
+            order_index INTEGER NOT NULL,
+            PRIMARY KEY (session_id, order_index),
+            FOREIGN KEY (session_id) REFERENCES video_sessions(id),
+            FOREIGN KEY (event_id) REFERENCES game_events(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vse_event ON video_session_events(event_id)")
+
     conn.commit()
 
     conn.close()
