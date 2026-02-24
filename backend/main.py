@@ -13893,6 +13893,19 @@ def _to_float(val, default=None):
         return default
 
 
+def _parse_pim(val) -> int:
+    """Parse PIM from InStat MM:SS format or plain integer. Always returns int minutes."""
+    if not val or str(val).strip() in ('-', ''):
+        return 0
+    s = str(val).strip()
+    if ':' in s:
+        return int(s.split(':')[0])
+    try:
+        return int(float(s))
+    except (ValueError, TypeError):
+        return 0
+
+
 # ============================================================
 # INSTAT ANALYTICS — UTILITY FUNCTIONS
 # ============================================================
@@ -13938,9 +13951,7 @@ def _parse_instat_row(row: dict, core_map: dict, extended_map: dict):
         if target == "toi_seconds":
             core[target] = _parse_mmss_to_seconds(cleaned)
         elif target == "pim":
-            # PIM comes as MM:SS in InStat
-            secs = _parse_mmss_to_seconds(cleaned)
-            core[target] = secs // 60 if secs else _to_int(cleaned)
+            core[target] = _parse_pim(cleaned)
         elif target == "shooting_pct":
             core[target] = _to_float(cleaned)
         elif target == "sv_pct":
@@ -15074,8 +15085,7 @@ async def ingest_stats(
             p = _to_int(row.get("points"), g + a)
 
             toi = _parse_mmss_to_seconds(row.get("time_on_ice", ""))
-            pim_seconds = _parse_mmss_to_seconds(row.get("penalty_time", ""))
-            pim_minutes = pim_seconds // 60 if pim_seconds else 0
+            pim_minutes = _parse_pim(row.get("penalty_time", ""))
 
             # Build a game_id from date + opponent for dedup
             game_date = row.get("date", "")
@@ -15222,7 +15232,7 @@ async def ingest_stats(
             a = _to_int(row.get("assists"))
             p = _to_int(row.get("points"), g + a)
             toi = _parse_mmss_to_seconds(row.get("time_on_ice", ""))
-            pim_seconds = _parse_mmss_to_seconds(row.get("penalty_time", ""))
+            pim = _parse_pim(row.get("penalty_time", ""))
 
             try:
                 conn.execute("""
@@ -15234,7 +15244,7 @@ async def ingest_stats(
                     _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
                     g, a, p,
                     _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−")),
-                    pim_seconds // 60 if pim_seconds else 0,
+                    pim,
                     toi,
                     _to_int(row.get("shots")),
                     _to_int(row.get("shots_on_goal") or row.get("sog")),
@@ -15296,7 +15306,7 @@ async def ingest_stats(
             _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
             g, a, p,
             _to_int(row.get("plus_minus") or row.get("+/-") or row.get("plusminus")),
-            _to_int(row.get("pim") or row.get("penalty_minutes")),
+            _parse_pim(row.get("pim") or row.get("penalty_minutes")),
             _to_int(row.get("toi_seconds") or row.get("toi")),
             _to_int(row.get("pp_toi_seconds") or row.get("pp_toi")),
             _to_int(row.get("pk_toi_seconds") or row.get("pk_toi")),
@@ -19598,7 +19608,7 @@ async def preview_import(
             "a": row.get("a") or row.get("assists") or row.get("ast") or None,
             "p": row.get("p") or row.get("pts") or row.get("points") or row.get("tp") or None,
             "plus_minus": row.get("plus_minus") or row.get("+/_") or row.get("plusminus") or row.get("+/−") or row.get("+/") or None,
-            "pim": row.get("pim") or row.get("penalty_minutes") or row.get("pen") or None,
+            "pim": _parse_pim(row.get("pim") or row.get("penalty_minutes") or row.get("pen")),
             "season": _normalize_season(row.get("season") or row.get("year") or ""),
         })
 
