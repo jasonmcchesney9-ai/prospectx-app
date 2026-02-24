@@ -40,6 +40,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TrendlineChart from "@/components/TrendlineChart";
+import SkillBars from "@/components/SkillBars";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import type {
   PlayerCardData_V1,
@@ -681,6 +682,11 @@ export default function PlayerCardPage() {
                 </p>
               )}
             </div>
+
+            {/* Skill bars visualization */}
+            {userRole !== "parent" && intel && (
+              <SkillBars intelligence={intel} />
+            )}
 
             {/* Active objectives */}
             <div className="bg-white rounded-xl border border-teal/20 p-4">
