@@ -13906,16 +13906,30 @@ def _parse_pim(val) -> int:
         return 0
 
 
+def _instat_val(val, default=None):
+    """Sanitize InStat field value: converts '-', '', '[object Object]', 'nan', 'None' to default.
+    Returns float for numeric strings, original string for non-numeric."""
+    if val is None:
+        return default
+    s = str(val).strip()
+    if s in ('-', '', '[object Object]', 'nan', 'None'):
+        return default
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return s
+
+
 # ============================================================
 # INSTAT ANALYTICS — UTILITY FUNCTIONS
 # ============================================================
 
 def _clean_instat_val(val):
-    """Clean InStat value: handle '-', None, strip %."""
+    """Clean InStat value: handle '-', None, '[object Object]', 'nan', strip %."""
     if val is None:
         return None
     s = str(val).strip()
-    if s in ("-", "None", "", "N/A"):
+    if s in ("-", "None", "", "N/A", "[object Object]", "nan"):
         return None
     return s
 
@@ -19596,18 +19610,18 @@ async def preview_import(
             "first_name": first,
             "last_name": last,
             "position": pos,
-            "dob": row.get("dob") or row.get("date_of_birth") or row.get("birthdate") or row.get("birth_date") or row.get("birthday") or row.get("born") or None,
-            "shoots": row.get("shoots") or row.get("shot") or row.get("sh") or row.get("hand") or row.get("handedness") or None,
-            "current_team": row.get("current_team") or row.get("team") or row.get("club") or row.get("team_name") or None,
-            "current_league": row.get("current_league") or row.get("league") or row.get("lg") or None,
-            "height_cm": row.get("height_cm") or row.get("height") or row.get("ht") or None,
-            "weight_kg": row.get("weight_kg") or row.get("weight") or row.get("wt") or None,
+            "dob": _instat_val(row.get("dob") or row.get("date_of_birth") or row.get("birthdate") or row.get("birth_date") or row.get("birthday") or row.get("born")),
+            "shoots": _instat_val(row.get("shoots") or row.get("shot") or row.get("sh") or row.get("hand") or row.get("handedness")),
+            "current_team": _instat_val(row.get("current_team") or row.get("team") or row.get("club") or row.get("team_name")),
+            "current_league": _instat_val(row.get("current_league") or row.get("league") or row.get("lg")),
+            "height_cm": _instat_val(row.get("height_cm") or row.get("height") or row.get("ht")),
+            "weight_kg": _instat_val(row.get("weight_kg") or row.get("weight") or row.get("wt")),
             # Stats columns (optional — will be imported as player_stats)
-            "gp": row.get("gp") or row.get("games_played") or row.get("games") or row.get("g.p.") or None,
-            "g": row.get("g") or row.get("goals") or None,
-            "a": row.get("a") or row.get("assists") or row.get("ast") or None,
-            "p": row.get("p") or row.get("pts") or row.get("points") or row.get("tp") or None,
-            "plus_minus": row.get("plus_minus") or row.get("+/_") or row.get("plusminus") or row.get("+/−") or row.get("+/") or None,
+            "gp": _instat_val(row.get("gp") or row.get("games_played") or row.get("games") or row.get("g.p.")),
+            "g": _instat_val(row.get("g") or row.get("goals")),
+            "a": _instat_val(row.get("a") or row.get("assists") or row.get("ast")),
+            "p": _instat_val(row.get("p") or row.get("pts") or row.get("points") or row.get("tp")),
+            "plus_minus": _instat_val(row.get("plus_minus") or row.get("+/_") or row.get("plusminus") or row.get("+/−") or row.get("+/")),
             "pim": _parse_pim(row.get("pim") or row.get("penalty_minutes") or row.get("pen")),
             "season": _normalize_season(row.get("season") or row.get("year") or ""),
         })
@@ -20533,9 +20547,9 @@ def _import_league_skaters(rows, season, org_id):
             first_name = parts[0] if parts else full_name
             last_name = parts[1] if len(parts) > 1 else ""
 
-            team = row.get("team", "").strip()
-            position = row.get("position", "F").strip() or "F"
-            jersey = str(row.get("shirt_number", "")).strip()
+            team = str(_clean_instat_val(row.get("team")) or "").strip()
+            position = str(_clean_instat_val(row.get("position")) or "F").strip()
+            jersey = str(_clean_instat_val(row.get("shirt_number")) or "").strip()
 
             # Bio data from passport section
             bio = {}
@@ -20670,7 +20684,7 @@ def _import_league_goalies(rows, season, org_id):
             parts = full_name.split(None, 1)
             first_name = parts[0] if parts else full_name
             last_name = parts[1] if len(parts) > 1 else ""
-            team = row.get("team", "").strip()
+            team = str(_clean_instat_val(row.get("team")) or "").strip()
 
             # Bio
             bio = {}
@@ -21981,9 +21995,9 @@ async def admin_restore_db(
                 if has_player_name_split:
                     fn, ln = _split_player_name(row[player_name_idx] if player_name_idx >= 0 else None)
                     vals = [fn, ln]  # first_name, last_name prepended
-                    vals.extend(row[i] for i in valid_indices)
+                    vals.extend(_instat_val(row[i]) for i in valid_indices)
                 else:
-                    vals = list(row[i] for i in valid_indices)
+                    vals = list(_instat_val(row[i]) for i in valid_indices)
                 # Skip completely empty rows
                 if all(v is None for v in vals):
                     continue
@@ -21997,8 +22011,8 @@ async def admin_restore_db(
                 if pack_extended:
                     ext = {}
                     for ei, ename in ext_stat_indices:
-                        v = row[ei]
-                        if v is not None and v != "":
+                        v = _instat_val(row[ei])
+                        if v is not None:
                             ext[ename] = v
                     vals.append(json.dumps(ext) if ext else None)
                 # Resolve player_id from first_name + last_name
