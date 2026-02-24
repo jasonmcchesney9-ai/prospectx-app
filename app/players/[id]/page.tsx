@@ -866,7 +866,7 @@ export default function PlayerDetailPage() {
               </button>
               <Link
                 href={`/players/${playerId}/card`}
-                className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 border border-blue-200 text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-blue-200 transition-colors no-print"
+                className="flex items-center gap-2 px-3 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors no-print"
               >
                 <Eye size={14} />
                 Player Card
