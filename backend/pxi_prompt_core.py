@@ -4709,6 +4709,290 @@ def build_family_guide_tile_prompt(
     return f"{context_block}\n{tile_prompt}"
 
 
+# ============================================================
+# PXI COACHING SECTION STANDARDS v1.0
+# ============================================================
+
+# ── COACHING NAV STRUCTURE ───────────────────────────────────
+
+COACHING_NAV = [
+    "practice_plans",           # Full practices + Game Issue mode
+    "drill_library",            # Browse/filter age-gated drills
+    "rink_builder",             # Custom drill designer → saves to Drill Library
+    "game_issue_video_sessions",# Video playlists + Generate Practice Segment
+    "skill_development_lab",    # Merged Skills Library + Pro Analysis
+    "hockey_glossary",          # Single-source, governing-body terminology
+]
+
+# Redirects — enforce in frontend routing
+COACHING_REDIRECTS = {
+    "/pro-analysis": "/skill-development-lab",
+    "/skills-library": "/skill-development-lab",
+    "/coaching/skills": "/skill-development-lab",
+}
+
+
+# ── DRILL SKILL DOMAINS ──────────────────────────────────────
+
+DRILL_SKILL_DOMAINS = [
+    "skating",
+    "puck_skills",
+    "passing",
+    "shooting",
+    "decision_making",
+    "compete",
+    "goalie",
+    "systems",
+    "transition",
+]
+
+# Game issue tags — align drill tags to these for Game Issue Practice
+GAME_ISSUE_TAGS = [
+    "d_zone_coverage",
+    "oz_entries",
+    "oz_possession",
+    "breakouts",
+    "net_front_battles",
+    "forecheck",
+    "backcheck",
+    "nz_play",
+    "rush_defense",
+    "pp_execution",
+    "pk_execution",
+    "corner_battles",
+    "faceoffs",
+    "transition_defense",
+    "transition_offense",
+    "goalie_positioning",
+    "goalie_rebound_control",
+]
+
+DRILL_INTENSITY_LEVELS = ["low", "medium", "high"]
+
+
+# ── DRILL LTPD TAGGING RULES ─────────────────────────────────
+# Rules PXI follows when bulk-tagging or auto-selecting drills.
+
+DRILL_TAGGING_RULES = """
+DRILL LTPD TAGGING RULES (PXI Coaching):
+
+When proposing or selecting drills, apply these rules:
+
+AGE-STAGE ASSIGNMENT:
+- U9 / FUNdamentals:
+  Assign when: name/description mentions fun, basic skills,
+  fundamentals, intro, station-based, small-area.
+  Never assign when: multiple rotations, complex systems,
+  set plays, advanced tactics.
+
+- U11 / Learn to Train Early:
+  Assign when: individual skills, puck skills, skating drills,
+  small battles, basic positioning.
+  Never assign: heavy systems, conditioning punishment blocks.
+
+- U13 / Learn to Train Late:
+  Assign when: position-specific skills, transition concepts,
+  basic team tactics, 1v1/2v1/2v2.
+  May include: simple breakout shapes, basic forecheck.
+
+- U15 / Train to Train:
+  Assign when: full systems work, compete drills, PP/PK basics,
+  strength-adjacent conditioning drills.
+
+- U18 / Train to Compete:
+  Assign when: advanced systems, video-linked drills,
+  game-situation drills, identity-linked content.
+
+- U20_Junior / Train to Win:
+  Assign when: pro-style structure, team identity drills,
+  situation-specific competitive drills.
+
+INTENSITY RULES:
+- "high": keywords → battle, conditioning, high-tempo,
+  full-ice sprint, compete, pressure.
+- "medium": keywords → transition, game-situation,
+  competitive, timed.
+- "low": keywords → station, fundamentals, intro,
+  walk-through, teaching, skill.
+
+GOALIE RULE:
+If description mentions crease, rebound, screens, save,
+blocker, glove, tracking → add "goalie" to skill_domains.
+
+SYSTEMS RULE:
+If description mentions forecheck system, breakout system,
+PP setup, PK formation, zone structure → add "systems"
+to skill_domains. Assign U13+ minimum stage.
+
+CONSERVATIVE BIAS RULE (most important):
+When unsure between a younger and older stage, always bias
+to the OLDER stage. It is safer to restrict than to
+over-expose young players to inappropriate content.
+Never stretch a drill to fill a plan. If no appropriate
+drill exists for an age/issue combination, PXI must say:
+"No age-appropriate drills tagged for this issue yet.
+Please create one in Rink Builder or tag existing drills."
+"""
+
+
+# ── COACHING SECTION STANDARDS ───────────────────────────────
+
+COACHING_SECTION_STANDARDS = """
+═══════════════════════════════════════════════════
+PXI COACHING SECTION STANDARDS v1.0
+Runs under: PXI Core Intelligence Standards v1.0
+═══════════════════════════════════════════════════
+
+ALL COACHING TOOLS — UNIVERSAL RULES:
+1. Age/stage gating via LTPD/ADM is MANDATORY for:
+   - Practice Plans
+   - Game Issue Practice
+   - Drill selection
+   - Skill Development Lab content
+2. Always detect stage using detect_ltpd_stage() from org context.
+3. Always inject Governing Body Guidelines block into prompts.
+4. Respect medical and liability safeguards — no diagnosis,
+   no rehab plans, no outcome guarantees.
+5. Use only approved authority sources and whitelist.
+   EliteProspects = secondary reference only.
+6. Never over-system, over-condition, or apply pro-level
+   tactical complexity to younger age groups.
+7. Glossary is single-source. Coaching and Family Guide
+   use different prompt wrappers but share one term store.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRACTICE PLANS:
+- Detect LTPD/ADM stage from org.country, province_state, team_age.
+- Inject full Governing Body Guidelines block (from
+  build_practice_plan_guidelines()).
+- Enforce: systems % cap, session length, bodychecking rules.
+- U13 Canada: check province before any checking content.
+- Always cite at plan header:
+  "This plan follows [model] recommendations for [age group] ([stage])."
+- Season phase (early/mid/playoffs): add later if needed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GAME ISSUE PRACTICE (mode under Practice Plans):
+Input: org, team_age, issue_tags[], segment_minutes (15-30).
+Behavior:
+1. Detect LTPD/ADM stage.
+2. Pull 2-4 drills from Drill Library matching:
+   - ltpd_stages includes team's stage
+   - tags overlap with issue_tags
+3. Return: segment title, drills with durations + teaching points.
+Guardrails:
+- U9/U11: simple habits and cues ONLY. No complex systems blocks.
+- No conditioning "punishment" segments at any age.
+- If no suitable drills found for age+issue:
+  "No age-appropriate drills tagged for this issue yet.
+   Please create one in Rink Builder or tag existing drills."
+- Never stretch an inappropriate drill to fill a time slot.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DRILL LIBRARY:
+Required fields per drill (enforce on save):
+  ltpd_stages: list (U9/U11/U13/U15/U18/U20_Junior)
+  age_bands: list of ints (explicit ages)
+  skill_domains: list from DRILL_SKILL_DOMAINS
+  intensity: "low" | "medium" | "high"
+  tags: optional list from GAME_ISSUE_TAGS
+
+Default UI filter: ON — show only drills for team's age/stage.
+PXI auto-selection: only use drills matching team stage.
+Multi-team orgs: per-team age override allowed.
+Override stored as: default_ltpd_stage on team record.
+
+PXI must NOT auto-select:
+- intensity = "high" for U9/U11 without coach override
+- systems-heavy drills for U9/U11 without coach override
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RINK BUILDER (Custom Drills):
+Required save fields:
+  name, description
+  ltpd_stages, age_bands
+  skill_domains, intensity
+  min_players, max_players, requires_goalies
+  tags (optional, from GAME_ISSUE_TAGS)
+  rink_layout (JSON canvas data)
+  created_by_user_id, org_id
+
+Custom drills treated identically to library drills by PXI.
+Age/stage filtering applies equally to custom drills.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GAME ISSUE VIDEO SESSIONS:
+- Build clip playlists from tagged game events.
+- Age-aware explanation language:
+  Younger teams: simple, constructive, habit-focused.
+  Junior: detailed tactical breakdown appropriate.
+- No invented stats or tendencies — only describe tagged data.
+- "Generate Practice Segment" button: calls Game Issue Practice
+  with issue_tags from the video session.
+- Respects all PXI Core guardrails on invented content.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SKILL DEVELOPMENT LAB (merged Skills Library + Pro Analysis):
+- "Pro Analysis" label removed entirely.
+  Redirect: /pro-analysis → /skill-development-lab
+- Each skill entry includes:
+  ltpd_stages, age_min, age_max
+  skill_domains
+  teaching_points by stage (U11, U13, U15, etc.)
+  recommended_drill_ids
+  pro_example_clips (optional): level, source, description
+- PXI behavior:
+  Show only teaching points/drills for team's current stage.
+  Show pro clips labeled: "Example from [NHL/AHL/NCAA]"
+  Never use pro clips as benchmarks or career projections.
+- Pro clips are illustrative context ONLY.
+- Tier 3 + Tier 4 sources for any performance claims.
+- No individual outcome predictions from pro examples.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HOCKEY GLOSSARY (Coaching context):
+- Single source of truth. Shared with Player & Family Guide.
+- Coaching wrapper: technical depth, governing-body precision.
+- Family Guide wrapper: plain language, parent-friendly.
+- Canadian orgs: Hockey Canada + IIHF terminology.
+- US orgs: USA Hockey + IIHF terminology.
+- Level definitions use authority whitelist only.
+  No rankings sites. No marketing labels.
+- Low hallucination risk but still under PXI Core rules.
+═══════════════════════════════════════════════════
+"""
+
+
+# ── ORG/TEAM FIELDS REQUIRED FOR COACHING ───────────────────
+# These fields must exist on org/team records for coaching
+# section to function correctly.
+
+COACHING_ORG_FIELDS_REQUIRED = {
+    "org": [
+        "country",           # CA | US | other
+        "province_state",    # For U13 bodychecking rule
+        "governing_body",    # hockey_canada | usa_hockey | other
+    ],
+    "team": [
+        "default_team_age",      # Primary age of team (int)
+        "default_ltpd_stage",    # Derived from age + country (cached)
+        # Note: per-team override allows multi-team orgs to have
+        # different age filters per team. Coach can change in session.
+    ],
+}
+
+# ── Append Coaching Standards to IMMUTABLE_GUARDRAILS ─────────
+IMMUTABLE_GUARDRAILS += COACHING_SECTION_STANDARDS
+PXI_CORE_GUARDRAILS = IMMUTABLE_GUARDRAILS  # refresh alias
+
+
 # ─────────────────────────────────────────────────────────
 # LTPD / ADM HELPER FUNCTIONS
 # ─────────────────────────────────────────────────────────
