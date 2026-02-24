@@ -469,18 +469,22 @@ export default function PlayerCardPage() {
                 <Activity size={11} className="inline mr-1" />
                 Season Stats
               </h3>
-              {perf.current_stats ? (
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {Object.entries(perf.current_stats).map(([key, val]) => (
-                    <div key={key} className="text-center">
-                      <p className="text-[9px] font-oswald uppercase tracking-wider text-muted">{key.toUpperCase()}</p>
-                      <p className="text-sm font-bold text-navy">
-                        {typeof val === "number" ? (Number.isInteger(val) ? val : val.toFixed(1)) : val}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
+              {perf.current_stats ? (() => {
+                const HIDE_KEYS = new Set(["toi_seconds", "toi"]);
+                const entries = Object.entries(perf.current_stats!).filter(([k]) => !HIDE_KEYS.has(k.toLowerCase()));
+                return (
+                  <div className="grid grid-cols-5 sm:grid-cols-7 gap-2">
+                    {entries.map(([key, val]) => (
+                      <div key={key} className="text-center">
+                        <p className="text-[9px] font-oswald uppercase tracking-wider text-muted">{key.toUpperCase()}</p>
+                        <p className="text-sm font-bold text-navy">
+                          {typeof val === "number" ? (Number.isInteger(val) ? val : val.toFixed(1)) : val}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })() : (
                 <p className="text-xs text-muted">No stats available.</p>
               )}
             </div>
@@ -623,7 +627,7 @@ export default function PlayerCardPage() {
               {/* PXI version */}
               {dev.skill_profile.pxi_version ? (
                 <div className="mb-3">
-                  <p className="text-[9px] font-oswald uppercase tracking-wider text-teal mb-1">PXI Assessment</p>
+                  <p className="text-[9px] font-oswald uppercase tracking-wider text-teal mb-1">PXI Scout Summary</p>
                   <p className="text-xs text-navy/80 leading-relaxed whitespace-pre-line">{dev.skill_profile.pxi_version}</p>
                 </div>
               ) : (
