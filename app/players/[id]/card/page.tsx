@@ -113,6 +113,10 @@ export default function PlayerCardPage() {
   const [showNotes, setShowNotes] = useState(true);
   const [showObjectives, setShowObjectives] = useState(true);
 
+  // Overflow menu
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
   // ── Load card ──
   const loadCard = useCallback(async () => {
     try {
@@ -144,6 +148,17 @@ export default function PlayerCardPage() {
   }, [playerId, trendMetric]);
 
   useEffect(() => { loadTrendline(); }, [loadTrendline]);
+
+  // ── Overflow click-outside ──
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) setOverflowOpen(false);
+    }
+    if (overflowOpen) {
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }
+  }, [overflowOpen]);
 
   // ── Generate skill profile ──
   async function handleGenerateProfile() {
@@ -812,25 +827,60 @@ export default function PlayerCardPage() {
             </div>
 
             {/* Quick actions */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4 print:hidden">
-              <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">Quick Actions</h3>
-              <div className="space-y-2">
-                <Link
-                  href={`/reports/generate?player_id=${playerId}`}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-navy border border-teal/20 rounded-lg hover:bg-navy/[0.03] transition-colors"
-                >
-                  <FileText size={13} />
-                  Generate Report
-                </Link>
-                <Link
-                  href={`/players/${playerId}?tab=notes`}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-navy border border-teal/20 rounded-lg hover:bg-navy/[0.03] transition-colors"
-                >
-                  <Edit3 size={13} />
-                  Add Scout Note
-                </Link>
+            {userRole !== "parent" && (
+              <div className="bg-white rounded-xl border border-teal/20 p-4 print:hidden">
+                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">Quick Actions</h3>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout")}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-teal/10 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/20 transition-colors"
+                  >
+                    <Search size={11} />
+                    Scout
+                  </button>
+                  <Link
+                    href={`/reports/generate?player_id=${playerId}`}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-navy/5 text-navy/70 text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-navy/10 transition-colors"
+                  >
+                    <FileText size={11} />
+                    Report
+                  </Link>
+                  <div className="relative" ref={overflowRef}>
+                    <button
+                      onClick={() => setOverflowOpen(!overflowOpen)}
+                      className="p-1.5 rounded-lg text-navy/30 hover:text-navy hover:bg-navy/5 transition-colors"
+                      title="More actions"
+                    >
+                      <MoreVertical size={14} />
+                    </button>
+                    {overflowOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1">
+                        <Link
+                          href="/scouting"
+                          onClick={() => setOverflowOpen(false)}
+                          className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] transition-colors"
+                        >
+                          Add to Scouting List
+                        </Link>
+                        <Link
+                          href={`/players/${playerId}`}
+                          onClick={() => setOverflowOpen(false)}
+                          className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] transition-colors"
+                        >
+                          View Full Profile
+                        </Link>
+                        <button
+                          onClick={() => { handlePrint(); setOverflowOpen(false); }}
+                          className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] transition-colors"
+                        >
+                          Print Card
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </main>
