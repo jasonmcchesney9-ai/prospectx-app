@@ -82,6 +82,16 @@ const POSITION_LABELS: Record<string, string> = {
   RD: "Right Defense",
 };
 
+// Grade-to-number for MetricCircle intensity
+const GRADE_TO_NUMBER: Record<string, number> = {
+  "A+": 10, "A": 9, "A-": 8, "B+": 7, "B": 6, "B-": 5,
+  "C+": 4, "C": 3, "C-": 2, "D+": 1.5, "D": 1, "NR": 0,
+};
+function gradeToNumber(grade: string | null | undefined): number {
+  if (!grade) return 0;
+  return GRADE_TO_NUMBER[grade] ?? (parseFloat(grade) || 0);
+}
+
 function fullPosition(pos: string | null | undefined): string {
   if (!pos) return "Unknown";
   return POSITION_LABELS[pos.toUpperCase()] || pos;
@@ -1489,28 +1499,34 @@ export default function PlayerDetailPage() {
                 </div>
 
                 <div className="p-5 space-y-5">
-                  {/* Grades Row */}
+                  {/* Grades Row — Enhanced MetricCircles */}
                   {intelligence.overall_grade && intelligence.overall_grade !== "NR" && (
                     <div>
                       <div className="flex flex-wrap gap-3">
                         {([
-                          { label: "Overall", grade: intelligence.overall_grade },
-                          { label: "Offensive", grade: intelligence.offensive_grade },
-                          { label: "Defensive", grade: intelligence.defensive_grade },
-                          { label: "Skating", grade: intelligence.skating_grade },
-                          { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
-                          { label: "Compete", grade: intelligence.compete_grade },
+                          { label: "OVR", grade: intelligence.overall_grade },
+                          { label: "OFF", grade: intelligence.offensive_grade },
+                          { label: "DEF", grade: intelligence.defensive_grade },
+                          { label: "SKT", grade: intelligence.skating_grade },
+                          { label: "IQ", grade: intelligence.hockey_iq_grade },
+                          { label: "CMP", grade: intelligence.compete_grade },
                         ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => {
-                          const gradeInfo = PROSPECT_GRADES[grade!];
+                          const numVal = gradeToNumber(grade);
+                          const intensity = 0.2 + (numVal / 10) * 0.8;
+                          const baseColor = GRADE_COLORS[grade!] || "#9ca3af";
                           return (
-                            <div key={label} className="text-center min-w-[60px]" title={gradeInfo?.nhl || ""}>
+                            <div key={label} className="flex flex-col items-center gap-0.5">
                               <div
-                                className="w-10 h-10 mx-auto rounded-lg flex items-center justify-center text-white font-oswald font-bold text-sm"
-                                style={{ backgroundColor: GRADE_COLORS[grade!] || "#9ca3af" }}
+                                className="w-11 h-11 rounded-full flex items-center justify-center text-white font-oswald font-bold text-sm border-2"
+                                style={{
+                                  backgroundColor: baseColor,
+                                  opacity: intensity,
+                                  borderColor: baseColor,
+                                }}
                               >
-                                {grade}
+                                {numVal > 0 ? numVal.toFixed(1) : grade}
                               </div>
-                              <p className="text-[10px] text-muted mt-1">{label}</p>
+                              <span className="text-[9px] font-oswald uppercase tracking-wider text-muted">{label}</span>
                             </div>
                           );
                         })}
