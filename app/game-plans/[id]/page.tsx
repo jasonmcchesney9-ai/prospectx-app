@@ -21,6 +21,7 @@ import {
   TrendingDown,
   Printer,
   Download,
+  Video,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -268,6 +269,14 @@ function GamePlanDetail() {
                 <Download size={14} />
                 PDF
               </button>
+              <Link
+                href={`/video-sessions?team_name=${encodeURIComponent(plan.opponent_team_name || "")}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
+                title="Pull game film for this opponent"
+              >
+                <Video size={14} />
+                Pull Film
+              </Link>
               {plan.status === "draft" && (
                 <button
                   onClick={() => handleStatusChange("active")}
