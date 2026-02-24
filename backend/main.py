@@ -13906,6 +13906,17 @@ def _parse_pim(val) -> int:
         return 0
 
 
+def _parse_pct(val) -> float | None:
+    """Parse percentage string like '59%' or '91.9%' to decimal float (0.59, 0.919).
+    Returns None for empty/invalid values."""
+    if not val or str(val).strip() in ('-', ''):
+        return None
+    try:
+        return float(str(val).strip().replace('%', '')) / 100
+    except (ValueError, TypeError):
+        return None
+
+
 def _instat_val(val, default=None):
     """Sanitize InStat field value: converts '-', '', '[object Object]', 'nan', 'None' to default.
     Returns float for numeric strings, original string for non-numeric."""
@@ -13969,7 +13980,7 @@ def _parse_instat_row(row: dict, core_map: dict, extended_map: dict):
         elif target == "shooting_pct":
             core[target] = _to_float(cleaned)
         elif target == "sv_pct":
-            core[target] = cleaned  # Keep as string like "91.9%"
+            core[target] = _parse_pct(cleaned)
         elif target in ("ga", "sa", "sv"):
             core[target] = _to_float(cleaned)
         else:
@@ -13991,7 +14002,7 @@ def _parse_instat_row(row: dict, core_map: dict, extended_map: dict):
             if "time" in field and ":" in str(cleaned):
                 extended[category][field] = _parse_mmss_to_seconds(cleaned)
             elif "pct" in field or field.endswith("_%"):
-                extended[category][field] = _to_float(cleaned)
+                extended[category][field] = _parse_pct(cleaned)
             else:
                 extended[category][field] = _instat_to_number(cleaned)
         else:
@@ -13999,7 +14010,7 @@ def _parse_instat_row(row: dict, core_map: dict, extended_map: dict):
             if "time" in target and ":" in str(cleaned):
                 extended[target] = _parse_mmss_to_seconds(cleaned)
             elif "pct" in target:
-                extended[target] = _to_float(cleaned)
+                extended[target] = _parse_pct(cleaned)
             else:
                 extended[target] = _instat_to_number(cleaned)
 
@@ -20821,6 +20832,8 @@ def _import_lines(rows, season, team_name, line_type, org_id):
                 if val is not None:
                     if "time" in field and ":" in val:
                         extended[field] = _parse_mmss_to_seconds(val)
+                    elif "pct" in field:
+                        extended[field] = _parse_pct(val)
                     else:
                         extended[field] = _instat_to_number(val)
 
@@ -21983,6 +21996,10 @@ async def admin_restore_db(
             toi_col_idx = valid_cols.index("toi_seconds") if "toi_seconds" in valid_cols else -1
             # Identify game_date column index for DD/MM -> YYYY-MM-DD conversion
             date_col_idx = valid_cols.index("game_date") if "game_date" in valid_cols else -1
+            # Identify pim column index for MM:SS PIM conversion
+            pim_col_idx = valid_cols.index("pim") if "pim" in valid_cols else -1
+            # Identify sv_pct column index for percentage conversion
+            svpct_col_idx = valid_cols.index("sv_pct") if "sv_pct" in valid_cols else -1
 
             placeholders = ", ".join(["?"] * len(valid_cols))
             col_list = ", ".join(valid_cols)
@@ -22007,6 +22024,12 @@ async def admin_restore_db(
                 # Convert DD/MM dates to YYYY-MM-DD
                 if date_col_idx >= 0 and date_col_idx < len(vals):
                     vals[date_col_idx] = _fix_date(vals[date_col_idx])
+                # Convert PIM MM:SS to integer minutes
+                if pim_col_idx >= 0 and pim_col_idx < len(vals):
+                    vals[pim_col_idx] = _parse_pim(vals[pim_col_idx])
+                # Convert sv_pct percentage string to decimal float
+                if svpct_col_idx >= 0 and svpct_col_idx < len(vals):
+                    vals[svpct_col_idx] = _parse_pct(vals[svpct_col_idx])
                 # Pack extended_stats JSON blob from unmapped analytics columns
                 if pack_extended:
                     ext = {}
