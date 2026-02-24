@@ -416,10 +416,12 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
 
 // ── Main Bench Talk Drawer ──────────────────────────────────
 export default function BenchTalkDrawer() {
-  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, roleOverride } = useBenchTalk();
+  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, roleOverride } = useBenchTalk();
 
   // Effective hockey role — respects admin preview override
   const effectiveHockeyRole = roleOverride || getUser()?.hockey_role;
+  // Role group — pendingRole from Family Guide tiles takes priority
+  const effectiveRoleGroup = getRoleGroup(pendingRole || effectiveHockeyRole);
 
   const [conversations, setConversations] = useState<BenchTalkConversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -620,7 +622,7 @@ export default function BenchTalkDrawer() {
     try {
       const res = await api.post<BenchTalkMessageResponse>(
         `/bench-talk/conversations/${convId}/messages`,
-        { message: messageText, mode: currentMode }
+        { message: messageText, mode: currentMode, role: pendingRole || getUser()?.hockey_role || null }
       );
       setMessages((prev) => [...prev, res.data.message]);
       loadConversations();
@@ -741,7 +743,7 @@ export default function BenchTalkDrawer() {
         <div className="bg-navy px-4 py-3 flex items-center gap-3 shrink-0">
           <PXIBadge size={36} variant="dark" showDot={true} />
           <div className="flex-1">
-            <h2 className="font-oswald font-bold text-white text-sm uppercase tracking-wider">Bench Talk</h2>
+            <h2 className="font-oswald font-bold text-white text-sm uppercase tracking-wider">{effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}</h2>
             <p className="text-[10px] text-white/40">AI-powered hockey ops assistant — ask about players, stats, trades, and strategy</p>
           </div>
           <div className="flex items-center gap-1">
@@ -886,7 +888,7 @@ export default function BenchTalkDrawer() {
                 <PXIBadge size={64} variant="dark" showDot={true} />
               </div>
               <h2 className="font-oswald text-xl font-bold text-navy tracking-wider uppercase mb-1">
-                Bench Talk
+                {effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}
               </h2>
               <p className="text-muted text-sm text-center mb-3 max-w-xs leading-relaxed">
                 Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.
