@@ -21,6 +21,11 @@ import {
   Star,
   RefreshCw,
   Loader2,
+  Utensils,
+  Dumbbell,
+  GraduationCap,
+  Brain,
+  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -29,6 +34,66 @@ import api from "@/lib/api";
 import type { Player, FamilyDashboard } from "@/types/api";
 
 const LS_KEY = "prospectx_my_player_id";
+
+// ── Tile grid config ──
+const GUIDE_TILES = [
+  { key: "nutrition", title: "Nutrition", desc: "Game-day meals, hydration, and recovery ideas tailored to your player\u2019s age and schedule.", icon: Utensils, seed: "I'm a hockey parent. My player is [age] and plays [level]. What should they eat before and after games this weekend? Keep it practical \u2014 things I can actually prepare at home." },
+  { key: "workouts", title: "Workouts", desc: "Age-appropriate off-ice strength, speed, and agility routines that fit around school and games.", icon: Dumbbell, seed: "I'm a hockey parent. My player is [age] and plays [level]. What are the best off-ice exercises they can do at home this week? Nothing that needs a gym \u2014 just bodyweight or basic equipment." },
+  { key: "player_development_journey", title: "Prep & College Guide", desc: "Clear pathways through minor, prep, junior, and college hockey \u2014 with key dates and academic checkpoints.", icon: GraduationCap, seed: "I'm a hockey parent. My player is [age] and plays [level]. Can you walk me through the realistic pathway from here to prep school or college hockey? What are the key ages and decisions we should be thinking about now?" },
+  { key: "mental_performance", title: "Mental Performance", desc: "Pre-game routines, focus tools, and bounce-back strategies to help your player handle pressure.", icon: Brain, seed: "I'm a hockey parent. My player is [age] and plays [level]. They sometimes struggle with nerves before big games. What are some simple pre-game routines or mental tools that work well at this age?" },
+  { key: "after_game_help", title: "Pressure & Confidence", desc: "Guided language for tough moments \u2014 what to say, what to avoid, and when to get extra support.", icon: Heart, seed: "I'm a hockey parent. My player is [age] and plays [level]. They've been hard on themselves lately. What should I be saying \u2014 and what should I avoid saying \u2014 to help them stay confident without putting more pressure on them?" },
+  { key: "gear_guide", title: "Gear Guide", desc: "What to prioritize, how to fit each piece safely, and when to replace equipment for skaters and goalies.", icon: Shield, seed: "I'm a hockey parent. My player is [age] and plays [level]. Can you walk me through what gear they actually need at this stage, what to prioritize for safety and fit, and when we should be replacing things?" },
+  { key: "hockey_glossary", title: "Hockey Glossary", desc: "Plain-language explanations of positions, stats, systems, and levels so you can follow the game with confidence.", icon: BookOpen, seed: "I'm a hockey parent trying to understand the game better. Can you explain some of the terms I hear coaches and announcers use? Start with the basics \u2014 positions, zones, and common stats \u2014 and I'll ask follow-up questions." },
+];
+
+// ── Parent tips pool ──
+const PARENT_TIPS = [
+  "Model good sportsmanship by staying calm with officials and other parents, even when calls don\u2019t go your way. Your player will copy your example more than your words.",
+  "Ask \u201CWhat was the most fun part of the game?\u201D instead of \u201CHow many points did you get?\u201D It shifts the focus from results to enjoyment \u2014 which is what keeps kids in the game.",
+  "On game days, make sure your player has a good meal 3\u20134 hours before and a light snack 60\u201390 minutes before. Hydration starts the night before, not at the rink.",
+  "Let the coach coach. If you have concerns, schedule a time to talk \u2014 never during or right after a game. Your player needs to see you and their coach on the same team.",
+  "Praise effort, not just results. \u201CI could see you were competing hard on every shift\u201D means more to your player\u2019s long-term confidence than \u201CGreat goal.\u201D",
+  "Your nerves in the stands are real \u2014 and that\u2019s okay. Take a breath, unclench your hands, and remember: your player feeds off your energy, calm or anxious.",
+  "If your player seems withdrawn, overwhelmed, or consistently unhappy about hockey, it\u2019s okay to reach out to a mental performance coach or school counsellor. Asking for help is strength.",
+  "Sleep is the most underrated performance tool in youth hockey. For players under 14, aim for 9\u201311 hours. For older players, 8\u201310 hours minimum on game nights.",
+];
+
+// ── Emotion pills + after-game scripts ──
+const EMOTION_PILLS = [
+  { key: "win_good", emoji: "\uD83D\uDE0A", label: "Win \u2014 Felt Good" },
+  { key: "win_flat", emoji: "\uD83D\uDE14", label: "Win \u2014 Quiet / Flat" },
+  { key: "tough_loss", emoji: "\uD83D\uDE1E", label: "Tough Loss" },
+  { key: "responsible_mistake", emoji: "\uD83D\uDE22", label: "Feels Responsible" },
+  { key: "low_ice_time", emoji: "\uD83D\uDE20", label: "Low Ice Time / Scratched" },
+];
+
+const AFTER_GAME_SCRIPTS: Record<string, { trySaying: string; spaceCue: string; emotionContext: string }> = {
+  win_good: {
+    trySaying: "I loved watching you compete today. What\u2019s one thing you feel good about in your game, and one thing you want to work on next time?",
+    spaceCue: "Celebrate the effort, then open the door to growth.",
+    emotionContext: "they played great and are feeling confident about their game",
+  },
+  win_flat: {
+    trySaying: "You played hard today. We don\u2019t have to talk about it right now \u2014 I\u2019m just glad I was there watching you.",
+    spaceCue: "Give them space. Don\u2019t push for an explanation.",
+    emotionContext: "we won but they seem quiet and flat \u2014 something feels off",
+  },
+  tough_loss: {
+    trySaying: "It\u2019s okay to be disappointed after a tough game. I\u2019m here with you.",
+    spaceCue: "We don\u2019t have to fix everything in the car ride.",
+    emotionContext: "they\u2019re upset after a hard loss and feeling down",
+  },
+  responsible_mistake: {
+    trySaying: "Every player on that ice made mistakes today \u2014 that\u2019s how the game works. What matters is that you kept competing.",
+    spaceCue: "Normalize it. Don\u2019t minimize it.",
+    emotionContext: "they feel responsible for a mistake that affected the game",
+  },
+  low_ice_time: {
+    trySaying: "That\u2019s a hard one. How are you feeling about it? I\u2019m just here to listen.",
+    spaceCue: "Stay on their side. Don\u2019t coach from the car.",
+    emotionContext: "they\u2019re upset about low ice time or being scratched",
+  },
+};
 
 export default function MyPlayerPage() {
   const router = useRouter();
@@ -143,6 +208,24 @@ export default function MyPlayerPage() {
     } catch { /* silent */ }
     finally { setGenerating(false); }
   }, [selectedPlayerId, fetchParentProfile]);
+
+  // After-Game Help + Parent Tip state
+  const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null);
+  const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * PARENT_TIPS.length));
+
+  function shuffleTip() {
+    setTipIndex((prev) => {
+      let next = Math.floor(Math.random() * PARENT_TIPS.length);
+      while (next === prev && PARENT_TIPS.length > 1) next = Math.floor(Math.random() * PARENT_TIPS.length);
+      return next;
+    });
+  }
+
+  function buildSeedMessage(template: string): string {
+    const age = getPlayerAge(selectedPlayer?.dob);
+    const level = selectedPlayer?.current_league || selectedPlayer?.current_team || "their level";
+    return template.replace("[age]", age ? `${age}` : "their age").replace("[level]", level);
+  }
 
   function getPlayerAge(dob: string | null | undefined): number | null {
     if (!dob) return null;
@@ -620,6 +703,119 @@ export default function MyPlayerPage() {
             )}
           </div>
         )}
+
+        {/* ── Tile Grid (7 tiles, 2-column) ── */}
+        {selectedPlayer && (
+          <div className="mb-6">
+            <h3 className="text-sm font-oswald uppercase tracking-wider font-bold mb-3" style={{ color: "#0F2942" }}>
+              Player &amp; Family Guide
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {GUIDE_TILES.map((tile) => {
+                const Icon = tile.icon;
+                return (
+                  <div key={tile.key} className="rounded-xl bg-white p-4 flex flex-col" style={{ borderLeft: "4px solid #0D9488" }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon size={18} style={{ color: "#0F2942" }} />
+                      <span className="text-sm font-bold" style={{ color: "#0F2942" }}>{tile.title}</span>
+                    </div>
+                    <p className="text-xs leading-relaxed flex-1 mb-3" style={{ color: "#666666" }}>{tile.desc}</p>
+                    <button
+                      onClick={() => openBenchTalk(buildSeedMessage(tile.seed))}
+                      disabled={!selectedPlayerId}
+                      className="w-full py-2 rounded-lg text-white text-xs font-bold font-oswald uppercase tracking-wider transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: "#0D9488" }}
+                      title={!selectedPlayerId ? "Select a player first" : `Ask PXI about ${tile.title.toLowerCase()}`}
+                    >
+                      Ask PXI about {tile.title.toLowerCase()}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Parent Tip of the Day ── */}
+        <div className="rounded-xl p-5 mb-6" style={{ backgroundColor: "#E6F7F6", borderLeft: "4px solid #0D9488" }}>
+          <div className="flex items-start justify-between mb-2">
+            <span className="text-xs font-oswald uppercase tracking-wider font-bold" style={{ color: "#0F2942" }}>
+              Parent Tip of the Day
+            </span>
+            <button
+              onClick={shuffleTip}
+              className="p-1 rounded hover:bg-white/50 transition-colors"
+              title="Shuffle tip"
+            >
+              <RefreshCw size={14} style={{ color: "#0D9488" }} />
+            </button>
+          </div>
+          <p className="text-sm leading-relaxed text-center px-2" style={{ color: "#0F2942" }}>
+            {PARENT_TIPS[tipIndex]}
+          </p>
+          <p className="text-center mt-3 text-xs" style={{ color: "#999" }}>
+            New tip every day to support your player on and off the ice.
+          </p>
+        </div>
+
+        {/* ── After-Game Help ── */}
+        <div className="mb-6">
+          <h3 className="text-sm font-oswald uppercase tracking-wider font-bold mb-1" style={{ color: "#0F2942" }}>
+            After-Game Help
+          </h3>
+          <p className="text-xs mb-3" style={{ color: "#666666" }}>
+            Simple scripts for tricky car rides and post-game conversations.
+          </p>
+
+          {/* Emotion pills */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {EMOTION_PILLS.map((pill) => (
+              <button
+                key={pill.key}
+                onClick={() => setSelectedEmotion(selectedEmotion === pill.key ? null : pill.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  selectedEmotion === pill.key
+                    ? "text-white border-transparent"
+                    : "bg-white border-gray-200 hover:border-[#0D9488]/40"
+                }`}
+                style={selectedEmotion === pill.key ? { backgroundColor: "#0F2942", color: "#fff" } : { color: "#0F2942" }}
+              >
+                <span>{pill.emoji}</span> {pill.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Script card — slides in on selection */}
+          {selectedEmotion && AFTER_GAME_SCRIPTS[selectedEmotion] && (
+            <div className="rounded-xl bg-white p-5 transition-all" style={{ borderLeft: "4px solid #0D9488" }}>
+              <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "#0D9488" }}>
+                Try saying&hellip;
+              </p>
+              <blockquote className="text-sm leading-relaxed italic pl-3 mb-3" style={{ color: "#0F2942", borderLeft: "2px solid #E6F7F6" }}>
+                &ldquo;{AFTER_GAME_SCRIPTS[selectedEmotion].trySaying}&rdquo;
+              </blockquote>
+
+              <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: "#0F2942" }}>
+                Give them space to feel it.
+              </p>
+              <p className="text-xs leading-relaxed mb-4" style={{ color: "#666666" }}>
+                {AFTER_GAME_SCRIPTS[selectedEmotion].spaceCue}
+              </p>
+
+              <button
+                onClick={() => {
+                  const ctx = AFTER_GAME_SCRIPTS[selectedEmotion!].emotionContext;
+                  const msg = `I'm a hockey parent. My player just had a game and ${ctx}. What should I say \u2014 and what should I avoid \u2014 in the car ride home? Keep it short and practical.`;
+                  openBenchTalk(msg);
+                }}
+                className="w-full py-2 rounded-lg text-white text-xs font-bold font-oswald uppercase tracking-wider transition-all hover:opacity-90"
+                style={{ backgroundColor: "#0D9488" }}
+              >
+                Ask PXI about this situation
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Link to Player Guide */}
         <Link
