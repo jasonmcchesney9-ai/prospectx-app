@@ -37,6 +37,7 @@ import {
   Search,
   Dumbbell,
   AlertTriangle,
+  Video,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -132,6 +133,7 @@ const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
 const SCOUTING_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
   { href: "/game-plans", label: "Chalk Talk", icon: Swords },
+  { href: "/video-sessions", label: "Video Sessions", icon: Video },
 ];
 
 // Reports dropdown items (PRO only)

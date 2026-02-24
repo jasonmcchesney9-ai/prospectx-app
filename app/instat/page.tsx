@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Calendar,
   Target,
+  Video,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -51,6 +52,9 @@ export default function InStatImportPage() {
       <NavBar />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <InStatUploader />
+        <div className="mt-10">
+          <XmlGameEventsUploader />
+        </div>
       </main>
     </ProtectedRoute>
   );
@@ -488,6 +492,241 @@ function InStatUploader() {
           XLSX files are auto-detected by column headers. XML source format is auto-detected. Players are matched by name + team.
         </p>
       </div>
+    </div>
+  );
+}
+
+/* ── XML Game Events Uploader ─────────────────────────────── */
+interface XmlImportResult {
+  status: string;
+  game: { date: string; home_team: string; away_team: string; score: string };
+  counts: { events_total: number; players_resolved: number; players_unresolved: number; unresolved_names: string[] };
+}
+
+const LEAGUE_OPTIONS = [
+  { value: "GOJHL", label: "GOJHL" },
+  { value: "OJHL", label: "OJHL" },
+  { value: "OHL", label: "OHL" },
+  { value: "WHL", label: "WHL" },
+  { value: "QMJHL", label: "QMJHL" },
+  { value: "PWHL", label: "PWHL" },
+];
+
+function XmlGameEventsUploader() {
+  const [xmlFile, setXmlFile] = useState<File | null>(null);
+  const [xmlLeague, setXmlLeague] = useState("GOJHL");
+  const [xmlSeason, setXmlSeason] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    return now.getMonth() < 8 ? `${y - 1}-${String(y).slice(-2)}` : `${y}-${String(y + 1).slice(-2)}`;
+  });
+  const [xmlUploading, setXmlUploading] = useState(false);
+  const [xmlResult, setXmlResult] = useState<XmlImportResult | null>(null);
+  const [xmlError, setXmlError] = useState("");
+  const xmlFileRef = useRef<HTMLInputElement>(null);
+
+  const handleXmlUpload = async () => {
+    if (!xmlFile) return;
+    setXmlUploading(true);
+    setXmlError("");
+    setXmlResult(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", xmlFile);
+      fd.append("league", xmlLeague);
+      fd.append("season", xmlSeason);
+
+      const { data } = await api.post<XmlImportResult>("/instat/import-xml", fd, { timeout: 300000 });
+      setXmlResult(data);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (err as { message?: string })?.message ||
+        "Import failed";
+      setXmlError(msg);
+    } finally {
+      setXmlUploading(false);
+    }
+  };
+
+  const resetXml = () => {
+    setXmlFile(null);
+    setXmlResult(null);
+    setXmlError("");
+    if (xmlFileRef.current) xmlFileRef.current.value = "";
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center">
+          <Video size={20} className="text-teal" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold font-oswald text-navy">InStat XML — Game Events</h2>
+          <p className="text-muted text-sm">
+            Upload the XML tagging file exported from InStat for a single game. This imports every tagged event (shots, faceoffs, hits, zone entries) with timestamps — enabling Video Sessions and detailed game film review for your coaching staff.
+          </p>
+        </div>
+      </div>
+
+      {/* Result */}
+      {xmlResult && (
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-5">
+          <div className="flex items-start gap-3">
+            <CheckCircle size={20} className="text-green-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-green-800 text-sm">
+                Imported {xmlResult.counts.events_total} events from {xmlResult.game.home_team} vs {xmlResult.game.away_team} ({xmlResult.game.date})
+              </p>
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <p className="text-2xl font-oswald font-bold text-teal">{xmlResult.counts.events_total}</p>
+                  <p className="text-xs text-muted uppercase tracking-wider">Events</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <p className="text-2xl font-oswald font-bold text-navy">{xmlResult.counts.players_resolved}</p>
+                  <p className="text-xs text-muted uppercase tracking-wider">Players Matched</p>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <p className="text-2xl font-oswald font-bold text-orange">{xmlResult.counts.players_unresolved}</p>
+                  <p className="text-xs text-muted uppercase tracking-wider">Unresolved</p>
+                </div>
+              </div>
+              {xmlResult.counts.unresolved_names.length > 0 && (
+                <div className="mt-3 bg-orange/5 border border-orange/20 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-orange mb-1">
+                    The following players could not be matched automatically — check spelling or add them manually in Manage Players:
+                  </p>
+                  <ul className="text-xs text-muted space-y-0.5">
+                    {xmlResult.counts.unresolved_names.map((n, i) => (
+                      <li key={i}>• {n} → not found</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="mt-3 flex gap-3 flex-wrap">
+                <Link href="/video-sessions" className="text-sm text-teal hover:underline">
+                  Video Sessions →
+                </Link>
+                <Link href="/players" className="text-sm text-teal hover:underline">
+                  View Players →
+                </Link>
+                <button onClick={resetXml} className="text-sm text-navy hover:underline">
+                  Import Another File
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {xmlError && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <AlertCircle size={18} className="text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-red-700 font-medium text-sm">Import Error</p>
+            <p className="text-red-600 text-xs mt-0.5">{xmlError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Form */}
+      {!xmlResult && (
+        <div className="bg-white rounded-xl border border-teal/20 p-6">
+          {/* File Picker */}
+          <div className="mb-5">
+            <label className="block text-sm font-semibold text-navy mb-2">
+              XML File
+            </label>
+            <div
+              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+                xmlFile ? "border-teal bg-teal/5" : "border-teal/20 hover:border-teal/50"
+              }`}
+              onClick={() => xmlFileRef.current?.click()}
+            >
+              {xmlFile ? (
+                <div className="flex items-center justify-center gap-3">
+                  <Video size={20} className="text-teal" />
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-navy">{xmlFile.name}</p>
+                    <p className="text-xs text-muted">{(xmlFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); resetXml(); }}
+                    className="text-xs text-muted hover:text-red-500 ml-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <Upload size={28} className="mx-auto text-muted/40 mb-2" />
+                  <p className="text-sm text-muted">Click to select an InStat XML tagging file</p>
+                  <p className="text-xs text-muted/60 mt-1">Accepts .xml files only</p>
+                </div>
+              )}
+            </div>
+            <input
+              ref={xmlFileRef}
+              type="file"
+              accept=".xml"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setXmlFile(f);
+              }}
+            />
+          </div>
+
+          {/* League + Season */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+            <div>
+              <label className="block text-sm font-semibold text-navy mb-1">League</label>
+              <select
+                value={xmlLeague}
+                onChange={(e) => setXmlLeague(e.target.value)}
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+              >
+                {LEAGUE_OPTIONS.map((l) => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-navy mb-1">Season</label>
+              <input
+                type="text"
+                value={xmlSeason}
+                onChange={(e) => setXmlSeason(e.target.value)}
+                placeholder="e.g. 2025-26"
+                className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+              />
+            </div>
+          </div>
+
+          {/* Upload Button */}
+          <button
+            onClick={handleXmlUpload}
+            disabled={!xmlFile || xmlUploading}
+            className="w-full bg-gradient-to-r from-teal to-teal/90 text-white py-3 rounded-xl font-oswald font-semibold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-shadow"
+          >
+            {xmlUploading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                Importing...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <Upload size={16} />
+                Upload &amp; Import
+              </span>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

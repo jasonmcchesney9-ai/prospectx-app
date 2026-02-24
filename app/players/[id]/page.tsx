@@ -43,6 +43,8 @@ import {
   Sparkles,
   Eye,
   EyeOff,
+  Video,
+  Play,
 } from "lucide-react";
 import {
   RadarChart,
@@ -66,7 +68,7 @@ import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
-type Tab = "profile" | "stats" | "notes" | "reports" | "player";
+type Tab = "profile" | "stats" | "notes" | "reports" | "player" | "video";
 type StatsSubView = "current" | "progression" | "gamelog";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -864,7 +866,7 @@ export default function PlayerDetailPage() {
               </button>
               <Link
                 href={`/players/${playerId}/card`}
-                className="flex items-center gap-2 px-3 py-2 border border-teal/20 text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.03] transition-colors no-print"
+                className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 border border-blue-200 text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-blue-200 transition-colors no-print"
               >
                 <Eye size={14} />
                 Player Card
@@ -897,6 +899,7 @@ export default function PlayerDetailPage() {
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
             { key: "player" as Tab, label: "Player", count: devPlanV2History.length || devPlanVersions.length || null },
+            { key: "video" as Tab, label: "Video", count: null },
           ]).map(({ key, label, count }) => (
             <button
               key={key}
@@ -2855,6 +2858,80 @@ export default function PlayerDetailPage() {
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {/* Video Tab */}
+        {activeTab === "video" && (
+          <section className="space-y-4">
+            <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
+                <Video size={14} className="text-teal" /> Game Film
+              </h3>
+              <p className="text-xs text-muted mb-5">
+                Quick-access clips for this player&apos;s recent events.
+              </p>
+
+              {player && stats.length > 0 ? (
+                <div className="flex flex-wrap gap-3">
+                  {/* Last Game – All Events */}
+                  <Link
+                    href={`/video-sessions?player_id=${playerId}`}
+                    className="px-4 py-2.5 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors flex items-center gap-2"
+                  >
+                    <Play size={14} /> Last Game – All Events
+                  </Link>
+
+                  {/* Last 3 Games – Shots */}
+                  <Link
+                    href={`/video-sessions?player_id=${playerId}&action=Shots`}
+                    className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                  >
+                    <Target size={14} /> Last 3 Games – Shots
+                  </Link>
+
+                  {/* Last 3 Games – Faceoffs (C/F only) */}
+                  {player.position && ["C", "F", "LW", "RW"].includes(player.position) && (
+                    <Link
+                      href={`/video-sessions?player_id=${playerId}&action=Faceoffs`}
+                      className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                    >
+                      <Swords size={14} /> Last 3 Games – Faceoffs
+                    </Link>
+                  )}
+
+                  {/* Defensive Zone Clips (D only) */}
+                  {player.position === "D" && (
+                    <Link
+                      href={`/video-sessions?player_id=${playerId}&zone=DZ`}
+                      className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                    >
+                      <Shield size={14} /> Defensive Zone Clips
+                    </Link>
+                  )}
+
+                  {/* Goals Against (G only) */}
+                  {player.position === "G" && (
+                    <Link
+                      href={`/video-sessions?player_id=${playerId}&action=Goals against`}
+                      className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                    >
+                      <AlertTriangle size={14} /> Goals Against
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Video size={32} className="mx-auto text-muted/30 mb-2" />
+                  <p className="text-sm text-muted">
+                    No game film imported yet for this player.
+                  </p>
+                  <p className="text-xs text-muted/60 mt-1">
+                    Upload an InStat XML file in Imports to get started.
+                  </p>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
