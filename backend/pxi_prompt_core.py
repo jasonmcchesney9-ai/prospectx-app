@@ -1040,6 +1040,7 @@ MODE_TEMPLATE_WIRING = {
     "agent_pack":          {"primary": "agent",       "secondary": "scout"},
     "development_roadmap": {"primary": "skill_coach", "secondary": "mental_coach"},
     "family_card":         {"primary": "parent",      "secondary": "skill_coach"},
+    "parent_report":       {"primary": "parent",      "secondary": None},
     "line_chemistry":      {"primary": "coach",       "secondary": "analyst"},
     "st_optimization":     {"primary": "coach",       "secondary": "analyst"},
     "trade_target":        {"primary": "gm",          "secondary": "scout"},
@@ -1136,6 +1137,10 @@ REQUIRED_SECTIONS_BY_TYPE = {
     "family_card": [
         "PLAYER_SNAPSHOT", "SEASON_HIGHLIGHTS", "AREAS_FOR_GROWTH",
         "PATHWAY_OPTIONS", "WHAT_SCOUTS_SEE", "ACTION_ITEMS",
+    ],
+    "parent_report": [
+        "HOW_THEY_ARE_PLAYING", "WHAT_THEY_DO_WELL",
+        "FOCUS_AREA", "LAST_GAME_SUMMARY",
     ],
     "line_chemistry": [
         "LINE_OVERVIEW", "CHEMISTRY_METRICS", "ROLE_COMPLEMENTARITY",
@@ -4151,6 +4156,35 @@ PLAYER_FAMILY_GUIDE_TILES = [
     "hockey_glossary",
     # EXCLUDED: "prep_college_guide" — deferred from v1
 ]
+
+
+# ── PARENT REPORT PROMPT ──────────────────────────────────────
+# Used by report_type: parent_report via POST /reports
+# Plain language only — no grades, no percentiles, no scouting jargon
+
+PARENT_REPORT_PROMPT = """You are ProspectX, writing a Parent Report for a hockey parent.
+This report translates scouting data into plain, warm language that a parent can understand.
+
+ABSOLUTE RULES:
+- NEVER use letter grades, percentiles, or comparative rankings
+- NEVER use the words: 'elite', 'below average', 'struggling', 'weak', 'poor', 'deficient'
+- NEVER use scouting jargon: 'compete level', 'hockey IQ', 'gap control', 'cycle game', 'transition play'
+- Focus on GROWTH, EFFORT, and SPECIFIC SKILLS — warm and specific
+- Write like you are speaking to a supportive hockey parent, not a scout or GM
+- Keep every section SHORT — 2-3 sentences max
+
+OUTPUT FORMAT — Return a JSON object with exactly these 4 fields:
+
+{
+  "how_they_playing": "2 sentences, plain language, warm tone. Describe how the player is contributing and progressing. Example: 'Your player is contributing offensively at a strong rate for their age group. They are showing steady improvement in their all-around play.'",
+  "what_they_do_well": "2-3 short bullet phrases, no jargon. Example: 'Strong on pucks along the boards. Competes hard in all three zones. Good instincts around the net.'",
+  "focus_area": "1 sentence, specific and actionable. Example: 'Working on first-step quickness off the rush.'",
+  "last_game_summary": "1-2 sentences from game stats if available. Example: 'Played 18 minutes Saturday vs Leamington. Recorded an assist and was on the ice for both team goals.' If no game data is available, set this field to null."
+}
+
+IMPORTANT: Return ONLY the JSON object. No markdown, no preamble, no explanation.
+If no recent game stats exist in the input data, set last_game_summary to null — do NOT fabricate game data.
+"""
 
 
 # ── SHARED CONTEXT INJECTOR ──────────────────────────────────

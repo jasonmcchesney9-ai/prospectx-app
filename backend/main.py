@@ -110,6 +110,7 @@ from pxi_prompt_core import (
     build_family_guide_tile_prompt,
     PLAYER_FAMILY_GUIDE_TILES,
     get_mental_health_resources,
+    PARENT_REPORT_PROMPT,
 )
 
 # Load .env from the backend directory (works regardless of CWD)
@@ -1575,7 +1576,10 @@ def init_db():
             FOREIGN KEY (org_id) REFERENCES organizations(id)
         )
     """)
-    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_org ON teams (name, org_id)")
+    try:
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_name_org ON teams (name, org_id)")
+    except Exception:
+        logger.warning("Could not create unique index on teams (duplicates exist) — will retry in migrations")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS scout_notes (
@@ -3869,6 +3873,9 @@ def seed_new_templates():
         ("Player Season Roadmap", "player_season_roadmap",
          "Player Analytics", "Projections & Development",
          "Unified season development report with identity, strengths, development priorities, phase plan, practice/game integration, and measurable checkpoints."),
+        ("Parent Report", "parent_report",
+         "Player Development", "Family Guide",
+         "Plain-language parent-facing report with 4 fields: how they are playing, what they do well, focus area, and last game summary. No grades, no jargon."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -18265,6 +18272,10 @@ Project this player's performance for the NEXT season (2026-27). Structure your 
 7. RECOMMENDATION — Clear actionable guidance
 Use the player's birth_year and age_group from the data. Today's date is {datetime.now().date().isoformat()}. Reference specific stats when projecting."""
 
+            elif request.report_type == "parent_report":
+                # Override system prompt entirely — parent_report uses plain language, no scouting jargon
+                system_prompt = PARENT_REPORT_PROMPT
+
             # Note: template-specific instructions are now handled by build_report_system_prompt()
 
             # ── Append drill recommendation instructions if drills were requested ──
@@ -18291,6 +18302,7 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                 "practice_plan": 4000,
                 "role_adjustment": 4000,
                 "bench_card": 2000,
+                "parent_report": 1000,
             }
             max_tokens = _type_tokens.get(request.report_type, 10000 if drill_list else 8000)
             message = client.messages.create(
@@ -33776,6 +33788,111 @@ async def family_guide_tile(request: Request, token_data: dict = Depends(verify_
 async def list_family_guide_tiles(token_data: dict = Depends(verify_token)):
     """Return the list of active Family Guide tile keys."""
     return {"tiles": PLAYER_FAMILY_GUIDE_TILES}
+
+
+@app.get("/players/{player_id}/parent-profile")
+async def get_parent_profile(player_id: str, token_data: dict = Depends(verify_token)):
+    """
+    Return the latest parent_report for a player + most recent game stats row.
+    Used by the My Player Parent Profile Block.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify player exists and belongs to this org
+        player_row = conn.execute(
+            "SELECT * FROM players WHERE id = %s AND org_id = %s AND (is_deleted = 0 OR is_deleted IS NULL)" if USE_PG
+            else "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not player_row:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        player = _player_from_row(player_row)
+
+        # Fetch latest parent_report
+        report_row = conn.execute(
+            "SELECT * FROM reports WHERE player_id = %s AND org_id = %s AND report_type = 'parent_report' AND status = 'completed' ORDER BY created_at DESC LIMIT 1" if USE_PG
+            else "SELECT * FROM reports WHERE player_id = ? AND org_id = ? AND report_type = 'parent_report' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+            (player_id, org_id),
+        ).fetchone()
+
+        # Fetch most recent game stats
+        last_game = None
+        game_row = conn.execute(
+            "SELECT * FROM player_game_stats WHERE player_id = %s ORDER BY game_date DESC LIMIT 1" if USE_PG
+            else "SELECT * FROM player_game_stats WHERE player_id = ? ORDER BY game_date DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        if game_row:
+            last_game = {
+                "game_date": game_row["game_date"],
+                "opponent": game_row["opponent"],
+                "goals": game_row["goals"],
+                "assists": game_row["assists"],
+                "points": game_row["points"],
+                "plus_minus": game_row["plus_minus"],
+                "shots": game_row["shots"],
+                "toi_seconds": game_row["toi_seconds"],
+            }
+
+        if not report_row:
+            return {
+                "has_report": False,
+                "player": {
+                    "id": player["id"],
+                    "first_name": player["first_name"],
+                    "last_name": player["last_name"],
+                    "position": player.get("position", ""),
+                    "current_team": player.get("current_team", ""),
+                    "league": player.get("league", ""),
+                    "dob": player.get("dob", ""),
+                },
+                "last_game": last_game,
+            }
+
+        # Parse report content (JSON fields)
+        report_content = {}
+        raw_content = report_row["content"] or "{}"
+        try:
+            report_content = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
+        except (json.JSONDecodeError, TypeError):
+            report_content = {"raw": raw_content}
+
+        # Check staleness (>21 days)
+        is_stale = False
+        last_updated = report_row["created_at"]
+        try:
+            report_date_str = last_updated[:10] if last_updated else ""
+            if report_date_str:
+                report_date = datetime.strptime(report_date_str, "%Y-%m-%d").date()
+                days_old = (datetime.now().date() - report_date).days
+                is_stale = days_old > 21
+        except Exception:
+            pass
+
+        return {
+            "has_report": True,
+            "is_stale": is_stale,
+            "last_updated": last_updated,
+            "report_id": report_row["id"],
+            "how_they_playing": report_content.get("how_they_playing", ""),
+            "what_they_do_well": report_content.get("what_they_do_well", ""),
+            "focus_area": report_content.get("focus_area", ""),
+            "last_game_summary": report_content.get("last_game_summary"),
+            "player": {
+                "id": player["id"],
+                "first_name": player["first_name"],
+                "last_name": player["last_name"],
+                "position": player.get("position", ""),
+                "current_team": player.get("current_team", ""),
+                "league": player.get("league", ""),
+                "dob": player.get("dob", ""),
+            },
+            "last_game": last_game,
+        }
+    finally:
+        conn.close()
 
 
 # ============================================================
