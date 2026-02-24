@@ -788,6 +788,75 @@ Anchor projection in role and path: 'projects as a middle-six play-driver if str
 and pace improve,' 'profiles as a depth energy winger with PK value.'"""
 
 # ─────────────────────────────────────────────────────────
+# A4) SCOUT_SUMMARY_STRUCTURE — enforced 3-line format for PXI Scout Summary
+# ─────────────────────────────────────────────────────────
+SCOUT_SUMMARY_STRUCTURE = """═══ SCOUT SUMMARY STRUCTURE ═══
+When generating a PXI Scout Summary for the Player Card, output EXACTLY 3 lines:
+
+LINE 1 — OVERALL BAND (must be one of the 5 allowed phrases, nothing else)
+LINE 2 — KEY STRENGTH (one sentence, specific observable skill with evidence)
+LINE 3 — DEVELOPMENT NOTE (one sentence, actionable area for improvement)
+
+Do NOT add extra lines, bullet points, or formatting. Three lines only."""
+
+# ─────────────────────────────────────────────────────────
+# A5) OVERALL_BAND_ALLOWED — five-band vocabulary (ONLY these phrases)
+# ─────────────────────────────────────────────────────────
+OVERALL_BAND_ALLOWED = [
+    "Top prospect in league",
+    "Above-average at level",
+    "Average at level",
+    "Depth / fringe roster",
+    "Too early to project",
+]
+
+# ─────────────────────────────────────────────────────────
+# A6) COHORT_PROJECTION_TONES — tone guidance per age cohort
+# ─────────────────────────────────────────────────────────
+COHORT_PROJECTION_TONES = {
+    "u16_chl": "Developmental ceiling language. Focus on trajectory and tools, not current production.",
+    "major_junior": "Balanced assessment. Weight current performance and projection equally.",
+    "nhl_draft": "Decisional language. Frame as draft-eligible with clear ceiling/floor/median lines.",
+    "overage": "Results-focused. Emphasize current role value and translation risk.",
+    "unknown": "Neutral assessment. State what data shows without age-specific framing.",
+}
+
+# ─────────────────────────────────────────────────────────
+# A7) BANNED_SCOUT_PHRASES — never output these in scout summaries
+# ─────────────────────────────────────────────────────────
+BANNED_SCOUT_PHRASES = [
+    "has potential",
+    "could be special",
+    "sky is the limit",
+    "next level talent",
+    "generational",
+    "franchise player",
+    "can't miss",
+    "sure-fire",
+    "guaranteed",
+    "will be",
+    "destined",
+]
+
+
+def _detect_cohort(player_age: int | None, league: str | None) -> str:
+    """Detect player cohort for tone calibration."""
+    if player_age is None:
+        return "unknown"
+    chl_leagues = {"OHL", "WHL", "QMJHL", "LHJMQ"}
+    league_upper = (league or "").upper()
+    if player_age <= 16 and league_upper in chl_leagues:
+        return "u16_chl"
+    if player_age <= 20 and league_upper in chl_leagues:
+        return "major_junior"
+    if 17 <= player_age <= 19:
+        return "nhl_draft"
+    if player_age >= 21:
+        return "overage"
+    return "unknown"
+
+
+# ─────────────────────────────────────────────────────────
 # B) PXI_MODE_BLOCKS — 10 mode-specific prompt blocks
 # ─────────────────────────────────────────────────────────
 PXI_MODE_BLOCKS = {
@@ -5285,6 +5354,10 @@ Perspective: {resolved_perspective}
     mode_block = PXI_MODE_BLOCKS.get(mode, PXI_MODE_BLOCKS.get("scout", ""))
     if mode_block:
         parts.append(mode_block)
+
+    # Scout Summary structure enforcement for scout mode
+    if mode == "scout":
+        parts.append(SCOUT_SUMMARY_STRUCTURE)
 
     # Scouting Language Rules — inject for player-facing report types in Bench Talk
     _PLAYER_FACING_TYPES = {
