@@ -40,9 +40,29 @@ export default function TrendlineChart({ data }: Props) {
 
   if (!trendline || trendline.length === 0) {
     return (
-      <div className="text-center py-6">
-        <BarChart3 size={24} className="mx-auto text-muted/30 mb-2" />
-        <p className="text-xs text-muted">No trendline data available.</p>
+      <div className="flex flex-col items-center justify-center py-6 rounded-lg" style={{ backgroundColor: "#E6F7F6" }}>
+        <BarChart3 size={24} className="text-gray-400 mb-2" />
+        <p className="text-xs text-gray-500 font-medium">No development data yet.</p>
+        <p className="text-[10px] text-gray-400 mt-0.5">Run a PXI Assessment to start tracking this player&apos;s trend.</p>
+      </div>
+    );
+  }
+
+  if (trendline.length === 1) {
+    return (
+      <div className="space-y-3">
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-oswald uppercase tracking-wider ${trendInfo.bg} ${trendInfo.color}`}>
+          <TrendIcon size={11} />
+          {trendInfo.label}
+        </div>
+        <div className="h-40 flex items-center justify-center">
+          <div className="flex flex-col items-center">
+            <div className="w-3 h-3 rounded-full bg-teal mb-2" />
+            <p className="text-sm font-bold text-navy">{trendline[0].value}</p>
+            <p className="text-[10px] text-muted mt-0.5">vs {trendline[0].opponent}</p>
+          </div>
+        </div>
+        <p className="text-[10px] text-gray-400 text-center">Not enough data for trend</p>
       </div>
     );
   }
