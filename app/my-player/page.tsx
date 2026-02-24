@@ -19,6 +19,8 @@ import {
   Target,
   Users,
   Star,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -93,6 +95,65 @@ export default function MyPlayerPage() {
       setDashboard(null);
     }
   }, [selectedPlayerId, fetchDashboard]);
+
+  // Parent Profile data
+  interface ParentProfile {
+    has_report: boolean;
+    is_stale?: boolean;
+    last_updated?: string;
+    report_id?: string;
+    how_they_playing?: string;
+    what_they_do_well?: string;
+    focus_area?: string;
+    last_game_summary?: string | null;
+    player: { id: string; first_name: string; last_name: string; position: string; current_team: string; league: string; dob: string };
+    last_game?: { game_date: string; opponent: string; goals: number; assists: number; points: number; plus_minus: number; shots: number; toi_seconds: number } | null;
+  }
+  const [parentProfile, setParentProfile] = useState<ParentProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  const fetchParentProfile = useCallback(async (pid: string) => {
+    setProfileLoading(true);
+    try {
+      const { data } = await api.get<ParentProfile>(`/players/${pid}/parent-profile`);
+      setParentProfile(data);
+    } catch {
+      setParentProfile(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedPlayerId) {
+      fetchParentProfile(selectedPlayerId);
+    } else {
+      setParentProfile(null);
+    }
+  }, [selectedPlayerId, fetchParentProfile]);
+
+  const generateParentReport = useCallback(async () => {
+    if (!selectedPlayerId) return;
+    setGenerating(true);
+    try {
+      await api.post("/reports", { player_id: selectedPlayerId, report_type: "parent_report" });
+      // Refetch profile to get new data
+      await fetchParentProfile(selectedPlayerId);
+    } catch { /* silent */ }
+    finally { setGenerating(false); }
+  }, [selectedPlayerId, fetchParentProfile]);
+
+  function getPlayerAge(dob: string | null | undefined): number | null {
+    if (!dob) return null;
+    try {
+      const birth = new Date(dob.slice(0, 10));
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
+      return age;
+    } catch { return null; }
+  }
 
   const filteredPlayers = useMemo(() => {
     if (!pickerSearch.trim()) return players.slice(0, 50);
@@ -218,6 +279,114 @@ export default function MyPlayerPage() {
             )}
           </div>
         </div>
+
+        {/* ── Parent Profile Block ── */}
+        {selectedPlayer && (
+          <div className="bg-white rounded-xl border border-[#0D9488]/20 p-5 mb-6">
+            {profileLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 size={20} className="animate-spin text-[#0D9488]" />
+                <span className="ml-2 text-xs text-gray-500">Loading profile...</span>
+              </div>
+            ) : parentProfile?.has_report ? (
+              <>
+                {/* Header Row */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-bold font-oswald uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                      {selectedPlayer.first_name} {selectedPlayer.last_name}
+                    </h2>
+                    {selectedPlayer.position && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: "#0D9488" }}>
+                        {selectedPlayer.position}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {parentProfile.is_stale && parentProfile.last_updated && (
+                      <button
+                        onClick={generateParentReport}
+                        disabled={generating}
+                        className="text-[10px] hover:underline flex items-center gap-1" style={{ color: "#0D9488" }}
+                      >
+                        <RefreshCw size={10} className={generating ? "animate-spin" : ""} />
+                        Last updated {new Date(parentProfile.last_updated).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Refresh?
+                      </button>
+                    )}
+                    {!parentProfile.is_stale && parentProfile.last_updated && (
+                      <span className="text-[10px]" style={{ color: "#999" }}>
+                        Updated {new Date(parentProfile.last_updated).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xs" style={{ color: "#666666" }}>
+                    {selectedPlayer.current_team || ""}
+                    {(() => { const age = getPlayerAge(selectedPlayer.dob); return age ? ` · Age ${age}` : ""; })()}
+                    {selectedPlayer.current_league ? ` · ${selectedPlayer.current_league}` : ""}
+                  </span>
+                </div>
+
+                {/* 2x2 Card Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* How They're Playing */}
+                  <div className="rounded-lg p-3" style={{ borderLeft: "4px solid #0D9488", background: "#fff" }}>
+                    <p className="text-sm font-bold mb-1" style={{ color: "#0F2942" }}>How They&apos;re Playing</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "#666666" }}>
+                      {parentProfile.how_they_playing || "No assessment yet."}
+                    </p>
+                  </div>
+
+                  {/* What They Do Well */}
+                  <div className="rounded-lg p-3" style={{ borderLeft: "4px solid #0D9488", background: "#fff" }}>
+                    <p className="text-sm font-bold mb-1" style={{ color: "#0F2942" }}>What They Do Well</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "#666666" }}>
+                      {parentProfile.what_they_do_well || "No assessment yet."}
+                    </p>
+                  </div>
+
+                  {/* Focus Area This Month */}
+                  <div className="rounded-lg p-3" style={{ borderLeft: "4px solid #0D9488", background: "#fff" }}>
+                    <p className="text-sm font-bold mb-1" style={{ color: "#0F2942" }}>Focus Area This Month</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "#666666" }}>
+                      {parentProfile.focus_area || "No assessment yet."}
+                    </p>
+                  </div>
+
+                  {/* Last Game */}
+                  <div className="rounded-lg p-3" style={{ borderLeft: "4px solid #0D9488", background: "#fff" }}>
+                    <p className="text-sm font-bold mb-1" style={{ color: "#0F2942" }}>Last Game</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "#666666" }}>
+                      {parentProfile.last_game_summary
+                        ? parentProfile.last_game_summary
+                        : "No recent game data. Upload a game file in Game Sheets to see your player\u2019s last game here."}
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* No report — Generate button */
+              <div className="text-center py-4">
+                <p className="text-sm mb-1" style={{ color: "#0F2942" }}>
+                  No assessment yet for {selectedPlayer.first_name}. Generate their Parent Report to get started.
+                </p>
+                <button
+                  onClick={generateParentReport}
+                  disabled={generating}
+                  className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-white text-sm font-bold font-oswald uppercase tracking-wider transition-all hover:opacity-90 disabled:opacity-50"
+                  style={{ backgroundColor: "#0D9488" }}
+                >
+                  {generating ? (
+                    <><Loader2 size={14} className="animate-spin" /> Generating...</>
+                  ) : (
+                    <>Generate {selectedPlayer.first_name}&apos;s Parent Report</>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Quick Actions — shown when player is selected */}
         {selectedPlayer && (
