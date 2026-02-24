@@ -423,7 +423,7 @@ export default function PlayerCardPage() {
                 {intel?.overall_grade != null && (
                   <div className="text-center mt-1">
                     <span className="text-lg font-bold text-navy">{String(intel.overall_grade)}</span>
-                    <span className="text-[10px] text-muted ml-1">/ 10</span>
+                    <span className="text-[10px] text-muted ml-1 font-oswald uppercase tracking-wider">OVR</span>
                   </div>
                 )}
               </div>
@@ -442,7 +442,19 @@ export default function PlayerCardPage() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-gray-400">No intelligence grades yet. Generate a PXI Assessment to grade this player.</p>
+                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider mb-2">
+                    Needs Scouting
+                  </span>
+                  <p className="text-[10px] text-gray-400 mb-3">No intelligence data yet.</p>
+                  {userRole !== "parent" && (
+                    <button
+                      onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout")}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
+                    >
+                      <Search size={11} />
+                      Scout Now
+                    </button>
+                  )}
                 </div>
               </div>
             )}
