@@ -21609,6 +21609,25 @@ async def admin_normalize_leagues(token_data: dict = Depends(verify_token)):
         if table_results:
             summary[f"{table}.{col}"] = table_results
 
+    # Cleanup pass: NULL out current_league values that look like game matchup strings
+    # e.g. "St Marys Lincolns 05-Feb-2026"
+    import re
+    garbage_pattern = re.compile(r'\d{2}-\w{3}-\d{4}')
+    bad_leagues = conn.execute(
+        "SELECT DISTINCT current_league FROM players WHERE current_league IS NOT NULL AND current_league != ''"
+    ).fetchall()
+    garbage_cleaned = 0
+    for row in bad_leagues:
+        val = row[0]
+        if garbage_pattern.search(val):
+            result = conn.execute(
+                "UPDATE players SET current_league = NULL WHERE current_league = ?", (val,)
+            )
+            garbage_cleaned += result.rowcount
+    total_fixed += garbage_cleaned
+    if garbage_cleaned:
+        summary["players.current_league_garbage_cleaned"] = garbage_cleaned
+
     conn.commit()
     conn.close()
 
