@@ -189,6 +189,7 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
       }))
     : null;
 
+  const allZeroRadar = radarData ? radarData.every(d => d.value === 0) : false;
   const hasIntel = !!(player.overall_grade && player.overall_grade !== "NR") || !!player.metrics;
 
   function handleScout(e: React.MouseEvent) {
@@ -262,7 +263,7 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
         </div>
 
         {/* Radar chart / Needs Scouting / Metric circles */}
-        {radarData ? (
+        {radarData && !allZeroRadar ? (
           <div className="flex-1 h-[130px] -my-1">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>

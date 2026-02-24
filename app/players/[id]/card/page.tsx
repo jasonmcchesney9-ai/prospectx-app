@@ -213,6 +213,7 @@ export default function PlayerCardPage() {
       value: typeof intel[k] === "number" ? intel[k] as number : parseFloat(String(intel[k])) || 0,
       fullMark: 10,
     })) : [];
+  const allZeroRadar = radarData.every(d => d.value === 0);
 
   return (
     <ProtectedRoute>
@@ -352,7 +353,7 @@ export default function PlayerCardPage() {
             )}
 
             {/* Intelligence radar */}
-            {radarData.length >= 3 && (
+            {radarData.length >= 3 && !allZeroRadar && (
               <div className="bg-white rounded-xl border border-teal/20 p-4">
                 <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Grade Profile</h3>
                 {intel?.archetype ? (
@@ -379,6 +380,24 @@ export default function PlayerCardPage() {
                     <span className="text-[10px] text-muted ml-1">/ 10</span>
                   </div>
                 )}
+              </div>
+            )}
+            {(radarData.length < 3 || allZeroRadar) && (
+              <div className="bg-white rounded-xl border border-teal/20 p-4">
+                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Grade Profile</h3>
+                <div className="flex flex-col items-center justify-center py-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    {["SNP", "IQ", "PLY", "TRN", "DEF", "CMP"].map((label) => (
+                      <div key={label} className="flex flex-col items-center gap-0.5">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center border border-dashed border-navy/20 text-navy/30 text-[9px] font-oswald font-bold">
+                          ?
+                        </div>
+                        <span className="text-[7px] font-oswald uppercase tracking-wider text-muted">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-400">No intelligence grades yet. Generate a PXI Assessment to grade this player.</p>
+                </div>
               </div>
             )}
           </div>
