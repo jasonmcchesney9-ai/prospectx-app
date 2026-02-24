@@ -8929,9 +8929,12 @@ async def admin_platform_stats(token_data: dict = Depends(verify_token)):
         stats["total_drills"] = conn.execute(
             "SELECT COUNT(*) FROM drills"
         ).fetchone()[0]
-        stats["total_conversations"] = conn.execute(
-            "SELECT COUNT(*) FROM chat_conversations WHERE org_id = ?", (org_id,)
-        ).fetchone()[0]
+        try:
+            stats["total_conversations"] = conn.execute(
+                "SELECT COUNT(*) FROM bench_talk_conversations WHERE org_id = ?", (org_id,)
+            ).fetchone()[0]
+        except Exception:
+            stats["total_conversations"] = 0
 
         # Reports by status
         stats["reports_by_status"] = [
@@ -29089,19 +29092,19 @@ async def get_bench_talk_suggestions(token_data: dict = Depends(verify_token)):
 
         # 2. Active game plan
         active_gp = conn.execute("""
-            SELECT opponent FROM game_plans
-            WHERE org_id = ? AND status = 'active' ORDER BY date ASC LIMIT 1
+            SELECT opponent_team_name FROM game_plans
+            WHERE org_id = ? AND status = 'active' ORDER BY game_date ASC LIMIT 1
         """, (org_id,)).fetchone()
-        if active_gp and active_gp["opponent"]:
-            activity.append({"text": f"Help me prep for {active_gp['opponent']}", "icon": "shield"})
+        if active_gp and active_gp["opponent_team_name"]:
+            activity.append({"text": f"Help me prep for {active_gp['opponent_team_name']}", "icon": "shield"})
 
         # 3. Active series
         active_series = conn.execute("""
-            SELECT series_name, opponent FROM series_plans
+            SELECT series_name, opponent_team_name FROM series_plans
             WHERE org_id = ? AND status = 'active' LIMIT 1
         """, (org_id,)).fetchone()
         if active_series:
-            opp = active_series["opponent"] or active_series["series_name"]
+            opp = active_series["opponent_team_name"] or active_series["series_name"]
             activity.append({"text": f"Update me on the {opp} series", "icon": "shield"})
 
         # 4. User's most-scouted team
@@ -29775,7 +29778,7 @@ async def my_data_summary(token_data: dict = Depends(verify_token)):
     ).fetchone()[0]
 
     uploads = conn.execute(
-        "SELECT COUNT(*) FROM import_jobs WHERE org_id = ? AND user_id = ?",
+        "SELECT COUNT(*) FROM import_jobs WHERE org_id = ? AND uploaded_by = ?",
         (org_id, user_id)
     ).fetchone()[0]
 
@@ -29790,12 +29793,12 @@ async def my_data_summary(token_data: dict = Depends(verify_token)):
     ).fetchone()[0]
 
     reports = conn.execute(
-        "SELECT COUNT(*) FROM reports WHERE org_id = ? AND user_id = ?",
+        "SELECT COUNT(*) FROM reports WHERE org_id = ? AND created_by = ?",
         (org_id, user_id)
     ).fetchone()[0]
 
     notes = conn.execute(
-        "SELECT COUNT(*) FROM scout_notes WHERE org_id = ? AND user_id = ?",
+        "SELECT COUNT(*) FROM scout_notes WHERE org_id = ? AND scout_id = ?",
         (org_id, user_id)
     ).fetchone()[0]
 
@@ -29817,7 +29820,7 @@ async def my_data_uploads(token_data: dict = Depends(verify_token)):
     user_id = token_data["user_id"]
     conn = get_db()
     rows = conn.execute("""
-        SELECT * FROM import_jobs WHERE org_id = ? AND user_id = ?
+        SELECT * FROM import_jobs WHERE org_id = ? AND uploaded_by = ?
         ORDER BY created_at DESC LIMIT 50
     """, (org_id, user_id)).fetchall()
     conn.close()
