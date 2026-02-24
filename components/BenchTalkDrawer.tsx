@@ -885,7 +885,7 @@ export default function BenchTalkDrawer() {
               return (
             <div className="flex flex-col items-center justify-center h-full px-4">
               <div className="mb-3 drop-shadow-lg">
-                <PXIBadge size={64} variant="dark" showDot={true} />
+                <img src="/images/pxi-logo.svg" alt="PXI" className="h-12 w-auto mx-auto" />
               </div>
               <h2 className="font-oswald text-xl font-bold text-navy tracking-wider uppercase mb-1">
                 {effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}
@@ -928,7 +928,7 @@ export default function BenchTalkDrawer() {
                 >
                   {msg.role === "assistant" && (
                     <div className="mr-1.5 mt-1 shrink-0">
-                      <PXIBadge size={32} variant="dark" showDot={false} />
+                      <img src="/images/pxi-logo.svg" alt="PXI" className="h-8 w-8 rounded-full object-cover" />
                     </div>
                   )}
                   <div className={`max-w-[85%] ${msg.role === "user" ? "" : "flex-1 min-w-0"}`}>
@@ -998,7 +998,7 @@ export default function BenchTalkDrawer() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="mr-1.5 mt-1 shrink-0">
-                    <PXIBadge size={32} variant="dark" showDot={false} />
+                    <img src="/images/pxi-logo.svg" alt="PXI" className="h-8 w-8 rounded-full object-cover" />
                   </div>
                   <div className="bg-white border border-teal/20 rounded-xl px-3 py-2 shadow-sm">
                     <div className="flex flex-col items-start gap-1">

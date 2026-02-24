@@ -43,7 +43,6 @@ import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
-import PXIBadge from "./PXIBadge";
 import PlayerSearchDropdown from "./PlayerSearchDropdown";
 
 // ── Role Group Mapping ─────────────────────────────────────────
@@ -428,7 +427,10 @@ export default function NavBar() {
                 benchTalkOpen ? "bg-orange/20" : "hover:bg-orange/10"
               }`}
             >
-              <PXIBadge size={22} variant="nav" showDot={true} />
+              <span className="relative inline-flex items-center">
+                <img src="/images/pxi-logo.svg" alt="PXI" className="h-5 w-auto" />
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500" />
+              </span>
             </button>
             <button
               className="text-white/70 hover:text-white"
@@ -457,7 +459,10 @@ export default function NavBar() {
                 : "text-orange hover:bg-orange/10"
             }`}
           >
-            <PXIBadge size={18} variant="nav" showDot={true} />
+            <span className="relative inline-flex items-center">
+              <img src="/images/pxi-logo.svg" alt="PXI" className="h-5 w-auto" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500" />
+            </span>
             Bench Talk
           </button>
         </div>

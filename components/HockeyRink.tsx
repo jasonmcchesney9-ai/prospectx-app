@@ -47,6 +47,7 @@ export default function HockeyRink({
 
   return (
     <div className={`inline-flex flex-col items-center ${className}`}>
+      <div className="relative">
       <svg
         width={w}
         height={h}
@@ -327,6 +328,16 @@ export default function HockeyRink({
           </>
         )}
       </svg>
+
+      {/* Center ice logo overlay (skip toast variant) */}
+      {!isTiny && (
+        <img
+          src="/images/pxi-logo.svg"
+          alt=""
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[22px] w-auto pointer-events-none opacity-[0.85]"
+        />
+      )}
+      </div>
 
       {/* Optional label */}
       {label && (
