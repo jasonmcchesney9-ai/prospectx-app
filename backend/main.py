@@ -111,6 +111,9 @@ from pxi_prompt_core import (
     PLAYER_FAMILY_GUIDE_TILES,
     get_mental_health_resources,
     PARENT_REPORT_PROMPT,
+    TILE_SEEDED_PROMPTS,
+    EMOTION_CONTEXT_MAP,
+    AFTER_GAME_SEED_TEMPLATE,
 )
 
 # Load .env from the backend directory (works regardless of CWD)
@@ -33669,6 +33672,7 @@ async def family_guide_tile(request: Request, token_data: dict = Depends(verify_
     body = await request.json()
     tile_key = body.get("tile_key", "").strip()
     player_id = body.get("player_id")
+    seed_message = body.get("seed_message", "").strip() if body.get("seed_message") else None
     if not tile_key:
         raise HTTPException(status_code=400, detail="tile_key is required")
     if tile_key not in PLAYER_FAMILY_GUIDE_TILES:
@@ -33763,6 +33767,7 @@ async def family_guide_tile(request: Request, token_data: dict = Depends(verify_
             player=player_dict,
             org=org_dict,
             last_game=last_game,
+            seed_message=seed_message,
         )
 
         # Include mental health resources for the mental_health_wellbeing tile
@@ -33786,8 +33791,18 @@ async def family_guide_tile(request: Request, token_data: dict = Depends(verify_
 
 @app.get("/family/guide/tiles")
 async def list_family_guide_tiles(token_data: dict = Depends(verify_token)):
-    """Return the list of active Family Guide tile keys."""
-    return {"tiles": PLAYER_FAMILY_GUIDE_TILES}
+    """Return the list of active Family Guide tile keys with seeded prompts."""
+    tiles = []
+    for key in PLAYER_FAMILY_GUIDE_TILES:
+        tiles.append({
+            "key": key,
+            "seeded_prompt": TILE_SEEDED_PROMPTS.get(key, ""),
+        })
+    return {
+        "tiles": tiles,
+        "emotion_context_map": EMOTION_CONTEXT_MAP,
+        "after_game_seed_template": AFTER_GAME_SEED_TEMPLATE,
+    }
 
 
 @app.get("/players/{player_id}/parent-profile")

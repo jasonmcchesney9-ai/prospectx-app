@@ -4721,17 +4721,90 @@ not a clinician, not a coach. You listen, you validate, you connect.
 }
 
 
+# ── TILE SEEDED PROMPTS ─────────────────────────────────────
+# Each tile's "Ask PXI" button pre-populates BenchTalk with this message.
+# [age] and [level] are replaced at runtime from the player profile.
+
+TILE_SEEDED_PROMPTS = {
+    "nutrition": (
+        "I'm a hockey parent. My player is [age] and plays [level]. "
+        "What should they eat before and after games this weekend? "
+        "Keep it practical — things I can actually prepare at home."
+    ),
+    "workouts": (
+        "I'm a hockey parent. My player is [age] and plays [level]. "
+        "What are the best off-ice exercises they can do at home this week? "
+        "Nothing that needs a gym — just bodyweight or basic equipment."
+    ),
+    "player_development_journey": (
+        "I'm a hockey parent. My player is [age] and plays [level]. "
+        "Can you walk me through the realistic pathway from here to prep school "
+        "or college hockey? What are the key ages and decisions we should be "
+        "thinking about now?"
+    ),
+    "mental_performance": (
+        "I'm a hockey parent. My player is [age] and plays [level]. "
+        "They sometimes struggle with nerves before big games. What are some "
+        "simple pre-game routines or mental tools that work well at this age?"
+    ),
+    "after_game_help": (
+        "I'm a hockey parent. My player is [age] and plays [level]. "
+        "They've been hard on themselves lately. What should I be saying — "
+        "and what should I avoid saying — to help them stay confident without "
+        "putting more pressure on them?"
+    ),
+    "gear_guide": (
+        "I'm a hockey parent. My player is [age] and plays [level]. "
+        "Can you walk me through what gear they actually need at this stage, "
+        "what to prioritize for safety and fit, and when we should be replacing things?"
+    ),
+    "hockey_glossary": (
+        "I'm a hockey parent trying to understand the game better. "
+        "Can you explain some of the terms I hear coaches and announcers use? "
+        "Start with the basics — positions, zones, and common stats — "
+        "and I'll ask follow-up questions."
+    ),
+    "mental_health_wellbeing": (
+        "I'm a hockey parent and I'm concerned about my player's mental "
+        "wellbeing — not just game-day nerves, but something that feels bigger. "
+        "Can you point me toward some resources and help me think about next steps?"
+    ),
+}
+
+
+# ── EMOTION CONTEXT MAP ─────────────────────────────────────
+# Used by After-Game Help tiles — maps emotion selection to context
+# string injected into the seeded BenchTalk prompt.
+
+EMOTION_CONTEXT_MAP = {
+    "win_good": "they played great and are feeling confident about their game",
+    "win_flat": "we won but they seem quiet and flat — something feels off",
+    "tough_loss": "they're upset after a hard loss and feeling down",
+    "responsible_mistake": "they feel responsible for a mistake that affected the game",
+    "low_ice_time": "they're upset about low ice time or being scratched",
+}
+
+# Seeded after-game prompt template — [emotion_context] replaced at runtime
+AFTER_GAME_SEED_TEMPLATE = (
+    "I'm a hockey parent. My player just had a game and [emotion_context]. "
+    "What should I say — and what should I avoid — in the car ride home? "
+    "Keep it short and practical."
+)
+
+
 # ── TILE PROMPT BUILDER ──────────────────────────────────────
 
 def build_family_guide_tile_prompt(
     tile_key: str,
     player: dict,
     org: dict,
-    last_game: dict = None
+    last_game: dict = None,
+    seed_message: str = None,
 ) -> str:
     """
     Build the complete system prompt for a Player & Family Guide tile.
     Combines shared context block with tile-specific prompt.
+    If seed_message is provided, it is appended as the user's opening question context.
     """
     if tile_key not in TILE_PROMPTS:
         raise ValueError(f"Unknown tile: {tile_key}. "
@@ -4740,7 +4813,12 @@ def build_family_guide_tile_prompt(
     context_block = build_family_guide_context(player, org, last_game)
     tile_prompt = TILE_PROMPTS[tile_key]
 
-    return f"{context_block}\n{tile_prompt}"
+    full_prompt = f"{context_block}\n{tile_prompt}"
+
+    if seed_message:
+        full_prompt += f"\n\nThe parent's opening question is:\n\"{seed_message}\"\nRespond directly to this question using the tile guidance above."
+
+    return full_prompt
 
 
 # ============================================================
