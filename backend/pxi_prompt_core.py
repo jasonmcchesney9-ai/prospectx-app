@@ -154,10 +154,576 @@ When asked to scout, evaluate, or report on a player:
 - No guarantees about roster spots, draft position, scholarships, contracts, or careers.
 - Use probability language and development-dependent framing.
 - Never promise outcomes — frame as projections with conditions.
-- Never reference 'the JSON', 'the data payload', or system internals. Write as a hockey professional addressing a hockey professional."""
+- Never reference 'the JSON', 'the data payload', or system internals. Write as a hockey professional addressing a hockey professional.
+
+═══════════════════════════════════════════════════
+PXI CORE INTELLIGENCE STANDARDS v1.0
+═══════════════════════════════════════════════════
+
+SOURCE AUTHORITY:
+Always reason using sources in this priority order:
+Tier 1 (governing bodies: Hockey Canada, USA Hockey, IIHF, NCAA)
+→ Tier 2 (sport science: NSCA, Canadian Sport Institute, GSSI, ISSN)
+→ Tier 3 (pro league benchmarks: NHL, AHL, ECHL combine norms)
+→ Tier 4 (peer-reviewed journals: JSCR, IJSPP, Sports Medicine, MSSE)
+Never invent sources. Never cite unstated generic "internet" information.
+When uncertain about a source: say you don't know.
+
+EVIDENCE CONFIDENCE — REQUIRED LANGUAGE:
+High confidence (meta-analysis, RCT, strong consensus):
+  → "Research strongly suggests..." / "There is strong evidence that..."
+Moderate confidence (cohort, longitudinal studies):
+  → "Research suggests..." / "There is moderate evidence that..."
+Low confidence (expert opinion, narrative review, indirect evidence):
+  → "Limited evidence indicates..." / "Early research suggests..."
+No evidence found:
+  → "There is no strong evidence for that — I cannot give a reliable answer."
+NEVER present low-confidence claims as certainties.
+
+MEDICAL — HARD STOP:
+Add medical disclaimer ONLY when the user asks about:
+injuries, pain, return-to-play, heavy training load risk,
+supplements for minors, concussions, or rehabilitation.
+Do NOT add on every response — coaches will tune it out.
+Required phrase when triggered:
+"This information is for education and coaching support only
+and does not replace advice from a licensed medical or health professional."
+NEVER: diagnose conditions, provide treatment plans, give numeric
+injury probabilities, provide return-to-play clearance, or recommend
+changing medications.
+
+ROSTER DECISIONS — GUARDRAIL:
+Never recommend cutting, releasing, demoting, or ending a player's
+time with a team.
+Always frame as: "The data shows X performs at this level —
+the roster decision is yours as the coach/GM."
+
+CAREER PREDICTIONS — GUARDRAIL:
+Never promise or guarantee:
+- Draft position or draft round
+- NHL, AHL, or any specific level attainment
+- Contract value or earnings
+- Scholarship outcomes
+Use only: "may", "projects to", "historically players with this
+profile...", "reasonable to expect", "upside exists if..."
+Never use certainty language about a player's future.
+
+ELITEPROSPECTS — RESTRICTED USE:
+Use only for: player identity confirmation, participation history,
+career timelines, contextual verification.
+Never use as primary source of record.
+Never use for: contracts, injuries, eligibility, intent, projections.
+Always qualify with: "listed as", "appears in publicly available
+records", "according to public listings (e.g., EliteProspects)"
+
+WEB ACCESS — WHITELIST ONLY:
+Fetch only from APPROVED_REFERENCE_URLS list.
+Never use open web search.
+If fetch returns unclear content:
+"I could not confirm this — please check [url] directly."
+Never fill gaps with invented content.
+
+PRACTICE PLANS — LTPD/ADM MANDATORY:
+1. Determine governing body from org.country and org.governing_body.
+2. Derive LTPD/ADM stage from player/team age using detect_ltpd_stage().
+3. Inject guidelines using build_practice_plan_guidelines().
+4. Always cite at top of plan:
+   "This plan follows [model] recommendations for [age group] ([stage])."
+5. Never exceed systems percentage for age stage.
+6. Never recommend bodychecking for age groups where not sanctioned.
+   CRITICAL for Canadian U13: check org.province_state —
+   Alberta allows checking, most other provinces do not.
+
+ANTI-HALLUCINATION — HARD RULES:
+Never invent:
+- Studies or research that do not exist
+- Exact protocols allegedly used by specific NHL teams or players
+- Private medical, contractual, or personal details about players
+- Player stats, height, weight, age, league, or team not in PXR data
+- Draft rankings or scouting grades not in the database
+"I don't know" is always better than a confident wrong answer.
+═══════════════════════════════════════════════════"""
 
 # Backward compatibility alias
 PXI_CORE_GUARDRAILS = IMMUTABLE_GUARDRAILS
+
+
+# ─────────────────────────────────────────────────────────
+# A1a) GOVERNING_BODY_GUIDELINES — LTPD / ADM age-stage rules
+# ─────────────────────────────────────────────────────────
+GOVERNING_BODY_GUIDELINES = {
+    "hockey_canada": {
+        "model": "Hockey Canada LTPD (Long-Term Player Development)",
+        "source": "hockeycanada.ca/en-ca/hockey-programs/coaching/ltpd",
+        "age_groups": {
+            "U7": {
+                "ages": "5-6",
+                "stage": "Active Start",
+                "ice_format": "Cross-ice (1/3 ice sections)",
+                "practice_duration_min": 45,
+                "practice_duration_max": 60,
+                "bodychecking": "None — no physical contact",
+                "practice_ratio": "3:1 practice to game",
+                "focus": "Fun, physical literacy, basic skating and puck feel",
+                "systems": "None — no positional or tactical concepts",
+                "key_rules": [
+                    "Cross-ice format mandatory",
+                    "No offsides, no icing",
+                    "No scores kept",
+                    "No tryouts — open registration",
+                    "Max 30-second explanations — maximize movement",
+                    "Fun must be the primary outcome at every session",
+                ],
+            },
+            "U9": {
+                "ages": "7-8",
+                "stage": "FUNdamentals",
+                "ice_format": "Half-ice",
+                "practice_duration_min": 50,
+                "practice_duration_max": 60,
+                "bodychecking": "None — incidental contact only",
+                "practice_ratio": "3:1 practice to game",
+                "focus": "Skating fundamentals, puck control, small-area games",
+                "systems": "None",
+                "key_rules": [
+                    "Half-ice format",
+                    "No tryouts — open registration",
+                    "Emphasize puck touches and individual skill over team concepts",
+                    "No advanced tactical systems",
+                    "Competitive spirit fostered individually, not team win/loss",
+                ],
+            },
+            "U11": {
+                "ages": "9-10",
+                "stage": "Learn to Train (Early)",
+                "ice_format": "Full ice",
+                "practice_duration_min": 60,
+                "practice_duration_max": 75,
+                "bodychecking": "None — body contact allowed, no checking",
+                "practice_ratio": "3:1 practice to game",
+                "focus": "Individual skills, skating efficiency, hockey sense, puck protection",
+                "systems": "Minimal — basic positional awareness only",
+                "key_rules": [
+                    "No bodychecking",
+                    "Body contact and angling OK",
+                    "Begin teaching positional awareness at basic level",
+                    "No systems blocks longer than 10 minutes",
+                    "No heavy physical conditioning — agility and movement only",
+                    "High puck-touch repetition is the priority",
+                ],
+            },
+            "U13": {
+                "ages": "11-12",
+                "stage": "Learn to Train (Late)",
+                "ice_format": "Full ice",
+                "practice_duration_min": 60,
+                "practice_duration_max": 75,
+                "bodychecking": "Province-dependent — Alberta YES, most other provinces NO",
+                "practice_ratio": "2:1 to 3:1 practice to game",
+                "focus": "Position-specific skills, transition game, 1v1, basic tactics",
+                "systems": "Basic — simple breakouts, zone entries, basic forecheck",
+                "key_rules": [
+                    "CRITICAL: Check province before any checking content",
+                    "Alberta introduces checking at U13 — other provinces do not",
+                    "Begin tactical concepts: breakouts, zone entries",
+                    "Moderate physical development — bodyweight and agility only",
+                    "Hockey sense and transition game are the priority",
+                    "No heavy strength training",
+                ],
+            },
+            "U15": {
+                "ages": "13-14",
+                "stage": "Train to Train",
+                "ice_format": "Full ice",
+                "practice_duration_min": 75,
+                "practice_duration_max": 90,
+                "bodychecking": "Yes — introduced at U15 in most Canadian provinces",
+                "practice_ratio": "2:1 practice to game",
+                "focus": "Team strategy, physical development, PP/PK, compete habits",
+                "systems": "Full — forecheck, breakout, NZ play, PP/PK basics",
+                "key_rules": [
+                    "Bodychecking fully introduced — emphasize safe technique",
+                    "Full tactical systems introduced",
+                    "Strength foundation begins — bodyweight, agility, speed",
+                    "Special teams concepts introduced (PP/PK)",
+                    "Aerobic base development begins",
+                    "Consider school schedule in weekly load planning",
+                ],
+            },
+            "U18": {
+                "ages": "15-17",
+                "stage": "Train to Compete",
+                "ice_format": "Full ice",
+                "practice_duration_min": 75,
+                "practice_duration_max": 90,
+                "bodychecking": "Yes — full contact",
+                "practice_ratio": "1.5:1 to 2:1 practice to game",
+                "focus": "Advanced systems, position-specific elite development, mental game",
+                "systems": "Advanced — full system work, game management, video review",
+                "key_rules": [
+                    "Full contact game",
+                    "Advanced tactical and system work",
+                    "Full physical development programs",
+                    "Mental performance and game management emphasis",
+                    "Individual development plans per player",
+                    "Exposure preparation (showcases, camps)",
+                ],
+            },
+            "U20_Junior": {
+                "ages": "17-20",
+                "stage": "Train to Win",
+                "ice_format": "Full ice",
+                "practice_duration_min": 60,
+                "practice_duration_max": 75,
+                "bodychecking": "Yes — full contact",
+                "practice_ratio": "1:1 to 1.5:1 practice to game",
+                "focus": "Team identity, situational hockey, video review, pro-ready habits",
+                "systems": "Elite — team identity drives all content, pro-style structure",
+                "key_rules": [
+                    "Full professional-style practice structure",
+                    "All systems work tied to team identity",
+                    "Video session integration",
+                    "Individual development plans per player",
+                    "Physical conditioning at full adult level",
+                    "Mental performance and leadership development",
+                ],
+            },
+        },
+    },
+    "usa_hockey": {
+        "model": "USA Hockey ADM (American Development Model)",
+        "source": "usahockey.com/adm",
+        "age_groups": {
+            "6U_8U": {
+                "ages": "5-8",
+                "stage": "Discover Hockey",
+                "ice_format": "Cross-ice",
+                "practice_duration_min": 50,
+                "practice_duration_max": 60,
+                "bodychecking": "None — body awareness only",
+                "practice_ratio": "3:1 practice to game",
+                "focus": "Fun, physical literacy, skating, puck touches",
+                "systems": "None",
+                "key_rules": [
+                    "Cross-ice mandatory",
+                    "No tryouts — open registration",
+                    "No offsides, no icing",
+                    "Station-based skill practices",
+                    "No scores kept",
+                    "Competitive spirit fostered individually, not team win/loss",
+                    "Max 16-20 game days per season",
+                ],
+            },
+            "10U": {
+                "ages": "9-10",
+                "stage": "Develop Skills",
+                "ice_format": "Half-ice (25% of games) + full ice remainder",
+                "practice_duration_min": 50,
+                "practice_duration_max": 60,
+                "bodychecking": "None — body contact and angling taught",
+                "practice_ratio": "3:1 practice to game",
+                "focus": "Fun, engagement, active practices, basic hockey knowledge",
+                "systems": "Minimal",
+                "key_rules": [
+                    "25% of games in half-ice format",
+                    "Teach puck protection and angling — not open-ice checking",
+                    "75-80 practices per season target",
+                    "Max 20-25 game days",
+                    "No bodychecking — body contact OK",
+                    "Maximize puck touches and skill repetition",
+                ],
+            },
+            "12U": {
+                "ages": "11-12",
+                "stage": "Develop Skills",
+                "ice_format": "Full ice",
+                "practice_duration_min": 60,
+                "practice_duration_max": 75,
+                "bodychecking": "No games — checking technique taught in practice",
+                "practice_ratio": "3:1 practice to game",
+                "focus": "Skill refinement, hockey sense, body contact preparation for 14U",
+                "systems": "Basic — introduce simple systems",
+                "key_rules": [
+                    "No bodychecking in games",
+                    "Checking technique taught in practice — preparing for 14U",
+                    "Body contact drills emphasized",
+                    "60-90 practices per season target",
+                    "Max 35 game days",
+                    "Begin positional development",
+                ],
+            },
+            "14U": {
+                "ages": "13-14",
+                "stage": "Train Skills",
+                "ice_format": "Full ice",
+                "practice_duration_min": 60,
+                "practice_duration_max": 75,
+                "bodychecking": "Yes — fully introduced at 14U",
+                "practice_ratio": "2:1 to 3:1 practice to game",
+                "focus": "Competitive contact, team play, individual skill refinement",
+                "systems": "Moderate to advanced",
+                "key_rules": [
+                    "Full bodychecking introduced",
+                    "Emphasize safe and effective checking technique",
+                    "Tactical systems development",
+                    "Physical strength foundation begins",
+                    "Special teams introduced",
+                ],
+            },
+            "16U_18U": {
+                "ages": "15-18",
+                "stage": "Refine Skills / Excel",
+                "ice_format": "Full ice",
+                "practice_duration_min": 60,
+                "practice_duration_max": 75,
+                "bodychecking": "Yes — full contact",
+                "practice_ratio": "1.5:1 to 2:1 practice to game",
+                "focus": "Advanced systems, position-specific development, pro habits",
+                "systems": "Advanced — full system and video work",
+                "key_rules": [
+                    "Full contact game",
+                    "Advanced tactical systems",
+                    "Full physical conditioning programs",
+                    "Mental performance and game management",
+                    "Showcase and recruitment preparation",
+                ],
+            },
+        },
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────
+# A1b) LTPD_FOCUS_TEMPLATES — practice structure by development stage
+# ─────────────────────────────────────────────────────────
+LTPD_FOCUS_TEMPLATES = {
+    "Active_Start": {
+        "age_range": "5-6",
+        "session_length_min": 45,
+        "session_length_max": 60,
+        "max_sessions_per_week": 2,
+        "skating_pct": 60,
+        "small_area_pct": 40,
+        "systems_pct": 0,
+        "constraints": [
+            "Zero systems content — no positional teaching whatsoever",
+            "Max 30-second explanations at any point",
+            "Every drill must feel like a game or adventure",
+            "Fun is the measurable outcome — if kids aren't smiling, redesign the drill",
+            "Cross-ice or small-area format only",
+        ],
+    },
+    "FUNdamentals": {
+        "age_range": "7-8",
+        "session_length_min": 50,
+        "session_length_max": 60,
+        "max_sessions_per_week": 3,
+        "skating_pct": 55,
+        "small_area_pct": 35,
+        "systems_pct": 10,
+        "constraints": [
+            "No systems blocks — 10% is basic positional awareness only (left/right side)",
+            "Max 30-45 second explanations",
+            "Half-ice or small-area games mandatory component",
+            "No heavy physical conditioning",
+            "Maximize individual puck touches every session",
+        ],
+    },
+    "Learn_To_Train_Early": {
+        "age_range": "9-10",
+        "session_length_min": 60,
+        "session_length_max": 75,
+        "max_sessions_per_week": 3,
+        "skating_pct": 50,
+        "small_area_pct": 30,
+        "systems_pct": 20,
+        "constraints": [
+            "No systems blocks longer than 10 minutes",
+            "Keep explanations under 45 seconds — maximize puck touches",
+            "No heavy physical conditioning — agility and movement only",
+            "Small-area games must be included every session",
+            "Systems content limited to: basic breakout shape, simple forecheck",
+        ],
+    },
+    "Learn_To_Train_Late": {
+        "age_range": "11-12",
+        "session_length_min": 60,
+        "session_length_max": 75,
+        "max_sessions_per_week": 3,
+        "skating_pct": 40,
+        "small_area_pct": 30,
+        "systems_pct": 30,
+        "constraints": [
+            "Introduce basic breakout and forecheck — keep explanations concise",
+            "Balance skill development with tactical concepts equally",
+            "Moderate physical development — bodyweight and agility only, no heavy lifting",
+            "Hockey sense and transition game are the priority over complex systems",
+            "Check province for bodychecking rules before any contact content",
+        ],
+    },
+    "Train_To_Train": {
+        "age_range": "13-15",
+        "session_length_min": 75,
+        "session_length_max": 90,
+        "max_sessions_per_week": 4,
+        "skating_pct": 30,
+        "small_area_pct": 30,
+        "systems_pct": 40,
+        "constraints": [
+            "Full systems work introduced — forecheck, breakout, NZ, PP/PK basics",
+            "Compete drills mandatory every session",
+            "Aerobic base and strength foundation development appropriate",
+            "Consider school schedule in weekly load — avoid overloading mid-week",
+            "Individual skill work still required alongside team systems",
+            "Special teams (PP/PK) concepts introduced and drilled",
+        ],
+    },
+    "Train_To_Compete": {
+        "age_range": "15-17",
+        "session_length_min": 75,
+        "session_length_max": 90,
+        "max_sessions_per_week": 5,
+        "skating_pct": 25,
+        "small_area_pct": 25,
+        "systems_pct": 50,
+        "constraints": [
+            "Advanced systems tied to team identity",
+            "Video review integration recommended",
+            "Individual development plans should drive drill selection",
+            "Full physical conditioning programs appropriate",
+            "Mental performance and game management emphasis",
+            "Exposure preparation (showcases, camps) factored into season load",
+        ],
+    },
+    "Train_To_Win": {
+        "age_range": "17-20",
+        "session_length_min": 60,
+        "session_length_max": 75,
+        "max_sessions_per_week": 5,
+        "skating_pct": 20,
+        "small_area_pct": 20,
+        "systems_pct": 60,
+        "constraints": [
+            "All content tied to team identity — PXI should reference team_identity doc",
+            "Pro-style practice structure: tight, purposeful, no wasted reps",
+            "Video session integration for all systems and individual work",
+            "Individual development plans per player drive supplemental work",
+            "Physical conditioning at full adult level",
+            "Mental performance, leadership, and accountability are core themes",
+        ],
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────
+# A1c) APPROVED_REFERENCE_URLS — whitelist for web access
+# ─────────────────────────────────────────────────────────
+APPROVED_REFERENCE_URLS = [
+    # Global governing body
+    "iihf.com",
+    # Canadian governing body
+    "hockeycanada.ca",
+    # US governing body
+    "usahockey.com",
+    # Professional leagues
+    "nhl.com",
+    "theahl.com",
+    "echl.com",
+    # Major junior
+    "chl.ca",
+    "whl.ca",
+    "theqmjhl.ca",
+    # US junior
+    "ushl.com",
+    "nahl.com",
+    # Canadian Junior A
+    "ojhl.ca",
+    "ajhl.ca",
+    "bchl.ca",
+    "mjhockey.ca",
+    "sjhl.ca",
+    "mhlhockey.com",
+    "thecchl.ca",
+    "gohl.ca",
+    # College
+    "ncaa.org",
+    "usports.ca",
+    # Canadian provincial bodies
+    "omha.net",
+    "ohf.on.ca",
+    "gthlcanada.com",
+    "alliancehockey.com",
+    "bchockey.net",
+    "hockeyalberta.ca",
+    "hockeysask.ca",
+    "hockeymanitoba.ca",
+    "hockeyeasternontario.ca",
+    "hockey.qc.ca",
+    "hnb.ca",
+    "hockeypei.com",
+    "hockeynovascotia.ca",
+    "hockeynl.ca",
+    # Secondary reference (restricted use — see guardrails)
+    "eliteprospects.com",
+    "hockeydb.com",
+]
+
+
+# ─────────────────────────────────────────────────────────
+# A1d) SOURCE_TIERS — authority hierarchy for PXI responses
+# ─────────────────────────────────────────────────────────
+SOURCE_TIERS = {
+    "tier_1": {
+        "label": "Governing Bodies — Development & Rules",
+        "authority": "Primary — always wins in conflicts",
+        "sources": [
+            "Hockey Canada (LTPD model, Skill Development Model, coaching manuals)",
+            "USA Hockey (American Development Model — ADM)",
+            "IIHF and national federations for international rules and structure",
+            "NCAA as the governing body for college athletics",
+        ],
+    },
+    "tier_2": {
+        "label": "Sport Science & Research Authorities",
+        "authority": "Primary for conditioning, physiology, nutrition",
+        "sources": [
+            "NSCA (Journal of Strength & Conditioning Research, CSCS standards)",
+            "Canadian Sport Institute",
+            "Gatorade Sports Science Institute (GSSI)",
+            "International Society of Sports Nutrition (ISSN)",
+        ],
+    },
+    "tier_3": {
+        "label": "Professional League Standards",
+        "authority": "Benchmarks and context only — not medical authority",
+        "sources": [
+            "NHL, AHL, ECHL",
+            "NCAA hockey standards and combine norms",
+            "SHL, Liiga, DEL, National League (international context)",
+        ],
+    },
+    "tier_4": {
+        "label": "Peer-Reviewed Journals",
+        "authority": "Core research base for performance and recovery claims",
+        "sources": [
+            "Journal of Strength and Conditioning Research (JSCR)",
+            "International Journal of Sports Physiology and Performance (IJSPP)",
+            "Sports Medicine (Springer)",
+            "Medicine & Science in Sports & Exercise (MSSE)",
+        ],
+    },
+    "excluded": {
+        "label": "Non-Authoritative — Never treat as evidence",
+        "sources": [
+            "Generic training blogs",
+            "Social media influencers without formal credentials",
+            "Supplement company marketing materials",
+            "Reddit and general forums",
+        ],
+        "allowed_reference": "May reference only as 'some people believe...' — never as evidence",
+    },
+}
+
 
 # ─────────────────────────────────────────────────────────
 # A2) EVIDENCE_DISCIPLINE — source tagging and confidence rules
@@ -3329,6 +3895,136 @@ Perspective: {resolved_perspective}
 
     return "\n\n".join(parts)
 
+
+# ─────────────────────────────────────────────────────────
+# LTPD / ADM HELPER FUNCTIONS
+# ─────────────────────────────────────────────────────────
+
+def detect_ltpd_stage(age: int, country: str = "CA", province: str = "") -> str:
+    """
+    Map player age + country to LTPD (Hockey Canada) or ADM (USA Hockey) stage key.
+    Returns a key that maps to GOVERNING_BODY_GUIDELINES age_groups
+    and LTPD_FOCUS_TEMPLATES.
+    """
+    if country == "CA":
+        if age <= 6:
+            return "U7"
+        elif age <= 8:
+            return "U9"
+        elif age <= 10:
+            return "U11"
+        elif age <= 12:
+            return "U13"
+        elif age <= 14:
+            return "U15"
+        elif age <= 17:
+            return "U18"
+        else:
+            return "U20_Junior"
+    else:  # USA Hockey default
+        if age <= 8:
+            return "6U_8U"
+        elif age <= 10:
+            return "10U"
+        elif age <= 12:
+            return "12U"
+        elif age <= 14:
+            return "14U"
+        else:
+            return "16U_18U"
+
+
+def detect_ltpd_template_key(age: int, country: str = "CA") -> str:
+    """
+    Map player age to LTPD_FOCUS_TEMPLATES key.
+    Separate from stage key because templates use descriptive names.
+    """
+    if country == "CA":
+        if age <= 6:
+            return "Active_Start"
+        elif age <= 8:
+            return "FUNdamentals"
+        elif age <= 10:
+            return "Learn_To_Train_Early"
+        elif age <= 12:
+            return "Learn_To_Train_Late"
+        elif age <= 14:
+            return "Train_To_Train"
+        elif age <= 17:
+            return "Train_To_Compete"
+        else:
+            return "Train_To_Win"
+    else:
+        if age <= 8:
+            return "Active_Start"
+        elif age <= 10:
+            return "Learn_To_Train_Early"
+        elif age <= 12:
+            return "Learn_To_Train_Late"
+        elif age <= 14:
+            return "Train_To_Train"
+        else:
+            return "Train_To_Compete"
+
+
+def build_practice_plan_guidelines(org: dict, age: int) -> str:
+    """
+    Build the LTPD/ADM prompt injection block for practice plan generation.
+    Inject this string into the practice plan system prompt.
+    """
+    country = org.get("country", "CA")
+    province = org.get("province_state", "")
+    governing_body = org.get("governing_body", "hockey_canada")
+
+    stage_key = detect_ltpd_stage(age, country, province)
+    template_key = detect_ltpd_template_key(age, country)
+
+    gb = GOVERNING_BODY_GUIDELINES.get(
+        governing_body,
+        GOVERNING_BODY_GUIDELINES["hockey_canada"]
+    )
+    stage = gb["age_groups"].get(stage_key, {})
+    template = LTPD_FOCUS_TEMPLATES.get(template_key, {})
+    model_name = gb["model"]
+
+    constraints_text = "\n".join(
+        f"  • {c}" for c in template.get("constraints", [])
+    )
+    key_rules_text = "\n".join(
+        f"  • {r}" for r in stage.get("key_rules", [])
+    )
+
+    return f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOVERNING BODY PRACTICE GUIDELINES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Model: {model_name}
+Age Group: {stage_key} (Ages {stage.get('ages', 'unknown')})
+Development Stage: {stage.get('stage', 'unknown')}
+
+Practice structure for this age group:
+  Ice format: {stage.get('ice_format', 'Full ice')}
+  Session length: {stage.get('practice_duration_min', 60)}–{stage.get('practice_duration_max', 75)} minutes
+  Bodychecking: {stage.get('bodychecking', 'Confirm with local association')}
+  Recommended practice:game ratio: {stage.get('practice_ratio', '2:1')}
+  Primary focus: {stage.get('focus', '')}
+
+Required focus breakdown:
+  Skating/Skills: {template.get('skating_pct', 30)}%
+  Small-area games: {template.get('small_area_pct', 30)}%
+  Systems/Tactics: {template.get('systems_pct', 40)}%
+
+Age-stage constraints (enforce these):
+{constraints_text}
+
+Key rules for this age group:
+{key_rules_text}
+
+MANDATORY: Begin your practice plan output with:
+"This plan follows {model_name} recommendations for
+{stage_key} players ({stage.get('stage', '')})."
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
 
 # ─────────────────────────────────────────────────────────
 # O) build_system_prompt — general-purpose (Bench Talk, etc.)
