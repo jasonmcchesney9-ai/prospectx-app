@@ -14,6 +14,7 @@ import type { PlayerCardData } from "@/types/api";
 import { GRADE_COLORS, METRIC_COLORS, COMMITMENT_STATUS_COLORS } from "@/types/api";
 import PlayerStatusBadges from "./PlayerStatusBadges";
 import { assetUrl, hasRealImage } from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import { formatLeague } from "@/lib/leagues";
 import { useBenchTalk } from "./BenchTalkProvider";
 
@@ -179,6 +180,7 @@ function OverflowMenu({ player, onScout }: { player: PlayerCardData; onScout: ()
 
 export default function VisualPlayerCard({ player }: { player: PlayerCardData }) {
   const { openBenchTalk } = useBenchTalk();
+  const userRole = getUser()?.hockey_role;
   const ppg = player.gp > 0 ? (player.p / player.gp).toFixed(2) : "---";
 
   const radarData = player.metrics
@@ -254,13 +256,28 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
 
       {/* ── Body: Radar / Metrics + Grade ─────────────── */}
       <div className="flex items-center px-3 pb-1">
-        {/* Grade badge */}
-        <div className="flex flex-col items-center gap-1 mr-2">
-          <GradeBadge grade={player.overall_grade} />
-          {player.overall_grade && player.overall_grade !== "NR" && (
-            <span className="text-[9px] text-muted font-oswald uppercase tracking-wider">Grade</span>
-          )}
-        </div>
+        {/* Grade badge / Generate CTA */}
+        {userRole !== "parent" && (
+          <div className="flex flex-col items-center gap-1 mr-2">
+            {player.overall_grade && player.overall_grade !== "NR" ? (
+              <>
+                <GradeBadge grade={player.overall_grade} />
+                <span className="text-[9px] text-muted font-oswald uppercase tracking-wider">OVR</span>
+              </>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.location.href = `/reports/generate?player_id=${player.id}&report_type=elite_profile`;
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors whitespace-nowrap"
+              >
+                Generate PXI Assessment
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Radar chart / Needs Scouting / Metric circles */}
         {radarData && !allZeroRadar ? (
@@ -288,19 +305,6 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
           <NeedsScoutingBadge />
         )}
       </div>
-
-      {/* ── Metric Circles Row (when metrics exist) ────── */}
-      {player.metrics && (
-        <div className="flex items-center justify-around px-3 pb-2">
-          {RADAR_AXES.map(({ key, label }) => (
-            <MetricCircle
-              key={key}
-              label={label}
-              value={player.metrics ? player.metrics[key as keyof typeof player.metrics] : null}
-            />
-          ))}
-        </div>
-      )}
 
       {/* ── Quick Actions ─────────────────────────────── */}
       <div className="flex gap-1.5 px-3 pb-2">
