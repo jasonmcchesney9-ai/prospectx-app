@@ -85,10 +85,10 @@ function SkillDetailContent() {
         <Dumbbell className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <p className="text-red-600 text-lg">{error || "Lesson not found"}</p>
         <button
-          onClick={() => router.push("/skills")}
+          onClick={() => router.push("/skill-development-lab")}
           className="mt-4 text-teal hover:underline text-sm"
         >
-          &larr; Back to Skills Library
+          &larr; Back to Skill Development Lab
         </button>
       </div>
     );
@@ -100,11 +100,11 @@ function SkillDetailContent() {
     <div className="space-y-6">
       {/* Back button */}
       <button
-        onClick={() => router.push("/skills")}
+        onClick={() => router.push("/skill-development-lab")}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-navy transition"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Skills Library
+        Back to Skill Development Lab
       </button>
 
       {/* Header */}

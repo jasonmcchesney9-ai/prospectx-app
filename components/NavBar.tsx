@@ -157,8 +157,7 @@ const COACHING_ITEMS: NavItem[] = [
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
   { href: "/practice-plans/from-game-issue", label: "Game Issue Practice", icon: AlertTriangle },
   { href: "/video-sessions", label: "Game Video Sessions", icon: Video },
-  { href: "/skills", label: "Skills Library", icon: Dumbbell },
-  { href: "/pro-analysis", label: "Pro Analysis", icon: Briefcase },
+  { href: "/skill-development-lab", label: "Skill Development Lab", icon: Dumbbell },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
 
