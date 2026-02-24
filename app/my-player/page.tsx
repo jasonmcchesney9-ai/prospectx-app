@@ -21,30 +21,15 @@ import {
   Star,
   RefreshCw,
   Loader2,
-  Utensils,
-  Dumbbell,
-  GraduationCap,
-  Brain,
-  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import api from "@/lib/api";
+import FamilyGuideTiles from "@/components/FamilyGuideTiles";
 import type { Player, FamilyDashboard } from "@/types/api";
 
 const LS_KEY = "prospectx_my_player_id";
-
-// ── Tile grid config ──
-const GUIDE_TILES = [
-  { key: "nutrition", title: "Nutrition", desc: "Game-day meals, hydration, and recovery ideas tailored to your player\u2019s age and schedule.", icon: Utensils, seed: "I'm a hockey parent. My player is [age] and plays [level]. What should they eat before and after games this weekend? Keep it practical \u2014 things I can actually prepare at home." },
-  { key: "workouts", title: "Workouts", desc: "Age-appropriate off-ice strength, speed, and agility routines that fit around school and games.", icon: Dumbbell, seed: "I'm a hockey parent. My player is [age] and plays [level]. What are the best off-ice exercises they can do at home this week? Nothing that needs a gym \u2014 just bodyweight or basic equipment." },
-  { key: "player_development_journey", title: "Prep & College Guide", desc: "Clear pathways through minor, prep, junior, and college hockey \u2014 with key dates and academic checkpoints.", icon: GraduationCap, seed: "I'm a hockey parent. My player is [age] and plays [level]. Can you walk me through the realistic pathway from here to prep school or college hockey? What are the key ages and decisions we should be thinking about now?" },
-  { key: "mental_performance", title: "Mental Performance", desc: "Pre-game routines, focus tools, and bounce-back strategies to help your player handle pressure.", icon: Brain, seed: "I'm a hockey parent. My player is [age] and plays [level]. They sometimes struggle with nerves before big games. What are some simple pre-game routines or mental tools that work well at this age?" },
-  { key: "after_game_help", title: "Pressure & Confidence", desc: "Guided language for tough moments \u2014 what to say, what to avoid, and when to get extra support.", icon: Heart, seed: "I'm a hockey parent. My player is [age] and plays [level]. They've been hard on themselves lately. What should I be saying \u2014 and what should I avoid saying \u2014 to help them stay confident without putting more pressure on them?" },
-  { key: "gear_guide", title: "Gear Guide", desc: "What to prioritize, how to fit each piece safely, and when to replace equipment for skaters and goalies.", icon: Shield, seed: "I'm a hockey parent. My player is [age] and plays [level]. Can you walk me through what gear they actually need at this stage, what to prioritize for safety and fit, and when we should be replacing things?" },
-  { key: "hockey_glossary", title: "Hockey Glossary", desc: "Plain-language explanations of positions, stats, systems, and levels so you can follow the game with confidence.", icon: BookOpen, seed: "I'm a hockey parent trying to understand the game better. Can you explain some of the terms I hear coaches and announcers use? Start with the basics \u2014 positions, zones, and common stats \u2014 and I'll ask follow-up questions." },
-];
 
 // ── Parent tips pool ──
 const PARENT_TIPS = [
@@ -704,36 +689,14 @@ export default function MyPlayerPage() {
           </div>
         )}
 
-        {/* ── Tile Grid (7 tiles, 2-column) ── */}
+        {/* ── Family Guide Tile Grid ── */}
         {selectedPlayer && (
-          <div className="mb-6">
-            <h3 className="text-sm font-oswald uppercase tracking-wider font-bold mb-3" style={{ color: "#0F2942" }}>
-              Player &amp; Family Guide
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {GUIDE_TILES.map((tile) => {
-                const Icon = tile.icon;
-                return (
-                  <div key={tile.key} className="rounded-xl bg-white p-4 flex flex-col" style={{ borderLeft: "4px solid #0D9488" }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Icon size={18} style={{ color: "#0F2942" }} />
-                      <span className="text-sm font-bold" style={{ color: "#0F2942" }}>{tile.title}</span>
-                    </div>
-                    <p className="text-xs leading-relaxed flex-1 mb-3" style={{ color: "#666666" }}>{tile.desc}</p>
-                    <button
-                      onClick={() => openBenchTalk(buildSeedMessage(tile.seed))}
-                      disabled={!selectedPlayerId}
-                      className="w-full py-2 rounded-lg text-white text-xs font-bold font-oswald uppercase tracking-wider transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ backgroundColor: "#0D9488" }}
-                      title={!selectedPlayerId ? "Select a player first" : `Ask PXI about ${tile.title.toLowerCase()}`}
-                    >
-                      Ask PXI about {tile.title.toLowerCase()}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <FamilyGuideTiles
+            selectedPlayer={selectedPlayer}
+            onAskPxi={(msg) => openBenchTalk(msg, "parent")}
+            buildSeedMessage={buildSeedMessage}
+            onSelectPlayer={() => setPickerOpen(true)}
+          />
         )}
 
         {/* ── Parent Tip of the Day ── */}
