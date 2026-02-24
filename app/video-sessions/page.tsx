@@ -13,6 +13,10 @@ import {
   Folder,
   Info,
   ChevronDown,
+  Upload,
+  CheckCircle,
+  ChevronUp,
+  Wrench,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -126,6 +130,19 @@ function VideoSessionsContent() {
   const [sessionDescription, setSessionDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+
+  /* ── Upload state ──────────────────────────────────────── */
+  const [uploadExpanded, setUploadExpanded] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadLeague, setUploadLeague] = useState("gojhl");
+  const [uploadSeason, setUploadSeason] = useState("2025-26");
+  const [uploadVideoUrl, setUploadVideoUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    events: number; home: string; away: string; date: string; matched: number;
+  } | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const uploadFileRef = useRef<HTMLInputElement>(null);
 
   /* ── Drawer state ───────────────────────────────────────── */
   const [drawerEvent, setDrawerEvent] = useState<VideoEvent | null>(null);
@@ -319,6 +336,53 @@ function VideoSessionsContent() {
     return singular[action] || action;
   };
 
+  /* ── Upload handler ─────────────────────────────────────── */
+  const handleUpload = async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    setUploadError("");
+    setUploadResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      formData.append("league", uploadLeague);
+      formData.append("season", uploadSeason);
+      if (uploadVideoUrl.trim()) formData.append("video_url", uploadVideoUrl.trim());
+      const res = await api.post("/instat/import-xml", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const d = res.data;
+      setUploadResult({
+        events: d.events_created || d.events_imported || 0,
+        home: d.home_team || "",
+        away: d.away_team || "",
+        date: d.game_date || "",
+        matched: d.players_matched || 0,
+      });
+      setUploadFile(null);
+      if (uploadFileRef.current) uploadFileRef.current.value = "";
+      // Collapse after successful upload
+      setTimeout(() => setUploadExpanded(false), 3000);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Upload failed";
+      setUploadError(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /* ── Auto-expand upload if no events exist ─────────────── */
+  const hasAnyEvents = events.length > 0 || sessions.length > 0;
+
+  const GS_LEAGUE_OPTIONS = [
+    { value: "gojhl", label: "GOJHL" },
+    { value: "ojhl", label: "OJHL" },
+    { value: "ohl", label: "OHL" },
+    { value: "whl", label: "WHL" },
+    { value: "qmjhl", label: "QMJHL" },
+    { value: "pwhl", label: "PWHL" },
+  ];
+
   return (
     <div>
       {/* Header */}
@@ -328,12 +392,147 @@ function VideoSessionsContent() {
             <Video size={20} className="text-teal" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-oswald text-navy">Video Sessions</h1>
+            <h1 className="text-2xl font-bold font-oswald text-navy">Game Video Sessions</h1>
             <p className="text-muted text-sm">
-              Your game film, organized. Filter by player, situation, or zone — then save a playlist for your next team meeting, 1-on-1 session, or pre-game prep.
+              Your game film, organized. Filter by player, situation, or zone — then save a playlist for your next team meeting, 1-on-1 session, or pre-game prep. PXI can help you find the right clips — just ask in Bench Talk.
             </p>
           </div>
         </div>
+        <p className="text-muted/70 text-xs mt-2">
+          Upload a tagged game file below to get started, or filter your existing clips.
+        </p>
+      </div>
+
+      {/* Upload Section — collapsed by default when events exist */}
+      <div className="mb-6">
+        <button
+          onClick={() => setUploadExpanded(!uploadExpanded)}
+          className="flex items-center gap-2 text-sm font-oswald uppercase tracking-wider text-navy hover:text-teal transition-colors"
+        >
+          <Upload size={14} className="text-teal" />
+          Add Game Film
+          {uploadExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        {(uploadExpanded || (!hasAnyEvents && !loadingSessions)) && (
+          <div className="mt-3 bg-white rounded-xl border border-teal/20 p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
+                <Upload size={18} className="text-teal" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-navy">Upload Game File</h3>
+                <p className="text-xs text-muted mt-0.5">
+                  Upload the tagged export file from your last game. ProspectX reads every event — every shot, faceoff, hit, and zone entry — and organizes it here automatically. One file per game.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              {/* File picker */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-navy mb-1">Game File</label>
+                <input
+                  ref={uploadFileRef}
+                  type="file"
+                  accept=".xml"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-navy file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-oswald file:font-semibold file:uppercase file:tracking-wider file:bg-teal/10 file:text-teal hover:file:bg-teal/20 file:cursor-pointer"
+                />
+              </div>
+
+              {/* League */}
+              <div>
+                <label className="block text-xs font-semibold text-navy mb-1">League</label>
+                <select
+                  value={uploadLeague}
+                  onChange={(e) => setUploadLeague(e.target.value)}
+                  className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                >
+                  {GS_LEAGUE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Season */}
+              <div>
+                <label className="block text-xs font-semibold text-navy mb-1">Season</label>
+                <input
+                  type="text"
+                  value={uploadSeason}
+                  onChange={(e) => setUploadSeason(e.target.value)}
+                  className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                />
+              </div>
+
+              {/* Video URL */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-navy mb-1">
+                  Game Video Link <span className="text-xs text-muted font-normal">(optional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={uploadVideoUrl}
+                  onChange={(e) => setUploadVideoUrl(e.target.value)}
+                  placeholder="Paste a link to the game footage (optional — enables in-app playback)"
+                  className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
+                />
+                <p className="text-xs text-muted/60 mt-1">You can add or update this later.</p>
+              </div>
+            </div>
+
+            {/* Upload button */}
+            <button
+              onClick={handleUpload}
+              disabled={!uploadFile || uploading}
+              className="px-5 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                  Processing...
+                </span>
+              ) : (
+                "Upload & Process"
+              )}
+            </button>
+
+            {/* Upload success */}
+            {uploadResult && (
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800 flex items-center gap-2">
+                  <CheckCircle size={14} className="text-green-600" />
+                  Game file processed — {uploadResult.events} events imported from {uploadResult.home} vs {uploadResult.away} on {uploadResult.date}. {uploadResult.matched} players matched.
+                </p>
+                <button
+                  onClick={() => { setUploadResult(null); handleApplyFilters(); }}
+                  className="mt-2 text-xs text-teal font-oswald uppercase tracking-wider hover:text-teal/70 transition-colors"
+                >
+                  Filter your new clips ↓
+                </button>
+              </div>
+            )}
+
+            {/* Upload error */}
+            {uploadError && (
+              <p className="mt-3 text-xs text-red-600">{uploadError}</p>
+            )}
+
+            {/* Link when events exist */}
+            {hasAnyEvents && (
+              <p className="mt-3 text-xs text-muted">
+                Already have game film?{" "}
+                <button
+                  onClick={() => setUploadExpanded(false)}
+                  className="text-teal hover:text-teal/70 transition-colors"
+                >
+                  Jump to filters ↓
+                </button>
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}
@@ -342,9 +541,12 @@ function VideoSessionsContent() {
         <div className="lg:col-span-3 space-y-6">
           {/* Filters Panel */}
           <div className="bg-white rounded-xl border border-teal/20 p-5">
-            <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-4">
-              <Filter size={14} className="text-teal" /> What do you want to review?
+            <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
+              <Filter size={14} className="text-teal" /> Filter your game film
             </h3>
+            <p className="text-xs text-muted mb-4">
+              Select a player, play type, or zone to build your clip list.
+            </p>
 
             {/* Player search */}
             <div className="mb-4" ref={playerDropdownRef}>
@@ -539,10 +741,10 @@ function VideoSessionsContent() {
           ) : hasSearched && events.length === 0 ? (
             <div className="bg-white rounded-xl border border-teal/20 p-12 text-center">
               <p className="text-muted text-sm">
-                No clips match your filters. Try a wider date range or different play type.
+                No clips match your filters. Try a wider date range, a different player, or a different play type.
               </p>
               <p className="text-muted/60 text-xs mt-2">
-                No game film imported yet? Upload a tagged game file in Game Sheets to get started.
+                No game film imported yet? Upload your first tagged game file above — ProspectX will read every event and organize your footage by player, situation, and zone automatically.
               </p>
             </div>
           ) : events.length > 0 ? (
@@ -644,7 +846,7 @@ function VideoSessionsContent() {
             ) : sessions.length === 0 ? (
               <div className="py-8 text-center">
                 <p className="text-muted text-sm">
-                  No saved sessions yet. Filter for the clips you want, select them, and hit Save Session to build your first playlist.
+                  No saved sessions yet. Filter for the clips you want, select them, then save as a session with a clear focus — e.g., &quot;D-zone coverage&quot; or &quot;Net-front battles&quot;.
                 </p>
               </div>
             ) : (
@@ -658,12 +860,21 @@ function VideoSessionsContent() {
                     <p className="text-xs text-muted mt-1">
                       {s.clip_count} clips · Created {formatDate(s.created_at)}
                     </p>
-                    <Link
-                      href={`/video-sessions/${s.id}`}
-                      className="inline-flex items-center gap-1 mt-2 text-xs text-teal hover:text-teal/70 font-oswald uppercase tracking-wider transition-colors"
-                    >
-                      <Play size={12} /> Open Session
-                    </Link>
+                    <div className="flex items-center gap-3 mt-2">
+                      <Link
+                        href={`/video-sessions/${s.id}`}
+                        className="inline-flex items-center gap-1 text-xs text-teal hover:text-teal/70 font-oswald uppercase tracking-wider transition-colors"
+                      >
+                        <Play size={12} /> Open Session
+                      </Link>
+                      <button
+                        disabled
+                        className="inline-flex items-center gap-1 text-xs text-muted/40 font-oswald uppercase tracking-wider cursor-not-allowed"
+                        title="Coming soon — generate a practice segment from this session"
+                      >
+                        <Wrench size={12} /> Build Practice Segment
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
