@@ -13917,6 +13917,27 @@ def _parse_pct(val) -> float | None:
         return None
 
 
+def _parse_instat_date(date_str, season='2025-26') -> str | None:
+    """Parse InStat DD/MM date (no year) into YYYY-MM-DD using season context.
+    Sep-Dec → first year, Jan-Aug → second year of the season."""
+    if not date_str or str(date_str).strip() in ('-', ''):
+        return None
+    s = str(date_str).strip()
+    # Already YYYY-MM-DD
+    if len(s) >= 8 and s[4] == '-':
+        return s
+    try:
+        parts = s.split('/')
+        if len(parts) != 2:
+            return s
+        day, month = int(parts[0]), int(parts[1])
+        end_year = int('20' + season.split('-')[1])
+        year = end_year - 1 if month >= 9 else end_year
+        return f"{year}-{month:02d}-{day:02d}"
+    except (ValueError, IndexError, TypeError):
+        return None
+
+
 def _parse_score(s) -> tuple:
     """Parse InStat score string like '4:3' into (goals_for, goals_against) integers."""
     if not s or str(s).strip() in ('-', ''):
@@ -14652,7 +14673,7 @@ def _norm_process_line(conn, org_id, season, line_type, row_dict, unmapped):
 def _norm_process_team_game(conn, org_id, season, row_dict, unmapped):
     """Process a team game log row into instat_team_game_log."""
     mapped = _norm_map_row(row_dict, NORM_TEAM_GAME_MAP)
-    game_date = row_dict.get("Date", "").strip() if row_dict.get("Date") else ""
+    game_date = _parse_instat_date(row_dict.get("Date"), season) or ""
     opponent = row_dict.get("Opponent", "").strip() if row_dict.get("Opponent") else ""
     if not game_date or not opponent or game_date == '-':
         return "skipped"
@@ -14711,7 +14732,7 @@ def _norm_process_player_game(conn, org_id, season, row_dict, filename, unmapped
     if not player_name:
         return "skipped"
 
-    game_date = row_dict.get("Date", "").strip() if row_dict.get("Date") else ""
+    game_date = _parse_instat_date(row_dict.get("Date"), season) or ""
     opponent = row_dict.get("Opponent", "").strip() if row_dict.get("Opponent") else ""
     if not game_date or not opponent or game_date == '-':
         return "skipped"
@@ -15128,7 +15149,7 @@ async def ingest_stats(
             pim_minutes = _parse_pim(row.get("penalty_time", ""))
 
             # Build a game_id from date + opponent for dedup
-            game_date = row.get("date", "")
+            game_date = _parse_instat_date(row.get("date"), default_season) or ""
             game_id = f"{game_date}_{opponent.replace(' ', '_')}" if game_date else None
 
             shots = _to_int(row.get("shots"))
@@ -21889,23 +21910,7 @@ async def admin_restore_db(
 
     def _fix_date(val, season="2025-26"):
         """Normalize date values: DD/MM -> YYYY-MM-DD using season context."""
-        if not val or str(val).strip() == "":
-            return None
-        s = str(val).strip()
-        # Already YYYY-MM-DD
-        if len(s) >= 8 and s[4] == "-":
-            return s
-        # DD/MM format — infer year from season
-        parts = s.split("/")
-        if len(parts) == 2:
-            try:
-                day, month = int(parts[0]), int(parts[1])
-                start_year = int(season.split("-")[0])
-                year = start_year + 1 if month < 8 else start_year
-                return f"{year}-{month:02d}-{day:02d}"
-            except (ValueError, IndexError):
-                return s
-        return s
+        return _parse_instat_date(val, season)
 
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
