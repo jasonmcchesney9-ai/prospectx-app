@@ -2496,6 +2496,25 @@ def init_db():
         conn.commit()
         logger.info("Migration: added country_framework column to drills")
 
+    # ── Migration: LTPD tagging columns on drills ──
+    drill_cols = _get_table_columns(conn, "drills")  # refresh after above migrations
+    for col_name, col_type in [
+        ("ltpd_stages", "TEXT DEFAULT '[]'"),
+        ("age_bands", "TEXT DEFAULT '[]'"),
+        ("skill_domains", "TEXT DEFAULT '[]'"),
+        ("min_players", "INTEGER"),
+        ("max_players", "INTEGER"),
+        ("requires_goalies", "INTEGER DEFAULT 0"),
+        ("rink_layout", "TEXT"),
+        ("ltpd_tagged_at", "TEXT"),
+        ("ltpd_confidence", "TEXT"),
+        ("created_by_user_id", "TEXT"),
+    ]:
+        if col_name not in drill_cols:
+            conn.execute(f"ALTER TABLE drills ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to drills", col_name)
+
     # ── Migration: PXI mode column on bench_talk_conversations ──
     bt_cols = _get_table_columns(conn, "bench_talk_conversations")
     if "mode" not in bt_cols:
@@ -3478,6 +3497,25 @@ def init_db():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_vse_event ON video_session_events(event_id)")
+
+    # ── Table: chalk_talks (coaching whiteboard drawings) ──
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS chalk_talks (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            team_id TEXT,
+            created_by_user_id TEXT,
+            name TEXT NOT NULL,
+            description TEXT,
+            board_layout TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_talks_org ON chalk_talks(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_talks_team ON chalk_talks(team_id)")
 
     conn.commit()
 
@@ -13071,6 +13109,8 @@ async def generate_practice_plan(body: PracticePlanGenerateRequest, token_data: 
     fw_context = framework_context(org_country, team_age_div, org_framework)
 
     # 2. Query matching drills
+    # IMPORTANT: Only query drills table, never chalk_talks
+    # PXI must never use chalk_talks for drill selection
     drill_where = ["(org_id IS NULL OR org_id = ?)", "age_levels LIKE ?"]
     drill_params: list = [org_id, f'%"{body.age_level}"%']
     if org_framework:
@@ -13392,6 +13432,8 @@ async def generate_practice_plan_from_issue(body: GameIssueGenerateRequest, toke
         fw_context = framework_context(org_country, team_age_div, org_framework) or ""
 
     # Query available drills
+    # IMPORTANT: Only query drills table, never chalk_talks
+    # PXI must never use chalk_talks for drill selection
     drill_rows = conn.execute(
         "SELECT * FROM drills WHERE (org_id IS NULL OR org_id = ?) ORDER BY category, name",
         (org_id,)
@@ -33734,6 +33776,180 @@ async def family_guide_tile(request: Request, token_data: dict = Depends(verify_
 async def list_family_guide_tiles(token_data: dict = Depends(verify_token)):
     """Return the list of active Family Guide tile keys."""
     return {"tiles": PLAYER_FAMILY_GUIDE_TILES}
+
+
+# ============================================================
+# CHALK TALKS API
+# ============================================================
+
+@app.post("/chalk-talks", status_code=201)
+async def create_chalk_talk(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a new chalk talk (whiteboard drawing)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    chalk_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO chalk_talks (id, org_id, team_id, created_by_user_id, name, description, board_layout, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            chalk_id, org_id, body.get("team_id"), user_id, name,
+            body.get("description"), json.dumps(body.get("board_layout")) if body.get("board_layout") else None,
+            now, now,
+        ))
+        conn.commit()
+        return {
+            "id": chalk_id, "org_id": org_id, "team_id": body.get("team_id"),
+            "name": name, "description": body.get("description"),
+            "board_layout": body.get("board_layout"),
+            "created_by_user_id": user_id, "created_at": now, "updated_at": now,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talks")
+async def list_chalk_talks(
+    team_id: Optional[str] = Query(None),
+    token_data: dict = Depends(verify_token),
+):
+    """List chalk talks for the org, optionally filtered by team_id."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        if team_id:
+            rows = conn.execute(
+                "SELECT * FROM chalk_talks WHERE org_id = ? AND team_id = ? ORDER BY updated_at DESC",
+                (org_id, team_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM chalk_talks WHERE org_id = ? ORDER BY updated_at DESC",
+                (org_id,),
+            ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            if d.get("board_layout"):
+                try:
+                    d["board_layout"] = json.loads(d["board_layout"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talks/{chalk_id}")
+async def get_chalk_talk(chalk_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single chalk talk by ID."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chalk_talks WHERE id = ? AND org_id = ?",
+            (chalk_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chalk talk not found")
+        d = dict(row)
+        if d.get("board_layout"):
+            try:
+                d["board_layout"] = json.loads(d["board_layout"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return d
+    finally:
+        conn.close()
+
+
+@app.patch("/chalk-talks/{chalk_id}")
+async def update_chalk_talk(chalk_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update a chalk talk. Only the creator or an admin can update."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chalk_talks WHERE id = ? AND org_id = ?",
+            (chalk_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chalk talk not found")
+
+        # Check ownership — creator or admin
+        user_row = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        is_admin = user_row and user_row["role"] in ("admin", "owner")
+        if row["created_by_user_id"] != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Only the creator or an admin can update this chalk talk")
+
+        now = datetime.now(timezone.utc).isoformat()
+        updates = []
+        params = []
+        for field in ("name", "description", "team_id"):
+            if field in body:
+                updates.append(f"{field} = ?")
+                params.append(body[field])
+        if "board_layout" in body:
+            updates.append("board_layout = ?")
+            params.append(json.dumps(body["board_layout"]) if body["board_layout"] else None)
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(chalk_id)
+        params.append(org_id)
+
+        conn.execute(
+            f"UPDATE chalk_talks SET {', '.join(updates)} WHERE id = ? AND org_id = ?",
+            params,
+        )
+        conn.commit()
+
+        updated = conn.execute("SELECT * FROM chalk_talks WHERE id = ?", (chalk_id,)).fetchone()
+        d = dict(updated)
+        if d.get("board_layout"):
+            try:
+                d["board_layout"] = json.loads(d["board_layout"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return d
+    finally:
+        conn.close()
+
+
+@app.delete("/chalk-talks/{chalk_id}")
+async def delete_chalk_talk(chalk_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a chalk talk. Only the creator or an admin can delete."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chalk_talks WHERE id = ? AND org_id = ?",
+            (chalk_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chalk talk not found")
+
+        # Check ownership — creator or admin
+        user_row = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        is_admin = user_row and user_row["role"] in ("admin", "owner")
+        if row["created_by_user_id"] != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Only the creator or an admin can delete this chalk talk")
+
+        conn.execute("DELETE FROM chalk_talks WHERE id = ? AND org_id = ?", (chalk_id, org_id))
+        conn.commit()
+        return {"deleted": True, "id": chalk_id}
+    finally:
+        conn.close()
 
 
 # ============================================================
