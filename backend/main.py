@@ -107,6 +107,9 @@ from pxi_prompt_core import (
     PLAYER_SEASON_ROADMAP,
     build_report_system_prompt,
     resolve_mode,
+    build_family_guide_tile_prompt,
+    PLAYER_FAMILY_GUIDE_TILES,
+    get_mental_health_resources,
 )
 
 # Load .env from the backend directory (works regardless of CWD)
@@ -33598,6 +33601,139 @@ async def generate_car_ride_script(request: Request, token_data: dict = Depends(
         personalized["age_note"] = "Respect your player's emotional state. Every player processes differently."
 
     return personalized
+
+
+# ── Family Guide Tile Prompt Endpoint ─────────────────────────
+
+@app.post("/family/guide/tile")
+async def family_guide_tile(request: Request, token_data: dict = Depends(verify_token)):
+    """
+    Generate a tile-specific system prompt for the Player & Family Guide.
+    Calls build_family_guide_tile_prompt() with player, org, and last_game context.
+    Returns the complete system prompt ready for Claude.
+    """
+    body = await request.json()
+    tile_key = body.get("tile_key", "").strip()
+    player_id = body.get("player_id")
+    if not tile_key:
+        raise HTTPException(status_code=400, detail="tile_key is required")
+    if tile_key not in PLAYER_FAMILY_GUIDE_TILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown tile: {tile_key}. Active tiles: {PLAYER_FAMILY_GUIDE_TILES}",
+        )
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # ── Player dict ──
+        player_row = conn.execute("""
+            SELECT id, first_name, last_name, position, dob, current_team, current_league
+            FROM players
+            WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+        """, (player_id, org_id)).fetchone()
+        if not player_row:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        p = dict(player_row)
+        # Compute age from dob
+        age = 0
+        if p.get("dob"):
+            try:
+                dob_date = datetime.strptime(p["dob"][:10], "%Y-%m-%d")
+                today = datetime.now()
+                age = today.year - dob_date.year - (
+                    (today.month, today.day) < (dob_date.month, dob_date.day)
+                )
+            except (ValueError, TypeError):
+                pass
+
+        player_dict = {
+            "name": f"{p.get('first_name', '')} {p.get('last_name', '')}".strip(),
+            "age": age,
+            "position": p.get("position", ""),
+        }
+
+        # ── Org dict ──
+        org_row = conn.execute("""
+            SELECT id, name, country, development_framework
+            FROM organizations WHERE id = ?
+        """, (org_id,)).fetchone()
+
+        org_data = dict(org_row) if org_row else {}
+        country = org_data.get("country", "Canada")
+        # Map full country names to codes
+        country_code = "CA"
+        if country and country.lower() in ("us", "usa", "united states"):
+            country_code = "US"
+        elif country and country.lower() in ("ca", "canada"):
+            country_code = "CA"
+
+        # Map development_framework to governing_body
+        framework = org_data.get("development_framework", "hockey_canada_ltpd")
+        governing_body = "hockey_canada"
+        if framework and "usa" in framework.lower():
+            governing_body = "usa_hockey"
+
+        org_dict = {
+            "country": country_code,
+            "province_state": "",  # org table doesn't have province_state yet
+            "governing_body": governing_body,
+        }
+
+        # ── Last game dict ──
+        last_game_row = conn.execute("""
+            SELECT game_date, opponent, goals, assists
+            FROM player_game_stats
+            WHERE player_id = ?
+            ORDER BY game_date DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        last_game = None
+        if last_game_row:
+            lg = dict(last_game_row)
+            # Determine result — check if there's a result field or infer
+            last_game = {
+                "result": "",
+                "opponent": lg.get("opponent", ""),
+                "date": lg.get("game_date", ""),
+                "goals": lg.get("goals", 0),
+                "assists": lg.get("assists", 0),
+            }
+
+        # ── Build the tile prompt ──
+        system_prompt = build_family_guide_tile_prompt(
+            tile_key=tile_key,
+            player=player_dict,
+            org=org_dict,
+            last_game=last_game,
+        )
+
+        # Include mental health resources for the mental_health_wellbeing tile
+        mental_health_resources = None
+        if tile_key == "mental_health_wellbeing":
+            mental_health_resources = get_mental_health_resources(org_dict)
+
+        return {
+            "tile_key": tile_key,
+            "player_id": player_id,
+            "player": player_dict,
+            "org": org_dict,
+            "last_game": last_game,
+            "system_prompt": system_prompt,
+            "mental_health_resources": mental_health_resources,
+            "available_tiles": PLAYER_FAMILY_GUIDE_TILES,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/family/guide/tiles")
+async def list_family_guide_tiles(token_data: dict = Depends(verify_token)):
+    """Return the list of active Family Guide tile keys."""
+    return {"tiles": PLAYER_FAMILY_GUIDE_TILES}
 
 
 # ============================================================

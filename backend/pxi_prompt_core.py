@@ -3904,19 +3904,188 @@ Perspective: {resolved_perspective}
 
 CRISIS_RESOURCES = {
     "CA": (
-        "Crisis Services Canada: call 1-833-456-4566 or text 45645. "
+        "988 Suicide Crisis Helpline: call or text 9-8-8 (toll free, 24/7/365). "
+        "Ontario 211: call or text 2-1-1 (free, confidential, 150+ languages, 24/7). "
+        "Distress & Crisis Ontario: distresscentreontario.com (chat available). "
+        "Kids Help Phone: call 1-800-668-6868 or text HELLO to 686868 (under 25). "
+        "If there is immediate danger, call 911."
+    ),
+    "CA_ON": (  # Ontario-specific — use when province_state = ON
+        "988 Suicide Crisis Helpline: call or text 9-8-8 (toll free, 24/7/365). "
+        "Ontario 211: call or text 2-1-1 — free, confidential, 150+ languages, 24/7. "
+        "Connects people to critical social and community supports. "
+        "Distress & Crisis Ontario: distresscentreontario.com (listening support, chat, 24/7). "
+        "Kids Help Phone: call 1-800-668-6868 or text HELLO to 686868 (under 25). "
+        "Canadian Mental Health Association: cmha.ca/211 "
         "If there is immediate danger, call 911."
     ),
     "US": (
-        "988 Suicide & Crisis Lifeline: call or text 988. "
+        "988 Suicide & Crisis Lifeline: call or text 988 (toll free, 24/7). "
+        "Crisis Text Line: text HOME to 741741 (24/7). "
         "If there is immediate danger, call 911."
     ),
     "default": (
         "Please contact your local emergency services or a crisis support "
-        "line in your area immediately. If there is immediate danger, call "
-        "your local emergency number (911 in North America)."
+        "line in your area immediately. "
+        "If there is immediate danger, call your local emergency number."
     ),
 }
+
+
+# ── MENTAL HEALTH RESOURCES (non-crisis, support & awareness) ─
+
+MENTAL_HEALTH_RESOURCES = {
+    "CA": {
+        "general": [
+            {
+                "name": "Ontario 211",
+                "url": "cmha.ca/211",
+                "description": (
+                    "Free, confidential service connecting people to critical social "
+                    "and community supports. Call or text 2-1-1, available in 150+ "
+                    "languages, 24/7. For when you don't know where to turn."
+                ),
+            },
+            {
+                "name": "Canadian Mental Health Association",
+                "url": "cmha.ca",
+                "description": "Mental health resources, programs, and support across Canada.",
+            },
+            {
+                "name": "Kids Help Phone",
+                "url": "kidshelpphone.ca",
+                "description": (
+                    "24/7 counselling and support for young people under 25. "
+                    "Call 1-800-668-6868 or text HELLO to 686868."
+                ),
+            },
+            {
+                "name": "Distress and Crisis Ontario",
+                "url": "distresscentreontario.com",
+                "description": (
+                    "Distress centres across Ontario offering listening support "
+                    "for lonely, depressed, or suicidal people. Chat available online."
+                ),
+            },
+        ],
+        "hockey_specific": [
+            {
+                "name": "Hockey Canada — Steps to Prevent Bullying",
+                "url": "hockeycanada.ca",
+                "description": (
+                    "Hockey Canada's resources on bullying prevention for "
+                    "kids, teens, and adults in hockey environments."
+                ),
+            },
+            {
+                "name": "OHL Talk Today",
+                "url": "chl.ca/ohl/talktoday",
+                "description": (
+                    "OHL mental health program supporting players and families "
+                    "in the hockey community."
+                ),
+            },
+            {
+                "name": "NHLPA First Line",
+                "url": "nhlpa.com/health-and-wellness/first-line",
+                "description": (
+                    "NHLPA mental health and wellness program — resources for "
+                    "players and the hockey community."
+                ),
+            },
+            {
+                "name": "ALLIANCE Hockey Anti-Bullying Seminars",
+                "url": "alliancehockey.com",
+                "description": (
+                    "Anti-bullying and anti-harassment educational seminars "
+                    "for players and teams in partnership with Hockey Canada."
+                ),
+            },
+        ],
+        "bullying_cyberbullying": [
+            {
+                "name": "Get Cyber Safe",
+                "url": "getcybersafe.gc.ca",
+                "description": "Government of Canada cybersafety resources.",
+            },
+            {
+                "name": "Need Help Now",
+                "url": "needhelpnow.ca",
+                "description": "Cyberbullying help for teens.",
+            },
+            {
+                "name": "PREVNet",
+                "url": "prevnet.ca",
+                "description": "Canada's authority on bullying research and prevention.",
+            },
+        ],
+    },
+    "US": {
+        "general": [
+            {
+                "name": "988 Suicide & Crisis Lifeline",
+                "url": "988lifeline.org",
+                "description": "Call or text 988. Free, confidential, 24/7.",
+            },
+            {
+                "name": "Crisis Text Line",
+                "url": "crisistextline.org",
+                "description": "Text HOME to 741741. Free, 24/7 crisis support.",
+            },
+            {
+                "name": "NAMI (National Alliance on Mental Illness)",
+                "url": "nami.org",
+                "description": "Mental health education, advocacy, and support.",
+            },
+        ],
+        "hockey_specific": [
+            {
+                "name": "NHLPA First Line",
+                "url": "nhlpa.com/health-and-wellness/first-line",
+                "description": (
+                    "NHLPA mental health and wellness program for "
+                    "players and the hockey community."
+                ),
+            },
+            {
+                "name": "USA Hockey SafeSport",
+                "url": "usahockey.com/safesport",
+                "description": (
+                    "USA Hockey's SafeSport program — athlete protection, "
+                    "abuse prevention, and reporting resources."
+                ),
+            },
+        ],
+    },
+}
+
+
+def get_crisis_resource(org: dict) -> str:
+    """
+    Return the appropriate crisis resource string based on
+    org country and province. Ontario gets expanded resources.
+    """
+    country = org.get("country", "CA")
+    province = org.get("province_state", "")
+
+    if country == "CA" and province == "ON":
+        return CRISIS_RESOURCES["CA_ON"]
+    elif country == "CA":
+        return CRISIS_RESOURCES["CA"]
+    elif country == "US":
+        return CRISIS_RESOURCES["US"]
+    else:
+        return CRISIS_RESOURCES["default"]
+
+
+def get_mental_health_resources(org: dict) -> list:
+    """
+    Return list of relevant mental health resources for the org's country.
+    Returns combined general + hockey_specific resources.
+    """
+    country = org.get("country", "CA")
+    resources = MENTAL_HEALTH_RESOURCES.get(country, MENTAL_HEALTH_RESOURCES["CA"])
+    return resources.get("general", []) + resources.get("hockey_specific", [])
 
 
 # ── GOVERNING BODY TERMINOLOGY SPLIT ────────────────────────
@@ -3977,6 +4146,7 @@ PLAYER_FAMILY_GUIDE_TILES = [
     "nutrition",
     "workouts",
     "mental_performance",
+    "mental_health_wellbeing",
     "gear_guide",
     "hockey_glossary",
     # EXCLUDED: "prep_college_guide" — deferred from v1
@@ -4006,7 +4176,7 @@ def build_family_guide_context(player: dict, org: dict, last_game: dict = None) 
     )
     age_group_label = terminology["age_groups"].get(stage_key, stage_key)
     model_name = terminology["development_model"]
-    crisis = CRISIS_RESOURCES.get(country, CRISIS_RESOURCES["default"])
+    crisis = get_crisis_resource(org)
 
     last_game_block = ""
     if last_game:
@@ -4429,6 +4599,90 @@ You MUST NOT:
   same player
 - Describe checking rules for age groups where checking
   is not permitted
+""",
+    "mental_health_wellbeing": """
+TILE: Mental Health & Wellbeing
+
+CRITICAL DISTINCTION — read before responding:
+This tile covers MENTAL HEALTH SUPPORT, not mental performance coaching.
+
+  Mental Performance Coaching = pre-game routines, confidence,
+  pressure management, bounce-back strategies. Performance focused.
+  → That is handled by the Mental Performance tile.
+
+  Mental Health Support = distress, bullying, depression, anxiety,
+  relationship issues, suicidal ideation, crisis. Clinical/support focused.
+  → That is what this tile handles — by referring out appropriately.
+
+Your role here is NOT to counsel or treat. Your role is to:
+1. Listen with empathy and without judgment
+2. Normalize that mental health matters in hockey and in life
+3. Connect the player or parent to the right resource for their situation
+4. Never attempt to handle clinical mental health concerns yourself
+
+Use the player context block above to:
+- Determine which country/province resources to share (CA vs US)
+- Calibrate language by age (U9 parent vs U18 player)
+- Reference last game context only if directly relevant
+
+Situations you handle and how:
+
+BULLYING (in hockey, online, at school):
+- Validate that it is not okay and not the player's fault
+- Provide Hockey Canada bullying resources (CA) or USA Hockey
+  SafeSport (US)
+- For cyberbullying: getcybersafe.gc.ca, needhelpnow.ca, prevnet.ca
+- Encourage telling a trusted adult: parent, coach, teacher
+- Never advise the player to "handle it themselves"
+
+GENERAL DISTRESS / FEELING OVERWHELMED:
+- Validate feelings without minimizing
+- Suggest Ontario 211 (CA-ON) or 988 (US) for general support
+- Suggest Kids Help Phone for players under 25 (CA)
+- Encourage speaking to a trusted adult or school counselor
+- Remind: asking for help is a sign of strength, not weakness
+
+ANXIETY / DEPRESSION SYMPTOMS:
+- Do NOT diagnose
+- Validate that these feelings are real and common
+- Direct to CMHA (CA) or NAMI (US) for information and support
+- Suggest speaking with a doctor or mental health professional
+- For hockey-specific support: OHL Talk Today, NHLPA First Line
+
+CRISIS — SUICIDAL IDEATION OR SELF-HARM — HARD STOP:
+If any message includes:
+- Suicidal thoughts or ideation
+- Self-harm references
+- Hopelessness ("don't want to live", "better if I weren't here")
+- Expressions of wanting to disappear or not exist
+
+IMMEDIATELY:
+1. Respond with warmth and without panic: "What you're feeling
+   matters and you deserve support right now."
+2. Provide crisis resources from CRISIS_RESOURCES for their region.
+   For Ontario: 9-8-8 AND 2-1-1 AND Kids Help Phone if under 25.
+3. State clearly: "This is beyond what I can help with — please
+   reach out to one of these supports right now."
+4. Do NOT continue the conversation on other topics.
+5. Do NOT provide coping strategies instead of crisis resources.
+6. Do NOT minimize or problem-solve the crisis.
+
+IMPORTANT SEPARATION:
+- Mental health ≠ mental performance
+- A player who is anxious before a big game → Mental Performance tile
+- A player who seems depressed, withdrawn, or in crisis → this tile
+- When in doubt, refer to this tile and provide resources
+
+You MUST NOT:
+- Diagnose any mental health condition
+- Provide therapy, treatment plans, or clinical interventions
+- Minimize distress ("everyone feels that way", "you'll be fine")
+- Encourage toughing it out or hiding how they feel
+- Use this tile to discuss pre-game nerves or performance anxiety
+  (those belong in Mental Performance tile)
+
+Tone: Warm, calm, non-judgmental. You are a safe first voice —
+not a clinician, not a coach. You listen, you validate, you connect.
 """,
 }
 
