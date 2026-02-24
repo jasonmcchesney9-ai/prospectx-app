@@ -703,45 +703,36 @@ export default function PlayerCardPage() {
               <SkillBars intelligence={intel} />
             )}
 
-            {/* Active objectives */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <button
-                onClick={() => setShowObjectives(!showObjectives)}
-                className="flex items-center justify-between w-full text-left print:pointer-events-none"
-              >
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
-                  <Target size={11} className="inline mr-1" />
-                  Development Objectives
-                </h3>
-                {showObjectives ? <ChevronUp size={12} className="text-muted print:hidden" /> : <ChevronDown size={12} className="text-muted print:hidden" />}
-              </button>
-              {showObjectives && (
-                <div className="mt-3 space-y-2">
-                  {dev.active_objectives.length > 0 ? (
-                    dev.active_objectives.map((obj) => (
-                      <div key={obj.id} className="bg-navy/[0.03] rounded-lg p-3">
-                        <p className="text-xs font-semibold text-navy mb-1">{obj.title}</p>
-                        <div className="flex flex-wrap gap-1 mb-1.5">
-                          {obj.skill_focus.map((sf) => (
-                            <span key={sf} className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald uppercase tracking-wider bg-teal/10 text-teal">
-                              {sf}
-                            </span>
+            {/* Active objectives — hidden when empty */}
+            {dev.active_objectives.length > 0 && (
+              <div className="bg-white rounded-xl border border-teal/20 p-4">
+                <button
+                  onClick={() => setShowObjectives(!showObjectives)}
+                  className="flex items-center justify-between w-full text-left print:pointer-events-none"
+                >
+                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
+                    <Target size={11} className="inline mr-1" />
+                    Development Objectives ({dev.active_objectives.length})
+                  </h3>
+                  {showObjectives ? <ChevronUp size={12} className="text-muted print:hidden" /> : <ChevronDown size={12} className="text-muted print:hidden" />}
+                </button>
+                {showObjectives && (
+                  <div className="mt-3">
+                    {dev.active_objectives.map((obj) => (
+                      <div key={obj.id} className="flex items-center justify-between py-1.5 border-b border-teal/10 last:border-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-semibold text-navy truncate">{obj.title}</span>
+                          {obj.skill_focus.slice(0, 2).map((sf) => (
+                            <span key={sf} className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald uppercase tracking-wider bg-teal/10 text-teal shrink-0">{sf}</span>
                           ))}
                         </div>
-                        <div className="flex items-center gap-3 text-[10px] text-muted">
-                          <span>{obj.drill_log_count} drills logged</span>
-                          {obj.last_drilled_at && (
-                            <span>Last: {new Date(obj.last_drilled_at).toLocaleDateString()}</span>
-                          )}
-                        </div>
+                        <span className="text-[10px] text-muted shrink-0 ml-2">{obj.drill_log_count} drills</span>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted">No active objectives.</p>
-                  )}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Intelligence details */}
             {intel && (
@@ -789,22 +780,22 @@ export default function PlayerCardPage() {
               </div>
             )}
 
-            {/* Recent scout notes */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <button
-                onClick={() => setShowNotes(!showNotes)}
-                className="flex items-center justify-between w-full text-left print:pointer-events-none"
-              >
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
-                  <FileText size={11} className="inline mr-1" />
-                  Recent Scout Notes
-                </h3>
-                {showNotes ? <ChevronUp size={12} className="text-muted print:hidden" /> : <ChevronDown size={12} className="text-muted print:hidden" />}
-              </button>
-              {showNotes && (
-                <div className="mt-3 space-y-2">
-                  {dev.recent_notes.length > 0 ? (
-                    dev.recent_notes.map((note) => (
+            {/* Recent scout notes — hidden when empty */}
+            {dev.recent_notes.length > 0 && (
+              <div className="bg-white rounded-xl border border-teal/20 p-4">
+                <button
+                  onClick={() => setShowNotes(!showNotes)}
+                  className="flex items-center justify-between w-full text-left print:pointer-events-none"
+                >
+                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
+                    <FileText size={11} className="inline mr-1" />
+                    Recent Scout Notes ({dev.recent_notes.length})
+                  </h3>
+                  {showNotes ? <ChevronUp size={12} className="text-muted print:hidden" /> : <ChevronDown size={12} className="text-muted print:hidden" />}
+                </button>
+                {showNotes && (
+                  <div className="mt-3 space-y-2">
+                    {dev.recent_notes.map((note) => (
                       <div key={note.id} className="bg-navy/[0.03] rounded-lg p-3">
                         <p className="text-xs text-navy/80 leading-relaxed mb-1.5">{note.note_text}</p>
                         <div className="flex items-center gap-2">
@@ -814,17 +805,15 @@ export default function PlayerCardPage() {
                             </span>
                           ))}
                           <span className="text-[9px] text-muted ml-auto">
-                            {new Date(note.created_at).toLocaleDateString()}
+                            {formatRelativeTime(note.created_at)}
                           </span>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted">No recent notes.</p>
-                  )}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Quick actions */}
             {userRole !== "parent" && (
@@ -906,4 +895,20 @@ function tryParseJson(val: unknown): string[] {
     try { return JSON.parse(val); } catch { return [val]; }
   }
   return [];
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+  const diffWeek = Math.floor(diffDay / 7);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay < 7) return `${diffDay}d ago`;
+  if (diffWeek < 4) return `${diffWeek}w ago`;
+  return date.toLocaleDateString();
 }
