@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -27,6 +27,8 @@ import {
   Save,
   X,
   ExternalLink,
+  Search,
+  MoreVertical,
 } from "lucide-react";
 import {
   RadarChart,
@@ -44,6 +46,8 @@ import type {
   TrendlineResponse,
   RoleTag,
 } from "@/types/api";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
+import { getUser } from "@/lib/auth";
 
 // ── Constants ──
 
@@ -199,6 +203,9 @@ export default function PlayerCardPage() {
     );
   }
 
+  const { openBenchTalk } = useBenchTalk();
+  const userRole = getUser()?.hockey_role;
+
   const { identity: id, performance: perf, development: dev, league_context } = card;
   const fullPos = POSITION_LABELS[id.position?.toUpperCase()] || id.position || "Unknown";
   const healthStyle = HEALTH_COLORS[id.health_status] || HEALTH_COLORS.healthy;
@@ -259,31 +266,70 @@ export default function PlayerCardPage() {
           <div className="lg:col-span-3 print:col-span-3 space-y-3">
 
             {/* Player photo + name */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4 text-center">
-              {hasRealImage(id.image_url) ? (
-                <img
-                  src={assetUrl(id.image_url)}
-                  alt={`${id.first_name} ${id.last_name}`}
-                  className="w-24 h-24 rounded-full mx-auto mb-3 object-cover border-2 border-teal/20"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-full mx-auto mb-3 bg-navy/[0.06] flex items-center justify-center">
-                  <User size={36} className="text-muted/40" />
+            <div className="bg-white rounded-xl border border-teal/20 p-4">
+              <div className="flex items-start gap-3">
+                {/* Avatar / Silhouette */}
+                {hasRealImage(id.image_url) ? (
+                  <img
+                    src={assetUrl(id.image_url)}
+                    alt={`${id.first_name} ${id.last_name}`}
+                    className="w-16 h-16 rounded-lg object-cover border-2 border-teal/20 shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-navy/[0.06] flex items-center justify-center shrink-0">
+                    {["G", "GK", "Goalie"].includes(id.position) ? (
+                      <svg width={40} height={40} viewBox="0 0 24 24" fill="none" className="text-navy/40">
+                        <circle cx="12" cy="5" r="3" fill="currentColor" opacity="0.6" />
+                        <path d="M6 11h12v2H6z" fill="currentColor" opacity="0.3" />
+                        <path d="M8 13v7h2v-4h4v4h2v-7H8z" fill="currentColor" opacity="0.5" />
+                        <rect x="4" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
+                        <rect x="17" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
+                      </svg>
+                    ) : (
+                      <svg width={40} height={40} viewBox="0 0 24 24" fill="none" className="text-navy/40">
+                        <circle cx="12" cy="4" r="3" fill="currentColor" opacity="0.6" />
+                        <path d="M10 8h4l2 6h-8l2-6z" fill="currentColor" opacity="0.5" />
+                        <path d="M9 14l-2 6h2l2-4 2 4h2l-2-6H9z" fill="currentColor" opacity="0.4" />
+                        <line x1="15" y1="10" x2="19" y2="6" stroke="currentColor" strokeWidth="1.2" opacity="0.35" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </div>
+                )}
+                {/* Identity lines */}
+                <div className="flex-1 min-w-0">
+                  {id.jersey_number && (
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">#{id.jersey_number}</span>
+                  )}
+                  <p className="text-sm font-oswald uppercase tracking-wider text-navy leading-tight">{id.first_name}</p>
+                  <h2 className="text-lg font-bold text-navy font-oswald uppercase tracking-wider leading-tight">{id.last_name}</h2>
+                  <p className="text-[11px] text-muted mt-0.5">
+                    {fullPos}{id.shoots ? ` • ${id.shoots}` : ""}{id.current_team ? ` • ${id.current_team}` : ""}
+                  </p>
+                  {(id.current_league || league_context) && (
+                    <p className="text-[10px] text-muted">
+                      {id.current_league || ""}{league_context ? ` • ${league_context.season}` : ""}
+                    </p>
+                  )}
                 </div>
-              )}
-              {id.jersey_number && (
-                <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">#{id.jersey_number}</span>
-              )}
-              <h2 className="text-lg font-bold text-navy font-oswald uppercase tracking-wider leading-tight">
-                {id.first_name} {id.last_name}
-              </h2>
-              <p className="text-xs text-muted mt-0.5">{fullPos} {id.shoots ? `• ${id.shoots}` : ""}</p>
-              {id.current_team && (
-                <p className="text-xs text-navy/70 mt-1">{id.current_team}</p>
-              )}
-              {id.current_league && (
-                <p className="text-[10px] text-muted">{id.current_league}</p>
-              )}
+              </div>
+              {/* Chips row: draft year, archetype, physical */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                {id.birth_year && (
+                  <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold bg-navy/[0.06] text-navy/70">
+                    {id.birth_year + 18} Draft
+                  </span>
+                )}
+                {intel?.archetype ? (
+                  <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold bg-teal/10 text-teal">
+                    {String(intel.archetype)}
+                  </span>
+                ) : null}
+                {(id.height_cm || id.weight_kg) && (
+                  <span className="text-[10px] text-muted">
+                    {id.height_cm ? `${id.height_cm}cm` : ""}{id.height_cm && id.weight_kg ? " / " : ""}{id.weight_kg ? `${id.weight_kg}kg` : ""}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Bio details */}
