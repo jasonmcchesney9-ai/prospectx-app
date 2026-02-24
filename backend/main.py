@@ -33601,6 +33601,282 @@ async def generate_car_ride_script(request: Request, token_data: dict = Depends(
 
 
 # ============================================================
+# VIDEO SESSIONS API
+# ============================================================
+
+@app.get("/video/events")
+async def list_video_events(
+    player_id: Optional[str] = Query(None),
+    team_name: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    zone: Optional[str] = Query(None),
+    period: Optional[int] = Query(None),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    token_data: dict = Depends(verify_token),
+):
+    """Query game events with optional filters."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        where = ["ge.org_id = ?"]
+        params: list = [org_id]
+        if player_id:
+            where.append("ge.player_id = ?")
+            params.append(player_id)
+        if team_name:
+            where.append("LOWER(ge.team_name) = ?")
+            params.append(team_name.lower())
+        if action:
+            where.append("ge.action = ?")
+            params.append(action)
+        if zone:
+            where.append("ge.zone = ?")
+            params.append(zone.upper())
+        if period:
+            where.append("ge.period = ?")
+            params.append(period)
+        if from_date:
+            where.append("ge.game_date >= ?")
+            params.append(from_date)
+        if to_date:
+            where.append("ge.game_date <= ?")
+            params.append(to_date)
+        params.append(limit)
+
+        where_clause = " AND ".join(where)
+        rows = conn.execute(f"""
+            SELECT ge.*, p.first_name, p.last_name
+            FROM game_events ge
+            LEFT JOIN players p ON ge.player_id = p.id
+            WHERE {where_clause}
+            ORDER BY ge.game_date, ge.period, ge.start_s
+            LIMIT ?
+        """, params).fetchall()
+
+        results = []
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else dict(zip(
+                ["id", "org_id", "game_id", "player_id", "team_name", "opponent_name",
+                 "league", "season", "game_date", "period", "start_s", "end_s",
+                 "pos_x", "pos_y", "action", "result", "zone", "short_description",
+                 "created_at", "first_name", "last_name"], r))
+            player_name = None
+            fn = row.get("first_name") or ""
+            ln = row.get("last_name") or ""
+            if fn or ln:
+                player_name = f"{fn} {ln}".strip()
+            clock_time = ""
+            if row.get("start_s") is not None and row.get("period"):
+                clock_time = _format_clock_time(row["start_s"], row["period"])
+            results.append({
+                "id": row["id"],
+                "game_date": row.get("game_date"),
+                "team_name": row.get("team_name"),
+                "opponent_name": row.get("opponent_name"),
+                "player_id": row.get("player_id"),
+                "player_name": player_name,
+                "period": row.get("period"),
+                "clock_time": clock_time,
+                "start_s": row.get("start_s"),
+                "end_s": row.get("end_s"),
+                "action": row.get("action"),
+                "result": row.get("result"),
+                "zone": row.get("zone"),
+                "short_description": row.get("short_description"),
+                "pos_x": row.get("pos_x"),
+                "pos_y": row.get("pos_y"),
+            })
+        return results
+    finally:
+        conn.close()
+
+
+@app.post("/video/sessions")
+async def create_video_session(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a video session (playlist) from selected event IDs."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Session name is required")
+    description = body.get("description")
+    event_ids = body.get("event_ids", [])
+    if not event_ids or not isinstance(event_ids, list):
+        raise HTTPException(status_code=400, detail="event_ids must be a non-empty list")
+
+    session_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO video_sessions (id, org_id, name, description, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, org_id, name, description, user_id, now),
+        )
+        for idx, eid in enumerate(event_ids):
+            conn.execute(
+                "INSERT INTO video_session_events (session_id, event_id, order_index) VALUES (?, ?, ?)",
+                (session_id, eid, idx),
+            )
+        conn.commit()
+        return {"id": session_id, "name": name, "description": description, "clip_count": len(event_ids), "created_at": now}
+    finally:
+        conn.close()
+
+
+@app.get("/video/sessions")
+async def list_video_sessions(token_data: dict = Depends(verify_token)):
+    """List all video sessions for the org, with clip counts."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT vs.id, vs.name, vs.description, vs.created_by, vs.created_at,
+                   COUNT(vse.event_id) as clip_count
+            FROM video_sessions vs
+            LEFT JOIN video_session_events vse ON vs.id = vse.session_id
+            WHERE vs.org_id = ?
+            GROUP BY vs.id
+            ORDER BY vs.created_at DESC
+        """, (org_id,)).fetchall()
+        results = []
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else dict(zip(
+                ["id", "name", "description", "created_by", "created_at", "clip_count"], r))
+            results.append(row)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/video/sessions/{session_id}")
+async def get_video_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Get a video session with its ordered events."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        session = conn.execute(
+            "SELECT id, name, description, created_by, created_at FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not session:
+            raise HTTPException(status_code=404, detail="Video session not found")
+        s = dict(session) if hasattr(session, "keys") else dict(zip(
+            ["id", "name", "description", "created_by", "created_at"], session))
+
+        event_rows = conn.execute("""
+            SELECT ge.*, p.first_name, p.last_name, vse.order_index
+            FROM video_session_events vse
+            JOIN game_events ge ON vse.event_id = ge.id
+            LEFT JOIN players p ON ge.player_id = p.id
+            WHERE vse.session_id = ?
+            ORDER BY vse.order_index
+        """, (session_id,)).fetchall()
+
+        events = []
+        for r in event_rows:
+            row = dict(r) if hasattr(r, "keys") else dict(zip(
+                ["id", "org_id", "game_id", "player_id", "team_name", "opponent_name",
+                 "league", "season", "game_date", "period", "start_s", "end_s",
+                 "pos_x", "pos_y", "action", "result", "zone", "short_description",
+                 "created_at", "first_name", "last_name", "order_index"], r))
+            fn = row.get("first_name") or ""
+            ln = row.get("last_name") or ""
+            player_name = f"{fn} {ln}".strip() if (fn or ln) else None
+            clock_time = ""
+            if row.get("start_s") is not None and row.get("period"):
+                clock_time = _format_clock_time(row["start_s"], row["period"])
+            events.append({
+                "id": row["id"],
+                "order_index": row.get("order_index"),
+                "game_date": row.get("game_date"),
+                "team_name": row.get("team_name"),
+                "opponent_name": row.get("opponent_name"),
+                "player_id": row.get("player_id"),
+                "player_name": player_name,
+                "period": row.get("period"),
+                "clock_time": clock_time,
+                "start_s": row.get("start_s"),
+                "end_s": row.get("end_s"),
+                "action": row.get("action"),
+                "result": row.get("result"),
+                "zone": row.get("zone"),
+                "short_description": row.get("short_description"),
+                "pos_x": row.get("pos_x"),
+                "pos_y": row.get("pos_y"),
+            })
+
+        s["events"] = events
+        s["clip_count"] = len(events)
+        return s
+    finally:
+        conn.close()
+
+
+@app.delete("/video/sessions/{session_id}")
+async def delete_video_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a video session. Admin or creator only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        session = conn.execute(
+            "SELECT created_by FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not session:
+            raise HTTPException(status_code=404, detail="Video session not found")
+        creator = session[0] if isinstance(session, (tuple, list)) else session["created_by"]
+        # Check admin or creator
+        user = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+        is_admin = (user[0] if isinstance(user, (tuple, list)) else user.get("is_admin")) if user else False
+        if creator != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Only session creator or admin can delete")
+        conn.execute("DELETE FROM video_session_events WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM video_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+        return {"status": "deleted", "id": session_id}
+    finally:
+        conn.close()
+
+
+@app.patch("/video/sessions/{session_id}")
+async def update_video_session(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update video session name and/or description."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        session = conn.execute(
+            "SELECT id FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not session:
+            raise HTTPException(status_code=404, detail="Video session not found")
+        updates = []
+        params: list = []
+        if "name" in body:
+            name = body["name"].strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Name cannot be empty")
+            updates.append("name = ?")
+            params.append(name)
+        if "description" in body:
+            updates.append("description = ?")
+            params.append(body["description"])
+        if not updates:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        params.append(session_id)
+        conn.execute(f"UPDATE video_sessions SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"status": "updated", "id": session_id}
+    finally:
+        conn.close()
+
+
+# ============================================================
 # TEMPORARY: Data Migration Endpoint (remove after use)
 # ============================================================
 
