@@ -2704,7 +2704,10 @@ def init_db():
     # Auto-complete onboarding for existing users (they were already using the platform)
     existing_users = conn.execute("SELECT COUNT(*) as c FROM users WHERE onboarding_completed IS NULL OR onboarding_completed = 0").fetchone()["c"]
     if existing_users > 0:
-        conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at::timestamp < CURRENT_TIMESTAMP")
+        if USE_PG:
+            conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at::timestamp < CURRENT_TIMESTAMP")
+        else:
+            conn.execute("UPDATE users SET onboarding_completed = 1 WHERE (onboarding_completed IS NULL OR onboarding_completed = 0) AND created_at < CURRENT_TIMESTAMP")
         conn.commit()
         logger.info("Migration: auto-completed onboarding for %d existing users", existing_users)
 
@@ -20904,7 +20907,7 @@ async def list_templates(token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
     conn = get_db()
     rows = conn.execute("""
-        SELECT id, template_name, report_type, description, is_global, version, created_at
+        SELECT id, template_name, report_type, prompt_text AS description, is_global, version, created_at
         FROM report_templates
         WHERE org_id = ? OR is_global = 1
         ORDER BY template_name
@@ -21759,6 +21762,9 @@ async def admin_restore_db(
     A server-side backup is created automatically before any changes.
     """
     _require_admin(token_data)
+
+    if USE_PG:
+        raise HTTPException(status_code=501, detail="XLSX restore not supported on PostgreSQL deployment. Use local SQLite instance.")
 
     fname = (file.filename or "").lower()
     if not fname.endswith(".xlsx"):
