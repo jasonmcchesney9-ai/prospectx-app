@@ -132,7 +132,7 @@ interface TopProspect {
   last_noted: string;
 }
 
-// ── HockeyTech league code mapping ──────────────────────────
+// ── League code mapping ──────────────────────────
 const HT_LEAGUE_CODES: Record<string, string> = {
   GOJHL: "gojhl", GOHL: "gojhl",
   OHL: "ohl", OJHL: "ojhl",

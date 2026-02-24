@@ -1663,7 +1663,7 @@ export default function PlayerDetailPage() {
             {(!intelligence || intelligence.version === 0) && (stats.length > 0 || goalieStats.length > 0 || notes.length > 0) && (
               <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-5 text-center">
                 <Brain size={28} className="mx-auto text-teal/40 mb-2" />
-                <p className="text-sm text-navy/70 mb-2">No intelligence data yet. Upload an InStat XML export or sync league data to populate this card.</p>
+                <p className="text-sm text-navy/70 mb-2">No intelligence data yet. Upload player stats or sync roster data to populate this card.</p>
                 <button
                   onClick={handleRefreshIntelligence}
                   disabled={refreshingIntel}
@@ -2927,7 +2927,7 @@ export default function PlayerDetailPage() {
                     No game film imported yet for this player.
                   </p>
                   <p className="text-xs text-muted/60 mt-1">
-                    Upload an InStat XML file in Imports to get started.
+                    Upload a tagged game file in Game Sheets to get started.
                   </p>
                 </div>
               )}

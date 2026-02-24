@@ -129,7 +129,7 @@ function StatNormalizerUploader() {
           <div>
             <h1 className="text-2xl font-bold font-oswald text-navy">Stat Normalizer</h1>
             <p className="text-muted text-sm">
-              Upload InStat XLSX exports for processing and normalization
+              Upload Player Stats files for processing and normalization
             </p>
           </div>
         </div>
@@ -259,7 +259,7 @@ function StatNormalizerUploader() {
                   <p className="text-sm text-muted">
                     Click to select an <span className="font-semibold text-navy">.xlsx</span> file
                   </p>
-                  <p className="text-xs text-muted mt-1">InStat Excel export</p>
+                  <p className="text-xs text-muted mt-1">Player Stats Excel export</p>
                 </div>
               )}
             </div>

@@ -228,7 +228,7 @@ function SessionContent() {
                   <p className="text-sm text-muted mt-1">{session.description}</p>
                 )}
                 <p className="text-xs text-muted/60 mt-2">
-                  Use the clip list on the right to jump between plays. Click any clip to jump to it, or use Previous/Next to step through during a team meeting or 1-on-1 session.
+                  Click any clip to jump to it. Use Next and Previous to step through during a meeting or 1-on-1 session.
                 </p>
               </>
             )}

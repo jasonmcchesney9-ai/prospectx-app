@@ -476,7 +476,7 @@ export default function PlayerCardPage() {
               )}
             </div>
 
-            {/* Event aggregates (InStat data) */}
+            {/* Event aggregates (game file data) */}
             {perf.event_aggregates && perf.event_aggregates.has_event_data && (
               <div className="bg-white rounded-xl border border-teal/20 p-4">
                 <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">

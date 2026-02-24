@@ -594,7 +594,7 @@ export default function TeamsPage() {
 }
 
 // ── Team Card Component ───────────────────────────────────
-// HockeyTech-supported league codes (must match backend/hockeytech.py LEAGUES keys)
+// Supported league codes (must match backend/hockeytech.py LEAGUES keys)
 const HT_LEAGUES = new Set(["ahl","echl","sphl","pwhl","ohl","whl","lhjmq","bchl","ajhl","sjhl","mjhl","ushl","ojhl","cchl","nojhl","mhl","gojhl","kijhl","pjhl","vijhl"]);
 
 function TeamCard({ team, onSync, syncing }: { team: TeamSummary; onSync: (t: TeamSummary) => void; syncing: boolean }) {

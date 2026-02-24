@@ -330,7 +330,7 @@ function VideoSessionsContent() {
           <div>
             <h1 className="text-2xl font-bold font-oswald text-navy">Video Sessions</h1>
             <p className="text-muted text-sm">
-              Build coaching playlists from game footage. Filter by player, action, or zone — then save as a reusable session for meetings or 1-on-1 reviews.
+              Your game film, organized. Filter by player, situation, or zone — then save a playlist for your next team meeting, 1-on-1 session, or pre-game prep.
             </p>
           </div>
         </div>
@@ -343,7 +343,7 @@ function VideoSessionsContent() {
           {/* Filters Panel */}
           <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-4">
-              <Filter size={14} className="text-teal" /> Filters
+              <Filter size={14} className="text-teal" /> What do you want to review?
             </h3>
 
             {/* Player search */}
@@ -458,7 +458,7 @@ function VideoSessionsContent() {
             {/* Action chips */}
             <div className="mb-4">
               <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                Actions
+                Play Type
                 <span className="group relative">
                   <Info size={12} className="text-muted cursor-help" />
                   <span className="hidden group-hover:block absolute left-0 bottom-full mb-1 w-56 bg-navy text-white text-xs rounded-lg px-3 py-2 shadow-lg z-20">
@@ -486,7 +486,7 @@ function VideoSessionsContent() {
             {/* Zone chips */}
             <div className="mb-5">
               <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                Zone
+                Ice Zone
                 <span className="group relative">
                   <Info size={12} className="text-muted cursor-help" />
                   <span className="hidden group-hover:block absolute left-0 bottom-full mb-1 w-56 bg-navy text-white text-xs rounded-lg px-3 py-2 shadow-lg z-20">
@@ -517,7 +517,7 @@ function VideoSessionsContent() {
                 onClick={handleApplyFilters}
                 className="px-5 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
               >
-                Apply Filters
+                Find Clips
               </button>
               <button
                 onClick={handleClear}
@@ -539,10 +539,10 @@ function VideoSessionsContent() {
           ) : hasSearched && events.length === 0 ? (
             <div className="bg-white rounded-xl border border-teal/20 p-12 text-center">
               <p className="text-muted text-sm">
-                No events found. Try widening your date range or selecting different action types.
+                No clips match your filters. Try a wider date range or different play type.
               </p>
               <p className="text-muted/60 text-xs mt-2">
-                No game events imported yet? Upload an InStat XML file in Imports to get started.
+                No game film imported yet? Upload a tagged game file in Game Sheets to get started.
               </p>
             </div>
           ) : events.length > 0 ? (
@@ -644,7 +644,7 @@ function VideoSessionsContent() {
             ) : sessions.length === 0 ? (
               <div className="py-8 text-center">
                 <p className="text-muted text-sm">
-                  No sessions yet. Select clips from the table and click &ldquo;Create Session&rdquo; to build your first playlist.
+                  No saved sessions yet. Filter for the clips you want, select them, and hit Save Session to build your first playlist.
                 </p>
               </div>
             ) : (
@@ -748,7 +748,7 @@ function VideoSessionsContent() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl border border-teal/20 p-6 w-full max-w-md">
-            <h3 className="text-lg font-oswald font-bold text-navy mb-4">Save Video Session</h3>
+            <h3 className="text-lg font-oswald font-bold text-navy mb-4">Save as Session</h3>
 
             <div className="space-y-4">
               <div>

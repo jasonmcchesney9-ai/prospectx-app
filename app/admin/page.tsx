@@ -561,7 +561,7 @@ function PxrOpsTab() {
         {/* Sync History */}
         <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col">
           <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">Sync History</h3>
-          <p className="text-xs text-muted mb-4 flex-1">View recent HockeyTech sync operations and outcomes.</p>
+          <p className="text-xs text-muted mb-4 flex-1">View recent Roster Sync operations and outcomes.</p>
           <button
             onClick={handleSyncHistory}
             disabled={shLoading}

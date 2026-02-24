@@ -151,7 +151,7 @@ export default function TeamDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>("roster");
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
-  // ── HockeyTech Sync State ──────────────────────────────
+  // ── Roster Sync State ──────────────────────────────
   const [htInfo, setHtInfo] = useState<{ hockeytech_team_id: number | null; hockeytech_league: string | null; linked: boolean; has_ht_players?: boolean } | null>(null);
   const [syncingStats, setSyncingStats] = useState(false);
   const [syncingGameLogs, setSyncingGameLogs] = useState(false);
@@ -233,7 +233,7 @@ export default function TeamDetailPage() {
         }
       }
 
-      // Load HockeyTech integration info (non-blocking)
+      // Load Roster Sync integration info (non-blocking)
       try {
         const htRes = await api.get<{ hockeytech_team_id: number | null; hockeytech_league: string | null; linked: boolean; has_ht_players?: boolean }>(
           `/teams/${encodeURIComponent(teamName)}/hockeytech-info`
@@ -367,7 +367,7 @@ export default function TeamDetailPage() {
     }
   };
 
-  // ── HockeyTech Sync Handlers ───────────────────────────
+  // ── Roster Sync Handlers ───────────────────────────
   const handleSyncStats = async () => {
     if (!htInfo?.hockeytech_team_id || !htInfo?.hockeytech_league) return;
     setSyncingStats(true);
@@ -528,7 +528,7 @@ export default function TeamDetailPage() {
           <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">{error}</div>
         )}
 
-        {/* HockeyTech Sync Bar — above tabs, visible on all tabs */}
+        {/* Roster Sync Bar — above tabs, visible on all tabs */}
         {htInfo && (htInfo.linked || htInfo.has_ht_players) && (
           <div className="mb-2 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-navy/[0.02] border border-teal/15">
             <div className="flex items-center justify-between flex-wrap gap-2">

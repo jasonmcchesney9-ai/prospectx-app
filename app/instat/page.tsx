@@ -32,7 +32,7 @@ const FILE_TYPE_LABELS: Record<string, { label: string; icon: typeof Users; colo
   team_skaters: { label: "Team Skater Stats", icon: Users, color: "text-navy" },
   team_goalies: { label: "Team Goalie Stats", icon: Shield, color: "text-navy" },
   lines: { label: "Line Combinations", icon: Layers, color: "text-orange" },
-  xml_instat: { label: "InStat XML Events", icon: Target, color: "text-teal" },
+  xml_instat: { label: "Game File Events", icon: Target, color: "text-teal" },
   xml_gamesheet: { label: "GameSheet XML", icon: Calendar, color: "text-orange" },
   xml_generic: { label: "XML Events", icon: Target, color: "text-navy" },
   unknown: { label: "Unknown Format", icon: AlertCircle, color: "text-red-500" },
@@ -341,7 +341,7 @@ function InStatUploader() {
                     Click to select or drop an .xlsx or .xml stats file
                   </p>
                   <p className="text-xs text-muted/60 mt-1">
-                    Supports: Games, Skaters, Goalies, Lines, InStat XML, GameSheet XML
+                    Supports: Games, Skaters, Goalies, Lines, Game Files, GameSheet XML
                   </p>
                 </div>
               )}
@@ -482,7 +482,7 @@ function InStatUploader() {
           <div>
             <p className="font-medium text-navy">Event Data (XML)</p>
             <ul className="text-muted text-xs mt-1 space-y-1">
-              <li>• <strong>InStat</strong> — Zone entries/exits, shots, passes, xG</li>
+              <li>• <strong>Game Files</strong> — Zone entries/exits, shots, passes, xG</li>
               <li>• <strong>GameSheet</strong> — Goals, assists, penalties, TOI</li>
               <li>• <strong>Generic</strong> — Standard ProspectX event XML schema</li>
             </ul>
@@ -564,9 +564,9 @@ function XmlGameEventsUploader() {
           <Video size={20} className="text-teal" />
         </div>
         <div>
-          <h2 className="text-xl font-bold font-oswald text-navy">InStat XML — Game Events</h2>
+          <h2 className="text-xl font-bold font-oswald text-navy">Game File — Events Import</h2>
           <p className="text-muted text-sm">
-            Upload the XML tagging file exported from InStat for a single game. This imports every tagged event (shots, faceoffs, hits, zone entries) with timestamps — enabling Video Sessions and detailed game film review for your coaching staff.
+            Upload the tagged game file for a single game. This imports every tagged event (shots, faceoffs, hits, zone entries) with timestamps — enabling Video Sessions and detailed game film review for your coaching staff.
           </p>
         </div>
       </div>
@@ -664,7 +664,7 @@ function XmlGameEventsUploader() {
               ) : (
                 <div>
                   <Upload size={28} className="mx-auto text-muted/40 mb-2" />
-                  <p className="text-sm text-muted">Click to select an InStat XML tagging file</p>
+                  <p className="text-sm text-muted">Click to select a tagged game file</p>
                   <p className="text-xs text-muted/60 mt-1">Accepts .xml files only</p>
                 </div>
               )}
