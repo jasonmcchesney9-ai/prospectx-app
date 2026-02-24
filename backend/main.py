@@ -20007,6 +20007,379 @@ INSTAT_MANPOWER_MAP: dict[str, str] = {
 }
 
 
+# ── InStat XML Tagging Helpers (game_events pipeline) ─────
+
+def _parse_instat_xml_filename(filename: str) -> dict:
+    """Parse InStat XML filename into game metadata.
+
+    Example: 'Komoka_Kings_3___6_Chatham_Maroons_16_02_2026.xml'
+    Returns: {home_team, away_team, home_score, away_score, game_date}
+    """
+    name = filename.rsplit(".", 1)[0] if "." in filename else filename
+    # Extract date from end: DD_MM_YYYY
+    date_match = re.search(r'(\d{2})_(\d{2})_(\d{4})$', name)
+    game_date = None
+    if date_match:
+        dd, mm, yyyy = date_match.groups()
+        game_date = f"{yyyy}-{mm}-{dd}"
+        name = name[:date_match.start()].rstrip("_")
+    # Extract score: _3___6_ (home_score___away_score)
+    score_match = re.search(r'_(\d+)___(\d+)_', name)
+    home_score, away_score = None, None
+    home_team, away_team = name, ""
+    if score_match:
+        home_score = int(score_match.group(1))
+        away_score = int(score_match.group(2))
+        home_team = name[:score_match.start()].replace("_", " ").strip()
+        away_team = name[score_match.end():].replace("_", " ").strip()
+    return {
+        "home_team": home_team,
+        "away_team": away_team,
+        "home_score": home_score,
+        "away_score": away_score,
+        "game_date": game_date,
+    }
+
+
+def _derive_zone(pos_x: float | None, pos_y: float | None, team_name: str, home_team: str) -> str | None:
+    """Derive zone from coordinates and team perspective.
+
+    Ice coordinates 0-100 scale. Home team attacks right.
+    Home: pos_x > 67 = OZ, pos_x < 33 = DZ, else NZ.
+    Away: pos_x < 33 = OZ, pos_x > 67 = DZ, else NZ.
+    """
+    if pos_x is None:
+        return None
+    is_home = team_name.lower().strip() == home_team.lower().strip()
+    if is_home:
+        if pos_x > 67:
+            return "OZ"
+        elif pos_x < 33:
+            return "DZ"
+        else:
+            return "NZ"
+    else:
+        if pos_x < 33:
+            return "OZ"
+        elif pos_x > 67:
+            return "DZ"
+        else:
+            return "NZ"
+
+
+def _format_clock_time(start_s: int, period: int) -> str:
+    """Convert raw seconds to period-relative clock time MM:SS.
+
+    Period 1: 0-1200s, Period 2: 1200-2400s, Period 3: 2400-3600s.
+    """
+    period_start = (max(period, 1) - 1) * 1200
+    elapsed = max(start_s - period_start, 0)
+    minutes = elapsed // 60
+    seconds = elapsed % 60
+    return f"{minutes}:{seconds:02d}"
+
+
+_ACTION_SINGULAR: dict[str, str] = {
+    "Goals": "Goal", "Assists": "Assist", "Shots": "Shot",
+    "Shots on goal": "Shot on goal", "Missed shots": "Missed shot",
+    "Blocked shots": "Blocked shot", "Shots blocking": "Shot block",
+    "Hits": "Hit", "Penalties": "Penalty",
+    "Faceoffs": "Faceoff", "Faceoffs won": "Faceoff won",
+    "Faceoffs lost": "Faceoff lost", "Saves": "Save",
+    "Shots against": "Shot against", "Goals against": "Goal against",
+    "All shifts": "Shift", "Even strength shifts": "ES shift",
+    "Power play shifts": "PP shift", "Penalty kill shifts": "PK shift",
+    "OZ play shifts": "OZ shift", "DZ play shifts": "DZ shift",
+    "NZ play shifts": "NZ shift",
+    "Faceoffs in OZ": "OZ faceoff", "Faceoffs in DZ": "DZ faceoff",
+    "Faceoffs in NZ": "NZ faceoff",
+    "Power play shots": "PP shot", "Short-handed shots": "SH shot",
+}
+_PERIOD_WORDS = {1: "1st", 2: "2nd", 3: "3rd", 4: "OT"}
+
+
+def _build_short_description(period: int, start_s: int, action: str, player_name: str | None, result: str | None) -> str:
+    """Build human-readable event description.
+
+    Returns: '2nd, 12:30 – Faceoff won (McChesney)'
+    """
+    per_word = _PERIOD_WORDS.get(period, f"P{period}")
+    clock = _format_clock_time(start_s, period)
+    action_text = _ACTION_SINGULAR.get(action, action)
+    if result:
+        action_text = f"{action_text} ({result})"
+    # Use last name only for brevity
+    short_name = ""
+    if player_name:
+        parts = player_name.strip().split()
+        short_name = parts[0] if parts else player_name  # InStat: "LastName FirstName"
+    if short_name:
+        return f"{per_word}, {clock} – {action_text} ({short_name})"
+    return f"{per_word}, {clock} – {action_text}"
+
+
+def _resolve_player_for_event(conn, org_id: str, player_code: str, team_name: str) -> str | None:
+    """Resolve InStat player code ('LastName FirstName') to player_id.
+
+    Does NOT auto-create — returns None for unresolved.
+    """
+    if not player_code or not player_code.strip():
+        return None
+    parts = player_code.strip().split(maxsplit=1)
+    if len(parts) == 2:
+        last_name, first_name = parts[0], parts[1]
+    elif len(parts) == 1:
+        last_name, first_name = parts[0], ""
+    else:
+        return None
+    # Exact match on first + last
+    if first_name:
+        row = conn.execute(
+            "SELECT id FROM players WHERE org_id = ? AND LOWER(last_name) = ? AND LOWER(first_name) = ? AND (is_deleted = 0 OR is_deleted IS NULL) LIMIT 1",
+            (org_id, last_name.lower(), first_name.lower()),
+        ).fetchone()
+        if row:
+            return row[0] if isinstance(row, (tuple, list)) else row["id"]
+    # Team-filtered last name
+    if team_name:
+        row = conn.execute(
+            "SELECT id FROM players WHERE org_id = ? AND LOWER(last_name) = ? AND LOWER(current_team) = ? AND (is_deleted = 0 OR is_deleted IS NULL) LIMIT 1",
+            (org_id, last_name.lower(), team_name.lower()),
+        ).fetchone()
+        if row:
+            return row[0] if isinstance(row, (tuple, list)) else row["id"]
+    # Last name only — single match
+    rows = conn.execute(
+        "SELECT id FROM players WHERE org_id = ? AND LOWER(last_name) = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (org_id, last_name.lower()),
+    ).fetchall()
+    if len(rows) == 1:
+        r = rows[0]
+        return r[0] if isinstance(r, (tuple, list)) else r["id"]
+    return None
+
+
+def _parse_instat_xml_events(file_bytes: bytes, filename: str, league: str, season: str, org_id: str) -> dict:
+    """Parse InStat XML tagging file into game_events records.
+
+    InStat XML structure:
+      <file> → <ALL_INSTANCES> → <instance>
+        <ID>, <start>, <end>, <pos_x>, <pos_y>, <code>
+        <label group="Team">, <label group="Action">, <label group="Half">
+    """
+    try:
+        root = ET.fromstring(file_bytes)
+    except ET.ParseError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid XML: {str(e)}")
+
+    game_meta = _parse_instat_xml_filename(filename)
+    home_team = game_meta["home_team"]
+    away_team = game_meta["away_team"]
+    game_date = game_meta["game_date"]
+    game_id = re.sub(r'[^a-zA-Z0-9]', '_', filename.rsplit(".", 1)[0] if "." in filename else filename)
+
+    # Find all <instance> elements
+    instances = root.findall(".//instance")
+    if not instances:
+        # Try other container patterns
+        instances = root.findall(".//Instance") or root.findall(".//row")
+
+    conn = get_db()
+    events = []
+    resolved_players: dict[str, str | None] = {}  # cache
+    unresolved_names: set[str] = set()
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Per-player stat aggregation for player_game_stats upsert
+    player_stats: dict[str, dict] = {}  # player_id → {goals, assists, ...}
+
+    try:
+        for inst in instances:
+            # Parse child elements
+            children = {c.tag: (c.text or "").strip() for c in inst}
+            raw_id = children.get("ID", "")
+            start_s_raw = children.get("start")
+            end_s_raw = children.get("end")
+            pos_x_raw = children.get("pos_x")
+            pos_y_raw = children.get("pos_y")
+            player_code = children.get("code", "")
+
+            # Parse labels
+            labels: dict[str, str] = {}
+            for label_el in inst.findall("label"):
+                group = label_el.get("group", "")
+                text = (label_el.text or "").strip()
+                if group and text:
+                    labels[group] = text
+
+            team_name = labels.get("Team", "")
+            action = labels.get("Action", "")
+            half_raw = labels.get("Half", labels.get("Half (period)", ""))
+
+            if not action:
+                continue
+
+            # Parse period from "Half" label (e.g., "1 Half", "2 Half", "3 Half", "OT")
+            period = 1
+            period_match = re.match(r'(\d+)', half_raw)
+            if period_match:
+                period = int(period_match.group(1))
+            elif "ot" in half_raw.lower():
+                period = 4
+
+            # Parse numeric fields
+            start_s = int(start_s_raw) if start_s_raw and start_s_raw.isdigit() else 0
+            end_s = int(end_s_raw) if end_s_raw and end_s_raw.isdigit() else None
+            pos_x = None
+            pos_y = None
+            try:
+                pos_x = float(pos_x_raw) if pos_x_raw else None
+            except (ValueError, TypeError):
+                pass
+            try:
+                pos_y = float(pos_y_raw) if pos_y_raw else None
+            except (ValueError, TypeError):
+                pass
+
+            # Determine opponent
+            if team_name.lower().strip() == home_team.lower().strip():
+                opponent_name = away_team
+            elif team_name.lower().strip() == away_team.lower().strip():
+                opponent_name = home_team
+            else:
+                opponent_name = ""
+
+            # Resolve player
+            if player_code not in resolved_players:
+                resolved_players[player_code] = _resolve_player_for_event(conn, org_id, player_code, team_name)
+                if resolved_players[player_code] is None and player_code:
+                    unresolved_names.add(player_code)
+            player_id = resolved_players[player_code]
+
+            # Derive zone
+            zone = _derive_zone(pos_x, pos_y, team_name, home_team)
+
+            # Derive result from action name
+            result = None
+            action_lower = action.lower()
+            if "won" in action_lower or action_lower == "goals" or action_lower == "saves":
+                result = "success"
+            elif "lost" in action_lower or action_lower in ("missed shots", "goals against"):
+                result = "fail"
+
+            # Build short description
+            player_name_for_desc = player_code if player_code else None
+            short_desc = _build_short_description(period, start_s, action, player_name_for_desc, None)
+
+            event_id = str(uuid.uuid4())
+            events.append({
+                "id": event_id,
+                "org_id": org_id,
+                "game_id": game_id,
+                "player_id": player_id,
+                "team_name": team_name,
+                "opponent_name": opponent_name,
+                "league": league,
+                "season": season,
+                "game_date": game_date,
+                "period": period,
+                "start_s": start_s,
+                "end_s": end_s,
+                "pos_x": pos_x,
+                "pos_y": pos_y,
+                "action": action,
+                "result": result,
+                "zone": zone,
+                "short_description": short_desc,
+                "created_at": now,
+            })
+
+            # Aggregate stats for player_game_stats
+            if player_id:
+                if player_id not in player_stats:
+                    player_stats[player_id] = {
+                        "team_name": team_name, "goals": 0, "assists": 0,
+                        "shots": 0, "pim": 0, "ppg": 0, "shg": 0,
+                    }
+                ps = player_stats[player_id]
+                if action == "Goals":
+                    ps["goals"] += 1
+                elif action == "Assists":
+                    ps["assists"] += 1
+                elif action in ("Shots", "Shots on goal", "Missed shots"):
+                    ps["shots"] += 1
+                elif action == "Penalties":
+                    ps["pim"] += 2  # default minor
+                elif action == "Power play shots" and action == "Goals":
+                    ps["ppg"] += 1
+                elif action == "Short-handed shots" and action == "Goals":
+                    ps["shg"] += 1
+
+        # Bulk insert game_events
+        for ev in events:
+            conn.execute("""
+                INSERT OR IGNORE INTO game_events
+                (id, org_id, game_id, player_id, team_name, opponent_name, league, season,
+                 game_date, period, start_s, end_s, pos_x, pos_y, action, result, zone,
+                 short_description, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                ev["id"], ev["org_id"], ev["game_id"], ev["player_id"],
+                ev["team_name"], ev["opponent_name"], ev["league"], ev["season"],
+                ev["game_date"], ev["period"], ev["start_s"], ev["end_s"],
+                ev["pos_x"], ev["pos_y"], ev["action"], ev["result"], ev["zone"],
+                ev["short_description"], ev["created_at"],
+            ))
+
+        # Upsert player_game_stats for resolved players
+        for pid, ps in player_stats.items():
+            # Check for existing row
+            existing = conn.execute(
+                "SELECT id FROM player_game_stats WHERE player_id = ? AND game_date = ? AND data_source = 'instat_xml' LIMIT 1",
+                (pid, game_date),
+            ).fetchone()
+            if existing:
+                row_id = existing[0] if isinstance(existing, (tuple, list)) else existing["id"]
+                conn.execute("""
+                    UPDATE player_game_stats SET goals = ?, assists = ?, points = ?,
+                    shots = ?, pim = ?, ppg = ?, shg = ?
+                    WHERE id = ?
+                """, (ps["goals"], ps["assists"], ps["goals"] + ps["assists"],
+                      ps["shots"], ps["pim"], ps["ppg"], ps["shg"], row_id))
+            else:
+                # Determine opponent for this player
+                if ps["team_name"].lower().strip() == home_team.lower().strip():
+                    opp = away_team
+                    ha = "H"
+                else:
+                    opp = home_team
+                    ha = "A"
+                conn.execute("""
+                    INSERT INTO player_game_stats
+                    (id, player_id, game_date, opponent, home_away, goals, assists, points,
+                     shots, pim, ppg, shg, season, league, data_source, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'instat_xml', ?)
+                """, (str(uuid.uuid4()), pid, game_date, opp, ha,
+                      ps["goals"], ps["assists"], ps["goals"] + ps["assists"],
+                      ps["shots"], ps["pim"], ps["ppg"], ps["shg"],
+                      season, league, now))
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    resolved_count = sum(1 for v in resolved_players.values() if v is not None)
+    unresolved_count = len(unresolved_names)
+
+    return {
+        "game_meta": game_meta,
+        "events": events,
+        "players_resolved": resolved_count,
+        "players_unresolved": unresolved_count,
+        "unresolved_names": sorted(unresolved_names),
+    }
+
+
 def _detect_xml_source(root: ET.Element) -> str:
     """Detect XML source format from root element tag and attributes."""
     tag = root.tag.lower().split("}")[-1] if "}" in root.tag else root.tag.lower()
@@ -20552,6 +20925,72 @@ async def instat_import(
         logger.info("Intelligence generation triggered for %d players from InStat import", min(len(_instat_player_ids), 50))
 
     return result
+
+
+@app.post("/instat/import-xml")
+async def instat_import_xml(
+    file: UploadFile = File(...),
+    league: str = Form(...),
+    season: str = Form("2025-26"),
+    token_data: dict = Depends(verify_token),
+):
+    """Import InStat XML tagging file into game_events table.
+
+    Parses per-event data with timestamps, coordinates, and action types.
+    Also aggregates per-player stats into player_game_stats.
+    """
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    # Tier permission + limit checks
+    perm_conn = get_db()
+    try:
+        _check_tier_permission(user_id, "can_upload_files", perm_conn)
+        _check_tier_limit(user_id, "uploads", perm_conn)
+    finally:
+        perm_conn.close()
+
+    fname = file.filename or ""
+    if not fname.lower().endswith(".xml"):
+        raise HTTPException(status_code=400, detail="File must be .xml")
+
+    content = await file.read()
+
+    # Track the upload usage
+    track_conn = get_db()
+    try:
+        _increment_tracking(user_id, "uploads", track_conn)
+    finally:
+        track_conn.close()
+
+    # Normalize league and season
+    try:
+        league = _normalize_league(league) or league
+    except ValueError:
+        pass  # keep raw if unrecognized
+    season = _normalize_season(season)
+
+    logger.info("XML tagging import: fname=%s, league=%s, season=%s, org=%s", fname, league, season, org_id)
+
+    result = _parse_instat_xml_events(content, fname, league, season, org_id)
+    game_meta = result["game_meta"]
+    score_str = f"{game_meta['home_score']}-{game_meta['away_score']}" if game_meta["home_score"] is not None else "unknown"
+
+    return {
+        "status": "ok",
+        "game": {
+            "date": game_meta["game_date"],
+            "home_team": game_meta["home_team"],
+            "away_team": game_meta["away_team"],
+            "score": score_str,
+        },
+        "counts": {
+            "events_total": len(result["events"]),
+            "players_resolved": result["players_resolved"],
+            "players_unresolved": result["players_unresolved"],
+            "unresolved_names": result["unresolved_names"],
+        },
+    }
 
 
 def _find_team_column(row: dict) -> str:
