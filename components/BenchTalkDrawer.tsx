@@ -765,7 +765,7 @@ export default function BenchTalkDrawer() {
           title="Open Bench Talk"
         >
           <div className="flex flex-col items-center gap-0.5">
-            <PXIBadge size={28} variant="dark" showDot={true} className="group-hover:scale-110 transition-transform" />
+            <PXIBadge size={56} variant="dark" showDot={true} className="group-hover:scale-110 transition-transform" />
           </div>
         </button>
       )}
@@ -778,9 +778,9 @@ export default function BenchTalkDrawer() {
       >
         {/* ── Header ── */}
         <div className="bg-navy px-4 py-3 flex items-center gap-3 shrink-0">
-          <PXIBadge size={36} variant="dark" showDot={true} />
+          <PXIBadge size={72} variant="dark" showDot={true} />
           <div className="flex-1">
-            <h2 className="font-oswald font-bold text-white text-sm uppercase tracking-wider">{effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}</h2>
+            <h2 className="font-oswald font-bold text-white text-lg uppercase tracking-wider">{effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}</h2>
             <p className="text-[10px] text-white/40">AI-powered hockey ops assistant — ask about players, stats, trades, and strategy</p>
           </div>
           <div className="flex items-center gap-1">
