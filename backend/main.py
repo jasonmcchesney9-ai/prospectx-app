@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 import uuid
+import statistics
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -8113,6 +8114,328 @@ def parse_toi(toi_str) -> float:
 
 
 TOI_GATE_SECONDS = 3600  # 60 minutes minimum for PXR scoring
+
+
+def get_position_group(position: str) -> str:
+    """Map player position to F/D/G group."""
+    if not position:
+        return 'F'
+    pos = position.upper().strip()
+    if pos in ('G', 'GOALIE', 'GOALTENDER'):
+        return 'G'
+    if pos in ('D', 'LD', 'RD', 'DEFENSE', 'DEFENCE'):
+        return 'D'
+    return 'F'
+
+
+def per60(value, toi_seconds: float) -> float:
+    """Convert counting stat to per-60 rate. Returns 0.0 if toi is 0."""
+    if not toi_seconds or toi_seconds <= 0:
+        return 0.0
+    return (float(value or 0) / toi_seconds) * 3600
+
+
+def league_zscore(players_data: list, metric_key: str) -> dict:
+    """Z-score each player's metric within their current_league group."""
+    by_league: dict = {}
+    for p in players_data:
+        league = p.get('current_league') or 'UNKNOWN'
+        by_league.setdefault(league, []).append(p)
+    result = {}
+    for league, group in by_league.items():
+        vals = [float(g.get(metric_key) or 0) for g in group]
+        if len(vals) < 2:
+            for g in group:
+                result[g['player_id']] = 0.0
+            continue
+        mean = statistics.mean(vals)
+        stdev = statistics.stdev(vals)
+        for g in group:
+            v = float(g.get(metric_key) or 0)
+            result[g['player_id']] = (v - mean) / stdev if stdev > 0 else 0.0
+    return result
+
+
+def global_percentile(z_scores_dict: dict) -> dict:
+    """Convert z-scores to global PERCENT_RANK 0-100."""
+    scored = sorted(z_scores_dict.items(), key=lambda x: x[1])
+    n = len(scored)
+    result = {}
+    for rank, (pid, _) in enumerate(scored):
+        result[pid] = (rank / (n - 1)) * 100 if n > 1 else 50.0
+    return result
+
+
+def age_modifier_calc(league_pct: float, cohort_pct: float) -> float:
+    """Reward young outperformers, penalise overagers. Capped +/-5.0."""
+    raw = (cohort_pct - league_pct) / 10.0
+    return max(-5.0, min(5.0, raw))
+
+
+PILLAR_METRICS = {
+    'P1': [('goals_60', 0.20), ('assists_60', 0.20), ('xg_60', 0.25), ('shots_60', 0.10), ('sc_60', 0.15), ('pp_60', 0.10)],
+    'P2': [('opp_xg_60_inv', 0.30), ('takeaways_60', 0.25), ('blocks_60', 0.20), ('pk_appearances', 0.15), ('corsi_pct_def', 0.10)],
+    'P3': [('corsi_pct', 0.30), ('entry_success_rate', 0.25), ('bkouts_60', 0.25), ('pass_pct', 0.20)],
+    'P4_F': [('hits_60', 0.35), ('fo_pct', 0.30), ('battles_pct', 0.20), ('losses_60_inv', 0.15)],
+    'P4_D': [('hits_60', 0.50), ('battles_pct', 0.28), ('losses_60_inv', 0.22)],
+}
+
+COMPOSITE_WEIGHTS = {
+    'F': {'P1': 0.35, 'P2': 0.15, 'P3': 0.25, 'P4': 0.15, 'P5': 0.0},
+    'D': {'P1': 0.15, 'P2': 0.35, 'P3': 0.25, 'P4': 0.25, 'P5': 0.0},
+    'G': {'P1': 0.0, 'P2': 0.0, 'P3': 0.0, 'P4': 0.0, 'P5': 1.0},
+}
+
+
+def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
+    """
+    Full PXR engine. Per-60 normalize -> league z-score -> global percentile
+    -> pillar scores -> composite -> age modifier -> upsert pxr_scores.
+    Returns: { 'scored': int, 'null_toi': int, 'null_data': int, 'duration_ms': int }
+    """
+    import time as _time
+    start = _time.time()
+
+    # Step 1: Fetch InStat data joined with player context
+    rows = conn.execute("""
+        SELECT
+            i.player_id,
+            p.birth_year,
+            p.position,
+            p.current_league,
+            i.toi_total,
+            i.goals, i.primary_assists, i.xg, i.shots_on_goal,
+            i.scoring_chances, i.pp_goals,
+            i.opp_xg_on, i.takeaways, i.blocked_shots,
+            i.pk_appearances, i.corsi_pct,
+            i.entry_success_rate, i.breakouts_carry, i.pass_pct,
+            i.hits, i.fo_pct, i.battles_pct, i.puck_losses
+        FROM instat_player_stats i
+        JOIN players p ON p.id = i.player_id
+        WHERE i.season = ?
+        AND i.toi_total IS NOT NULL
+    """, (season,)).fetchall()
+
+    null_toi = 0
+    null_data = 0
+    players_data = []
+
+    # Step 2: TOI gate
+    for row in rows:
+        rd = dict(row)
+        toi_seconds = parse_toi(rd['toi_total'])
+        pos_group = get_position_group(rd['position'])
+        if toi_seconds < TOI_GATE_SECONDS:
+            null_toi += 1
+            conn.execute("""
+                INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
+                    pxr_score, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    toi_gate_met = 0, pxr_score = NULL,
+                    p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
+                    p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
+                    league_percentile = NULL, cohort_percentile = NULL,
+                    data_completeness = NULL, calc_timestamp = CURRENT_TIMESTAMP
+            """, (rd['player_id'], season, pos_group))
+            continue
+        rd['toi_seconds'] = toi_seconds
+        rd['position_group'] = pos_group
+        players_data.append(rd)
+
+    if not players_data:
+        conn.commit()
+        duration_ms = int((_time.time() - start) * 1000)
+        return {'scored': 0, 'null_toi': null_toi, 'null_data': null_data, 'duration_ms': duration_ms}
+
+    # Step 3: Per-60 normalization (counting stats only — percentages used raw)
+    for p in players_data:
+        ts = p['toi_seconds']
+        p['goals_60'] = per60(p['goals'], ts)
+        p['assists_60'] = per60(p['primary_assists'], ts)
+        p['xg_60'] = per60(p['xg'], ts)
+        p['shots_60'] = per60(p['shots_on_goal'], ts)
+        p['sc_60'] = per60(p['scoring_chances'], ts)
+        p['pp_60'] = per60(p['pp_goals'], ts)
+        p['opp_xg_60'] = per60(p['opp_xg_on'], ts)
+        p['takeaways_60'] = per60(p['takeaways'], ts)
+        p['blocks_60'] = per60(p['blocked_shots'], ts)
+        p['hits_60'] = per60(p['hits'], ts)
+        p['losses_60'] = per60(p['puck_losses'], ts)
+        p['bkouts_60'] = per60(p['breakouts_carry'], ts)
+        # Raw percentages — use as-is (already 0-100 scale)
+        p['corsi_pct'] = float(p.get('corsi_pct') or 0)
+        p['entry_success_rate'] = float(p.get('entry_success_rate') or 0)
+        p['pass_pct'] = float(p.get('pass_pct') or 0)
+        p['fo_pct'] = float(p.get('fo_pct') or 0)
+        p['battles_pct'] = float(p.get('battles_pct') or 0)
+        p['pk_appearances'] = float(p.get('pk_appearances') or 0)
+
+    # Step 4: League z-scores + global percentiles for all metrics
+    all_metrics = [
+        'goals_60', 'assists_60', 'xg_60', 'shots_60', 'sc_60', 'pp_60',
+        'opp_xg_60', 'takeaways_60', 'blocks_60', 'pk_appearances', 'corsi_pct',
+        'entry_success_rate', 'bkouts_60', 'pass_pct',
+        'hits_60', 'fo_pct', 'battles_pct', 'losses_60',
+    ]
+    percentiles = {}  # metric -> { player_id: 0-100 }
+    for metric in all_metrics:
+        z = league_zscore(players_data, metric)
+        percentiles[metric] = global_percentile(z)
+
+    # Step 5: Inverted metrics (lower is better -> invert after percentile)
+    for pid in percentiles.get('opp_xg_60', {}):
+        percentiles.setdefault('opp_xg_60_inv', {})[pid] = 100 - percentiles['opp_xg_60'].get(pid, 50)
+        percentiles.setdefault('losses_60_inv', {})[pid] = 100 - percentiles['losses_60'].get(pid, 50)
+    # Defensive corsi = same as corsi_pct percentile (higher corsi = better defense)
+    percentiles['corsi_pct_def'] = percentiles.get('corsi_pct', {})
+
+    # Step 6: Pillar scores + data completeness
+    scored = 0
+    for p in players_data:
+        pid = p['player_id']
+        pos_group = p['position_group']
+
+        if pos_group == 'G':
+            # Goalie: P5 = 50.0 placeholder (no goalie InStat metrics yet)
+            p5 = 50.0
+            composite = p5
+            pillar_scores = {'P1': None, 'P2': None, 'P3': None, 'P4': None, 'P5': p5}
+            data_comp = 0.0
+        else:
+            # Compute each pillar
+            def _compute_pillar(pillar_key, _pid=pid, _percentiles=percentiles):
+                metrics_list = PILLAR_METRICS.get(pillar_key, [])
+                total_weight = 0.0
+                weighted_sum = 0.0
+                available = 0
+                for metric, weight in metrics_list:
+                    pct = _percentiles.get(metric, {}).get(_pid)
+                    if pct is not None:
+                        weighted_sum += pct * weight
+                        total_weight += weight
+                        available += 1
+                if total_weight == 0:
+                    return None, 0, len(metrics_list)
+                return weighted_sum / total_weight, available, len(metrics_list)
+
+            p1, p1_avail, p1_total = _compute_pillar('P1')
+            p2, p2_avail, p2_total = _compute_pillar('P2')
+            p3, p3_avail, p3_total = _compute_pillar('P3')
+            p4_key = 'P4_D' if pos_group == 'D' else 'P4_F'
+            p4, p4_avail, p4_total = _compute_pillar(p4_key)
+
+            pillar_scores = {'P1': p1, 'P2': p2, 'P3': p3, 'P4': p4, 'P5': None}
+
+            # Data completeness
+            total_metrics = p1_total + p2_total + p3_total + p4_total
+            avail_metrics = p1_avail + p2_avail + p3_avail + p4_avail
+            data_comp = round((avail_metrics / total_metrics) * 100, 1) if total_metrics > 0 else 0.0
+
+            # Composite
+            weights = COMPOSITE_WEIGHTS[pos_group]
+            composite = 0.0
+            weight_sum = 0.0
+            for pkey, w in weights.items():
+                pval = pillar_scores.get(pkey)
+                if pval is not None and w > 0:
+                    composite += pval * w
+                    weight_sum += w
+            composite = composite / weight_sum if weight_sum > 0 else None
+
+        if composite is None:
+            null_data += 1
+            conn.execute("""
+                INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
+                    pxr_score, data_completeness, calc_timestamp)
+                VALUES (?, ?, ?, 1, NULL, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    toi_gate_met = 1, pxr_score = NULL,
+                    data_completeness = EXCLUDED.data_completeness,
+                    calc_timestamp = CURRENT_TIMESTAMP
+            """, (pid, season, pos_group, data_comp))
+            continue
+
+        p['composite'] = composite
+        p['pillar_scores'] = pillar_scores
+        p['data_completeness'] = data_comp
+
+    # Step 7: League percentile + cohort percentile + age modifier
+    # (only for players with composite scores)
+    composited = [p for p in players_data if 'composite' in p]
+
+    # League percentile: PERCENT_RANK within same league + position_group
+    by_league_pos: dict = {}
+    for p in composited:
+        key = (p.get('current_league') or 'UNKNOWN', p['position_group'])
+        by_league_pos.setdefault(key, []).append(p)
+    for key, group in by_league_pos.items():
+        group.sort(key=lambda x: x['composite'])
+        n = len(group)
+        for rank, p in enumerate(group):
+            p['league_percentile'] = round((rank / (n - 1)) * 100, 1) if n > 1 else 50.0
+
+    # Cohort percentile: PERCENT_RANK within same birth_year + position_group
+    by_cohort: dict = {}
+    for p in composited:
+        key = (p.get('birth_year'), p['position_group'])
+        by_cohort.setdefault(key, []).append(p)
+    for key, group in by_cohort.items():
+        group.sort(key=lambda x: x['composite'])
+        n = len(group)
+        for rank, p in enumerate(group):
+            p['cohort_percentile'] = round((rank / (n - 1)) * 100, 1) if n > 1 else 50.0
+
+    # Age modifier
+    for p in composited:
+        lp = p.get('league_percentile', 50.0)
+        cp = p.get('cohort_percentile', 50.0)
+        p['age_mod'] = age_modifier_calc(lp, cp)
+        # Final PXR score = composite + age_modifier
+        p['pxr_final'] = round(p['composite'] + p['age_mod'], 1)
+
+    # Step 8: Upsert pxr_scores
+    for p in composited:
+        ps = p['pillar_scores']
+        conn.execute("""
+            INSERT INTO pxr_scores (
+                player_id, season, position_group,
+                pxr_score, p1_offense, p2_defense, p3_possession,
+                p4_physical, p5_goalie, age_modifier,
+                league_percentile, cohort_percentile,
+                toi_gate_met, data_completeness, calc_timestamp
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,CURRENT_TIMESTAMP)
+            ON CONFLICT (player_id, season) DO UPDATE SET
+                pxr_score = EXCLUDED.pxr_score,
+                p1_offense = EXCLUDED.p1_offense,
+                p2_defense = EXCLUDED.p2_defense,
+                p3_possession = EXCLUDED.p3_possession,
+                p4_physical = EXCLUDED.p4_physical,
+                p5_goalie = EXCLUDED.p5_goalie,
+                age_modifier = EXCLUDED.age_modifier,
+                league_percentile = EXCLUDED.league_percentile,
+                cohort_percentile = EXCLUDED.cohort_percentile,
+                toi_gate_met = 1,
+                data_completeness = EXCLUDED.data_completeness,
+                calc_timestamp = CURRENT_TIMESTAMP
+        """, (
+            p['player_id'], season, p['position_group'],
+            p['pxr_final'],
+            round(ps['P1'], 1) if ps['P1'] is not None else None,
+            round(ps['P2'], 1) if ps['P2'] is not None else None,
+            round(ps['P3'], 1) if ps['P3'] is not None else None,
+            round(ps['P4'], 1) if ps['P4'] is not None else None,
+            round(ps['P5'], 1) if ps['P5'] is not None else None,
+            round(p['age_mod'], 1),
+            round(p['league_percentile'], 1),
+            round(p['cohort_percentile'], 1),
+            p['data_completeness'],
+        ))
+        scored += 1
+
+    conn.commit()
+    duration_ms = int((_time.time() - start) * 1000)
+    return {'scored': scored, 'null_toi': null_toi, 'null_data': null_data, 'duration_ms': duration_ms}
 
 
 def get_anthropic_client():
