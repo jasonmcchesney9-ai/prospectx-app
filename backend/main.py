@@ -23157,7 +23157,8 @@ async def import_cross_league(
 
     players_imported = 0
     players_skipped = 0
-    external_id_map = {}  # xlsx player id → our DB player id
+    instat_id_map = {}  # xlsx player id → instat_players.id (for instat_player_stats FK)
+    players_id_map = {}  # xlsx player id → players.id (for player_stats FK)
 
     conn = get_db()
     try:
@@ -23213,29 +23214,36 @@ async def import_cross_league(
                   shoots, int(height_cm) if height_cm else None,
                   int(weight_kg) if weight_kg else None,
                   team, league_abbrev, jersey))
+            players_id_map[xlsx_id] = player_id
 
             # Also upsert into instat_players (FK target for instat_player_stats)
+            # Has UNIQUE(org_id, player_name) — check-then-insert to handle dupes
             player_name_full = f"{first_name} {last_name}"
-            conn.execute("""
-                INSERT INTO instat_players (
-                    id, org_id, player_name, jersey_number, position,
-                    handedness, dob, height_cm, weight_kg,
-                    created_at, updated_at
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-                ON CONFLICT (id) DO UPDATE SET
-                    player_name = EXCLUDED.player_name,
-                    jersey_number = EXCLUDED.jersey_number,
-                    position = EXCLUDED.position,
-                    handedness = EXCLUDED.handedness,
-                    dob = EXCLUDED.dob,
-                    height_cm = EXCLUDED.height_cm,
-                    weight_kg = EXCLUDED.weight_kg,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (player_id, org_id, player_name_full, jersey, position,
-                  shoots, dob,
-                  height_cm, weight_kg))
-
-            external_id_map[xlsx_id] = player_id
+            existing_instat = conn.execute(
+                "SELECT id FROM instat_players WHERE org_id = %s AND player_name = %s",
+                (org_id, player_name_full)
+            ).fetchone()
+            if existing_instat:
+                instat_pid = existing_instat[0]
+                conn.execute("""
+                    UPDATE instat_players SET
+                        jersey_number = %s, position = %s, handedness = %s,
+                        dob = %s, height_cm = %s, weight_kg = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (jersey, position, shoots, dob, height_cm, weight_kg,
+                      instat_pid))
+                instat_id_map[xlsx_id] = instat_pid
+            else:
+                conn.execute("""
+                    INSERT INTO instat_players (
+                        id, org_id, player_name, jersey_number, position,
+                        handedness, dob, height_cm, weight_kg,
+                        created_at, updated_at
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                """, (player_id, org_id, player_name_full, jersey, position,
+                      shoots, dob, height_cm, weight_kg))
+                instat_id_map[xlsx_id] = player_id
             players_imported += 1
 
         conn.commit()
@@ -23253,11 +23261,11 @@ async def import_cross_league(
             xlsx_player_id = str(sd.get("player_id") or "").strip()
 
             # Only import stats for players we successfully imported
-            if xlsx_player_id not in external_id_map:
+            if xlsx_player_id not in instat_id_map:
                 stats_skipped += 1
                 continue
 
-            player_id = external_id_map[xlsx_player_id]
+            player_id = instat_id_map[xlsx_player_id]
             season = (sd.get("season") or "2025-26").strip()
             stat_id = str(sd.get("id") or gen_id()).strip()
 
@@ -23398,9 +23406,9 @@ async def import_cross_league(
         for row in s_rows[1:]:
             sd = dict(zip(s_headers, row))
             xlsx_player_id = str(sd.get("player_id") or "").strip()
-            if xlsx_player_id not in external_id_map:
+            if xlsx_player_id not in players_id_map:
                 continue
-            player_id = external_id_map[xlsx_player_id]
+            player_id = players_id_map[xlsx_player_id]
             season = (sd.get("season") or "2025-26").strip()
 
             gp = parse_dash(sd.get("gp"))
