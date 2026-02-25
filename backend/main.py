@@ -23512,6 +23512,57 @@ async def recalculate_pxr(
     }
 
 
+@app.get("/admin/pxr/leaderboard")
+async def pxr_leaderboard(
+    season: str = Query(default="2025-26"),
+    limit: int = Query(default=10, le=100),
+    token_data: dict = Depends(verify_token),
+):
+    """Admin-only. Top PXR-scored players + league distribution."""
+    _require_admin(token_data)
+    conn = get_db()
+    try:
+        top = conn.execute("""
+            SELECT p.first_name || ' ' || p.last_name AS player_name,
+                   p.current_league, p.position,
+                   px.pxr_score, px.league_percentile, px.cohort_percentile,
+                   px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
+                   px.age_modifier, px.data_completeness
+            FROM pxr_scores px
+            JOIN players p ON p.id = px.player_id
+            WHERE px.pxr_score IS NOT NULL
+            ORDER BY px.pxr_score DESC
+            LIMIT %s
+        """, (limit,)).fetchall()
+
+        by_league = conn.execute("""
+            SELECT p.current_league,
+                   COUNT(*) AS players_scored,
+                   ROUND(AVG(px.pxr_score)::numeric, 1) AS avg_score,
+                   MAX(px.pxr_score) AS top_score
+            FROM pxr_scores px
+            JOIN players p ON p.id = px.player_id
+            WHERE px.pxr_score IS NOT NULL
+            GROUP BY p.current_league
+            ORDER BY avg_score DESC
+        """).fetchall()
+
+        counts = conn.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM instat_player_stats) AS instat_count,
+                (SELECT COUNT(*) FROM pxr_scores WHERE pxr_score IS NOT NULL) AS scored_count,
+                (SELECT COUNT(*) FROM pxr_scores) AS total_pxr_rows
+        """).fetchone()
+    finally:
+        conn.close()
+
+    return {
+        "top_players": [dict(r) for r in top],
+        "by_league": [dict(r) for r in by_league],
+        "counts": dict(counts) if counts else {},
+    }
+
+
 # ============================================================
 # DEVELOPMENT PLANS
 # ============================================================
