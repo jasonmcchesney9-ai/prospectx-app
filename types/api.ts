@@ -2958,6 +2958,21 @@ export interface CalendarEvent {
   opponent_name?: string;
   is_home?: number | null;
   visibility: 'ORG' | 'TEAM' | 'PLAYER_FAMILY' | 'PRIVATE';
+  purpose?:
+    | 'skills' | 'systems' | 'special_teams' | 'video' | 'recovery'  // practice
+    | 'league' | 'playoff' | 'exhibition' | 'showcase'                // game
+    | null;
+  scouting_assignments?: Array<{
+    scoutId: string;
+    scoutName: string;
+    status: 'PLANNED' | 'ATTENDED' | 'REPORT_SUBMITTED';
+  }>;
+  has_watchlist_players?: boolean;
+  travel_info?: {
+    departureTime?: string;
+    rinkAddress?: string;
+    notes?: string;
+  } | null;
   created_at: string;
   updated_at: string;
 }
@@ -2996,6 +3011,30 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   MEETING: 'Meeting',
   DEADLINE: 'Deadline',
   OTHER: 'Other',
+};
+
+export const PURPOSE_LABELS: Record<string, string> = {
+  skills: 'Skills',
+  systems: 'Systems',
+  special_teams: 'Special Teams',
+  video: 'Video',
+  recovery: 'Recovery',
+  league: 'League',
+  playoff: 'Playoff',
+  exhibition: 'Exhibition',
+  showcase: 'Showcase',
+};
+
+export const PURPOSE_COLORS: Record<string, string> = {
+  skills: '#0D9488',
+  systems: '#6366F1',
+  special_teams: '#D97706',
+  video: '#7C3AED',
+  recovery: '#10B981',
+  league: '#F97316',
+  playoff: '#DC2626',
+  exhibition: '#64748B',
+  showcase: '#8B5CF6',
 };
 
 export const CALENDAR_PROVIDERS: Record<string, { label: string; color: string }> = {

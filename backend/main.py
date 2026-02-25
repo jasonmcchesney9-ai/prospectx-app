@@ -2631,6 +2631,18 @@ def init_db():
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # ── events table migrations: add hockey-context fields ──
+    ev_cols = _get_table_columns(conn, "events")
+    for col_name, col_type in [
+        ("purpose", "TEXT"),
+        ("scouting_assignments", "TEXT"),  # JSON array
+        ("has_watchlist_players", "INTEGER DEFAULT 0"),
+        ("travel_info", "TEXT"),  # JSON object
+    ]:
+        if col_name not in ev_cols:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS calendar_feeds (
             id TEXT PRIMARY KEY,
@@ -30623,6 +30635,10 @@ class CalendarEventCreate(BaseModel):
     team_id: Optional[str] = None
     player_id: Optional[str] = None
     visibility: str = "ORG"
+    purpose: Optional[str] = None
+    scouting_assignments: Optional[str] = None  # JSON string
+    has_watchlist_players: Optional[bool] = None
+    travel_info: Optional[str] = None  # JSON string
 
 
 class CalendarEventUpdate(BaseModel):
@@ -30639,6 +30655,10 @@ class CalendarEventUpdate(BaseModel):
     team_id: Optional[str] = None
     player_id: Optional[str] = None
     visibility: Optional[str] = None
+    purpose: Optional[str] = None
+    scouting_assignments: Optional[str] = None
+    has_watchlist_players: Optional[bool] = None
+    travel_info: Optional[str] = None
 
 
 class CalendarFeedCreate(BaseModel):
@@ -31483,7 +31503,20 @@ async def get_calendar_events(
     query += " ORDER BY start_time ASC"
     rows = conn.execute(query, params).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [_parse_calendar_event(r) for r in rows]
+
+
+def _parse_calendar_event(r):
+    """Parse a raw events DB row, deserializing JSON text fields."""
+    d = dict(r)
+    for jf in ("scouting_assignments", "travel_info"):
+        if d.get(jf) and isinstance(d[jf], str):
+            try:
+                d[jf] = json.loads(d[jf])
+            except (json.JSONDecodeError, TypeError):
+                pass
+    d["has_watchlist_players"] = bool(d.get("has_watchlist_players"))
+    return d
 
 
 @app.post("/api/calendar/events")
@@ -31499,17 +31532,22 @@ async def create_calendar_event(
     conn.execute("""
         INSERT INTO events (id, org_id, team_id, player_id, created_by_user_id, type, source,
         title, description, start_time, end_time, timezone, location,
-        league_name, opponent_name, is_home, visibility)
-        VALUES (?, ?, ?, ?, ?, ?, 'MANUAL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        league_name, opponent_name, is_home, visibility,
+        purpose, scouting_assignments, has_watchlist_players, travel_info)
+        VALUES (?, ?, ?, ?, ?, ?, 'MANUAL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?)
     """, (event_id, org_id, body.team_id, body.player_id, user_id, body.type,
           body.title, body.description, body.start_time, body.end_time, body.timezone,
           body.location, body.league_name, body.opponent_name,
           1 if body.is_home is True else (0 if body.is_home is False else None),
-          body.visibility))
+          body.visibility,
+          body.purpose, body.scouting_assignments,
+          1 if body.has_watchlist_players else 0,
+          body.travel_info))
     conn.commit()
     row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
-    return dict(row)
+    return _parse_calendar_event(row)
 
 
 @app.put("/api/calendar/events/{event_id}")
@@ -31537,12 +31575,15 @@ async def update_calendar_event(
 
     updates = {}
     for field in ["type", "title", "description", "start_time", "end_time", "timezone",
-                  "location", "league_name", "opponent_name", "team_id", "player_id", "visibility"]:
+                  "location", "league_name", "opponent_name", "team_id", "player_id", "visibility",
+                  "purpose", "scouting_assignments", "travel_info"]:
         val = getattr(body, field, None)
         if val is not None:
             updates[field] = val
     if body.is_home is not None:
         updates["is_home"] = 1 if body.is_home else 0
+    if body.has_watchlist_players is not None:
+        updates["has_watchlist_players"] = 1 if body.has_watchlist_players else 0
 
     if updates:
         set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -31553,7 +31594,7 @@ async def update_calendar_event(
 
     row = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
     conn.close()
-    return dict(row)
+    return _parse_calendar_event(row)
 
 
 @app.delete("/api/calendar/events/{event_id}")
