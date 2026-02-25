@@ -81,7 +81,7 @@ export default function CalendarGrid({
         >
           <ChevronLeft size={18} className="text-navy" />
         </button>
-        <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">
+        <h3 className="text-base font-oswald font-bold text-navy uppercase tracking-wider">
           {monthName}
         </h3>
         <button
@@ -105,7 +105,7 @@ export default function CalendarGrid({
       <div className="grid grid-cols-7 gap-0.5">
         {grid.map((cell, i) => {
           if (!cell.day) {
-            return <div key={i} className="h-12 sm:h-14" />;
+            return <div key={i} className="h-14 sm:h-20" />;
           }
 
           const isToday = cell.date === todayStr;
@@ -117,7 +117,7 @@ export default function CalendarGrid({
             <button
               key={i}
               onClick={() => onDateSelect(cell.date)}
-              className={`h-12 sm:h-14 rounded-lg flex flex-col items-center justify-start pt-1 transition-all relative ${
+              className={`h-14 sm:h-20 rounded-lg flex flex-col items-center justify-start pt-1 transition-all relative ${
                 isSelected
                   ? "bg-teal/10 border-2 border-teal"
                   : isToday
@@ -128,7 +128,7 @@ export default function CalendarGrid({
               }`}
             >
               <span
-                className={`text-xs font-oswald ${
+                className={`text-sm font-oswald ${
                   isSelected
                     ? "font-bold text-teal"
                     : isToday
