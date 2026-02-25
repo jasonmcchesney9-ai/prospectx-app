@@ -23074,6 +23074,31 @@ async def admin_restore_db(
     }
 
 
+# ── PXR Admin Endpoints ──
+
+@app.post("/admin/pxr/recalculate")
+async def recalculate_pxr(
+    season: str = Query(default="2025-26"),
+    token_data: dict = Depends(verify_token),
+):
+    """Admin-only. Triggers full PXR recalculation for given season."""
+    _require_admin(token_data)
+    conn = get_db()
+    try:
+        result = calculate_pxr_scores(conn, season)
+    finally:
+        conn.close()
+    return {
+        'status': 'complete',
+        'season': season,
+        'players_scored': result['scored'],
+        'players_null_toi': result['null_toi'],
+        'players_null_data': result['null_data'],
+        'duration_ms': result['duration_ms'],
+        'message': f"PXR calculated for {result['scored']} players in {result['duration_ms']}ms",
+    }
+
+
 # ============================================================
 # DEVELOPMENT PLANS
 # ============================================================
