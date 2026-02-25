@@ -3524,6 +3524,34 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_talks_org ON chalk_talks(org_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_talks_team ON chalk_talks(team_id)")
 
+    # ── Table: pxr_scores (ProspectX Rating engine) ──
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS pxr_scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id TEXT NOT NULL,
+            season TEXT NOT NULL,
+            position_group TEXT NOT NULL CHECK (position_group IN ('F', 'D', 'G')),
+            pxr_score REAL,
+            p1_offense REAL,
+            p2_defense REAL,
+            p3_possession REAL,
+            p4_physical REAL,
+            p5_goalie REAL,
+            age_modifier REAL,
+            league_percentile REAL,
+            cohort_percentile REAL,
+            toi_gate_met INTEGER NOT NULL DEFAULT 0,
+            data_completeness REAL,
+            calc_timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (player_id, season),
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_player ON pxr_scores(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_season ON pxr_scores(season)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_score ON pxr_scores(pxr_score DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_position ON pxr_scores(position_group)")
+
     conn.commit()
 
     conn.close()
@@ -8069,6 +8097,22 @@ def gen_id() -> str:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def parse_toi(toi_str) -> float:
+    """Convert MM:SS string to float seconds. Returns 0.0 on any parse failure."""
+    if not toi_str:
+        return 0.0
+    try:
+        parts = str(toi_str).strip().split(':')
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + float(parts[1])
+        return float(toi_str)  # already numeric
+    except (ValueError, AttributeError):
+        return 0.0
+
+
+TOI_GATE_SECONDS = 3600  # 60 minutes minimum for PXR scoring
 
 
 def get_anthropic_client():
