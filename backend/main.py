@@ -23214,6 +23214,27 @@ async def import_cross_league(
                   int(weight_kg) if weight_kg else None,
                   team, league_abbrev, jersey))
 
+            # Also upsert into instat_players (FK target for instat_player_stats)
+            player_name_full = f"{first_name} {last_name}"
+            conn.execute("""
+                INSERT INTO instat_players (
+                    id, org_id, player_name, jersey_number, position,
+                    handedness, dob, height_cm, weight_kg,
+                    created_at, updated_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                ON CONFLICT (id) DO UPDATE SET
+                    player_name = EXCLUDED.player_name,
+                    jersey_number = EXCLUDED.jersey_number,
+                    position = EXCLUDED.position,
+                    handedness = EXCLUDED.handedness,
+                    dob = EXCLUDED.dob,
+                    height_cm = EXCLUDED.height_cm,
+                    weight_kg = EXCLUDED.weight_kg,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (player_id, org_id, player_name_full, jersey, position,
+                  shoots, dob,
+                  height_cm, weight_kg))
+
             external_id_map[xlsx_id] = player_id
             players_imported += 1
 
