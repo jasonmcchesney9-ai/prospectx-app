@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { MapPin, Clock, Edit3, Trash2, X, Rss } from "lucide-react";
+import { MapPin, Clock, Edit3, Trash2, X, Rss, Search, Star, Car } from "lucide-react";
 import type { CalendarEvent } from "@/types/api";
-import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "@/types/api";
+import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS, PURPOSE_LABELS, PURPOSE_COLORS } from "@/types/api";
 
 interface EventPopoverProps {
   event: CalendarEvent;
@@ -11,9 +11,10 @@ interface EventPopoverProps {
   onEdit?: (event: CalendarEvent) => void;
   onDelete?: (eventId: string) => void;
   canEdit: boolean;
+  roleGroup?: "PRO" | "MEDIA" | "FAMILY" | "AGENT";
 }
 
-export default function EventPopover({ event, onClose, onEdit, onDelete, canEdit }: EventPopoverProps) {
+export default function EventPopover({ event, onClose, onEdit, onDelete, canEdit, roleGroup = "PRO" }: EventPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function EventPopover({ event, onClose, onEdit, onDelete, canEdit
         </button>
       </div>
 
-      {/* Type badge */}
+      {/* Type badge + purpose pill */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         <span
           className="text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
@@ -73,6 +74,14 @@ export default function EventPopover({ event, onClose, onEdit, onDelete, canEdit
         >
           {EVENT_TYPE_LABELS[event.type] || event.type}
         </span>
+        {event.purpose && PURPOSE_LABELS[event.purpose] && (
+          <span
+            className="text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+            style={{ backgroundColor: PURPOSE_COLORS[event.purpose] || "#6B7280" }}
+          >
+            {PURPOSE_LABELS[event.purpose]}
+          </span>
+        )}
         {!isManual && (
           <span className="text-[10px] font-oswald uppercase tracking-wider px-2 py-0.5 rounded-full bg-navy/5 text-navy/60 flex items-center gap-1">
             <Rss size={8} /> {event.source}
@@ -110,6 +119,43 @@ export default function EventPopover({ event, onClose, onEdit, onDelete, canEdit
           <p className="text-muted/70 text-[11px] border-t border-border pt-2 mt-2">
             {event.description}
           </p>
+        )}
+
+        {/* PRO role: scout assignments + watchlist */}
+        {roleGroup === "PRO" && ((event.scouting_assignments?.length || 0) > 0 || event.has_watchlist_players) && (
+          <div className="flex items-center gap-2 border-t border-border pt-2 mt-2">
+            {(event.scouting_assignments?.length || 0) > 0 && (
+              <span className="flex items-center gap-1 text-[10px] text-teal font-medium">
+                <Search size={10} /> {event.scouting_assignments!.length} scout{event.scouting_assignments!.length > 1 ? "s" : ""} assigned
+              </span>
+            )}
+            {event.has_watchlist_players && (
+              <span className="flex items-center gap-1 text-[10px] text-orange font-medium">
+                <Star size={10} /> Watchlist
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* FAMILY role: travel info */}
+        {roleGroup === "FAMILY" && event.travel_info?.departureTime && (
+          <div className="flex items-center gap-1.5 border-t border-border pt-2 mt-2 text-[10px] text-navy/60">
+            <Car size={10} className="shrink-0" />
+            <span>Depart: {event.travel_info.departureTime}</span>
+            {event.travel_info.rinkAddress && (
+              <>
+                <span>·</span>
+                <a
+                  href={`https://maps.google.com/?q=${encodeURIComponent(event.travel_info.rinkAddress)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal underline flex items-center gap-0.5"
+                >
+                  <MapPin size={8} /> Map
+                </a>
+              </>
+            )}
+          </div>
         )}
       </div>
 

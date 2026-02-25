@@ -2,7 +2,7 @@
 
 import { Clock, MapPin, ChevronRight } from "lucide-react";
 import type { CalendarEvent } from "@/types/api";
-import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "@/types/api";
+import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS, PURPOSE_LABELS, PURPOSE_COLORS } from "@/types/api";
 
 interface UpcomingListProps {
   events: CalendarEvent[];
@@ -77,9 +77,19 @@ export default function UpcomingList({ events, onEventClick, limit = 10 }: Upcom
                         style={{ backgroundColor: typeColor }}
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-navy truncate group-hover:text-teal transition-colors">
-                          {evt.title}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-medium text-navy truncate group-hover:text-teal transition-colors">
+                            {evt.title}
+                          </p>
+                          {evt.purpose && PURPOSE_LABELS[evt.purpose] && (
+                            <span
+                              className="text-[8px] font-oswald uppercase tracking-wider px-1 py-0.5 rounded-full text-white shrink-0 leading-none"
+                              style={{ backgroundColor: PURPOSE_COLORS[evt.purpose] || "#6B7280" }}
+                            >
+                              {PURPOSE_LABELS[evt.purpose]}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 text-[10px] text-muted/60">
                           <span>{time}</span>
                           {evt.location && (

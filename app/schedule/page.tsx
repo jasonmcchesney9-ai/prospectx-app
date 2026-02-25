@@ -15,6 +15,10 @@ import {
   Link2,
   Monitor,
   Smartphone,
+  Search,
+  Star,
+  Car,
+  MapPin,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -26,7 +30,7 @@ import AddEventModal from "@/components/calendar/AddEventModal";
 import api from "@/lib/api";
 import { getUser, getToken } from "@/lib/auth";
 import type { CalendarEvent, CalendarFeed, Team } from "@/types/api";
-import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "@/types/api";
+import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS, PURPOSE_LABELS, PURPOSE_COLORS } from "@/types/api";
 
 // ── Platform integration configs ────────────────────────────
 const PLATFORMS = [
@@ -464,34 +468,89 @@ export default function SchedulePage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {selectedDateEvents.map((evt) => (
-                        <button
-                          key={evt.id}
-                          onClick={() => setPopoverEvent(evt)}
-                          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-teal/30 hover:bg-navy/[0.02] transition-all text-left"
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: EVENT_TYPE_COLORS[evt.type] || "#9CA3AF" }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-navy truncate">{evt.title}</p>
-                            <p className="text-[10px] text-muted">
-                              {new Date(evt.start_time).toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                              {evt.location && ` · ${evt.location}`}
-                            </p>
-                          </div>
-                          <span
-                            className="text-[9px] font-oswald uppercase px-1.5 py-0.5 rounded text-white shrink-0"
-                            style={{ backgroundColor: EVENT_TYPE_COLORS[evt.type] || "#9CA3AF" }}
+                      {selectedDateEvents.map((evt) => {
+                        const purposeLabel = evt.purpose ? PURPOSE_LABELS[evt.purpose] : null;
+                        const purposeColor = evt.purpose ? PURPOSE_COLORS[evt.purpose] : null;
+                        const scoutCount = evt.scouting_assignments?.length || 0;
+                        const travelDep = evt.travel_info?.departureTime;
+                        const travelAddr = evt.travel_info?.rinkAddress;
+
+                        return (
+                          <button
+                            key={evt.id}
+                            onClick={() => setPopoverEvent(evt)}
+                            className="w-full flex items-start gap-2 px-3 py-2 rounded-lg border border-border hover:border-teal/30 hover:bg-navy/[0.02] transition-all text-left"
                           >
-                            {EVENT_TYPE_LABELS[evt.type] || evt.type}
-                          </span>
-                        </button>
-                      ))}
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
+                              style={{ backgroundColor: EVENT_TYPE_COLORS[evt.type] || "#9CA3AF" }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-xs font-semibold text-navy truncate">{evt.title}</p>
+                                {/* Purpose pill — all roles */}
+                                {purposeLabel && (
+                                  <span
+                                    className="text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded-full text-white shrink-0"
+                                    style={{ backgroundColor: purposeColor || "#6B7280" }}
+                                  >
+                                    {purposeLabel}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-muted">
+                                {new Date(evt.start_time).toLocaleTimeString("en-US", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                                {evt.location && ` · ${evt.location}`}
+                              </p>
+                              {/* PRO role: scout count + watchlist */}
+                              {roleGroup === "PRO" && (scoutCount > 0 || evt.has_watchlist_players) && (
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {scoutCount > 0 && (
+                                    <span className="flex items-center gap-0.5 text-[9px] text-teal font-medium">
+                                      <Search size={9} /> {scoutCount} scout{scoutCount > 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                  {evt.has_watchlist_players && (
+                                    <span className="flex items-center gap-0.5 text-[9px] text-orange font-medium">
+                                      <Star size={9} /> Watchlist
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {/* FAMILY role: travel info */}
+                              {roleGroup === "FAMILY" && travelDep && (
+                                <div className="flex items-center gap-1 mt-0.5 text-[9px] text-navy/60">
+                                  <Car size={9} />
+                                  <span>Depart: {travelDep}</span>
+                                  {travelAddr && (
+                                    <>
+                                      <span>·</span>
+                                      <a
+                                        href={`https://maps.google.com/?q=${encodeURIComponent(travelAddr)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="text-teal underline flex items-center gap-0.5"
+                                      >
+                                        <MapPin size={8} /> Map
+                                      </a>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <span
+                              className="text-[9px] font-oswald uppercase px-1.5 py-0.5 rounded text-white shrink-0"
+                              style={{ backgroundColor: EVENT_TYPE_COLORS[evt.type] || "#9CA3AF" }}
+                            >
+                              {EVENT_TYPE_LABELS[evt.type] || evt.type}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -537,6 +596,7 @@ export default function SchedulePage() {
               }}
               onDelete={handleDeleteEvent}
               canEdit={canEdit}
+              roleGroup={roleGroup}
             />
           </div>
         )}
