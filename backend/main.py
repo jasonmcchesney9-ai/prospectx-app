@@ -3528,7 +3528,7 @@ def init_db():
     # ── Table: pxr_scores (ProspectX Rating engine) ──
     c.execute("""
         CREATE TABLE IF NOT EXISTS pxr_scores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             player_id TEXT NOT NULL,
             season TEXT NOT NULL,
             position_group TEXT NOT NULL CHECK (position_group IN ('F', 'D', 'G')),
