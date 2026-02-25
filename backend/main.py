@@ -8116,6 +8116,61 @@ def parse_toi(toi_str) -> float:
 TOI_GATE_SECONDS = 3600  # 60 minutes minimum for PXR scoring
 
 
+# ── Cross-League Import Helpers ──
+
+VALID_LEAGUES = {
+    "BCHL": "British Columbia Hockey League",
+    "CCHL": "Central Canada Hockey League",
+    "GOJHL": "Greater Ontario Junior Hockey League",
+    "NAHL": "North American Hockey League",
+    "OHL": "Ontario Hockey League",
+    "OJHL": "Ontario Junior Hockey League",
+    "QMJHL": "Quebec Major Junior Hockey League",
+    "USHL": "United States Hockey League",
+}
+# Reverse lookup: full name → abbreviation
+_LEAGUE_FULL_TO_ABBREV = {v: k for k, v in VALID_LEAGUES.items()}
+
+
+def parse_pct(val) -> Optional[float]:
+    """Strip '%' suffix and return float, or None on failure."""
+    if val is None:
+        return None
+    s = str(val).strip().rstrip('%').strip()
+    if not s or s == '-':
+        return None
+    try:
+        return round(float(s), 2)
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_dash(val) -> Optional[float]:
+    """Convert '-' or empty to None, otherwise float."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s or s == '-':
+        return None
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def seconds_to_mmss(total_seconds) -> Optional[str]:
+    """Convert numeric seconds to 'MM:SS' string."""
+    if total_seconds is None:
+        return None
+    try:
+        s = int(float(total_seconds))
+        mm = s // 60
+        ss = s % 60
+        return f"{mm}:{ss:02d}"
+    except (ValueError, TypeError):
+        return None
+
+
 def get_position_group(position: str) -> str:
     """Map player position to F/D/G group."""
     if not position:
@@ -23071,6 +23126,335 @@ async def admin_restore_db(
         "total_rows": total_rows,
         "sheets": results,
         "skipped_sheets": skipped_sheets,
+    }
+
+
+# ── Cross-League Import Endpoint ──
+
+@app.post("/admin/import/cross-league")
+async def import_cross_league(
+    file: UploadFile = File(...),
+    token_data: dict = Depends(verify_token),
+):
+    """
+    Admin-only.  Import the normalized cross-league XLSX into players +
+    instat_player_stats.  Filters to VALID_LEAGUES only, uses JWT org_id,
+    and upserts on (player_id, season).
+    """
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    import openpyxl, io, time as _time
+    start = _time.time()
+
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
+
+    # ── Step 1: Import players sheet ──
+    ws_players = wb["players"]
+    p_rows = list(ws_players.iter_rows(values_only=True))
+    p_headers = [str(h).strip() for h in p_rows[0]]
+
+    players_imported = 0
+    players_skipped = 0
+    external_id_map = {}  # xlsx player id → our DB player id
+
+    conn = get_db()
+    try:
+        for row in p_rows[1:]:
+            rd = dict(zip(p_headers, row))
+            league_full = (rd.get("current_league") or "").strip()
+
+            # Filter: only VALID_LEAGUES (full name match)
+            if league_full not in _LEAGUE_FULL_TO_ABBREV:
+                players_skipped += 1
+                continue
+
+            league_abbrev = _LEAGUE_FULL_TO_ABBREV[league_full]
+            xlsx_id = str(rd.get("id") or "").strip()
+            first_name = (rd.get("first_name") or "").strip()
+            last_name = (rd.get("last_name") or "").strip()
+            if not first_name or not last_name:
+                players_skipped += 1
+                continue
+
+            position = (rd.get("position") or "F").strip()
+            shoots = (rd.get("shoots") or "").strip() or None
+            dob = str(rd.get("dob") or "").strip() if rd.get("dob") else None
+            height_cm = parse_dash(rd.get("height_cm"))
+            weight_kg = parse_dash(rd.get("weight_kg"))
+            team = (rd.get("current_team") or "").strip() or None
+            jersey = str(rd.get("jersey_number") or "").strip() or None
+            nationality_raw = (str(rd.get("nationality") or "")).strip()
+            nationality = None if nationality_raw in ("", "[object Object]", "-") else nationality_raw
+
+            # Use the XLSX id as our player id (they're already UUIDs)
+            player_id = xlsx_id if xlsx_id else gen_id()
+
+            conn.execute("""
+                INSERT INTO players (
+                    id, org_id, first_name, last_name, dob, position, shoots,
+                    height_cm, weight_kg, current_team, current_league,
+                    jersey_number, created_at, updated_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                ON CONFLICT (id) DO UPDATE SET
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    dob = EXCLUDED.dob,
+                    position = EXCLUDED.position,
+                    shoots = EXCLUDED.shoots,
+                    height_cm = EXCLUDED.height_cm,
+                    weight_kg = EXCLUDED.weight_kg,
+                    current_team = EXCLUDED.current_team,
+                    current_league = EXCLUDED.current_league,
+                    jersey_number = EXCLUDED.jersey_number,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (player_id, org_id, first_name, last_name, dob, position,
+                  shoots, int(height_cm) if height_cm else None,
+                  int(weight_kg) if weight_kg else None,
+                  team, league_abbrev, jersey))
+
+            external_id_map[xlsx_id] = player_id
+            players_imported += 1
+
+        conn.commit()
+
+        # ── Step 2: Import player_stats → instat_player_stats ──
+        ws_stats = wb["player_stats"]
+        s_rows = list(ws_stats.iter_rows(values_only=True))
+        s_headers = [str(h).strip() for h in s_rows[0]]
+
+        stats_imported = 0
+        stats_skipped = 0
+
+        for row in s_rows[1:]:
+            sd = dict(zip(s_headers, row))
+            xlsx_player_id = str(sd.get("player_id") or "").strip()
+
+            # Only import stats for players we successfully imported
+            if xlsx_player_id not in external_id_map:
+                stats_skipped += 1
+                continue
+
+            player_id = external_id_map[xlsx_player_id]
+            season = (sd.get("season") or "2025-26").strip()
+            stat_id = str(sd.get("id") or gen_id()).strip()
+
+            # Parse fields
+            gp = parse_dash(sd.get("gp"))
+            goals = parse_dash(sd.get("g"))
+            assists = parse_dash(sd.get("a"))
+            points = parse_dash(sd.get("p"))
+            plus_minus = parse_dash(sd.get("plus_minus"))
+
+            # PIM is MM:SS text — convert to total minutes as float
+            pim_raw = sd.get("pim")
+            penalties = None
+            if pim_raw:
+                pim_str = str(pim_raw).strip()
+                if ':' in pim_str:
+                    try:
+                        parts = pim_str.split(':')
+                        penalties = float(parts[0]) + float(parts[1]) / 60.0
+                    except (ValueError, IndexError):
+                        penalties = None
+                else:
+                    penalties = parse_dash(pim_raw)
+
+            toi_seconds = parse_dash(sd.get("toi_seconds"))
+            toi_total = seconds_to_mmss(toi_seconds)
+            pp_toi_seconds = parse_dash(sd.get("pp_toi_seconds"))
+            pp_toi = seconds_to_mmss(pp_toi_seconds)
+            pk_toi_seconds = parse_dash(sd.get("pk_toi_seconds"))
+            pk_toi = seconds_to_mmss(pk_toi_seconds)
+
+            shots_total = parse_dash(sd.get("shots"))
+            shots_on_goal = parse_dash(sd.get("sog"))
+
+            # Compute shot_pct and ppg
+            shot_pct = round((goals / shots_on_goal) * 100, 1) if goals and shots_on_goal and shots_on_goal > 0 else None
+            ppg_val = round(goals / gp, 3) if goals and gp and gp > 0 else None
+
+            # Compute toi_per_game
+            toi_per_game = round((toi_seconds / gp) / 60.0, 2) if toi_seconds and gp and gp > 0 else None
+
+            # Advanced metrics
+            xg = parse_dash(sd.get("xG_Expected_goals"))
+            xg_per_shot = parse_dash(sd.get("xG_per_shot"))
+            corsi_raw = parse_dash(sd.get("CORSI"))
+            corsi_pct = parse_pct(sd.get("CORSI_for_pct"))
+            fenwick_pct = parse_pct(sd.get("Fenwick_for_pct"))
+            scoring_chances = parse_dash(sd.get("Scoring_chances___total"))
+            hits = parse_dash(sd.get("Hits"))
+            hits_against = parse_dash(sd.get("Hits_against"))
+            takeaways = parse_dash(sd.get("Takeaways"))
+            puck_losses = parse_dash(sd.get("Puck_losses"))
+            passes_total = parse_dash(sd.get("Passes"))
+            pass_pct = parse_pct(sd.get("Accurate_passes_pct"))
+            fo_pct = parse_pct(sd.get("Faceoffs_won_pct"))
+
+            conn.execute("""
+                INSERT INTO instat_player_stats (
+                    id, player_id, org_id, season, uploaded_at,
+                    gp, toi_total, toi_per_game,
+                    goals, points, ppg,
+                    plus_minus, penalties,
+                    hits, hits_against,
+                    shots_total, shots_on_goal, shot_pct,
+                    scoring_chances,
+                    xg, xg_per_shot,
+                    corsi_pct, corsi_for,
+                    fenwick_pct,
+                    takeaways, puck_losses,
+                    passes_total, pass_pct,
+                    fo_pct,
+                    pp_toi, pk_toi
+                ) VALUES (
+                    %s,%s,%s,%s,CURRENT_TIMESTAMP,
+                    %s,%s,%s,
+                    %s,%s,%s,
+                    %s,%s,
+                    %s,%s,
+                    %s,%s,%s,
+                    %s,
+                    %s,%s,
+                    %s,%s,
+                    %s,
+                    %s,%s,
+                    %s,%s,
+                    %s,
+                    %s,%s
+                )
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    gp = EXCLUDED.gp,
+                    toi_total = EXCLUDED.toi_total,
+                    toi_per_game = EXCLUDED.toi_per_game,
+                    goals = EXCLUDED.goals,
+                    points = EXCLUDED.points,
+                    ppg = EXCLUDED.ppg,
+                    plus_minus = EXCLUDED.plus_minus,
+                    penalties = EXCLUDED.penalties,
+                    hits = EXCLUDED.hits,
+                    hits_against = EXCLUDED.hits_against,
+                    shots_total = EXCLUDED.shots_total,
+                    shots_on_goal = EXCLUDED.shots_on_goal,
+                    shot_pct = EXCLUDED.shot_pct,
+                    scoring_chances = EXCLUDED.scoring_chances,
+                    xg = EXCLUDED.xg,
+                    xg_per_shot = EXCLUDED.xg_per_shot,
+                    corsi_pct = EXCLUDED.corsi_pct,
+                    corsi_for = EXCLUDED.corsi_for,
+                    fenwick_pct = EXCLUDED.fenwick_pct,
+                    takeaways = EXCLUDED.takeaways,
+                    puck_losses = EXCLUDED.puck_losses,
+                    passes_total = EXCLUDED.passes_total,
+                    pass_pct = EXCLUDED.pass_pct,
+                    fo_pct = EXCLUDED.fo_pct,
+                    pp_toi = EXCLUDED.pp_toi,
+                    pk_toi = EXCLUDED.pk_toi,
+                    uploaded_at = CURRENT_TIMESTAMP
+            """, (stat_id, player_id, org_id, season,
+                  gp, toi_total, toi_per_game,
+                  goals, points, ppg_val,
+                  plus_minus, penalties,
+                  hits, hits_against,
+                  shots_total, shots_on_goal, shot_pct,
+                  scoring_chances,
+                  xg, xg_per_shot,
+                  corsi_pct, corsi_raw,
+                  fenwick_pct,
+                  takeaways, puck_losses,
+                  passes_total, pass_pct,
+                  fo_pct,
+                  pp_toi, pk_toi))
+
+            stats_imported += 1
+
+        conn.commit()
+
+        # ── Step 3: Also populate basic player_stats for standard views ──
+        basic_imported = 0
+        for row in s_rows[1:]:
+            sd = dict(zip(s_headers, row))
+            xlsx_player_id = str(sd.get("player_id") or "").strip()
+            if xlsx_player_id not in external_id_map:
+                continue
+            player_id = external_id_map[xlsx_player_id]
+            season = (sd.get("season") or "2025-26").strip()
+
+            gp = parse_dash(sd.get("gp"))
+            goals = parse_dash(sd.get("g"))
+            assists = parse_dash(sd.get("a"))
+            points = parse_dash(sd.get("p"))
+            plus_minus = parse_dash(sd.get("plus_minus"))
+            toi_seconds = parse_dash(sd.get("toi_seconds"))
+            pp_toi_seconds = parse_dash(sd.get("pp_toi_seconds"))
+            pk_toi_seconds = parse_dash(sd.get("pk_toi_seconds"))
+            shots = parse_dash(sd.get("shots"))
+            sog = parse_dash(sd.get("sog"))
+
+            # PIM as integer minutes
+            pim_raw = sd.get("pim")
+            pim = None
+            if pim_raw:
+                pim_str = str(pim_raw).strip()
+                if ':' in pim_str:
+                    try:
+                        pim = int(pim_str.split(':')[0])
+                    except ValueError:
+                        pim = None
+                else:
+                    pim = int(parse_dash(pim_raw) or 0)
+
+            # Check if basic stats already exist for this player+season
+            existing_ps = conn.execute(
+                "SELECT id FROM player_stats WHERE player_id = %s AND season = %s AND stat_type = 'season'",
+                (player_id, season)
+            ).fetchone()
+            if not existing_ps:
+                ps_id = gen_id()
+                conn.execute("""
+                    INSERT INTO player_stats (
+                        id, player_id, season, stat_type,
+                        gp, g, a, p, plus_minus, pim,
+                        toi_seconds, pp_toi_seconds, pk_toi_seconds,
+                        shots, sog, created_at
+                    ) VALUES (%s,%s,%s,'season',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)
+                """, (ps_id, player_id, season,
+                      int(gp) if gp else 0,
+                      int(goals) if goals else 0,
+                      int(assists) if assists else 0,
+                      int(points) if points else 0,
+                      int(plus_minus) if plus_minus else 0,
+                      pim or 0,
+                      int(toi_seconds) if toi_seconds else 0,
+                      int(pp_toi_seconds) if pp_toi_seconds else 0,
+                      int(pk_toi_seconds) if pk_toi_seconds else 0,
+                      int(shots) if shots else 0,
+                      int(sog) if sog else 0))
+            basic_imported += 1
+
+        conn.commit()
+
+    finally:
+        conn.close()
+        wb.close()
+
+    duration_ms = int((_time.time() - start) * 1000)
+
+    return {
+        "status": "complete",
+        "players_imported": players_imported,
+        "players_skipped": players_skipped,
+        "stats_imported": stats_imported,
+        "stats_skipped": stats_skipped,
+        "basic_stats_imported": basic_imported,
+        "duration_ms": duration_ms,
+        "message": (
+            f"Imported {players_imported} players, {stats_imported} instat stats, "
+            f"{basic_imported} basic stats in {duration_ms}ms. "
+            f"Skipped {players_skipped} players, {stats_skipped} stats."
+        ),
     }
 
 
