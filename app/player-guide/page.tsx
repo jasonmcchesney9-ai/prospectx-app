@@ -9,7 +9,6 @@ import {
   ShoppingBag,
   BookOpen,
   Heart,
-  ChevronDown,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -112,11 +111,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
 
 /* ---------- Main Page ---------- */
 export default function PlayerGuidePage() {
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
-
-  function toggleSection(id: string) {
-    setExpandedSection((prev) => (prev === id ? null : id));
-  }
+  const [activeTab, setActiveTab] = useState("nutrition");
 
   return (
     <ProtectedRoute>
@@ -148,60 +143,35 @@ export default function PlayerGuidePage() {
           <CarRideScript />
         </div>
 
-        {/* 6 Content Sections */}
-        <div className="space-y-3">
-          {GUIDE_SECTIONS.map((section) => {
-            const isExpanded = expandedSection === section.id;
-            const SectionContent = section.component;
-            return (
-              <div
-                key={section.id}
-                className={`bg-white rounded-xl border transition-all duration-300 overflow-hidden ${
-                  isExpanded
-                    ? `border-l-4 ${section.accent} border-gray-200 shadow-md`
-                    : "border-teal/20 hover:shadow-sm hover:border-teal/30"
-                }`}
-              >
-                {/* Clickable header */}
-                <button
-                  onClick={() => toggleSection(section.id)}
-                  className="w-full flex items-center gap-4 p-4 text-left"
-                >
-                  <div
-                    className={`w-11 h-11 rounded-xl ${section.bg} flex items-center justify-center shrink-0`}
-                  >
-                    <section.icon size={20} className={section.color} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-navy font-oswald uppercase tracking-wider">
-                      {section.title}
-                    </h3>
-                    <p className="text-xs text-muted mt-0.5 leading-relaxed line-clamp-1">
-                      {section.desc}
-                    </p>
-                  </div>
-                  <ChevronDown
-                    size={18}
-                    className={`text-gray-400 shrink-0 transition-transform duration-300 ${
-                      isExpanded ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {/* Expandable content */}
-                <div
-                  className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                    isExpanded ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="px-4 pb-5 pt-1 border-t border-gray-100">
-                    <SectionContent />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        {/* Tab Bar */}
+        <div className="flex flex-wrap gap-1 mb-4">
+          {GUIDE_SECTIONS.map((section) => (
+            <button
+              key={section.id}
+              onClick={() => setActiveTab(section.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
+                activeTab === section.id
+                  ? "bg-navy text-white"
+                  : "bg-navy/5 text-navy hover:bg-navy/10"
+              }`}
+            >
+              <section.icon size={14} />
+              {section.title}
+            </button>
+          ))}
         </div>
+
+        {/* Active Tab Content */}
+        {(() => {
+          const active = GUIDE_SECTIONS.find((s) => s.id === activeTab);
+          if (!active) return null;
+          const SectionContent = active.component;
+          return (
+            <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <SectionContent />
+            </div>
+          );
+        })()}
 
         {/* PXI Quick Ask bar */}
         <div className="mt-8">
