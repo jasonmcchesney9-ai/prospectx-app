@@ -9502,6 +9502,7 @@ async def admin_platform_stats(token_data: dict = Depends(verify_token)):
                 "SELECT COUNT(*) FROM bench_talk_conversations WHERE org_id = ?", (org_id,)
             ).fetchone()[0]
         except Exception:
+            conn.rollback()
             stats["total_conversations"] = 0
 
         # Reports by status
@@ -22595,6 +22596,7 @@ async def admin_normalize_leagues(token_data: dict = Depends(verify_token)):
                             table_results[variant] = result.rowcount
                             total_fixed += result.rowcount
                 except Exception as e:
+                    conn.rollback()
                     table_results[alias] = f"error: {str(e)}"
         if table_results:
             summary[f"{table}.{col}"] = table_results
@@ -22618,6 +22620,7 @@ async def admin_normalize_leagues(token_data: dict = Depends(verify_token)):
                             table_results[variant] = result.rowcount
                             total_fixed += result.rowcount
                 except Exception as e:
+                    conn.rollback()
                     table_results[alias] = f"error: {str(e)}"
         if table_results:
             summary[f"{table}.{col}"] = table_results
@@ -31270,15 +31273,20 @@ async def my_data_summary(token_data: dict = Depends(verify_token)):
         (org_id, user_id)
     ).fetchone()[0]
 
-    corrections = conn.execute(
-        "SELECT COUNT(*) FROM player_corrections WHERE org_id = ? AND user_id = ?",
-        (org_id, user_id)
-    ).fetchone()[0]
+    try:
+        corrections = conn.execute(
+            "SELECT COUNT(*) FROM player_corrections WHERE org_id = ? AND user_id = ?",
+            (org_id, user_id)
+        ).fetchone()[0]
 
-    corrections_approved = conn.execute(
-        "SELECT COUNT(*) FROM player_corrections WHERE org_id = ? AND user_id = ? AND status = 'approved'",
-        (org_id, user_id)
-    ).fetchone()[0]
+        corrections_approved = conn.execute(
+            "SELECT COUNT(*) FROM player_corrections WHERE org_id = ? AND user_id = ? AND status = 'approved'",
+            (org_id, user_id)
+        ).fetchone()[0]
+    except Exception:
+        conn.rollback()
+        corrections = 0
+        corrections_approved = 0
 
     reports = conn.execute(
         "SELECT COUNT(*) FROM reports WHERE org_id = ? AND created_by = ?",
