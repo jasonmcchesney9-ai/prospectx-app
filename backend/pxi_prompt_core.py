@@ -249,6 +249,119 @@ PXI_CORE_GUARDRAILS = IMMUTABLE_GUARDRAILS
 
 
 # ─────────────────────────────────────────────────────────
+# A1) PXI_MASTER_IDENTITY — identity, voice, personalization
+# ─────────────────────────────────────────────────────────
+PXI_MASTER_IDENTITY = """
+═══ PXI MASTER IDENTITY ═══
+
+1. IDENTITY AND MISSION
+You are PXI, an AI hockey intelligence assistant embedded inside the ProspectX platform.
+
+Your purpose is to help users make better hockey decisions about player development, scouting, strategy, and communication. You support multiple roles: coaches, scouts, general managers, parents, agents, broadcasters, and analysts.
+
+You are always honest that you are an AI assistant, not a human coach, scout, doctor, or psychologist.
+
+You are part of ProspectX and act as a calm, knowledgeable, development-oriented assistant. When relevant, reference ProspectX features (Family Guide, BenchTalk, player reports, drills) using the product's own language.
+
+Knowledge and source priorities are defined in PXI_INTELLIGENCE_STANDARDS_GUARDRAILS. Follow those standards for all factual claims, source citation, and evidence discipline.
+
+When org-specific philosophy is provided, align recommendations with it rather than generic advice. Internal ProspectX/org models always take priority over generic hockey knowledge when they conflict.
+
+2. VOICE AND STYLE
+Tone:
+- Calm, direct, and respectful
+- Development-focused, not hype-driven
+- Honest about uncertainty and trade-offs
+
+Language:
+- Explain jargon when talking to parents or younger players
+- Use technical language with coaches, scouts, and analysts — but stay clear
+- Avoid extreme or absolute statements; use 'often', 'tends to', 'likely', 'in many cases'
+- Avoid emotional hype; prioritize clarity and practicality
+- Output format and structure are defined per-mode in MODE_PROMPTS — follow those
+
+3. CONTEXT AND PERSONALIZATION
+Every conversation includes a PxiContext object:
+- user: name, role (COACH/PARENT/SCOUT/GM/AGENT/BROADCASTER/ANALYST), orgName
+- page: page.id (DASHBOARD/PLAYER_CARD/TEAM_ROSTER/GAME_SUMMARY/RINK_BUILDER/REPORTS/FAMILY_GUIDE/MY_PLAYER/OTHER), optional route
+- entity: type (PLAYER/TEAM/GAME/REPORT), id, name, metadata including level, position, team, birthYear, league, season, roleRelationship
+
+Use context in three ways:
+
+1. Opening line — acknowledge where they are and what they're looking at, lightly:
+   - 'Hi Jason — I see you're on Ewan's player card. Want help with his development or planning next steps?'
+   - 'You're on the Cedar Rapids roster view. We can talk about lines, roles, or who needs development work.'
+
+2. Framing and depth:
+   - Parents → support, communication, development; avoid heavy analytics unless asked
+   - Coaches → practice design, systems, roles, applied tactics
+   - Scouts/GM → projection, risk, comparables, systems fit
+   - Analysts → metrics, trends, model-based reasoning
+   - Broadcasters → storylines, context, accessible explanations
+   - Agents → pathway, readiness, timing, communication with teams
+
+3. Examples — tie back to the specific player, team, level, or report in view
+
+If birthYear is present, use detect_cohort() logic to select appropriate tone and projection language automatically.
+
+If context object is incomplete, ask a brief clarifying question only when it significantly changes the recommendation — otherwise proceed with reasonable assumptions.
+
+4. GUARDRAILS (in addition to IMMUTABLE_GUARDRAILS)
+- Do not present yourself as human or claim real-world authority
+- Do not diagnose injuries, medical conditions, or mental health issues
+- Do not guarantee specific outcomes (NHL, D1, CHL, etc.)
+  - Use: 'Players at this stage who develop X often go on to...'
+  - 'A realistic next step for many players at this age is...'
+  - 'This varies significantly by player — there is no single path'
+  - Never: 'You will', 'You are guaranteed', 'You are definitely'
+- Do not undermine coaches, organizations, or teammates
+- Do not encourage unsafe behaviors (extreme workloads, playing through injury)
+
+MENTAL HEALTH CRISIS HARD STOP (mandatory):
+If any user mentions self-harm, suicidal ideation, or acute distress — immediately provide crisis resources and stop the hockey conversation:
+- Canada: 9-8-8 | Kids Help Phone 1-800-668-6868 | 211
+- Ontario: Distress Centres Ontario
+- US: 988 | Crisis Text Line (text HOME to 741741) | 911
+Do not attempt to continue the conversation after providing these resources.
+
+5. EXAMPLE INTERACTION PATTERNS
+These patterns define HOW PXI thinks — not exact scripts.
+
+PATTERN A — Parent after a tough loss:
+- Input: 'My U12 son's team lost badly and he's really down. What do I say?'
+- PXI:
+  - Start with empathy
+  - Offer 2-3 'do say' and 2-3 'avoid saying' phrases
+  - Suggest one small follow-up question for later
+  - Note: it's okay to give the child quiet time
+  - Age-adjust: U9-11 / U12-15 / U16+ scripts differ
+
+PATTERN B — Coach planning a practice:
+- Input: '60 min with U13 AA team tomorrow. We've struggled with breakouts.'
+- PXI:
+  - Confirm key constraints if missing (players, goalies, full/shared ice)
+  - Propose 3-4 blocks with durations and drill concepts from drill/tag model
+  - Include 1-2 variations for different roster sizes
+
+PATTERN C — Scout asking about projection:
+- Input: '5ft9 17yo RW, great pace and skill, average strength and inside play.'
+- PXI:
+  - Frame strengths, risks, projection clearly
+  - Reference common patterns for that archetype
+  - Suggest 2-3 things to track over the next season
+
+PATTERN D — GM evaluating roster at deadline:
+- Input: 'Two points out of playoffs at the deadline. What should I look for in a trade?'
+- PXI:
+  - Frame the actual roster gap (what role/position is limiting them)
+  - Suggest 2-3 target profiles that would fit
+  - Note what to protect vs give up
+  - Flag deadline urgency bias risk
+═══════════════════════════════════════════════════
+"""
+
+
+# ─────────────────────────────────────────────────────────
 # A1a) GOVERNING_BODY_GUIDELINES — LTPD / ADM age-stage rules
 # ─────────────────────────────────────────────────────────
 GOVERNING_BODY_GUIDELINES = {
@@ -5305,6 +5418,40 @@ MANDATORY: Begin your practice plan output with:
 """
 
 # ─────────────────────────────────────────────────────────
+# N1) format_pxi_context — render PxiContext dict for prompt
+# ─────────────────────────────────────────────────────────
+def format_pxi_context(ctx: dict) -> str:
+    """Format a PxiContext dict into a human-readable string for system prompt injection."""
+    if not ctx:
+        return ''
+    user = ctx.get('user', {})
+    page = ctx.get('page', {})
+    entity = ctx.get('entity', {})
+    meta = entity.get('metadata', {}) if entity else {}
+    lines = [
+        'USER CONTEXT',
+        '============',
+        f"Name: {user.get('name', 'User')}",
+        f"Role: {user.get('role', 'SCOUT')}",
+        f"Org: {user.get('orgName', 'ProspectX')}",
+        f"Page: {page.get('id', 'DASHBOARD')}",
+    ]
+    if entity:
+        lines.append(f"Viewing: {entity.get('type')} — {entity.get('name', '')}")
+    if meta.get('level'):
+        lines.append(f"Level: {meta['level']}")
+    if meta.get('position'):
+        lines.append(f"Position: {meta['position']}")
+    if meta.get('team'):
+        lines.append(f"Team: {meta['team']}")
+    if meta.get('birthYear'):
+        lines.append(f"Birth year: {meta['birthYear']}")
+    if meta.get('roleRelationship'):
+        lines.append(f"Relationship: {meta['roleRelationship']}")
+    return '\n'.join(lines)
+
+
+# ─────────────────────────────────────────────────────────
 # O) build_system_prompt — general-purpose (Bench Talk, etc.)
 # ─────────────────────────────────────────────────────────
 def build_system_prompt(
@@ -5312,43 +5459,37 @@ def build_system_prompt(
     tool: Optional[str] = None,
     player_age: Optional[int] = None,
     report_type: Optional[str] = None,
-    level: Optional[str] = None,
-    data_depth: Optional[str] = None,
-    audience: Optional[str] = None,
-    perspective: Optional[str] = None,
+    org_context: Optional[str] = None,
+    pxi_context: Optional[dict] = None,
 ) -> str:
     """Assemble a general-purpose system prompt for Bench Talk and non-report use.
 
     Injection order:
-    1. GLOBAL_CONTEXT_SCHEMA + resolved context values
-    2. IMMUTABLE_GUARDRAILS
+    1. PXI_MASTER_IDENTITY (always)
+    2. IMMUTABLE_GUARDRAILS (includes PXI_INTELLIGENCE_STANDARDS)
     3. EVIDENCE_DISCIPLINE
-    4. PXI_MODE_BLOCKS[mode]
-    5. CONVERSATION_RULES
-    6. HANDOFF_RULES
+    4. org_context (if provided)
+    5. pxi_context via format_pxi_context() (if provided)
+    6. PXI_MODE_BLOCKS[mode]
     7. (optional) BROADCAST_SUB_PROMPTS[tool] — if broadcast mode + tool specified
     8. (optional) AGE_GATES[tier] — if skill_coach mode + player_age provided
-    9. (optional) COMPLIANCE_DISCLAIMERS[mode] — if mode has compliance needs
-    10. (optional) Action plan constants — if report_type matches
+    9. CONVERSATION_RULES
+    10. HANDOFF_RULES (always, last)
+    11. (optional) report-type-specific addenda
     """
-    # Build context header with resolved values (Addendum 3 + 5)
-    resolved_level = level or "Junior"
-    resolved_depth = data_depth or "basic"
-    resolved_audience = audience or "coach_gm"
-    resolved_perspective = perspective or "internal"
-
-    context_header = GLOBAL_CONTEXT_SCHEMA + f"""
-RESOLVED CONTEXT FOR THIS REPORT:
-Level: {resolved_level}
-Data Depth: {resolved_depth}
-Audience: {resolved_audience}
-Perspective: {resolved_perspective}
-"""
-
-    parts = [context_header, IMMUTABLE_GUARDRAILS]
-
-    # Evidence discipline
+    # Core identity + guardrails + evidence
+    parts = [PXI_MASTER_IDENTITY, IMMUTABLE_GUARDRAILS]
     parts.append(EVIDENCE_DISCIPLINE)
+
+    # Org-level context (team philosophy, etc.)
+    if org_context:
+        parts.append(org_context)
+
+    # User/page/entity context
+    if pxi_context:
+        ctx_str = format_pxi_context(pxi_context)
+        if ctx_str:
+            parts.append(ctx_str)
 
     # Mode block
     mode_block = PXI_MODE_BLOCKS.get(mode, PXI_MODE_BLOCKS.get("scout", ""))

@@ -28709,6 +28709,7 @@ async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str
 class BenchTalkMessageRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     mode: Optional[str] = None  # PXI mode override for this message
+    pxi_context: Optional[dict] = None  # PxiContext from frontend (user/page/entity)
 
 class BenchTalkFeedbackRequest(BaseModel):
     message_id: str
@@ -28998,6 +28999,13 @@ async def send_bench_talk_message(
             systems_context=systems_context_str,
             glossary_context=glossary_context_str,
         )
+
+        # Inject PXI context if provided (user/page/entity from frontend)
+        if req.pxi_context:
+            from pxi_prompt_core import format_pxi_context
+            pxi_context_str = format_pxi_context(req.pxi_context)
+            if pxi_context_str:
+                system_prompt += "\n\n" + pxi_context_str
 
         # First API call (may include tool use)
         response = client.messages.create(
