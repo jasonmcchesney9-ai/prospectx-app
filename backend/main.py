@@ -25514,14 +25514,14 @@ def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: 
     league_iq = []
 
     for ls in league_stats:
-        lgp = max(ls.get("gp", 1), 1)
-        lg = ls.get("g", 0)
-        la = ls.get("a", 0)
-        lp = ls.get("p", 0)
-        lpm = ls.get("plus_minus", 0)
-        lpim = ls.get("pim", 0)
-        lshots = ls.get("sog", 0) or ls.get("shots", 0) or 0
-        lshoot = ls.get("shooting_pct", None)
+        lgp = max(ls.get("gp") or 1, 1)
+        lg = ls.get("g") or 0
+        la = ls.get("a") or 0
+        lp = ls.get("p") or 0
+        lpm = ls.get("plus_minus") or 0
+        lpim = ls.get("pim") or 0
+        lshots = ls.get("sog") or ls.get("shots") or 0
+        lshoot = ls.get("shooting_pct") or None
         if lshoot is None and lshots > 0:
             lshoot = (lg / lshots) * 100
         elif lshoot is None:
@@ -26402,7 +26402,7 @@ async def auto_assign_teams_from_stats(
     players = conn.execute("""
         SELECT p.id, p.first_name, p.last_name, p.current_team, p.current_league,
                (SELECT ps.data_source FROM player_stats ps
-                WHERE ps.player_id = p.id ORDER BY ps.rowid DESC LIMIT 1) as latest_source
+                WHERE ps.player_id = p.id ORDER BY ps.created_at DESC LIMIT 1) as latest_source
         FROM players p
         WHERE p.org_id = ?
     """, (org_id,)).fetchall()
@@ -34024,7 +34024,7 @@ async def family_player_dashboard(player_id: str, token_data: dict = Depends(ver
         next_up = None
         # Check game_plans for upcoming
         upcoming_game = conn.execute("""
-            SELECT id, opponent, game_date, status FROM game_plans
+            SELECT id, opponent_team_name, game_date, status FROM game_plans
             WHERE org_id = ? AND game_date >= CURRENT_DATE
             ORDER BY game_date ASC LIMIT 1
         """, (org_id,)).fetchone()
@@ -34032,7 +34032,7 @@ async def family_player_dashboard(player_id: str, token_data: dict = Depends(ver
             next_up = {
                 "type": "game",
                 "id": upcoming_game["id"],
-                "opponent": upcoming_game["opponent"],
+                "opponent": upcoming_game["opponent_team_name"],
                 "date": upcoming_game["game_date"],
                 "status": upcoming_game["status"],
             }
