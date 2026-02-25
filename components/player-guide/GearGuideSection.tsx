@@ -56,8 +56,8 @@ export default function GearGuideSection() {
             onClick={() => setGearTab("skater")}
             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
               gearTab === "skater"
-                ? "bg-navy text-white shadow-sm"
-                : "text-gray-600 hover:text-navy"
+                ? "bg-navy text-white"
+                : "bg-navy/5 text-navy hover:bg-navy/10"
             }`}
           >
             Skater
@@ -66,8 +66,8 @@ export default function GearGuideSection() {
             onClick={() => setGearTab("goalie")}
             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
               gearTab === "goalie"
-                ? "bg-navy text-white shadow-sm"
-                : "text-gray-600 hover:text-navy"
+                ? "bg-navy text-white"
+                : "bg-navy/5 text-navy hover:bg-navy/10"
             }`}
           >
             Goalie

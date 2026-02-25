@@ -902,7 +902,7 @@ export default function PlayerDetailPage() {
         <div className="ice-stripe mb-6 rounded-b-full" />
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-teal/20 no-print">
+        <div className="flex gap-1 mb-6 no-print">
           {([
             { key: "profile" as Tab, label: "Profile", count: null },
             { key: "stats" as Tab, label: "Stats", count: stats.length },
@@ -914,10 +914,10 @@ export default function PlayerDetailPage() {
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`px-4 py-2.5 text-sm font-oswald uppercase tracking-wider border-b-2 transition-colors ${
+              className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
                 activeTab === key
-                  ? "border-teal text-teal font-semibold"
-                  : "border-transparent text-muted hover:text-navy"
+                  ? "bg-navy text-white"
+                  : "bg-navy/5 text-navy hover:bg-navy/10"
               }`}
             >
               {label}

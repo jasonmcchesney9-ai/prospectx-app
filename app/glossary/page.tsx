@@ -206,7 +206,7 @@ function GlossaryContent() {
           className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
             activeCategory === "all"
               ? "bg-navy text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              : "bg-navy/5 text-navy hover:bg-navy/10"
           }`}
         >
           All
@@ -220,7 +220,7 @@ function GlossaryContent() {
               key={cat}
               onClick={() => setActiveCategory(isActive ? "all" : cat)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition ${
-                isActive ? "bg-navy text-white" : `${bg} ${text} hover:opacity-80`
+                isActive ? "bg-navy text-white" : "bg-navy/5 text-navy hover:bg-navy/10"
               }`}
             >
               {cat}

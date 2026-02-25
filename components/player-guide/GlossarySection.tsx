@@ -152,7 +152,7 @@ export default function GlossarySection() {
               className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition ${
                 activeCategory === cat.key
                   ? "bg-navy text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  : "bg-navy/5 text-navy hover:bg-navy/10"
               }`}
             >
               {cat.label}
