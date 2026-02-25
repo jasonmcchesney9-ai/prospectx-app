@@ -41,6 +41,7 @@ import type {
   BenchTalkContextResponse,
   Player,
   Report,
+  PxiContext,
 } from "@/types/api";
 import { REPORT_TYPE_LABELS, TEAM_REPORT_TYPES } from "@/types/api";
 import UpgradeModal from "./UpgradeModal";
@@ -416,7 +417,10 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
 
 // ── Main Bench Talk Drawer ──────────────────────────────────
 export default function BenchTalkDrawer() {
-  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, roleOverride } = useBenchTalk();
+  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, pendingPxiContext, clearPendingPxiContext, roleOverride } = useBenchTalk();
+
+  // Page/entity context for this conversation
+  const [pageContext, setPageContext] = useState<PxiContext | null>(null);
 
   // Effective hockey role — respects admin preview override
   const effectiveHockeyRole = roleOverride || getUser()?.hockey_role;
@@ -471,9 +475,14 @@ export default function BenchTalkDrawer() {
     }
   }, [isOpen]);
 
-  // Handle pending message from other pages
+  // Handle pending message and context from other pages
   useEffect(() => {
     if (isOpen && pendingMessage && !loading) {
+      // Capture PXI context before clearing
+      if (pendingPxiContext) {
+        setPageContext(pendingPxiContext);
+        clearPendingPxiContext();
+      }
       sendMessage(pendingMessage);
       clearPendingMessage();
     }
@@ -622,7 +631,7 @@ export default function BenchTalkDrawer() {
     try {
       const res = await api.post<BenchTalkMessageResponse>(
         `/bench-talk/conversations/${convId}/messages`,
-        { message: messageText, mode: currentMode, role: pendingRole || getUser()?.hockey_role || null }
+        { message: messageText, mode: currentMode, role: pendingRole || getUser()?.hockey_role || null, pxi_context: pageContext }
       );
       setMessages((prev) => [...prev, res.data.message]);
       loadConversations();
@@ -683,7 +692,7 @@ export default function BenchTalkDrawer() {
   const isNewConversation = messages.length === 0 && !loading;
   const hasContext = contextPlayers.length > 0 || contextReports.length > 0;
 
-  // Role-specific suggestion chips for empty state
+  // Role-specific suggestion chips (fallback for roles/pages not in context matrix)
   const ROLE_SUGGESTION_CHIPS: Record<string, string[]> = {
     scout: ["Scout me a player", "Compare two players", "Who should I watch this week?"],
     coach: ["Build a game plan", "Suggest line combinations", "Give me a practice drill"],
@@ -695,6 +704,34 @@ export default function BenchTalkDrawer() {
     producer: ["Tonight's storylines", "Segment planning", "Graphics ideas"],
     skill_coach: ["Drill design for edges", "Practice drill for passing", "Technical development plan"],
     mental_coach: ["Build a pre-game routine", "Confidence strategies", "Focus techniques"],
+  };
+
+  // Context-aware chip matrix — keyed by role_pageId
+  const CONTEXT_CHIPS: Record<string, string[]> = {
+    // Scout chips by page
+    "scout_PLAYER_CARD": ["Scout this player", "Strengths & weaknesses", "System fit analysis"],
+    "scout_TEAM_ROSTER": ["Roster depth analysis", "Who's trending up?", "Identify trade targets"],
+    "scout_DASHBOARD": ["Scout me a player", "Compare two players", "Who should I watch?"],
+    // Coach chips by page
+    "coach_PLAYER_CARD": ["Development plan for this player", "Where do they fit in our lineup?", "Practice focus areas"],
+    "coach_TEAM_ROSTER": ["Line combination ideas", "Special teams optimization", "Team identity check"],
+    "coach_DASHBOARD": ["Build a game plan", "Suggest line combinations", "Practice drill ideas"],
+    // Parent chips by page
+    "parent_MY_PLAYER": ["How is my player doing?", "What should we focus on?", "Development milestones"],
+    "parent_PLAYER_CARD": ["Tell me about this player", "How do they compare?", "What are their strengths?"],
+    "parent_DASHBOARD": ["How is my player developing?", "What should I focus on?", "Explain this stat"],
+    // GM chips by page
+    "gm_PLAYER_CARD": ["Trade value assessment", "Contract projection", "Roster fit analysis"],
+    "gm_TEAM_ROSTER": ["Roster optimization", "Cap structure analysis", "Identify weak spots"],
+    "gm_DASHBOARD": ["Analyze my roster", "Suggest a trade target", "Who needs development?"],
+    // Agent chips by page
+    "agent_PLAYER_CARD": ["Client showcase prep", "Comparable players", "Pathway projection"],
+    "agent_DASHBOARD": ["Plan my client's pathway", "Generate a 90-day plan", "Readiness check"],
+    // Broadcast chips by page
+    "broadcast_DASHBOARD": ["Tonight's storylines", "Build a spotting board", "Interview questions"],
+    // Analyst chips by page
+    "analyst_PLAYER_CARD": ["Advanced stats breakdown", "Trend analysis", "Projection model"],
+    "analyst_DASHBOARD": ["Advanced stats breakdown", "Trend analysis", "Regression candidates"],
   };
 
   // Usage/limit state
@@ -881,7 +918,9 @@ export default function BenchTalkDrawer() {
               const rg = getRoleGroup(effectiveHockeyRole);
               const theme = BENCH_TALK_THEMES[rg];
               const modeKey = effectiveHockeyRole === "player" ? "parent" : (effectiveHockeyRole || "scout");
-              const chips = ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
+              // Context-aware chip resolution: role_pageId → role_DASHBOARD → fallback
+              const chipKey = `${modeKey}_${pageContext?.page?.id || "DASHBOARD"}`;
+              const chips = CONTEXT_CHIPS[chipKey] || CONTEXT_CHIPS[`${modeKey}_DASHBOARD`] || ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
               return (
             <div className="flex flex-col items-center justify-center h-full px-4">
               <div className="mb-3 drop-shadow-lg">
@@ -891,7 +930,26 @@ export default function BenchTalkDrawer() {
                 {effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}
               </h2>
               <p className="text-muted text-sm text-center mb-3 max-w-xs leading-relaxed">
-                Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.
+                {(() => {
+                  if (!pageContext?.entity) {
+                    return "Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.";
+                  }
+                  const eName = pageContext.entity.name || "this entity";
+                  const rel = pageContext.entity.metadata?.roleRelationship;
+                  switch (pageContext.entity.type) {
+                    case "PLAYER":
+                      if (rel === "MY_CHILD") return `You're viewing ${eName}'s profile. Ask me anything about their development, stats, or what to focus on next.`;
+                      return `Viewing ${eName}. Ask me anything — scouting report, stats breakdown, development outlook, system fit.`;
+                    case "TEAM":
+                      return `Viewing ${eName}. Ask me about roster depth, line combinations, system identity, or trade targets.`;
+                    case "GAME":
+                      return `Viewing ${eName}. Ask me about matchups, key players, tactical adjustments, or post-game analysis.`;
+                    case "REPORT":
+                      return `Viewing ${eName}. Ask me to explain findings, dive deeper into sections, or generate follow-up analysis.`;
+                    default:
+                      return "Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.";
+                  }
+                })()}
               </p>
 
               {/* Current mode badge */}

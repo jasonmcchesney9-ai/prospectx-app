@@ -1549,6 +1549,37 @@ export interface BenchTalkSuggestion {
   icon: string;
 }
 
+// ── PXI Context (assembled at call site, never inferred by BenchTalk) ──
+export type PxiContext = {
+  user: {
+    id: string;
+    name: string;
+    role: 'COACH' | 'PARENT' | 'SCOUT' | 'GM' | 'AGENT' | 'BROADCASTER' | 'ANALYST';
+    orgName: string;
+  };
+  page: {
+    id: 'DASHBOARD' | 'PLAYER_CARD' | 'TEAM_ROSTER' | 'GAME_SUMMARY'
+       | 'RINK_BUILDER' | 'REPORTS' | 'FAMILY_GUIDE' | 'MY_PLAYER'
+       | 'SETTINGS' | 'OTHER';
+    route?: string;
+  };
+  entity?: {
+    type: 'PLAYER' | 'TEAM' | 'GAME' | 'REPORT';
+    id: string;
+    name?: string;
+    metadata?: {
+      level?: string;
+      position?: string;
+      handedness?: string;
+      season?: string;
+      league?: string;
+      team?: string;
+      birthYear?: number;
+      roleRelationship?: 'MY_CHILD' | 'MY_PLAYER' | 'MY_TEAM' | 'OPPONENT';
+    };
+  };
+};
+
 // ── Subscription Types ──────────────────────────────────────
 export interface SubscriptionTier {
   name: string;

@@ -1,16 +1,19 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback } from "react";
+import type { PxiContext } from "@/types/api";
 
 interface BenchTalkContextType {
   isOpen: boolean;
   toggleBenchTalk: () => void;
-  openBenchTalk: (initialMessage?: string, role?: string) => void;
+  openBenchTalk: (initialMessage?: string, role?: string, pxiContext?: PxiContext) => void;
   closeBenchTalk: () => void;
   pendingMessage: string | null;
   clearPendingMessage: () => void;
   pendingRole: string | null;
   clearPendingRole: () => void;
+  pendingPxiContext: PxiContext | null;
+  clearPendingPxiContext: () => void;
   // Admin role preview
   roleOverride: string | null;
   setRoleOverride: (role: string | null) => void;
@@ -25,6 +28,8 @@ const BenchTalkContext = createContext<BenchTalkContextType>({
   clearPendingMessage: () => {},
   pendingRole: null,
   clearPendingRole: () => {},
+  pendingPxiContext: null,
+  clearPendingPxiContext: () => {},
   roleOverride: null,
   setRoleOverride: () => {},
 });
@@ -37,18 +42,22 @@ export default function BenchTalkProvider({ children }: { children: React.ReactN
   const [isOpen, setIsOpen] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<string | null>(null);
+  const [pendingPxiContext, setPendingPxiContext] = useState<PxiContext | null>(null);
   const [roleOverride, setRoleOverride] = useState<string | null>(null);
 
   const toggleBenchTalk = useCallback(() => {
     setIsOpen((prev) => !prev);
   }, []);
 
-  const openBenchTalk = useCallback((initialMessage?: string, role?: string) => {
+  const openBenchTalk = useCallback((initialMessage?: string, role?: string, pxiContext?: PxiContext) => {
     if (initialMessage) {
       setPendingMessage(initialMessage);
     }
     if (role) {
       setPendingRole(role);
+    }
+    if (pxiContext) {
+      setPendingPxiContext(pxiContext);
     }
     setIsOpen(true);
   }, []);
@@ -60,15 +69,20 @@ export default function BenchTalkProvider({ children }: { children: React.ReactN
   const clearPendingMessage = useCallback(() => {
     setPendingMessage(null);
     setPendingRole(null);
+    setPendingPxiContext(null);
   }, []);
 
   const clearPendingRole = useCallback(() => {
     setPendingRole(null);
   }, []);
 
+  const clearPendingPxiContext = useCallback(() => {
+    setPendingPxiContext(null);
+  }, []);
+
   return (
     <BenchTalkContext.Provider
-      value={{ isOpen, toggleBenchTalk, openBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, clearPendingRole, roleOverride, setRoleOverride }}
+      value={{ isOpen, toggleBenchTalk, openBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, clearPendingRole, pendingPxiContext, clearPendingPxiContext, roleOverride, setRoleOverride }}
     >
       {children}
     </BenchTalkContext.Provider>

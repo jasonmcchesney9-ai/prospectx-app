@@ -26,6 +26,7 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import FamilyGuideTiles from "@/components/FamilyGuideTiles";
 import type { Player, FamilyDashboard } from "@/types/api";
 
@@ -512,7 +513,11 @@ export default function MyPlayerPage() {
 
               {/* Ask PXI */}
               <button
-                onClick={() => openBenchTalk(`[Parent Mode] How is ${selectedPlayer.first_name} ${selectedPlayer.last_name} doing this season? Give me a plain-language summary.`)}
+                onClick={() => openBenchTalk(`[Parent Mode] How is ${selectedPlayer.first_name} ${selectedPlayer.last_name} doing this season? Give me a plain-language summary.`, "parent", {
+                  user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgName: "ProspectX" },
+                  page: { id: "MY_PLAYER" },
+                  entity: { type: "PLAYER", id: selectedPlayer.id, name: `${selectedPlayer.first_name} ${selectedPlayer.last_name}`, metadata: { position: selectedPlayer.position || undefined, team: selectedPlayer.current_team || undefined, league: selectedPlayer.current_league || undefined, roleRelationship: "MY_CHILD" } },
+                })}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg border border-purple-200 bg-purple-50/50 text-left hover:bg-purple-50 hover:border-purple-300 transition-all"
               >
                 <MessageSquare size={16} className="text-purple-600 shrink-0" />
@@ -693,7 +698,11 @@ export default function MyPlayerPage() {
         {selectedPlayer && (
           <FamilyGuideTiles
             selectedPlayer={selectedPlayer}
-            onAskPxi={(msg) => openBenchTalk(msg, "parent")}
+            onAskPxi={(msg) => openBenchTalk(msg, "parent", selectedPlayer ? {
+              user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgName: "ProspectX" },
+              page: { id: "MY_PLAYER" },
+              entity: { type: "PLAYER", id: selectedPlayer.id, name: `${selectedPlayer.first_name} ${selectedPlayer.last_name}`, metadata: { position: selectedPlayer.position || undefined, team: selectedPlayer.current_team || undefined, roleRelationship: "MY_CHILD" } },
+            } : undefined)}
             buildSeedMessage={buildSeedMessage}
             onSelectPlayer={() => setPickerOpen(true)}
           />
@@ -769,7 +778,11 @@ export default function MyPlayerPage() {
                 onClick={() => {
                   const ctx = AFTER_GAME_SCRIPTS[selectedEmotion!].emotionContext;
                   const msg = `I'm a hockey parent. My player just had a game and ${ctx}. What should I say \u2014 and what should I avoid \u2014 in the car ride home? Keep it short and practical.`;
-                  openBenchTalk(msg);
+                  openBenchTalk(msg, "parent", selectedPlayer ? {
+                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgName: "ProspectX" },
+                    page: { id: "MY_PLAYER" },
+                    entity: { type: "PLAYER", id: selectedPlayer.id, name: `${selectedPlayer.first_name} ${selectedPlayer.last_name}`, metadata: { position: selectedPlayer.position || undefined, team: selectedPlayer.current_team || undefined, roleRelationship: "MY_CHILD" } },
+                  } : undefined);
                 }}
                 className="w-full py-2 rounded-lg text-white text-xs font-bold font-oswald uppercase tracking-wider transition-all hover:opacity-90"
                 style={{ backgroundColor: "#0D9488" }}
