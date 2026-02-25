@@ -7554,10 +7554,22 @@ def seed_drills_v3():
 
 
 def generate_missing_diagrams():
-    """Generate SVG rink diagrams for any drills that don't have one yet."""
+    """Generate SVG rink diagrams for drills missing their diagram file.
+
+    Handles two cases:
+    1. diagram_url IS NULL  → brand-new drill, needs initial generation.
+    2. diagram_url is set but the file doesn't exist on disk → lost after
+       ephemeral-filesystem redeploy (e.g. Railway).  Re-generate from
+       the same concept_id / category / description used originally.
+    """
+    if generate_drill_diagram is None:
+        return
     conn = get_db()
+    # Fetch ALL drills that might need a diagram (including those with a URL
+    # whose file was wiped by a redeploy).
     rows = conn.execute(
-        "SELECT id, ice_surface, category, concept_id, description FROM drills WHERE diagram_url IS NULL"
+        "SELECT id, ice_surface, category, concept_id, description, diagram_url "
+        "FROM drills"
     ).fetchall()
     if not rows:
         conn.close()
@@ -7569,21 +7581,30 @@ def generate_missing_diagrams():
         category = row[2] or "offensive"
         concept_id = row[3]
         description = row[4] or ""
+        existing_url = row[5]
+
+        # Determine expected SVG path on disk
+        svg_filename = f"drill_{drill_id}.svg"
+        svg_path = os.path.join(_IMAGES_DIR, svg_filename)
+
+        # Skip if the file already exists on disk
+        if os.path.isfile(svg_path):
+            continue
+
         try:
             svg_content = generate_drill_diagram(ice_surface, category, concept_id, description)
-            svg_filename = f"drill_{drill_id}.svg"
-            svg_path = os.path.join(_IMAGES_DIR, svg_filename)
             with open(svg_path, "w", encoding="utf-8") as f:
                 f.write(svg_content)
             diagram_url = f"/uploads/{svg_filename}"
-            conn.execute("UPDATE drills SET diagram_url = ? WHERE id = ?", (diagram_url, drill_id))
+            if existing_url != diagram_url:
+                conn.execute("UPDATE drills SET diagram_url = ? WHERE id = ?", (diagram_url, drill_id))
             count += 1
         except Exception as e:
             logger.error("Failed to generate diagram for drill %s: %s", drill_id, e)
     conn.commit()
     conn.close()
     if count:
-        logger.info("Generated %d drill diagrams", count)
+        logger.info("Regenerated %d drill diagrams (missing files)", count)
 
 
 def _seed_superadmin_user():

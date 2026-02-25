@@ -407,6 +407,7 @@ export default function PracticePlanDetailPage() {
                                 src={assetUrl(d.drill_diagram_url)}
                                 alt={`${d.drill_name} diagram`}
                                 className="max-w-[300px] max-h-36 object-contain rounded border border-teal/8 bg-white p-1"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                               />
                             </div>
                           )}

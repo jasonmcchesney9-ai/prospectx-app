@@ -218,6 +218,7 @@ export default function DrillsPage() {
                             src={assetUrl(drill.diagram_url)}
                             alt={`${drill.name} diagram`}
                             className="w-full max-h-52 object-contain rounded-lg border border-teal/8 bg-white p-2"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         </div>
                       ) : (
