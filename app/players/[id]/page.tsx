@@ -1089,6 +1089,542 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
+        {/* Player Info + Archetype */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Bio Card */}
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
+                <User size={14} className="text-teal" /> Player Info
+              </h3>
+              <button
+                onClick={() => setEditingBio(!editingBio)}
+                className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+              >
+                {editingBio ? <X size={12} /> : <Edit3 size={12} />}
+                {editingBio ? "Cancel" : "Edit"}
+              </button>
+            </div>
+
+            {/* Inline edit form */}
+            {editingBio && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-teal/20 space-y-2">
+                {/* League */}
+                <div>
+                  <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
+                  {customLeague ? (
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={editFields.current_league}
+                        onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
+                        placeholder="Enter league name"
+                        className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setCustomLeague(false); setEditFields((f) => ({ ...f, current_league: "" })); }}
+                        className="text-[10px] text-teal hover:underline px-1 shrink-0"
+                      >
+                        List
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={editFields.current_league}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setCustomLeague(true);
+                          setEditFields((f) => ({ ...f, current_league: "", current_team: "" }));
+                          setCustomTeam(true);
+                        } else {
+                          setEditFields((f) => ({ ...f, current_league: e.target.value, current_team: "" }));
+                          setCustomTeam(false);
+                        }
+                      }}
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    >
+                      <option value="">Select league...</option>
+                      {editLeagues.map((lg) => (
+                        <option key={lg.id} value={lg.name}>{lg.name}</option>
+                      ))}
+                      <option value="__custom__">Custom...</option>
+                    </select>
+                  )}
+                </div>
+                {/* Team */}
+                <div>
+                  <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Team</label>
+                  {customTeam ? (
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={editFields.current_team}
+                        onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
+                        placeholder="Enter team name"
+                        className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      />
+                      {!customLeague && (
+                        <button
+                          type="button"
+                          onClick={() => { setCustomTeam(false); setEditFields((f) => ({ ...f, current_team: "" })); }}
+                          className="text-[10px] text-teal hover:underline px-1 shrink-0"
+                        >
+                          List
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      value={editFields.current_team}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setCustomTeam(true);
+                          setEditFields((f) => ({ ...f, current_team: "" }));
+                        } else {
+                          setEditFields((f) => ({ ...f, current_team: e.target.value }));
+                        }
+                      }}
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    >
+                      <option value="">Select team...</option>
+                      {filteredEditTeams.map((t) => (
+                        <option key={t.id} value={t.name}>{t.name}{t.city ? ` (${t.city})` : ""}</option>
+                      ))}
+                      <option value="__custom__">Custom...</option>
+                    </select>
+                  )}
+                </div>
+                {/* Position, Shoots, DOB */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Position</label>
+                    <select
+                      value={editFields.position}
+                      onChange={(e) => setEditFields((f) => ({ ...f, position: e.target.value }))}
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    >
+                      <option value="C">Center</option>
+                      <option value="LW">Left Wing</option>
+                      <option value="RW">Right Wing</option>
+                      <option value="D">Defense</option>
+                      <option value="G">Goalie</option>
+                      <option value="F">Forward</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Shoots</label>
+                    <select
+                      value={editFields.shoots}
+                      onChange={(e) => setEditFields((f) => ({ ...f, shoots: e.target.value }))}
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    >
+                      <option value="">—</option>
+                      <option value="L">Left</option>
+                      <option value="R">Right</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">DOB</label>
+                    <input
+                      type="date"
+                      value={editFields.dob}
+                      onChange={(e) => setEditFields((f) => ({ ...f, dob: e.target.value }))}
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    />
+                  </div>
+                </div>
+                {/* Height & Weight */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Height (cm)</label>
+                    <input
+                      type="number"
+                      value={editFields.height_cm}
+                      onChange={(e) => setEditFields((f) => ({ ...f, height_cm: e.target.value }))}
+                      placeholder="e.g. 183"
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Weight (kg)</label>
+                    <input
+                      type="number"
+                      value={editFields.weight_kg}
+                      onChange={(e) => setEditFields((f) => ({ ...f, weight_kg: e.target.value }))}
+                      placeholder="e.g. 82"
+                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  className="w-full mt-2 bg-teal text-white py-1.5 rounded text-xs font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {savingEdit ? "Saving..." : <><Save size={12} /> Save Changes</>}
+                </button>
+                {editError && <p className="text-xs text-red-500 mt-1">{editError}</p>}
+              </div>
+            )}
+
+            {/* Player Photo Upload */}
+            <div className="flex items-center gap-4 mb-4 pb-4 border-b border-teal/10">
+              <div className="relative group">
+                {hasRealImage(player.image_url) ? (
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-teal/20 bg-navy/5">
+                    <img
+                      src={assetUrl(player.image_url)}
+                      alt={`${player.first_name} ${player.last_name}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded-lg border-2 border-dashed border-teal/20 bg-navy/[0.02] flex items-center justify-center">
+                    <Camera size={24} className="text-muted/30" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted mb-1.5">Player Photo</p>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal border border-teal/20 hover:bg-teal/20 transition-colors">
+                    <Camera size={12} />
+                    {uploadingImage ? "Uploading..." : hasRealImage(player.image_url) ? "Change" : "Upload"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleImageUpload}
+                      disabled={uploadingImage}
+                      className="hidden"
+                    />
+                  </label>
+                  {hasRealImage(player.image_url) && (
+                    <button
+                      onClick={handleImageDelete}
+                      className="text-xs text-muted hover:text-red-600 transition-colors"
+                      title="Remove photo"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted/50 mt-1">JPG, PNG, or WebP. Max 5 MB.</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted">Position</span>
+                <span className="font-semibold text-navy">{fullPosition(player.position)}</span>
+              </div>
+              {player.shoots && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Shoots</span>
+                  <span className="font-semibold text-navy">{player.shoots}</span>
+                </div>
+              )}
+              {player.dob && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Date of Birth</span>
+                  <span className="font-semibold text-navy">
+                    {player.dob}
+                    <span className="text-xs text-muted ml-1.5">
+                      (Age {(() => {
+                        const birth = new Date(player.dob!);
+                        const today = new Date();
+                        let age = today.getFullYear() - birth.getFullYear();
+                        const m = today.getMonth() - birth.getMonth();
+                        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+                        return age;
+                      })()})
+                    </span>
+                  </span>
+                </div>
+              )}
+              {player.height_cm && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Height</span>
+                  <span className="font-semibold text-navy">
+                    {Math.floor(player.height_cm / 2.54 / 12)}&apos;{Math.round(player.height_cm / 2.54 % 12)}&quot;
+                    <span className="text-xs text-muted ml-1">({player.height_cm}cm)</span>
+                  </span>
+                </div>
+              )}
+              {player.weight_kg && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Weight</span>
+                  <span className="font-semibold text-navy">
+                    {Math.round(player.weight_kg * 2.205)} lbs
+                    <span className="text-xs text-muted ml-1">({player.weight_kg}kg)</span>
+                  </span>
+                </div>
+              )}
+              {player.current_team && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Team</span>
+                  <span className="font-semibold text-navy">
+                    {player.current_team}
+                    {player.current_league && <span className="text-xs text-muted ml-1">({formatLeague(player.current_league)})</span>}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setTransferLeague(player.current_league || "");
+                    setTransferTeam("");
+                    setTransferNote("");
+                    setTransferCustomLeague(false);
+                    setTransferCustomTeam(false);
+                    setShowTransferModal(true);
+                  }}
+                  className="text-[10px] text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+                >
+                  <ArrowRightLeft size={10} /> Change Team
+                </button>
+              </div>
+              {player.league_tier && player.league_tier !== "Unknown" && (
+                <div className="flex justify-between">
+                  <span className="text-muted">League Tier</span>
+                  <span className="font-semibold text-navy text-xs">{player.league_tier}</span>
+                </div>
+              )}
+              {player.age_group && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Age Group</span>
+                  <span className={`font-semibold text-xs px-1.5 py-0.5 rounded ${
+                    player.age_group === "U16" ? "bg-green-50 text-green-700" :
+                    player.age_group === "U18" ? "bg-blue-50 text-blue-700" :
+                    player.age_group === "U20" ? "bg-orange/10 text-orange" :
+                    "bg-gray-50 text-gray-600"
+                  }`}>{player.age_group}</span>
+                </div>
+              )}
+              {player.draft_eligible_year && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Draft Eligible</span>
+                  <span className="font-semibold text-navy">{player.draft_eligible_year}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-muted">Status</span>
+                <select
+                  value={player.commitment_status || "Uncommitted"}
+                  onChange={async (e) => {
+                    const newStatus = e.target.value;
+                    try {
+                      await api.patch(`/players/${playerId}`, { commitment_status: newStatus });
+                      setPlayer((prev) => prev ? { ...prev, commitment_status: newStatus } : prev);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
+                    COMMITMENT_STATUS_COLORS[player.commitment_status || "Uncommitted"]?.text || "text-gray-600"
+                  }`}
+                >
+                  {COMMITMENT_STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted">Roster Status</span>
+                <select
+                  value={player.roster_status || "active"}
+                  onChange={async (e) => {
+                    const newStatus = e.target.value;
+                    try {
+                      await api.patch(`/players/${playerId}`, { roster_status: newStatus });
+                      setPlayer((prev) => prev ? { ...prev, roster_status: newStatus } : prev);
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
+                    (player.roster_status || "active") === "active" ? "text-green-600" :
+                    (player.roster_status || "active") === "inj" ? "text-red-600" :
+                    (player.roster_status || "active") === "susp" ? "text-yellow-600" :
+                    (player.roster_status || "active") === "ap" ? "text-blue-600" :
+                    (player.roster_status || "active") === "scrch" ? "text-gray-500" :
+                    "text-gray-600"
+                  }`}
+                >
+                  {[
+                    { value: "active", label: "Active" },
+                    { value: "ap", label: "AP (Affiliated Player)" },
+                    { value: "inj", label: "INJ (Injured)" },
+                    { value: "susp", label: "SUSP (Suspended)" },
+                    { value: "scrch", label: "SCRCH (Healthy Scratch)" },
+                  ].map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              {player.passports && player.passports.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Nationality</span>
+                  <span className="font-semibold text-navy">{player.passports.join(", ")}</span>
+                </div>
+              )}
+              {player.tags && player.tags.length > 0 && (
+                <div className="pt-2 border-t border-teal/10">
+                  <span className="text-xs text-muted">Tags</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {player.tags.map((tag) => (
+                      <span key={tag} className="px-2 py-0.5 text-xs bg-navy/5 text-navy/70 rounded-full">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {player.elite_prospects_url && (
+                <div className="pt-2 border-t border-teal/10">
+                  <a
+                    href={player.elite_prospects_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-teal hover:text-teal/80 transition-colors"
+                  >
+                    <ExternalLink size={14} />
+                    Elite Prospects Profile
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Archetype Card */}
+          <div className="bg-white rounded-xl border border-teal/20 p-5">
+            <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+              <Activity size={14} className="text-orange" /> Player Archetype
+            </h3>
+            {!editingArchetype ? (
+              <div>
+                {player.archetype ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-semibold text-navy">{player.archetype}</span>
+                    <button
+                      onClick={() => setEditingArchetype(true)}
+                      className="text-xs text-muted hover:text-teal transition-colors"
+                    >
+                      <Edit3 size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingArchetype(true)}
+                    className="text-xs text-teal hover:underline"
+                  >
+                    + Assign archetype
+                  </button>
+                )}
+                {player.archetype && (
+                  <p className="text-xs text-muted/70 mt-2 leading-relaxed">
+                    Compound archetypes help the AI understand the full player profile for system fit analysis.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="text"
+                  value={archetypeValue}
+                  onChange={(e) => setArchetypeValue(e.target.value)}
+                  placeholder="e.g., Two-Way Playmaking Forward"
+                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
+                  autoFocus
+                />
+                <p className="text-[10px] text-muted/60 mb-2">Click traits below to build a compound archetype, or type your own:</p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {([
+                    { group: "Style", chips: ["Two-Way", "Offensive", "Defensive", "Physical", "Speed", "Playmaking", "Sniper", "Power", "Shutdown"] },
+                    { group: "Role", chips: ["Forward", "Center", "Winger", "Defenseman", "Goalie"] },
+                    { group: "Traits", chips: ["Elite IQ", "Net-Front", "Transition", "Puck-Moving", "Grinder", "Energy", "Checking", "Hybrid"] },
+                  ] as const).map(({ group, chips }) => (
+                    <div key={group} className="flex flex-wrap items-center gap-1">
+                      <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/50 mr-0.5">{group}:</span>
+                      {chips.map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => {
+                            const current = archetypeValue.trim();
+                            if (current && !current.endsWith(" ")) {
+                              setArchetypeValue(current + " " + chip);
+                            } else {
+                              setArchetypeValue((current + " " + chip).trim());
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[10px] rounded-full border border-teal/20 hover:border-teal/50 hover:bg-teal/5 text-navy/70 transition-colors"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.put(`/players/${playerId}`, {
+                          ...player,
+                          archetype: archetypeValue.trim() || null,
+                        });
+                        setPlayer({ ...player, archetype: archetypeValue.trim() || null });
+                        setEditingArchetype(false);
+                      } catch {
+                        toast.error("Failed to save archetype");
+                      }
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+                  >
+                    <Save size={12} /> Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setArchetypeValue(player.archetype || "");
+                      setEditingArchetype(false);
+                    }}
+                    className="px-3 py-1.5 text-xs text-muted hover:text-navy transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  {archetypeValue && (
+                    <button
+                      onClick={() => setArchetypeValue("")}
+                      className="px-2 py-1 text-xs text-muted/60 hover:text-red-500 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ProspectX Metrics */}
+            {(playerMetrics || stats.length > 0) && (
+              <div className="mt-4 pt-4 border-t border-teal/10">
+                <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-0.5">
+                  ProspectX Metrics
+                </h4>
+                <p className="text-[10px] text-muted/50 mb-2">
+                  PXI scores across 6 dimensions — derived from stats, scouting notes, and AI analysis
+                </p>
+                {playerMetrics ? (
+                  <>
+                    <MetricsRadarChart indices={playerMetrics} />
+                    <ProspectXMetricsPanel indices={playerMetrics} />
+                  </>
+                ) : (
+                  <QuickMetrics stats={stats} position={player.position} />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* SeasonSnapshot — current season stats bar + trendline */}
         {(() => {
           // Find current season stats — prefer most recent season entry
@@ -1276,542 +1812,6 @@ export default function PlayerDetailPage() {
         {/* Profile Tab */}
         {activeTab === "profile" && (
           <section className="space-y-6">
-            {/* Player Info + Archetype */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Bio Card */}
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                    <User size={14} className="text-teal" /> Player Info
-                  </h3>
-                  <button
-                    onClick={() => setEditingBio(!editingBio)}
-                    className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
-                  >
-                    {editingBio ? <X size={12} /> : <Edit3 size={12} />}
-                    {editingBio ? "Cancel" : "Edit"}
-                  </button>
-                </div>
-
-                {/* Inline edit form */}
-                {editingBio && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-teal/20 space-y-2">
-                    {/* League */}
-                    <div>
-                      <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
-                      {customLeague ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={editFields.current_league}
-                            onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
-                            placeholder="Enter league name"
-                            className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => { setCustomLeague(false); setEditFields((f) => ({ ...f, current_league: "" })); }}
-                            className="text-[10px] text-teal hover:underline px-1 shrink-0"
-                          >
-                            List
-                          </button>
-                        </div>
-                      ) : (
-                        <select
-                          value={editFields.current_league}
-                          onChange={(e) => {
-                            if (e.target.value === "__custom__") {
-                              setCustomLeague(true);
-                              setEditFields((f) => ({ ...f, current_league: "", current_team: "" }));
-                              setCustomTeam(true);
-                            } else {
-                              setEditFields((f) => ({ ...f, current_league: e.target.value, current_team: "" }));
-                              setCustomTeam(false);
-                            }
-                          }}
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        >
-                          <option value="">Select league...</option>
-                          {editLeagues.map((lg) => (
-                            <option key={lg.id} value={lg.name}>{lg.name}</option>
-                          ))}
-                          <option value="__custom__">Custom...</option>
-                        </select>
-                      )}
-                    </div>
-                    {/* Team */}
-                    <div>
-                      <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Team</label>
-                      {customTeam ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={editFields.current_team}
-                            onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
-                            placeholder="Enter team name"
-                            className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                          />
-                          {!customLeague && (
-                            <button
-                              type="button"
-                              onClick={() => { setCustomTeam(false); setEditFields((f) => ({ ...f, current_team: "" })); }}
-                              className="text-[10px] text-teal hover:underline px-1 shrink-0"
-                            >
-                              List
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <select
-                          value={editFields.current_team}
-                          onChange={(e) => {
-                            if (e.target.value === "__custom__") {
-                              setCustomTeam(true);
-                              setEditFields((f) => ({ ...f, current_team: "" }));
-                            } else {
-                              setEditFields((f) => ({ ...f, current_team: e.target.value }));
-                            }
-                          }}
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        >
-                          <option value="">Select team...</option>
-                          {filteredEditTeams.map((t) => (
-                            <option key={t.id} value={t.name}>{t.name}{t.city ? ` (${t.city})` : ""}</option>
-                          ))}
-                          <option value="__custom__">Custom...</option>
-                        </select>
-                      )}
-                    </div>
-                    {/* Position, Shoots, DOB */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Position</label>
-                        <select
-                          value={editFields.position}
-                          onChange={(e) => setEditFields((f) => ({ ...f, position: e.target.value }))}
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        >
-                          <option value="C">Center</option>
-                          <option value="LW">Left Wing</option>
-                          <option value="RW">Right Wing</option>
-                          <option value="D">Defense</option>
-                          <option value="G">Goalie</option>
-                          <option value="F">Forward</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Shoots</label>
-                        <select
-                          value={editFields.shoots}
-                          onChange={(e) => setEditFields((f) => ({ ...f, shoots: e.target.value }))}
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        >
-                          <option value="">—</option>
-                          <option value="L">Left</option>
-                          <option value="R">Right</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">DOB</label>
-                        <input
-                          type="date"
-                          value={editFields.dob}
-                          onChange={(e) => setEditFields((f) => ({ ...f, dob: e.target.value }))}
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        />
-                      </div>
-                    </div>
-                    {/* Height & Weight */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Height (cm)</label>
-                        <input
-                          type="number"
-                          value={editFields.height_cm}
-                          onChange={(e) => setEditFields((f) => ({ ...f, height_cm: e.target.value }))}
-                          placeholder="e.g. 183"
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Weight (kg)</label>
-                        <input
-                          type="number"
-                          value={editFields.weight_kg}
-                          onChange={(e) => setEditFields((f) => ({ ...f, weight_kg: e.target.value }))}
-                          placeholder="e.g. 82"
-                          className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleSaveEdit}
-                      disabled={savingEdit}
-                      className="w-full mt-2 bg-teal text-white py-1.5 rounded text-xs font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
-                    >
-                      {savingEdit ? "Saving..." : <><Save size={12} /> Save Changes</>}
-                    </button>
-                    {editError && <p className="text-xs text-red-500 mt-1">{editError}</p>}
-                  </div>
-                )}
-
-                {/* Player Photo Upload */}
-                <div className="flex items-center gap-4 mb-4 pb-4 border-b border-teal/10">
-                  <div className="relative group">
-                    {hasRealImage(player.image_url) ? (
-                      <div className="w-20 h-20 rounded-lg overflow-hidden border border-teal/20 bg-navy/5">
-                        <img
-                          src={assetUrl(player.image_url)}
-                          alt={`${player.first_name} ${player.last_name}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-20 h-20 rounded-lg border-2 border-dashed border-teal/20 bg-navy/[0.02] flex items-center justify-center">
-                        <Camera size={24} className="text-muted/30" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-muted mb-1.5">Player Photo</p>
-                    <div className="flex items-center gap-2">
-                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal border border-teal/20 hover:bg-teal/20 transition-colors">
-                        <Camera size={12} />
-                        {uploadingImage ? "Uploading..." : hasRealImage(player.image_url) ? "Change" : "Upload"}
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={handleImageUpload}
-                          disabled={uploadingImage}
-                          className="hidden"
-                        />
-                      </label>
-                      {hasRealImage(player.image_url) && (
-                        <button
-                          onClick={handleImageDelete}
-                          className="text-xs text-muted hover:text-red-600 transition-colors"
-                          title="Remove photo"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-muted/50 mt-1">JPG, PNG, or WebP. Max 5 MB.</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted">Position</span>
-                    <span className="font-semibold text-navy">{fullPosition(player.position)}</span>
-                  </div>
-                  {player.shoots && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Shoots</span>
-                      <span className="font-semibold text-navy">{player.shoots}</span>
-                    </div>
-                  )}
-                  {player.dob && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Date of Birth</span>
-                      <span className="font-semibold text-navy">
-                        {player.dob}
-                        <span className="text-xs text-muted ml-1.5">
-                          (Age {(() => {
-                            const birth = new Date(player.dob!);
-                            const today = new Date();
-                            let age = today.getFullYear() - birth.getFullYear();
-                            const m = today.getMonth() - birth.getMonth();
-                            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-                            return age;
-                          })()})
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                  {player.height_cm && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Height</span>
-                      <span className="font-semibold text-navy">
-                        {Math.floor(player.height_cm / 2.54 / 12)}&apos;{Math.round(player.height_cm / 2.54 % 12)}&quot;
-                        <span className="text-xs text-muted ml-1">({player.height_cm}cm)</span>
-                      </span>
-                    </div>
-                  )}
-                  {player.weight_kg && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Weight</span>
-                      <span className="font-semibold text-navy">
-                        {Math.round(player.weight_kg * 2.205)} lbs
-                        <span className="text-xs text-muted ml-1">({player.weight_kg}kg)</span>
-                      </span>
-                    </div>
-                  )}
-                  {player.current_team && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Team</span>
-                      <span className="font-semibold text-navy">
-                        {player.current_team}
-                        {player.current_league && <span className="text-xs text-muted ml-1">({formatLeague(player.current_league)})</span>}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        setTransferLeague(player.current_league || "");
-                        setTransferTeam("");
-                        setTransferNote("");
-                        setTransferCustomLeague(false);
-                        setTransferCustomTeam(false);
-                        setShowTransferModal(true);
-                      }}
-                      className="text-[10px] text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
-                    >
-                      <ArrowRightLeft size={10} /> Change Team
-                    </button>
-                  </div>
-                  {player.league_tier && player.league_tier !== "Unknown" && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">League Tier</span>
-                      <span className="font-semibold text-navy text-xs">{player.league_tier}</span>
-                    </div>
-                  )}
-                  {player.age_group && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Age Group</span>
-                      <span className={`font-semibold text-xs px-1.5 py-0.5 rounded ${
-                        player.age_group === "U16" ? "bg-green-50 text-green-700" :
-                        player.age_group === "U18" ? "bg-blue-50 text-blue-700" :
-                        player.age_group === "U20" ? "bg-orange/10 text-orange" :
-                        "bg-gray-50 text-gray-600"
-                      }`}>{player.age_group}</span>
-                    </div>
-                  )}
-                  {player.draft_eligible_year && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Draft Eligible</span>
-                      <span className="font-semibold text-navy">{player.draft_eligible_year}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted">Status</span>
-                    <select
-                      value={player.commitment_status || "Uncommitted"}
-                      onChange={async (e) => {
-                        const newStatus = e.target.value;
-                        try {
-                          await api.patch(`/players/${playerId}`, { commitment_status: newStatus });
-                          setPlayer((prev) => prev ? { ...prev, commitment_status: newStatus } : prev);
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
-                        COMMITMENT_STATUS_COLORS[player.commitment_status || "Uncommitted"]?.text || "text-gray-600"
-                      }`}
-                    >
-                      {COMMITMENT_STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted">Roster Status</span>
-                    <select
-                      value={player.roster_status || "active"}
-                      onChange={async (e) => {
-                        const newStatus = e.target.value;
-                        try {
-                          await api.patch(`/players/${playerId}`, { roster_status: newStatus });
-                          setPlayer((prev) => prev ? { ...prev, roster_status: newStatus } : prev);
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                      className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
-                        (player.roster_status || "active") === "active" ? "text-green-600" :
-                        (player.roster_status || "active") === "inj" ? "text-red-600" :
-                        (player.roster_status || "active") === "susp" ? "text-yellow-600" :
-                        (player.roster_status || "active") === "ap" ? "text-blue-600" :
-                        (player.roster_status || "active") === "scrch" ? "text-gray-500" :
-                        "text-gray-600"
-                      }`}
-                    >
-                      {[
-                        { value: "active", label: "Active" },
-                        { value: "ap", label: "AP (Affiliated Player)" },
-                        { value: "inj", label: "INJ (Injured)" },
-                        { value: "susp", label: "SUSP (Suspended)" },
-                        { value: "scrch", label: "SCRCH (Healthy Scratch)" },
-                      ].map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {player.passports && player.passports.length > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted">Nationality</span>
-                      <span className="font-semibold text-navy">{player.passports.join(", ")}</span>
-                    </div>
-                  )}
-                  {player.tags && player.tags.length > 0 && (
-                    <div className="pt-2 border-t border-teal/10">
-                      <span className="text-xs text-muted">Tags</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {player.tags.map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 text-xs bg-navy/5 text-navy/70 rounded-full">{tag}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {player.elite_prospects_url && (
-                    <div className="pt-2 border-t border-teal/10">
-                      <a
-                        href={player.elite_prospects_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm text-teal hover:text-teal/80 transition-colors"
-                      >
-                        <ExternalLink size={14} />
-                        Elite Prospects Profile
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Archetype Card */}
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
-                  <Activity size={14} className="text-orange" /> Player Archetype
-                </h3>
-                {!editingArchetype ? (
-                  <div>
-                    {player.archetype ? (
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg font-semibold text-navy">{player.archetype}</span>
-                        <button
-                          onClick={() => setEditingArchetype(true)}
-                          className="text-xs text-muted hover:text-teal transition-colors"
-                        >
-                          <Edit3 size={12} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setEditingArchetype(true)}
-                        className="text-xs text-teal hover:underline"
-                      >
-                        + Assign archetype
-                      </button>
-                    )}
-                    {player.archetype && (
-                      <p className="text-xs text-muted/70 mt-2 leading-relaxed">
-                        Compound archetypes help the AI understand the full player profile for system fit analysis.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <input
-                      type="text"
-                      value={archetypeValue}
-                      onChange={(e) => setArchetypeValue(e.target.value)}
-                      placeholder="e.g., Two-Way Playmaking Forward"
-                      className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
-                      autoFocus
-                    />
-                    <p className="text-[10px] text-muted/60 mb-2">Click traits below to build a compound archetype, or type your own:</p>
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {([
-                        { group: "Style", chips: ["Two-Way", "Offensive", "Defensive", "Physical", "Speed", "Playmaking", "Sniper", "Power", "Shutdown"] },
-                        { group: "Role", chips: ["Forward", "Center", "Winger", "Defenseman", "Goalie"] },
-                        { group: "Traits", chips: ["Elite IQ", "Net-Front", "Transition", "Puck-Moving", "Grinder", "Energy", "Checking", "Hybrid"] },
-                      ] as const).map(({ group, chips }) => (
-                        <div key={group} className="flex flex-wrap items-center gap-1">
-                          <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/50 mr-0.5">{group}:</span>
-                          {chips.map((chip) => (
-                            <button
-                              key={chip}
-                              type="button"
-                              onClick={() => {
-                                const current = archetypeValue.trim();
-                                if (current && !current.endsWith(" ")) {
-                                  setArchetypeValue(current + " " + chip);
-                                } else {
-                                  setArchetypeValue((current + " " + chip).trim());
-                                }
-                              }}
-                              className="px-2 py-0.5 text-[10px] rounded-full border border-teal/20 hover:border-teal/50 hover:bg-teal/5 text-navy/70 transition-colors"
-                            >
-                              {chip}
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api.put(`/players/${playerId}`, {
-                              ...player,
-                              archetype: archetypeValue.trim() || null,
-                            });
-                            setPlayer({ ...player, archetype: archetypeValue.trim() || null });
-                            setEditingArchetype(false);
-                          } catch {
-                            toast.error("Failed to save archetype");
-                          }
-                        }}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-                      >
-                        <Save size={12} /> Save
-                      </button>
-                      <button
-                        onClick={() => {
-                          setArchetypeValue(player.archetype || "");
-                          setEditingArchetype(false);
-                        }}
-                        className="px-3 py-1.5 text-xs text-muted hover:text-navy transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      {archetypeValue && (
-                        <button
-                          onClick={() => setArchetypeValue("")}
-                          className="px-2 py-1 text-xs text-muted/60 hover:text-red-500 transition-colors"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ProspectX Metrics */}
-                {(playerMetrics || stats.length > 0) && (
-                  <div className="mt-4 pt-4 border-t border-teal/10">
-                    <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-0.5">
-                      ProspectX Metrics
-                    </h4>
-                    <p className="text-[10px] text-muted/50 mb-2">
-                      PXI scores across 6 dimensions — derived from stats, scouting notes, and AI analysis
-                    </p>
-                    {playerMetrics ? (
-                      <>
-                        <MetricsRadarChart indices={playerMetrics} />
-                        <ProspectXMetricsPanel indices={playerMetrics} />
-                      </>
-                    ) : (
-                      <QuickMetrics stats={stats} position={player.position} />
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* ── PXI Scout Summary Panel ── */}
             {intelligence && intelligence.version > 0 && (
               <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
