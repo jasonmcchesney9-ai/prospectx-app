@@ -11418,19 +11418,24 @@ async def search_players_autocomplete(
     org_id = token_data["org_id"]
     conn = get_db()
     pattern = f"%{q}%"
+    prefix = f"{q}%"
     rows = conn.execute(
-        """SELECT id, first_name, last_name, current_team, position, jersey_number
+        """SELECT id, first_name, last_name, current_team, position, jersey_number,
+                  CASE
+                    WHEN first_name LIKE ? OR last_name LIKE ? THEN 0
+                    ELSE 1
+                  END AS relevance
            FROM players
            WHERE org_id = ?
              AND (is_deleted = 0 OR is_deleted IS NULL)
              AND (first_name LIKE ? OR last_name LIKE ? OR (first_name || ' ' || last_name) LIKE ?)
            GROUP BY id
-           ORDER BY last_name, first_name
+           ORDER BY relevance, last_name, first_name
            LIMIT ?""",
-        (org_id, pattern, pattern, pattern, limit),
+        (prefix, prefix, org_id, pattern, pattern, pattern, limit),
     ).fetchall()
     conn.close()
-    return {"results": [dict(r) for r in rows]}
+    return {"results": [{k: v for k, v in dict(r).items() if k != "relevance"} for r in rows]}
 
 # ── Saved Searches ────────────────────────────────────────────
 
