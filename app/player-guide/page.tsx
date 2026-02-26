@@ -22,7 +22,6 @@ import GlossarySection from "@/components/player-guide/GlossarySection";
 import PXIQuickAsk from "@/components/player-guide/PXIQuickAsk";
 import ParentDoDontCard from "@/components/player-guide/ParentDoDontCard";
 import PressureConfidenceTool from "@/components/player-guide/PressureConfidenceTool";
-import CarRideScript from "@/components/player-guide/CarRideScript";
 
 /* ---------- Section definitions ---------- */
 interface GuideSection {
@@ -40,7 +39,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "nutrition",
     icon: Apple,
-    title: "Nutrition",
+    title: "Ask PXI: Nutrition",
     desc: "Game-day meal patterns by age, hydration, and recovery nutrition for young athletes.",
     color: "text-green-600",
     bg: "bg-green-50",
@@ -50,7 +49,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "workouts",
     icon: Dumbbell,
-    title: "Workouts",
+    title: "Ask PXI: Workouts",
     desc: "Age-appropriate off-ice training — strength, agility, conditioning, and weekly plans.",
     color: "text-orange",
     bg: "bg-orange/10",
@@ -60,7 +59,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "prep-college",
     icon: GraduationCap,
-    title: "Prep & College Guide",
+    title: "Ask PXI: Prep & College",
     desc: "Hockey pathways, key dates, academic requirements, and recruiting timelines.",
     color: "text-teal",
     bg: "bg-teal/10",
@@ -70,7 +69,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "mental",
     icon: Brain,
-    title: "Mental Performance",
+    title: "Ask PXI: Mental Performance",
     desc: "Pre-game routine builder, bounce-back tips, and confidence strategies.",
     color: "text-purple-600",
     bg: "bg-purple-50",
@@ -80,7 +79,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "pressure-confidence",
     icon: Heart,
-    title: "Pressure & Confidence",
+    title: "Ask PXI: Pressure & Confidence",
     desc: "AI-powered support for tough moments — what to say, what to avoid, and when to seek help.",
     color: "text-rose-600",
     bg: "bg-rose-50",
@@ -90,7 +89,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "gear",
     icon: ShoppingBag,
-    title: "Gear Guide",
+    title: "Ask PXI: Gear Guide",
     desc: "Equipment priority table for skaters and goalies, fitting tips, and replacement guidelines.",
     color: "text-navy",
     bg: "bg-navy/5",
@@ -100,7 +99,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "glossary",
     icon: BookOpen,
-    title: "Hockey Glossary",
+    title: "Ask PXI: Hockey Glossary",
     desc: "Plain-language hockey terms — positions, stats, systems, penalties, and levels — searchable and filterable.",
     color: "text-blue-600",
     bg: "bg-blue-50",
@@ -136,11 +135,6 @@ export default function PlayerGuidePage() {
         {/* Parent Do / Don't Tip Card */}
         <div className="mb-3">
           <ParentDoDontCard />
-        </div>
-
-        {/* Car Ride Script — After Game Help */}
-        <div className="mb-3">
-          <CarRideScript />
         </div>
 
         {/* Tab Bar */}
