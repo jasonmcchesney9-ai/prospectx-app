@@ -1118,6 +1118,47 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
+        {/* PXI Score Tiles — numeric 1-10 above the fold */}
+        {intelligence && intelligence.overall_grade && intelligence.overall_grade !== "NR" && (() => {
+          const subScores = [
+            { label: "Offense", grade: intelligence.offensive_grade },
+            { label: "Defense", grade: intelligence.defensive_grade },
+            { label: "Skating", grade: intelligence.skating_grade },
+            { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
+            { label: "Compete", grade: intelligence.compete_grade },
+            { label: "Overall", grade: intelligence.overall_grade },
+          ] as const;
+          const validScores = subScores.filter(s => s.grade && s.grade !== "NR");
+          if (validScores.length === 0) return null;
+          return (
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-2 mb-1">
+              {validScores.map(({ label, grade }) => {
+                const val = gradeToNumber(grade);
+                const isOverall = label === "Overall";
+                return (
+                  <div
+                    key={label}
+                    className="flex flex-col items-center justify-center py-3 rounded-xl transition-colors"
+                    style={{
+                      backgroundColor: "#162E4A",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,148,136,0.4)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
+                  >
+                    <span className="font-bold font-oswald" style={{ fontSize: "22px", color: isOverall ? "#14B8A8" : "#FFFFFF" }}>
+                      {val > 0 ? val.toFixed(1) : "—"}
+                    </span>
+                    <span className="text-[9px] font-oswald uppercase tracking-wider font-bold mt-0.5" style={{ color: "#64748B" }}>
+                      {label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* Player Info + Archetype */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Bio Card */}
