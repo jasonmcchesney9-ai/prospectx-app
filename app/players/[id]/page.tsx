@@ -206,6 +206,7 @@ export default function PlayerDetailPage() {
   const [gameLogOffset, setGameLogOffset] = useState(0);
   const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
   const [trendlineData, setTrendlineData] = useState<import("@/types/api").TrendlineResponse | null>(null);
+  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null } | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
 
@@ -657,6 +658,13 @@ export default function PlayerDetailPage() {
           setTrendlineData(trendRes.data);
         } catch { /* May not have game data */ }
 
+        // Load PXR pillar scores (non-blocking — for SkillBars)
+        try {
+          const pxrRes = await api.get("/pxr/draft-board?season=2025-26");
+          const match = (pxrRes.data.players || []).find((p: { player_id: string }) => p.player_id === playerId);
+          if (match) setPxrData(match);
+        } catch { /* PXR data may not exist */ }
+
         // Load pending corrections count (non-blocking)
         try {
           const corrRes = await api.get<PlayerCorrection[]>(`/players/${playerId}/corrections`);
@@ -1087,6 +1095,49 @@ export default function PlayerDetailPage() {
             </div>
           );
         })()}
+
+        {/* SkillBars — PXR pillar scores (hidden for parent/player roles) */}
+        {!FAMILY_ROLES.has(userRole) && (
+          <div className="bg-white border border-border rounded-xl px-5 py-3 mt-2 mb-1">
+            <h4 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">PXR Pillar Scores</h4>
+            {pxrData ? (
+              <div className="space-y-2">
+                {([
+                  { label: "P1 Offense", value: pxrData.p1_offense },
+                  { label: "P2 Defense", value: pxrData.p2_defense },
+                  { label: "P3 Possession", value: pxrData.p3_possession },
+                  { label: "P4 Physical", value: pxrData.p4_physical },
+                ] as const).map(({ label, value }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-24 shrink-0">{label}</span>
+                    <div className="flex-1 h-3 bg-navy/[0.06] rounded-full overflow-hidden">
+                      {value != null && value > 0 && (
+                        <div
+                          className="h-full bg-teal rounded-full transition-all"
+                          style={{ width: `${Math.min(value, 100)}%` }}
+                        />
+                      )}
+                    </div>
+                    <span className="text-xs font-oswald font-bold text-navy w-8 text-right">
+                      {value != null && value > 0 ? Math.round(value) : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(["P1 Offense", "P2 Defense", "P3 Possession", "P4 Physical"]).map((label) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/30 w-24 shrink-0">{label}</span>
+                    <div className="flex-1 h-3 rounded-full border border-dashed border-navy/15" />
+                    <span className="text-xs font-oswald text-navy/30 w-8 text-right">—</span>
+                  </div>
+                ))}
+                <p className="text-[9px] text-muted/50 text-center mt-1">No PXR data — minimum 60 min TOI required</p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="ice-stripe mb-6 rounded-b-full" />
 
