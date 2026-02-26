@@ -867,6 +867,17 @@ export default function PlayerDetailPage() {
                     )}
                   </div>
                 )}
+                {intelligence?.overall_grade && gradeToNumber(intelligence.overall_grade) > 0 && (
+                  <div className="mt-2 text-center">
+                    <div className="text-lg font-bold text-teal">
+                      {gradeToNumber(intelligence.overall_grade).toFixed(1)}
+                      <span className="text-xs text-white/50 font-normal"> / 10</span>
+                    </div>
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-white/40">
+                      PXI Score
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="min-w-0">
                 {/* Line 1: Player Name */}
