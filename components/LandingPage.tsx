@@ -42,7 +42,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Who is ProspectX for?",
-        a: "GMs & Hockey Ops for roster construction and draft strategy. Scouts for amateur/pro scouting and list building. Coaches for game plans, deployment, and practice planning. Player Development staff for improvement plans and progress tracking. Agents for player marketing and recruiting. We serve junior hockey (GOHL, OJHL, OHL, BCHL, USHL), AAA organizations, NCAA programs, and professional scouts.",
+        a: "GMs & Hockey Ops for roster construction and draft strategy. Scouts for amateur/pro scouting and list building. Coaches for game plans, deployment, and practice planning. Player Development staff for improvement plans and progress tracking. Agents for player marketing and recruiting. We serve junior hockey (GOJHL, OJHL, OHL, BCHL, USHL), AAA organizations, NCAA programs, and professional scouts.",
       },
     ],
   },
@@ -105,7 +105,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Can multiple users access ProspectX?",
-        a: "Yes! GOHL tier includes 3 users, OJHL includes 5, OHL includes unlimited. User roles: Admin (full access), Coach (reports + notes), Scout (notes + view), and Read-Only (view reports only). All users share the player database, team systems, scout notes, and reports.",
+        a: "Yes! Team tier includes 10 seats, Program includes 30 seats, Enterprise includes unlimited seats. User roles: Admin (full access), Coach (reports + notes), Scout (notes + view), and Read-Only (view reports only). All users share the player database, team systems, scout notes, and reports.",
       },
       {
         q: "Does ProspectX work on mobile?",
@@ -130,7 +130,7 @@ const FAQ_SECTIONS = [
       },
       {
         q: "Do you offer training?",
-        a: "Yes, included with every plan! 30-minute onboarding walkthrough, email support, video tutorials, and knowledge base. OJHL+ tiers get phone support. OHL+ tiers get quarterly strategy reviews, advanced training, and a dedicated account manager.",
+        a: "Yes, included with every plan! 30-minute onboarding walkthrough, email support, video tutorials, and knowledge base. Pro+ tiers get phone support. Elite+ tiers get quarterly strategy reviews, advanced training, and a dedicated account manager.",
       },
     ],
   },
