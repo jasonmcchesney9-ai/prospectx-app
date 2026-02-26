@@ -16417,7 +16417,8 @@ async def league_player_add(body: LeaguePlayerAddRequest, token_data: dict = Dep
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (player_id, org_id, first_name, last_name, pos,
              row.get("dob"), row.get("height_cm"), row.get("weight_kg"),
-             shoots, row.get("team_name"), row.get("league_name"),
+             shoots, row.get("team_name"),
+             _normalize_league_safe(row.get("league_name") or "", "full") or None,
              row.get("jersey_number"), user_id, now_iso()),
         )
         conn.commit()
@@ -22893,6 +22894,56 @@ async def admin_normalize_leagues_gohl(token_data: dict = Depends(verify_token))
     return await admin_normalize_leagues(token_data)
 
 
+@app.post("/admin/normalize-all-leagues")
+async def admin_normalize_all_leagues(token_data: dict = Depends(verify_token)):
+    """One-shot normalizer: walks every players.current_league and teams.league
+    value through _normalize_league_safe and UPDATEs any that change.
+    Admin-only (jason@prospectx.com)."""
+    conn = get_db()
+    user = conn.execute("SELECT email FROM users WHERE id = ?",
+                        (token_data["user_id"],)).fetchone()
+    if not user or user["email"] != "jason@prospectx.com":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    players_fixed = 0
+    teams_fixed = 0
+
+    # --- players.current_league ---
+    rows = conn.execute(
+        "SELECT id, current_league FROM players "
+        "WHERE current_league IS NOT NULL AND current_league != ''"
+    ).fetchall()
+    for r in rows:
+        raw = r["current_league"]
+        normed = _normalize_league_safe(raw, "full")
+        if normed != raw:
+            conn.execute("UPDATE players SET current_league = ? WHERE id = ?",
+                         (normed, r["id"]))
+            players_fixed += 1
+
+    # --- teams.league ---
+    rows = conn.execute(
+        "SELECT id, league FROM teams "
+        "WHERE league IS NOT NULL AND league != ''"
+    ).fetchall()
+    for r in rows:
+        raw = r["league"]
+        normed = _normalize_league_safe(raw, "full")
+        if normed != raw:
+            conn.execute("UPDATE teams SET league = ? WHERE id = ?",
+                         (normed, r["id"]))
+            teams_fixed += 1
+
+    conn.commit()
+    conn.close()
+    return {
+        "players_fixed": players_fixed,
+        "teams_fixed": teams_fixed,
+        "total": players_fixed + teams_fixed,
+    }
+
+
 @app.post("/admin/normalize-seasons")
 async def admin_normalize_seasons(token_data: dict = Depends(verify_token)):
     """Normalize ALL season strings across stat tables using _normalize_season().
@@ -26653,6 +26704,7 @@ async def bulk_assign_league(
 
     if league:
         # Simple: set league for all players in the org that don't have one
+        league = _normalize_league_safe(league, "full")
         result = conn.execute(
             "UPDATE players SET current_league = ? WHERE org_id = ? AND (current_league IS NULL OR current_league = '')",
             (league, org_id)
@@ -26683,6 +26735,7 @@ async def bulk_assign_league(
                         matched_league = ref_league
                         break
             if matched_league:
+                matched_league = _normalize_league_safe(matched_league, "full")
                 conn.execute(
                     "UPDATE players SET current_league = ? WHERE id = ?",
                     (matched_league, p["id"])
@@ -26743,6 +26796,7 @@ async def auto_assign_teams_from_stats(
                         league = ref_league
                         break
             if league:
+                league = _normalize_league_safe(league, "full")
                 conn.execute(
                     "UPDATE players SET current_league = ? WHERE id = ?",
                     (league, pid)
