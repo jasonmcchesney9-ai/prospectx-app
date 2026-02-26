@@ -152,7 +152,7 @@ function ScoutingList() {
             Scouting List
           </h1>
           <p className="text-muted text-sm mt-1">
-            Track and manage prospects you&apos;re watching
+            Your personal watchlist. Track prospects across any league, add priority ratings, and build your pipeline.
           </p>
         </div>
         <button

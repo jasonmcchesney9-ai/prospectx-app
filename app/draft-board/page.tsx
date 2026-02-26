@@ -203,7 +203,7 @@ export default function DraftBoardPage() {
               Draft Board
             </h1>
             <p className="text-sm text-muted mt-0.5">
-              PXR-Ranked Player Intelligence — {total.toLocaleString()} players scored
+              Players ranked by PXR score across all leagues. Filter by position, birth year, and league to build your draft list. {total.toLocaleString()} players scored.
             </p>
           </div>
           <button

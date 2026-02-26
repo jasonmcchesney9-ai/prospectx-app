@@ -258,10 +258,10 @@ export default function SchedulePage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold font-oswald text-navy uppercase tracking-wider">
-                Calendar & Schedule
+                Live Schedule
               </h1>
               <p className="text-sm text-muted">
-                Games, practices, showcases — all in one view
+                Live scores, results, and upcoming games pulled from league feeds.
               </p>
             </div>
           </div>

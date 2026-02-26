@@ -171,7 +171,7 @@ export default function LeaderboardPage() {
             </h1>
           </div>
           <p className="text-sm text-muted ml-[40px]">
-            Scout Intelligence — Powered by ProspectX Rating Engine
+            Players are ranked using the ProspectX Rating (PXR) — a proprietary scoring engine built on 57 advanced metrics across offense, defense, possession, and physicality.
           </p>
         </div>
 

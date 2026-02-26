@@ -127,7 +127,7 @@ export default function LeagueHubPage() {
   const tabs: { key: Tab; label: string; icon: typeof Trophy }[] = [
     { key: "standings", label: "Standings", icon: Trophy },
     { key: "player-stats", label: "Player Stats", icon: TrendingUp },
-    { key: "schedule", label: "Schedule", icon: Calendar },
+    { key: "schedule", label: "Live Schedule", icon: Calendar },
     { key: "teams", label: "Teams", icon: Shield },
   ];
 
@@ -143,7 +143,7 @@ export default function LeagueHubPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold font-oswald text-navy">League Hub</h1>
-              <p className="text-sm text-muted">Live standings, stats, and scores from 20 leagues. Your finger on the pulse of the hockey world.</p>
+              <p className="text-sm text-muted">Your league at a glance. Live standings, scores, and team activity across all tracked leagues.</p>
             </div>
           </div>
 

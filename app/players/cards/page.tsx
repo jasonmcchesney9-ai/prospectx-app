@@ -65,6 +65,9 @@ export default function PlayerCardsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-navy font-oswald uppercase tracking-wider">Player Cards</h1>
+            <p className="text-sm text-muted mt-0.5">
+              Quick-view cards for every player in the database. Tap any card to open their full intelligence profile.
+            </p>
             {!loading && (
               <p className="text-xs text-muted mt-0.5">
                 {sorted.length} player{sorted.length !== 1 ? "s" : ""}

@@ -79,7 +79,7 @@ type NavItem = { href: string; label: string; icon: React.ElementType; badge?: n
 const PRO_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/schedule", label: "Live Schedule", icon: Calendar },
 ];
 const PRO_NAV_RIGHT: NavItem[] = [
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -90,7 +90,7 @@ const MEDIA_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/players", label: "Players", icon: Users },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/schedule", label: "Live Schedule", icon: Calendar },
 ];
 const MEDIA_NAV_RIGHT: NavItem[] = [
   { href: "/reports", label: "Reports", icon: FileText },
@@ -101,7 +101,7 @@ const MEDIA_NAV_RIGHT: NavItem[] = [
 const FAMILY_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-player", label: "My Player", icon: Heart },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/schedule", label: "Live Schedule", icon: Calendar },
 ];
 const FAMILY_NAV_RIGHT: NavItem[] = [
   { href: "/player-guide", label: "Guide", icon: BookOpen },
@@ -117,7 +117,7 @@ const AGENT_NAV_LEFT: NavItem[] = [
 ];
 const AGENT_NAV_RIGHT: NavItem[] = [
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/schedule", label: "Live Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },
 ];
 

@@ -77,7 +77,7 @@ function PlayerManagement() {
             Player Management
           </h1>
           <p className="text-muted text-sm mt-1">
-            Merge duplicates, assign leagues, transfer players between teams
+            Manage your full roster. Add players, update profiles, assign to lines, and track development across the season.
           </p>
         </div>
         <Link
