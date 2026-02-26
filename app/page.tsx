@@ -24,6 +24,7 @@ import {
   CheckCircle,
   Sparkles,
   Pin,
+  Calendar,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -390,6 +391,65 @@ function Dashboard() {
                 </div>
               </div>
             )}
+
+            {/* Upcoming Schedule */}
+            {(() => {
+              const today = new Date().toISOString().slice(0, 10);
+              const upcoming = scorebar
+                .filter((g) => g.game_date >= today && g.status !== "Final")
+                .sort((a, b) => a.game_date.localeCompare(b.game_date) || a.time.localeCompare(b.time))
+                .slice(0, 5);
+              const teamName = activeTeam?.name || "";
+              return (
+                <div className="mb-4 bg-white rounded-xl border-l-4 border-l-teal border border-border overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} className="text-teal" />
+                      <span className="text-xs font-oswald font-bold text-navy uppercase tracking-wider">Upcoming Schedule</span>
+                    </div>
+                    <Link href="/schedule" className="text-[10px] font-oswald uppercase tracking-wider text-teal hover:text-teal/80 transition-colors">
+                      Full Schedule
+                    </Link>
+                  </div>
+                  {upcoming.length === 0 ? (
+                    <div className="px-4 py-6 text-center">
+                      <p className="text-sm text-muted">No upcoming games — <Link href="/schedule" className="text-teal hover:underline">view Schedule</Link></p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {upcoming.map((g) => {
+                        const isHome = g.home_team === teamName;
+                        const opponent = isHome ? g.away_team : g.home_team;
+                        const homeAway = isHome ? "HOME" : "AWAY";
+                        const dateStr = new Date(g.game_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                        return (
+                          <div key={g.game_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-navy/[0.02] transition-colors">
+                            <div className="w-20 shrink-0">
+                              <p className="text-xs font-medium text-navy">{dateStr}</p>
+                              {g.time && <p className="text-[10px] text-muted">{g.time}</p>}
+                            </div>
+                            <span className={`text-[9px] font-oswald font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isHome ? "bg-teal/10 text-teal" : "bg-navy/5 text-navy/60"}`}>
+                              {homeAway}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-navy truncate">{isHome ? "vs" : "@"} {opponent}</p>
+                              {g.venue && <p className="text-[10px] text-muted truncate">{g.venue}</p>}
+                            </div>
+                            <Link
+                              href={`/game-plans/new?opponent=${encodeURIComponent(opponent)}&date=${g.game_date}`}
+                              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-oswald font-bold uppercase tracking-wider text-teal bg-teal/10 rounded-lg hover:bg-teal/20 transition-colors"
+                            >
+                              <Swords size={10} />
+                              Prep Game
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Two-Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
