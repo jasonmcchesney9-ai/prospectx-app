@@ -468,11 +468,18 @@ export default function BenchTalkDrawer() {
         api.get("/pxi/modes").then(({ data }) => setPxiModes(data)).catch(() => {});
       }
       // If no pending context but there's an active page context, use it
-      if (!pendingPxiContext && activePxiContext && !pageContext) {
+      if (!pendingPxiContext && activePxiContext) {
         setPageContext(activePxiContext);
       }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update page context when active page changes (e.g., navigating between players while drawer is open)
+  useEffect(() => {
+    if (isOpen && !pendingPxiContext) {
+      setPageContext(activePxiContext);
+    }
+  }, [activePxiContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Focus input when drawer opens
   useEffect(() => {
