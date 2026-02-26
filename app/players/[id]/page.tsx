@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -45,6 +45,9 @@ import {
   EyeOff,
   Video,
   Play,
+  MoreVertical,
+  Search,
+  ListPlus,
 } from "lucide-react";
 import {
   RadarChart,
@@ -257,6 +260,10 @@ export default function PlayerDetailPage() {
 
   // Image upload
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // QuickActions overflow menu
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
 
   // Correction form
   const [showCorrectionForm, setShowCorrectionForm] = useState(false);
@@ -731,6 +738,17 @@ export default function PlayerDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, searchParams]);
 
+  // Close overflow menu on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) setOverflowOpen(false);
+    }
+    if (overflowOpen) {
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }
+  }, [overflowOpen]);
+
   // Lazy-load progression/game log when sub-view switches
   useEffect(() => {
     if (statsSubView === "progression" && !progression && !loadingProgression) {
@@ -1136,6 +1154,69 @@ export default function PlayerDetailPage() {
                 <p className="text-[9px] text-muted/50 text-center mt-1">No PXR data — minimum 60 min TOI required</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* QuickActions — Scout + Report + overflow (hidden for parent/player) */}
+        {!FAMILY_ROLES.has(userRole) && player && (
+          <div className="flex gap-1.5 mt-2 mb-1 no-print">
+            <button
+              onClick={() => openBenchTalk(
+                `Scout ${player.first_name} ${player.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`,
+                "scout"
+              )}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-teal/10 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/20 transition-colors"
+            >
+              <Search size={12} />
+              Scout
+            </button>
+            <button
+              onClick={() => { window.location.href = `/reports/generate?player_id=${playerId}`; }}
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-navy/5 text-navy/70 text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-navy/10 transition-colors"
+            >
+              <FileText size={12} />
+              Report
+            </button>
+            <div className="relative" ref={overflowRef}>
+              <button
+                onClick={() => setOverflowOpen(!overflowOpen)}
+                className="p-2 rounded-lg bg-navy/5 text-navy/40 hover:text-navy hover:bg-navy/10 transition-colors"
+                title="More actions"
+              >
+                <MoreVertical size={14} />
+              </button>
+              {overflowOpen && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1">
+                  <button
+                    onClick={() => { openBenchTalk(`Scout ${player.first_name} ${player.last_name}`, "scout"); setOverflowOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                  >
+                    <Search size={12} className="text-teal" /> Scout in Bench Talk
+                  </button>
+                  <Link
+                    href="/scouting"
+                    onClick={() => setOverflowOpen(false)}
+                    className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                  >
+                    <ListPlus size={12} className="text-muted" /> Add to Scouting List
+                  </Link>
+                  <Link
+                    href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
+                    onClick={() => setOverflowOpen(false)}
+                    className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                  >
+                    <Wand2 size={12} className="text-muted" /> Generate PXI Assessment
+                  </Link>
+                  <Link
+                    href={`/reports/custom?player=${playerId}`}
+                    onClick={() => setOverflowOpen(false)}
+                    className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                  >
+                    <FileText size={12} className="text-muted" /> Custom Report
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
