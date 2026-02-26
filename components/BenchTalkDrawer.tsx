@@ -454,7 +454,9 @@ export default function BenchTalkDrawer() {
   const [pxiModes, setPxiModes] = useState<Array<{ id: string; name: string; primary_user: string; key_output: string; icon: string }>>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const latestAiRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prevMessageCountRef = useRef(0);
 
   // Load conversations + modes on mount
   useEffect(() => {
@@ -488,9 +490,25 @@ export default function BenchTalkDrawer() {
     }
   }, [isOpen, pendingMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll to bottom on new messages
+  // Smart scroll: user message → bottom, AI response → top of new message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const prevCount = prevMessageCountRef.current;
+    const curCount = messages.length;
+    prevMessageCountRef.current = curCount;
+
+    if (curCount > prevCount && curCount > 0) {
+      const lastMsg = messages[curCount - 1];
+      if (lastMsg.role === "assistant" && latestAiRef.current) {
+        // AI response arrived — scroll to top of it
+        latestAiRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        // User message — scroll to bottom
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    } else if (loading) {
+      // Typing indicator — scroll to bottom
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, loading]);
 
   // Fetch context entities when messages change
@@ -979,9 +997,10 @@ export default function BenchTalkDrawer() {
           ) : (
             /* Message List */
             <div className="p-3 space-y-3">
-              {messages.map((msg) => (
+              {messages.map((msg, msgIdx) => (
                 <div
                   key={msg.id}
+                  ref={msg.role === "assistant" && msgIdx === messages.length - 1 ? latestAiRef : undefined}
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   {msg.role === "assistant" && (
@@ -1041,7 +1060,7 @@ export default function BenchTalkDrawer() {
                           >
                             <ThumbsDown size={11} />
                           </button>
-                          {msg.tokens_used > 0 && (
+                          {process.env.NODE_ENV === 'development' && msg.tokens_used > 0 && (
                             <span className="text-[8px] text-muted/30 ml-0.5">
                               {msg.tokens_used.toLocaleString()} tokens
                             </span>
