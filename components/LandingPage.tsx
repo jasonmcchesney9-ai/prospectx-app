@@ -558,7 +558,7 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange/10 border border-orange/20 mb-4">
               <Star size={12} className="text-orange" />
               <span className="text-xs font-oswald uppercase tracking-widest text-orange">
-                Founding Member Pricing
+                Season 1 Founders Pricing
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-oswald font-bold text-white">
