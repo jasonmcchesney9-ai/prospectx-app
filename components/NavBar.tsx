@@ -38,6 +38,7 @@ import {
   Dumbbell,
   AlertTriangle,
   Video,
+  Star,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -126,12 +127,16 @@ const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/players/manage", label: "Manage Players", icon: Settings },
   { href: "/scouting", label: "Scouting List", icon: Target },
   { href: "/players/cards", label: "Player Cards", icon: Eye },
+  { href: "/leaderboard", label: "PXR Leaderboard", icon: Trophy },
+  { href: "/draft-board", label: "Draft Board (PXR)", icon: BarChart3 },
 ];
 
 // Scouting dropdown items (PRO only)
 const SCOUTING_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
   { href: "/game-plans", label: "Chalk Talk", icon: Swords },
+  { href: "/watchlist", label: "Watchlist", icon: Eye },
+  { href: "/top-prospects", label: "Top Prospects", icon: Star },
 ];
 
 // Reports dropdown items (PRO only)
