@@ -642,6 +642,8 @@ _allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://prospectx-app-ten.vercel.app",
+    "https://prospectxintelligence.com",
+    "https://www.prospectxintelligence.com",
     FRONTEND_URL,
 ]
 # Remove duplicates and empty strings
