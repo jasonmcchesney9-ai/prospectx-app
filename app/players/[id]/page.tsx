@@ -66,6 +66,7 @@ import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
+import TrendlineChart from "@/components/TrendlineChart";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
@@ -204,6 +205,7 @@ export default function PlayerDetailPage() {
   const [gameLog, setGameLog] = useState<GameStatsResponse | null>(null);
   const [gameLogOffset, setGameLogOffset] = useState(0);
   const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
+  const [trendlineData, setTrendlineData] = useState<import("@/types/api").TrendlineResponse | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
 
@@ -649,6 +651,12 @@ export default function PlayerDetailPage() {
           setRecentForm(formRes.data);
         } catch { /* May not have game data */ }
 
+        // Load trendline data (non-blocking — for SeasonSnapshot sparkline)
+        try {
+          const trendRes = await api.get(`/players/${playerId}/trendline?metric=points&last_n=10`);
+          setTrendlineData(trendRes.data);
+        } catch { /* May not have game data */ }
+
         // Load pending corrections count (non-blocking)
         try {
           const corrRes = await api.get<PlayerCorrection[]>(`/players/${playerId}/corrections`);
@@ -1028,6 +1036,57 @@ export default function PlayerDetailPage() {
             )}
           </div>
         )}
+
+        {/* SeasonSnapshot — current season stats bar + trendline */}
+        {(() => {
+          // Find current season stats — prefer most recent season entry
+          const seasonStats = stats
+            .filter(s => s.stat_type === "season")
+            .sort((a, b) => (b.season || "").localeCompare(a.season || ""))[0];
+          if (!seasonStats || seasonStats.gp === 0) return null;
+          const ppg = seasonStats.gp > 0 ? (seasonStats.p / seasonStats.gp).toFixed(2) : "---";
+          return (
+            <div className="bg-white border border-border rounded-xl px-5 py-3 mt-2 mb-1">
+              {/* Primary line */}
+              <div className="flex items-center gap-4 text-sm font-oswald">
+                <span className="text-navy font-bold">{seasonStats.gp} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">GP</span></span>
+                <span className="text-white/20">·</span>
+                <span className="text-navy font-bold">{seasonStats.g} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">G</span></span>
+                <span className="text-white/20">·</span>
+                <span className="text-navy font-bold">{seasonStats.a} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">A</span></span>
+                <span className="text-white/20">·</span>
+                <span className="text-navy font-bold">{seasonStats.p} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">P</span></span>
+                <span className="text-white/20">·</span>
+                <span className="text-teal font-bold">{ppg} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">PPG</span></span>
+                {seasonStats.plus_minus != null && seasonStats.plus_minus !== 0 && (
+                  <>
+                    <span className="text-white/20">·</span>
+                    <span className={`font-bold ${seasonStats.plus_minus > 0 ? "text-green-600" : "text-red-500"}`}>
+                      {seasonStats.plus_minus > 0 ? "+" : ""}{seasonStats.plus_minus} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">+/-</span>
+                    </span>
+                  </>
+                )}
+                {seasonStats.pim != null && seasonStats.pim > 0 && (
+                  <>
+                    <span className="text-white/20">·</span>
+                    <span className="text-navy font-bold">{seasonStats.pim} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">PIM</span></span>
+                  </>
+                )}
+              </div>
+              {/* Secondary line */}
+              {(seasonStats.sog > 0 || (seasonStats.shooting_pct != null && seasonStats.shooting_pct > 0)) && (
+                <div className="flex items-center gap-4 text-xs text-muted mt-1">
+                  {seasonStats.sog > 0 && <span>{seasonStats.sog} shots</span>}
+                  {seasonStats.shooting_pct != null && seasonStats.shooting_pct > 0 && <span>{seasonStats.shooting_pct.toFixed(1)}% SH</span>}
+                </div>
+              )}
+              {/* Trendline sparkline */}
+              <div className="mt-2">
+                <TrendlineChart data={trendlineData} />
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="ice-stripe mb-6 rounded-b-full" />
 
@@ -1598,14 +1657,14 @@ export default function PlayerDetailPage() {
               </div>
             </div>
 
-            {/* ── ProspectX Intelligence Panel ── */}
+            {/* ── PXI Scout Summary Panel ── */}
             {intelligence && intelligence.version > 0 && (
               <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-teal/10 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Brain size={16} className="text-teal" />
-                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">ProspectX Intelligence</h3>
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">PXI Scout Summary</h3>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/10 text-teal font-medium">v{intelligence.version}</span>
                     {intelligence.trigger && (
                       <span className="text-[10px] text-muted/50">via {intelligence.trigger}</span>
