@@ -393,6 +393,76 @@ function Dashboard() {
               </div>
             )}
 
+            {/* Live Schedule Strip — today's games, live first */}
+            {(() => {
+              const todayStr = new Date().toISOString().slice(0, 10);
+              const todayGames = scorebar
+                .filter((g) => (g.game_date || g.date) === todayStr)
+                .sort((a, b) => {
+                  const aFinal = a.status === "Final" || a.status === "Final OT" || a.status === "Final SO";
+                  const bFinal = b.status === "Final" || b.status === "Final OT" || b.status === "Final SO";
+                  const aLive = !aFinal && a.status !== "" && a.period !== "";
+                  const bLive = !bFinal && b.status !== "" && b.period !== "";
+                  if (aLive && !bLive) return -1;
+                  if (!aLive && bLive) return 1;
+                  return (a.time || "").localeCompare(b.time || "");
+                })
+                .slice(0, 4);
+              if (todayGames.length === 0) return null;
+              const hasLive = todayGames.some((g) => {
+                const isFinal = g.status === "Final" || g.status === "Final OT" || g.status === "Final SO";
+                return !isFinal && g.status !== "" && g.period !== "";
+              });
+              return (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {hasLive && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                      <h3 className="text-xs font-oswald font-bold uppercase tracking-wider text-navy">
+                        {hasLive ? "Live Now" : "Today\u2019s Games"}
+                      </h3>
+                    </div>
+                    <Link href="/leagues?tab=schedule" className="text-[10px] font-oswald uppercase tracking-wider text-teal hover:text-teal/80 transition-colors">
+                      View all
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    {todayGames.map((g) => {
+                      const isFinal = g.status === "Final" || g.status === "Final OT" || g.status === "Final SO";
+                      const isLive = !isFinal && g.status !== "" && g.period !== "";
+                      return (
+                        <div
+                          key={g.game_id}
+                          className={`bg-white rounded-xl border ${isLive ? "border-red-400 shadow-sm" : "border-teal/20"} p-3`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-oswald text-navy truncate flex-1">{g.away_team}</span>
+                            <span className="font-oswald font-bold text-sm text-navy ml-2">
+                              {isFinal || isLive ? g.away_score : ""}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-oswald text-navy truncate flex-1">{g.home_team}</span>
+                            <span className="font-oswald font-bold text-sm text-navy ml-2">
+                              {isFinal || isLive ? g.home_score : ""}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className={`text-[9px] font-oswald uppercase tracking-wider ${isLive ? "text-red-600 font-bold" : "text-muted/50"}`}>
+                              {isLive ? `${g.period} ${g.game_clock}` : isFinal ? g.status : g.time || "TBD"}
+                            </p>
+                            {g.venue && (
+                              <p className="text-[9px] text-muted/40 truncate max-w-[80px]">{g.venue}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Upcoming Schedule */}
             {(() => {
               const today = new Date().toISOString().slice(0, 10);
