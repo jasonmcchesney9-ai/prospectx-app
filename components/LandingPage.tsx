@@ -301,13 +301,21 @@ export default function LandingPage() {
             Analyze players within YOUR forecheck, YOUR structure, YOUR identity.
           </p>
 
-          <div className="flex flex-col items-center gap-3 mt-10">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-10">
             <Link
               href="/onboarding"
               className="flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
             >
               Get Started for Free <ArrowRight size={16} />
             </Link>
+            <a
+              href="mailto:jason@prospectxintelligence.com?subject=ProspectX Demo Request"
+              className="flex items-center gap-2 px-8 py-3 border border-teal/30 text-teal font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/10 transition-colors text-sm"
+            >
+              Book a Demo
+            </a>
+          </div>
+          <div className="mt-3">
             <Link
               href="/login"
               className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
@@ -325,6 +333,21 @@ export default function LandingPage() {
           <p className="text-xs text-white/30 mt-4">
             2-week free trial. No credit card required.
           </p>
+
+          {/* Hero Stats Bar */}
+          <div className="mt-12 flex flex-wrap justify-center gap-6 sm:gap-10">
+            {[
+              { value: "12,000+", label: "Players" },
+              { value: "39", label: "Report Types" },
+              { value: "8", label: "Leagues" },
+              { value: "10", label: "PXI Modes" },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="text-2xl sm:text-3xl font-oswald font-bold text-teal">{stat.value}</div>
+                <div className="text-[10px] font-oswald uppercase tracking-widest text-white/40 mt-0.5">{stat.label}</div>
+              </div>
+            ))}
+          </div>
 
           {/* Ice Stripe */}
           <div className="ice-stripe mt-16 rounded-full max-w-lg mx-auto" />
@@ -726,8 +749,8 @@ export default function LandingPage() {
             </span>
           </div>
           <div className="flex items-center gap-6 text-xs text-white/30">
-            <a href="mailto:jason@prospectx.ai" className="hover:text-white/60 transition-colors">
-              jason@prospectx.ai
+            <a href="mailto:jason@prospectxintelligence.com" className="hover:text-white/60 transition-colors">
+              jason@prospectxintelligence.com
             </a>
             <span>Built in Ontario, Canada</span>
           </div>
