@@ -23599,6 +23599,84 @@ async def pxr_leaderboard(
     }
 
 
+
+@app.get("/pxr/draft-board")
+async def pxr_draft_board(
+    season: str = Query(default="2025-26"),
+    league: Optional[str] = Query(default=None),
+    position_group: Optional[str] = Query(default=None),
+    birth_year: Optional[int] = Query(default=None),
+    token_data: dict = Depends(verify_token),
+):
+    """Draft Board — ranked player list from pxr_scores. Authenticated users."""
+    conn = get_db()
+    try:
+        where_clauses = ["px.pxr_score IS NOT NULL", "px.season = %s"]
+        params: list = [season]
+
+        if league:
+            where_clauses.append("p.current_league = %s")
+            params.append(league)
+        if position_group:
+            where_clauses.append("px.position_group = %s")
+            params.append(position_group)
+        if birth_year:
+            where_clauses.append("p.birth_year = %s")
+            params.append(str(birth_year))
+
+        where_sql = " AND ".join(where_clauses)
+
+        rows = conn.execute(f"""
+            SELECT p.id AS player_id,
+                   p.first_name, p.last_name,
+                   p.current_team, p.current_league, p.position,
+                   p.birth_year,
+                   px.position_group,
+                   px.pxr_score, px.league_percentile, px.cohort_percentile,
+                   px.age_modifier,
+                   px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
+                   px.data_completeness, px.season
+            FROM pxr_scores px
+            JOIN players p ON p.id = px.player_id
+            WHERE {where_sql}
+            ORDER BY px.pxr_score DESC
+        """, params).fetchall()
+
+        # Gather distinct filter options
+        filters = conn.execute("""
+            SELECT DISTINCT p.current_league
+            FROM pxr_scores px
+            JOIN players p ON p.id = px.player_id
+            WHERE px.pxr_score IS NOT NULL AND px.season = %s
+            ORDER BY p.current_league
+        """, (season,)).fetchall()
+
+        birth_years = conn.execute("""
+            SELECT DISTINCT p.birth_year
+            FROM pxr_scores px
+            JOIN players p ON p.id = px.player_id
+            WHERE px.pxr_score IS NOT NULL AND px.season = %s AND p.birth_year IS NOT NULL
+            ORDER BY p.birth_year
+        """, (season,)).fetchall()
+
+        seasons = conn.execute("""
+            SELECT DISTINCT season FROM pxr_scores WHERE pxr_score IS NOT NULL ORDER BY season DESC
+        """).fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "players": [dict(r) for r in rows],
+        "total": len(rows),
+        "filter_options": {
+            "leagues": [r["current_league"] for r in filters if r["current_league"]],
+            "birth_years": [r["birth_year"] for r in birth_years if r["birth_year"]],
+            "seasons": [r["season"] for r in seasons],
+            "positions": ["F", "D", "G"],
+        },
+    }
+
+
 # ============================================================
 # DEVELOPMENT PLANS
 # ============================================================
