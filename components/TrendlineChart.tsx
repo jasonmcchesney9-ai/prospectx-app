@@ -14,7 +14,7 @@ import {
 import type { TrendlineResponse } from "@/types/api";
 
 interface Props {
-  data: TrendlineResponse;
+  data: TrendlineResponse | null | undefined;
 }
 
 const TREND_STYLES: Record<string, { icon: React.ComponentType<{ size?: number; className?: string }>; label: string; color: string; bg: string }> = {
@@ -34,6 +34,16 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 export default function TrendlineChart({ data }: Props) {
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-6 rounded-lg" style={{ backgroundColor: "#E6F7F6" }}>
+        <BarChart3 size={24} className="text-gray-400 mb-2" />
+        <p className="text-xs text-gray-500 font-medium">No development data yet.</p>
+        <p className="text-[10px] text-gray-400 mt-0.5">Run a PXI Assessment to start tracking this player&apos;s trend.</p>
+      </div>
+    );
+  }
+
   const { trendline, trend, metric, games_found } = data;
   const trendInfo = TREND_STYLES[trend] || TREND_STYLES.insufficient_data;
   const TrendIcon = trendInfo.icon;
