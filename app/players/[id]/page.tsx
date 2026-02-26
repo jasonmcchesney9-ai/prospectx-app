@@ -2264,6 +2264,127 @@ export default function PlayerDetailPage() {
                 </p>
               )}
             </div>
+
+            {/* ── BelowFold: Career Stats ── */}
+            {stats.filter(s => s.stat_type === "season").length > 1 && (
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+                  <TrendingUp size={14} className="text-teal" /> Career Stats
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-navy/10">
+                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Season</th>
+                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Team</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">GP</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">G</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">A</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">P</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-teal text-[10px]">PPG</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats
+                        .filter(s => s.stat_type === "season")
+                        .sort((a, b) => (b.season || "").localeCompare(a.season || ""))
+                        .map((s) => (
+                          <tr key={s.id} className="border-b border-navy/5 hover:bg-navy/[0.02]">
+                            <td className="py-1.5 px-2 font-medium text-navy">{s.season || "—"}</td>
+                            <td className="py-1.5 px-2 text-navy/70">{s.team_name || player.current_team || "—"}</td>
+                            <td className="text-center py-1.5 px-2">{s.gp}</td>
+                            <td className="text-center py-1.5 px-2">{s.g}</td>
+                            <td className="text-center py-1.5 px-2">{s.a}</td>
+                            <td className="text-center py-1.5 px-2 font-bold">{s.p}</td>
+                            <td className="text-center py-1.5 px-2 font-bold text-teal">
+                              {s.gp > 0 ? (s.p / s.gp).toFixed(2) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── BelowFold: Recent Game Log ── */}
+            {gameLog && gameLog.games.length > 0 && (
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
+                    <Activity size={14} className="text-teal" /> Recent Games
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab("stats")}
+                    className="text-[10px] text-teal hover:underline font-oswald uppercase tracking-wider"
+                  >
+                    View All →
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-navy/10">
+                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Date</th>
+                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Opponent</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">G</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">A</th>
+                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">P</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gameLog.games.slice(0, 5).map((g, i) => (
+                        <tr key={i} className="border-b border-navy/5 hover:bg-navy/[0.02]">
+                          <td className="py-1.5 px-2 text-navy/70">
+                            {g.game_date ? new Date(g.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                          </td>
+                          <td className="py-1.5 px-2 text-navy">{g.opponent || "—"}</td>
+                          <td className="text-center py-1.5 px-2">{g.goals ?? "—"}</td>
+                          <td className="text-center py-1.5 px-2">{g.assists ?? "—"}</td>
+                          <td className="text-center py-1.5 px-2 font-bold">{g.points ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── BelowFold: Scout Notes Preview ── */}
+            {notes.length > 0 && (
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
+                    <PenLine size={14} className="text-teal" /> Scout Notes
+                    <span className="text-xs font-normal text-muted/60">({notes.length})</span>
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab("notes")}
+                    className="text-[10px] text-teal hover:underline font-oswald uppercase tracking-wider"
+                  >
+                    View All →
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {notes.slice(0, 3).map((note) => (
+                    <div key={note.id} className="flex items-start gap-2 p-2 rounded-lg bg-navy/[0.02]">
+                      <span className={`px-1.5 py-0.5 text-[9px] rounded-full font-medium shrink-0 ${
+                        note.note_type === "game" ? "bg-blue-50 text-blue-700" :
+                        note.note_type === "practice" ? "bg-green-50 text-green-700" :
+                        note.note_type === "interview" ? "bg-purple-50 text-purple-700" :
+                        "bg-gray-50 text-gray-600"
+                      }`}>
+                        {NOTE_TYPE_LABELS[note.note_type] || note.note_type}
+                      </span>
+                      <p className="text-xs text-navy/80 line-clamp-2 flex-1">
+                        {note.one_line_summary || note.note_text || "—"}
+                      </p>
+                      <span className="text-[10px] text-muted/50 shrink-0">{relativeTime(note.created_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
