@@ -3565,6 +3565,30 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_score ON pxr_scores(pxr_score DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_position ON pxr_scores(position_group)")
 
+    # ── PXR Run Log (nightly cron tracking) ──
+    if USE_PG:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pxr_run_log (
+                id SERIAL PRIMARY KEY,
+                run_at TIMESTAMPTZ DEFAULT NOW(),
+                players_scored INTEGER,
+                duration_seconds NUMERIC(8,2),
+                status TEXT,
+                error_message TEXT
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pxr_run_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                players_scored INTEGER,
+                duration_seconds REAL,
+                status TEXT,
+                error_message TEXT
+            )
+        """)
+
     conn.commit()
 
     conn.close()
@@ -8524,6 +8548,68 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     conn.commit()
     duration_ms = int((_time.time() - start) * 1000)
     return {'scored': scored, 'null_toi': null_toi, 'null_data': null_data, 'duration_ms': duration_ms}
+
+
+def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, error_message: str | None = None):
+    """Write a row to pxr_run_log for audit trail."""
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO pxr_run_log (players_scored, duration_seconds, status, error_message) VALUES (%s, %s, %s, %s)"
+            if USE_PG else
+            "INSERT INTO pxr_run_log (players_scored, duration_seconds, status, error_message) VALUES (?, ?, ?, ?)",
+            (players_scored, round(duration_seconds, 2), status, error_message),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error("Failed to log PXR run: %s", e)
+
+
+def recalculate_pxr_scores_cron():
+    """Cron wrapper for nightly PXR recalculation. Logs start/end/errors."""
+    import time as _time
+    logger.info("[PXR CRON] Nightly recalculation starting")
+    start = _time.time()
+    try:
+        conn = get_db()
+        result = calculate_pxr_scores(conn, '2025-26')
+        conn.close()
+        duration = _time.time() - start
+        scored = result.get('scored', 0)
+        logger.info("[PXR CRON] Complete: %d players scored in %.2fs", scored, duration)
+        _log_pxr_run(scored, duration, 'success')
+    except Exception as e:
+        duration = _time.time() - start
+        logger.error("[PXR CRON] Failed after %.2fs: %s", duration, e)
+        _log_pxr_run(0, duration, 'error', str(e)[:500])
+
+
+# ── APScheduler: Nightly PXR recalculation (2:00 AM UTC) ────
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _BGScheduler
+    _pxr_scheduler = _BGScheduler()
+    _pxr_scheduler.add_job(
+        recalculate_pxr_scores_cron,
+        'cron',
+        hour=2,
+        minute=0,
+        timezone='UTC',
+        id='pxr_nightly_recalc',
+        replace_existing=True,
+    )
+    _pxr_scheduler.start()
+    logger.info("APScheduler started — PXR nightly recalc at 02:00 UTC")
+except ImportError:
+    logger.warning("APScheduler not installed — PXR nightly cron disabled")
+    _pxr_scheduler = None
+except Exception as e:
+    logger.error("APScheduler startup failed: %s", e)
+    _pxr_scheduler = None
+
+import atexit
+if _pxr_scheduler is not None:
+    atexit.register(lambda: _pxr_scheduler.shutdown(wait=False))
 
 
 def get_anthropic_client():
@@ -23665,17 +23751,26 @@ async def recalculate_pxr(
 ):
     """Admin-only. Triggers full PXR recalculation for given season."""
     _require_admin(token_data)
+    import time as _time
+    start = _time.time()
     conn = get_db()
     try:
         result = calculate_pxr_scores(conn, season)
+    except Exception as e:
+        duration = _time.time() - start
+        _log_pxr_run(0, duration, 'error', str(e)[:500])
+        raise
     finally:
         conn.close()
+    duration = _time.time() - start
+    _log_pxr_run(result['scored'], duration, 'success')
     return {
         'status': 'complete',
         'season': season,
         'players_scored': result['scored'],
         'players_null_toi': result['null_toi'],
         'players_null_data': result['null_data'],
+        'duration_seconds': round(duration, 2),
         'duration_ms': result['duration_ms'],
         'message': f"PXR calculated for {result['scored']} players in {result['duration_ms']}ms",
     }
