@@ -773,9 +773,10 @@ export default function PlayerDetailPage() {
 
         {/* Player Header */}
         <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-6 text-white mb-1">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              {/* Player Photo */}
+          <div className="flex items-start justify-between gap-4">
+            {/* Left: Avatar + Identity */}
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              {/* Player Photo / Position Silhouette */}
               <div className="shrink-0">
                 {hasRealImage(player.image_url) ? (
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-white/20 bg-white/10">
@@ -786,123 +787,203 @@ export default function PlayerDetailPage() {
                     />
                   </div>
                 ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-white/10 bg-white/5 flex items-center justify-center">
-                    <User size={28} className="text-white/30" />
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-white/10 bg-teal/10 flex items-center justify-center">
+                    {player.position === "G" || player.position === "GK" ? (
+                      <svg width={32} height={32} viewBox="0 0 24 24" fill="none" className="text-white/40">
+                        <circle cx="12" cy="5" r="3" fill="currentColor" opacity="0.6" />
+                        <path d="M6 11h12v2H6z" fill="currentColor" opacity="0.3" />
+                        <path d="M8 13v7h2v-4h4v4h2v-7H8z" fill="currentColor" opacity="0.5" />
+                        <rect x="4" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
+                        <rect x="17" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
+                      </svg>
+                    ) : (
+                      <svg width={32} height={32} viewBox="0 0 24 24" fill="none" className="text-white/40">
+                        <circle cx="12" cy="4" r="3" fill="currentColor" opacity="0.6" />
+                        <path d="M10 8h4l2 6h-8l2-6z" fill="currentColor" opacity="0.5" />
+                        <path d="M9 14l-2 6h2l2-4 2 4h2l-2-6H9z" fill="currentColor" opacity="0.4" />
+                        <line x1="15" y1="10" x2="19" y2="6" stroke="currentColor" strokeWidth="1.2" opacity="0.35" strokeLinecap="round" />
+                      </svg>
+                    )}
                   </div>
                 )}
               </div>
-              <div>
-              <h1 className="text-2xl font-bold">
-                {player.first_name} {player.last_name}
-              </h1>
-              <div className="flex items-center gap-3 mt-2 text-sm text-white/70">
-                <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-xs uppercase tracking-wide">
-                  {fullPosition(player.position)}
-                </span>
-                {player.archetype && (
-                  <span className="px-2 py-0.5 bg-orange/20 text-orange rounded font-oswald font-bold text-xs">
-                    {player.archetype}
+              <div className="min-w-0">
+                {/* Line 1: Player Name */}
+                <h1 className="text-2xl font-bold font-oswald truncate">
+                  {player.first_name} {player.last_name}
+                </h1>
+                {/* Line 2: Position · Team · League */}
+                <div className="flex items-center gap-1.5 mt-1 text-sm text-white/70 flex-wrap">
+                  <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-xs uppercase tracking-wide">
+                    {fullPosition(player.position)}
                   </span>
-                )}
-                {player.commitment_status && player.commitment_status !== "Uncommitted" && (
-                  <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs ${
-                    COMMITMENT_STATUS_COLORS[player.commitment_status]?.bg || "bg-white/10"
-                  } ${COMMITMENT_STATUS_COLORS[player.commitment_status]?.text || "text-white/70"}`}>
-                    {player.commitment_status}
-                  </span>
-                )}
-                {player.roster_status && player.roster_status !== "active" && (
-                  <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs uppercase tracking-wide ${
-                    player.roster_status === "inj" ? "bg-red-500/20 text-red-300" :
-                    player.roster_status === "susp" ? "bg-yellow-500/20 text-yellow-300" :
-                    player.roster_status === "ap" ? "bg-blue-500/20 text-blue-300" :
-                    player.roster_status === "scrch" ? "bg-gray-400/20 text-gray-300" :
-                    "bg-white/10 text-white/70"
-                  }`}>
-                    {player.roster_status === "inj" ? "INJ" :
-                     player.roster_status === "susp" ? "SUSP" :
-                     player.roster_status === "ap" ? "AP" :
-                     player.roster_status === "scrch" ? "SCRCH" :
-                     player.roster_status.toUpperCase()}
-                  </span>
-                )}
-                <PlayerStatusBadges tags={player.tags || []} size="md" />
-                {player.shoots && <span>Shoots {player.shoots}</span>}
-                {player.current_team && <span>{player.current_team}</span>}
-                {player.current_league && <span className="text-white/50">({formatLeague(player.current_league)})</span>}
-              </div>
-              {(player.height_cm || player.weight_kg || player.dob) && (
-                <p className="text-xs text-white/50 mt-1">
+                  {player.current_team && (
+                    <>
+                      <span className="text-white/30">·</span>
+                      <span>{player.current_team}</span>
+                    </>
+                  )}
+                  {player.current_league && (
+                    <>
+                      <span className="text-white/30">·</span>
+                      <span className="text-white/50">{formatLeague(player.current_league)}</span>
+                    </>
+                  )}
+                  {player.commitment_status && player.commitment_status !== "Uncommitted" && (
+                    <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs ${
+                      COMMITMENT_STATUS_COLORS[player.commitment_status]?.bg || "bg-white/10"
+                    } ${COMMITMENT_STATUS_COLORS[player.commitment_status]?.text || "text-white/70"}`}>
+                      {player.commitment_status}
+                    </span>
+                  )}
+                  {player.roster_status && player.roster_status !== "active" && (
+                    <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs uppercase tracking-wide ${
+                      player.roster_status === "inj" ? "bg-red-500/20 text-red-300" :
+                      player.roster_status === "susp" ? "bg-yellow-500/20 text-yellow-300" :
+                      player.roster_status === "ap" ? "bg-blue-500/20 text-blue-300" :
+                      player.roster_status === "scrch" ? "bg-gray-400/20 text-gray-300" :
+                      "bg-white/10 text-white/70"
+                    }`}>
+                      {player.roster_status === "inj" ? "INJ" :
+                       player.roster_status === "susp" ? "SUSP" :
+                       player.roster_status === "ap" ? "AP" :
+                       player.roster_status === "scrch" ? "SCRCH" :
+                       player.roster_status.toUpperCase()}
+                    </span>
+                  )}
+                  <PlayerStatusBadges tags={player.tags || []} size="md" />
+                </div>
+                {/* Line 3: Jersey # · Handedness · Birth Year · Age */}
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-white/50 flex-wrap">
+                  {player.jersey_number && (
+                    <>
+                      <span className="font-oswald font-bold text-white/70">#{player.jersey_number}</span>
+                      <span className="text-white/20">·</span>
+                    </>
+                  )}
+                  {player.shoots && (
+                    <>
+                      <span>Shoots {player.shoots}</span>
+                      <span className="text-white/20">·</span>
+                    </>
+                  )}
+                  {player.birth_year && <span>Born {player.birth_year}</span>}
                   {player.dob && (() => {
                     const birth = new Date(player.dob);
                     const today = new Date();
                     let age = today.getFullYear() - birth.getFullYear();
                     const m = today.getMonth() - birth.getMonth();
                     if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-                    return `Age ${age}`;
+                    return (
+                      <>
+                        {player.birth_year && <span className="text-white/20"> · </span>}
+                        <span>Age {age}</span>
+                      </>
+                    );
                   })()}
-                  {player.dob && (player.height_cm || player.weight_kg) && " · "}
-                  {player.height_cm && `${player.height_cm}cm`}
-                  {player.height_cm && player.weight_kg && " / "}
-                  {player.weight_kg && `${player.weight_kg}kg`}
-                </p>
-              )}
-              {/* Inline OVR Badge or Generate Assessment CTA (hidden for parents) */}
-              {!FAMILY_ROLES.has(userRole) && (
-                <div className="mt-2">
-                  {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" ? (
-                    <div className="flex items-center gap-1">
-                      <span
-                        className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-oswald font-bold text-sm bg-teal shadow-sm"
-                        title={`OVR: ${gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}`}
-                      >
-                        {gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}
-                      </span>
-                      <span className="text-[9px] text-white/40 font-oswald uppercase tracking-wider">OVR</span>
-                    </div>
-                  ) : (
-                    <Link
-                      href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
-                    >
-                      <Wand2 size={12} />
-                      Generate PXI Assessment
-                    </Link>
-                  )}
                 </div>
-              )}
+                {/* Line 4: Archetype (if set) */}
+                {player.archetype && (
+                  <p className="text-xs text-white/40 italic mt-1">{player.archetype}</p>
+                )}
+                {/* Inline OVR Badge or Generate Assessment CTA (hidden for parents) */}
+                {!FAMILY_ROLES.has(userRole) && (
+                  <div className="mt-2">
+                    {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" ? (
+                      <div className="flex items-center gap-1">
+                        <span
+                          className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-oswald font-bold text-sm bg-teal shadow-sm"
+                          title={`OVR: ${gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}`}
+                        >
+                          {gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}
+                        </span>
+                        <span className="text-[9px] text-white/40 font-oswald uppercase tracking-wider">OVR</span>
+                      </div>
+                    ) : (
+                      <Link
+                        href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
+                      >
+                        <Wand2 size={12} />
+                        Generate PXI Assessment
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleDownloadPDF}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
-                title="Download as PDF"
-              >
-                <Download size={14} />
-                PDF
-              </button>
-              <Link
-                href={`/players/${playerId}/card`}
-                className="flex items-center gap-2 px-3 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors no-print"
-              >
-                <Eye size={14} />
-                Player Card
-              </Link>
-              <Link
-                href={`/reports/custom?player=${playerId}`}
-                className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors no-print"
-              >
-                <Wand2 size={14} />
-                Custom
-              </Link>
-              <Link
-                href={`/reports/generate?player=${playerId}`}
-                className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors no-print"
-              >
-                <Zap size={14} />
-                Generate Report
-              </Link>
+            {/* Right: Draft Chips + Physical Profile + Actions */}
+            <div className="shrink-0 flex flex-col items-end gap-3">
+              {/* Draft Context Chips */}
+              {(() => {
+                const league = (player.current_league || "").toUpperCase();
+                const by = player.birth_year;
+                const chlLeagues = ["OHL", "WHL", "QMJHL", "LHJMQ"];
+                const ncaaLeagues = ["USHL", "NAHL", "PREP", "USHS", "US PREP"];
+                const isCHL = chlLeagues.some(l => league.includes(l));
+                const isNCAA = ncaaLeagues.some(l => league.includes(l));
+                const isDraftWindow = by != null && by >= 2004 && by <= 2007;
+                if (isCHL && isDraftWindow) {
+                  return (
+                    <span className="px-2.5 py-1 rounded-lg bg-teal/20 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider border border-teal/30">
+                      CHL + NCAA Viable
+                    </span>
+                  );
+                }
+                if (isNCAA) {
+                  return (
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 text-[10px] font-oswald font-bold uppercase tracking-wider border border-blue-500/30">
+                      NCAA Path Only
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+              {/* Physical Profile Mini-Block */}
+              {(player.height_cm || player.weight_kg || player.shoots) && (
+                <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/10 text-right">
+                  <p className="text-[9px] font-oswald uppercase tracking-wider text-white/40 mb-1">Physical</p>
+                  <div className="flex items-center gap-2 text-xs text-white/70">
+                    {player.height_cm && <span>{player.height_cm}cm</span>}
+                    {player.height_cm && player.weight_kg && <span className="text-white/20">·</span>}
+                    {player.weight_kg && <span>{player.weight_kg}kg</span>}
+                    {(player.height_cm || player.weight_kg) && player.shoots && <span className="text-white/20">·</span>}
+                    {player.shoots && <span>{player.shoots}</span>}
+                  </div>
+                </div>
+              )}
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 no-print">
+                <button
+                  onClick={handleDownloadPDF}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors"
+                  title="Download as PDF"
+                >
+                  <Download size={14} />
+                  PDF
+                </button>
+                <Link
+                  href={`/players/${playerId}/card`}
+                  className="flex items-center gap-2 px-3 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+                >
+                  <Eye size={14} />
+                  Player Card
+                </Link>
+                <Link
+                  href={`/reports/custom?player=${playerId}`}
+                  className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
+                >
+                  <Wand2 size={14} />
+                  Custom
+                </Link>
+                <Link
+                  href={`/reports/generate?player=${playerId}`}
+                  className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+                >
+                  <Zap size={14} />
+                  Generate Report
+                </Link>
+              </div>
             </div>
           </div>
         </div>
