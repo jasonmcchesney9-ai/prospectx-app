@@ -1,12 +1,30 @@
-const CACHE_NAME = 'prospectx-v1';
-const STATIC_ASSETS = ['/', '/dashboard'];
+// ProspectX Service Worker — Network First
+// Prevents stale JS bundle conflicts after Vercel deploys
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(STATIC_ASSETS)));
+const CACHE_NAME = 'prospectx-v1';
+
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
-self.addEventListener('fetch', e => {
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.map(key => caches.delete(key)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (e) => {
+  // Never cache API calls — always network
+  if (e.request.url.includes('/api/') ||
+       e.request.url.includes('railway.app')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
+  // Network first for everything else
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    fetch(e.request).catch(() => caches.match(e.request))
   );
 });
