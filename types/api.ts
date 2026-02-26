@@ -1576,6 +1576,9 @@ export type PxiContext = {
       team?: string;
       birthYear?: number;
       roleRelationship?: 'MY_CHILD' | 'MY_PLAYER' | 'MY_TEAM' | 'OPPONENT';
+      archetype?: string;
+      overall_band?: string;
+      pxr_score?: number;
     };
   };
 };

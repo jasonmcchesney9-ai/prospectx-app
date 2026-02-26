@@ -14,6 +14,9 @@ interface BenchTalkContextType {
   clearPendingRole: () => void;
   pendingPxiContext: PxiContext | null;
   clearPendingPxiContext: () => void;
+  // Persistent page context (set by current page, used by BenchTalk)
+  activePxiContext: PxiContext | null;
+  setActivePxiContext: (ctx: PxiContext | null) => void;
   // Admin role preview
   roleOverride: string | null;
   setRoleOverride: (role: string | null) => void;
@@ -30,6 +33,8 @@ const BenchTalkContext = createContext<BenchTalkContextType>({
   clearPendingRole: () => {},
   pendingPxiContext: null,
   clearPendingPxiContext: () => {},
+  activePxiContext: null,
+  setActivePxiContext: () => {},
   roleOverride: null,
   setRoleOverride: () => {},
 });
@@ -43,6 +48,7 @@ export default function BenchTalkProvider({ children }: { children: React.ReactN
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<string | null>(null);
   const [pendingPxiContext, setPendingPxiContext] = useState<PxiContext | null>(null);
+  const [activePxiContext, setActivePxiContext] = useState<PxiContext | null>(null);
   const [roleOverride, setRoleOverride] = useState<string | null>(null);
 
   const toggleBenchTalk = useCallback(() => {
@@ -82,7 +88,7 @@ export default function BenchTalkProvider({ children }: { children: React.ReactN
 
   return (
     <BenchTalkContext.Provider
-      value={{ isOpen, toggleBenchTalk, openBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, clearPendingRole, pendingPxiContext, clearPendingPxiContext, roleOverride, setRoleOverride }}
+      value={{ isOpen, toggleBenchTalk, openBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, clearPendingRole, pendingPxiContext, clearPendingPxiContext, activePxiContext, setActivePxiContext, roleOverride, setRoleOverride }}
     >
       {children}
     </BenchTalkContext.Provider>

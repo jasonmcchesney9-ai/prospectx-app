@@ -5508,6 +5508,21 @@ def format_pxi_context(ctx: dict) -> str:
         lines.append(f"Birth year: {meta['birthYear']}")
     if meta.get('roleRelationship'):
         lines.append(f"Relationship: {meta['roleRelationship']}")
+    if meta.get('archetype'):
+        lines.append(f"Archetype: {meta['archetype']}")
+    if meta.get('overall_band'):
+        lines.append(f"Overall Band: {meta['overall_band']}")
+    if meta.get('pxr_score'):
+        lines.append(f"PXR Score: {meta['pxr_score']}")
+
+    # Player profile proactive prompt
+    if page.get('id') == 'PLAYER_CARD' and entity and entity.get('type') == 'PLAYER':
+        player_name = entity.get('name', 'this player')
+        lines.append('')
+        lines.append('CURRENT PAGE CONTEXT:')
+        lines.append(f'The user is viewing the player profile for {player_name}.')
+        lines.append('Proactively offer relevant assistance for this player — scouting, practice planning')
+        lines.append('targeting their development areas, or report generation. Do not wait to be asked.')
     return '\n'.join(lines)
 
 

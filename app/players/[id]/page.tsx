@@ -204,7 +204,7 @@ export default function PlayerDetailPage() {
   const playerId = params.id as string;
   const currentUser = getUser();
   const userRole = currentUser?.hockey_role || "scout";
-  const { openBenchTalk } = useBenchTalk();
+  const { openBenchTalk, setActivePxiContext } = useBenchTalk();
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [stats, setStats] = useState<PlayerStats[]>([]);
@@ -735,6 +735,35 @@ export default function PlayerDetailPage() {
     }
     if (playerId) load();
   }, [playerId]);
+
+  // Set active PXI context for BenchTalk when viewing this player
+  useEffect(() => {
+    if (player) {
+      setActivePxiContext({
+        user: {
+          id: currentUser?.id || "",
+          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "SCOUT" | "COACH" | "GM" | "PARENT" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgName: "ProspectX",
+        },
+        page: { id: "PLAYER_CARD", route: `/players/${playerId}` },
+        entity: {
+          type: "PLAYER",
+          id: player.id,
+          name: `${player.first_name} ${player.last_name}`,
+          metadata: {
+            position: player.position || undefined,
+            team: player.current_team || undefined,
+            league: player.current_league || undefined,
+            archetype: intelligence?.archetype || undefined,
+            overall_band: intelligence?.overall_grade ? gradeToOverallBand(intelligence.overall_grade) || undefined : undefined,
+            pxr_score: pxrData?.pxr_score || undefined,
+          },
+        },
+      });
+    }
+    return () => { setActivePxiContext(null); };
+  }, [player, playerId, currentUser, intelligence, pxrData, setActivePxiContext]);
 
   // Auto-trigger: deep-link from dashboard with ?tab=player&autoGenerate=true
   useEffect(() => {

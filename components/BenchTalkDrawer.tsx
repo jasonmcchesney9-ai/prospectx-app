@@ -417,7 +417,7 @@ function ModePillBar({ pxiModes, currentMode, onModeChange, roleGroup }: ModePil
 
 // ── Main Bench Talk Drawer ──────────────────────────────────
 export default function BenchTalkDrawer() {
-  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, pendingPxiContext, clearPendingPxiContext, roleOverride } = useBenchTalk();
+  const { isOpen, toggleBenchTalk, closeBenchTalk, pendingMessage, clearPendingMessage, pendingRole, pendingPxiContext, clearPendingPxiContext, activePxiContext, roleOverride } = useBenchTalk();
 
   // Page/entity context for this conversation
   const [pageContext, setPageContext] = useState<PxiContext | null>(null);
@@ -458,7 +458,7 @@ export default function BenchTalkDrawer() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const prevMessageCountRef = useRef(0);
 
-  // Load conversations + modes on mount
+  // Load conversations + modes on mount; pick up active page context
   useEffect(() => {
     if (isOpen) {
       loadConversations();
@@ -466,6 +466,10 @@ export default function BenchTalkDrawer() {
       // Fetch PXI modes (only once)
       if (pxiModes.length === 0) {
         api.get("/pxi/modes").then(({ data }) => setPxiModes(data)).catch(() => {});
+      }
+      // If no pending context but there's an active page context, use it
+      if (!pendingPxiContext && activePxiContext && !pageContext) {
+        setPageContext(activePxiContext);
       }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
