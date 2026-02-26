@@ -2492,7 +2492,7 @@ export default function PlayerDetailPage() {
                 </div>
 
                 {stats.length === 0 && goalieStats.length === 0 && (
-                  <p className="text-xs text-muted/60 mt-2">No stats yet — import via CSV/XLSX or sync from HockeyTech.</p>
+                  <p className="text-xs text-muted/60 mt-2">No stats yet — import via CSV/XLSX or sync from League Data.</p>
                 )}
 
                 {/* Extended Stats (Advanced Analytics) */}
