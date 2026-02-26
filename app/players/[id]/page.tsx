@@ -65,6 +65,7 @@ import { formatLeague } from "@/lib/leagues";
 import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse } from "@/types/api";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
@@ -98,6 +99,16 @@ function scoreLabel(score: number): string {
   if (score >= 6.0) return "Developing";
   if (score >= 5.0) return "Building";
   return "Early Stage";
+}
+
+function gradeToOverallBand(grade: string | null | undefined): string | null {
+  if (!grade || grade === "NR") return null;
+  const score = GRADE_TO_NUMBER[grade] ?? (parseFloat(grade) || 0);
+  if (score >= 9.0) return "Top prospect in league";
+  if (score >= 8.0) return "Above-average at level";
+  if (score >= 6.5) return "Average at level";
+  if (score >= 5.0) return "Depth / fringe roster";
+  return "Too early to project";
 }
 
 function fullPosition(pos: string | null | undefined): string {
@@ -174,6 +185,7 @@ export default function PlayerDetailPage() {
   const playerId = params.id as string;
   const currentUser = getUser();
   const userRole = currentUser?.hockey_role || "scout";
+  const { openBenchTalk } = useBenchTalk();
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [stats, setStats] = useState<PlayerStats[]>([]);
@@ -886,30 +898,7 @@ export default function PlayerDetailPage() {
                 {player.archetype && (
                   <p className="text-xs text-white/40 italic mt-1">{player.archetype}</p>
                 )}
-                {/* Inline OVR Badge or Generate Assessment CTA (hidden for parents) */}
-                {!FAMILY_ROLES.has(userRole) && (
-                  <div className="mt-2">
-                    {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" ? (
-                      <div className="flex items-center gap-1">
-                        <span
-                          className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-oswald font-bold text-sm bg-teal shadow-sm"
-                          title={`OVR: ${gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}`}
-                        >
-                          {gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}
-                        </span>
-                        <span className="text-[9px] text-white/40 font-oswald uppercase tracking-wider">OVR</span>
-                      </div>
-                    ) : (
-                      <Link
-                        href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
-                      >
-                        <Wand2 size={12} />
-                        Generate PXI Assessment
-                      </Link>
-                    )}
-                  </div>
-                )}
+                {/* OVR badge removed — replaced by RoleAndOverallRow below header */}
               </div>
             </div>
             {/* Right: Draft Chips + Physical Profile + Actions */}
@@ -987,6 +976,58 @@ export default function PlayerDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* RoleAndOverallRow — hidden for FAMILY role */}
+        {!FAMILY_ROLES.has(userRole) && (
+          <div className="bg-white border border-border rounded-xl px-5 py-3 mt-2 mb-1 flex items-center justify-between">
+            {intelligence && intelligence.version > 0 ? (
+              <>
+                {/* Role Projection */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Role</span>
+                  <span className="text-sm font-semibold text-navy font-oswald">
+                    {intelligence.archetype || "—"}
+                  </span>
+                </div>
+                {/* Overall Band */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Overall</span>
+                  <span className="text-sm font-semibold text-teal font-oswald">
+                    {gradeToOverallBand(intelligence.overall_grade) || "—"}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider">
+                    Needs Scouting
+                  </span>
+                  <span className="text-xs text-muted">No intelligence data yet</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openBenchTalk(
+                      `I want to scout ${player.first_name} ${player.last_name}, ${fullPosition(player.position)} for ${player.current_team || "unknown team"} in ${player.current_league ? formatLeague(player.current_league) : "unknown league"}.`,
+                      "scout"
+                    )}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
+                  >
+                    <Zap size={12} />
+                    Scout Now
+                  </button>
+                  <Link
+                    href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-teal/30 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/10 transition-colors"
+                  >
+                    <Wand2 size={12} />
+                    Generate PXI Assessment
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="ice-stripe mb-6 rounded-b-full" />
 
