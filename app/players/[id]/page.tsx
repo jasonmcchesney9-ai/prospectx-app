@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -198,14 +198,6 @@ const COACH_ROLES = new Set(["coach", "gm", "admin", "scout"]);
 const FAMILY_ROLES = new Set(["parent", "player"]);
 
 export default function PlayerDetailPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" /></div>}>
-      <PlayerDetailContent />
-    </Suspense>
-  );
-}
-
-function PlayerDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
