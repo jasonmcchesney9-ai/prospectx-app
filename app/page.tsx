@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,6 +12,7 @@ import {
   Crown,
   Trophy,
   ChevronRight,
+  ChevronLeft,
   Briefcase,
   MessageSquare,
   UserPlus,
@@ -1133,8 +1134,13 @@ function TopProspectsSection({ prospects, loading }: { prospects: TopProspect[];
 
 function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { scorebar: HTGame[]; teamName: string; scorebarLeague?: string; onLeagueChange?: (v: string) => void }) {
   const lower = teamName.toLowerCase();
+  const scrollRef = useRef<HTMLDivElement>(null);
   // Show games sorted by date, most recent / live first
   const sorted = [...scorebar].sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime());
+
+  function scrollBy(dir: number) {
+    scrollRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
+  }
 
   return (
     <div className="bg-white rounded-xl border border-orange/25 p-4">
@@ -1156,37 +1162,53 @@ function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { 
           </select>
         )}
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
-        {sorted.slice(0, 10).map((g) => {
-          const isOurGame = g.home_team.toLowerCase().includes(lower) || g.away_team.toLowerCase().includes(lower) ||
-                            lower.includes(g.home_team.toLowerCase()) || lower.includes(g.away_team.toLowerCase());
-          return (
-            <div
-              key={g.game_id}
-              className={`shrink-0 w-40 rounded-lg border p-2.5 text-center text-xs ${
-                isOurGame ? "border-orange/35 bg-teal/[0.03]" : "border-border"
-              }`}
-            >
-              <p className="text-[9px] text-muted/60 mb-1">
-                {new Date(g.game_date || g.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                {g.time && ` · ${g.time}`}
-              </p>
-              <div className="flex items-center justify-between gap-1">
-                <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.away_team}</span>
-                <span className="font-oswald font-bold text-sm text-navy">{g.away_score || "-"}</span>
+      <div className="relative">
+        <button
+          onClick={() => scrollBy(-1)}
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 w-7 h-7 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-navy/60 hover:text-navy hover:border-teal/30 transition-colors"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin scroll-smooth">
+          {sorted.map((g) => {
+            const isOurGame = g.home_team.toLowerCase().includes(lower) || g.away_team.toLowerCase().includes(lower) ||
+                              lower.includes(g.home_team.toLowerCase()) || lower.includes(g.away_team.toLowerCase());
+            return (
+              <div
+                key={g.game_id}
+                className={`shrink-0 w-40 rounded-lg border p-2.5 text-center text-xs ${
+                  isOurGame ? "border-teal bg-teal/[0.03]" : "border-border"
+                }`}
+              >
+                <p className="text-[9px] text-muted/60 mb-1">
+                  {new Date(g.game_date || g.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  {g.time && ` · ${g.time}`}
+                </p>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.home_team}</span>
+                  <span className="font-oswald font-bold text-sm text-navy">{g.home_score ?? "-"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.away_team}</span>
+                  <span className="font-oswald font-bold text-sm text-navy">{g.away_score ?? "-"}</span>
+                </div>
+                <p className={`text-[9px] font-oswald uppercase tracking-wider mt-1 ${
+                  g.status === "Final" || g.status === "final" ? "text-muted/50" : "text-green-600 font-bold"
+                }`}>
+                  {g.status || "Scheduled"}
+                </p>
               </div>
-              <div className="flex items-center justify-between gap-1">
-                <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.home_team}</span>
-                <span className="font-oswald font-bold text-sm text-navy">{g.home_score || "-"}</span>
-              </div>
-              <p className={`text-[9px] font-oswald uppercase tracking-wider mt-1 ${
-                g.status === "Final" || g.status === "final" ? "text-muted/50" : "text-green-600 font-bold"
-              }`}>
-                {g.status || "Scheduled"}
-              </p>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <button
+          onClick={() => scrollBy(1)}
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 w-7 h-7 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-navy/60 hover:text-navy hover:border-teal/30 transition-colors"
+          aria-label="Scroll right"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
     </div>
   );
