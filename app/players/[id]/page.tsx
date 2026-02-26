@@ -1127,21 +1127,20 @@ function PlayerDetailContent() {
         )}
 
         {/* PXI Score Tiles — numeric 1-10 above the fold */}
-        {intelligence && intelligence.overall_grade && intelligence.overall_grade !== "NR" && (() => {
+        {pxrData && pxrData.pxr_score > 0 && (() => {
           const subScores = [
-            { label: "Offense", grade: intelligence.offensive_grade },
-            { label: "Defense", grade: intelligence.defensive_grade },
-            { label: "Skating", grade: intelligence.skating_grade },
-            { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
-            { label: "Compete", grade: intelligence.compete_grade },
-            { label: "Overall", grade: intelligence.overall_grade },
+            { label: "Offense", value: pxrData.p1_offense },
+            { label: "Defense", value: pxrData.p2_defense },
+            { label: "Possession", value: pxrData.p3_possession },
+            { label: "Physical", value: pxrData.p4_physical },
+            { label: "Overall", value: pxrData.pxr_score },
           ] as const;
-          const validScores = subScores.filter(s => s.grade && s.grade !== "NR");
+          const validScores = subScores.filter(s => s.value != null && s.value > 0);
           if (validScores.length === 0) return null;
           return (
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-2 mb-1">
-              {validScores.map(({ label, grade }) => {
-                const val = gradeToNumber(grade);
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-2 mb-1">
+              {validScores.map(({ label, value }) => {
+                const scaled = (value! / 10);
                 const isOverall = label === "Overall";
                 return (
                   <div
@@ -1155,7 +1154,7 @@ function PlayerDetailContent() {
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
                   >
                     <span className="font-bold font-oswald" style={{ fontSize: "22px", color: isOverall ? "#14B8A8" : "#FFFFFF" }}>
-                      {val > 0 ? val.toFixed(1) : "—"}
+                      {scaled > 0 ? scaled.toFixed(1) : "—"}
                     </span>
                     <span className="text-[9px] font-oswald uppercase tracking-wider font-bold mt-0.5" style={{ color: "#64748B" }}>
                       {label}
