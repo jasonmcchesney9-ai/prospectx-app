@@ -9,9 +9,11 @@ import {
   ShoppingBag,
   BookOpen,
   Heart,
+  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { getUser } from "@/lib/auth";
 import DevelopmentJourneyTracker from "@/components/player-guide/DevelopmentJourneyTracker";
 import NutritionSection from "@/components/player-guide/NutritionSection";
 import WorkoutsSection from "@/components/player-guide/WorkoutsSection";
@@ -111,6 +113,26 @@ const GUIDE_SECTIONS: GuideSection[] = [
 /* ---------- Main Page ---------- */
 export default function PlayerGuidePage() {
   const [activeTab, setActiveTab] = useState("nutrition");
+  const _user = getUser();
+  const _role = _user?.hockey_role || "";
+  const _roleAllowed = _role === "parent" || _role === "player";
+
+  if (!_roleAllowed) {
+    return (
+      <ProtectedRoute>
+        <NavBar />
+        <main className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <Shield size={48} className="text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-navy mb-2">Access Denied</h2>
+          <p className="text-muted text-sm mb-1">This page is available to Family accounts only.</p>
+          <p className="text-muted/60 text-xs mb-6">Your current role: <span className="font-medium text-navy">{_role || "none"}</span></p>
+          <a href="/" className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors">
+            Go to Dashboard
+          </a>
+        </main>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>

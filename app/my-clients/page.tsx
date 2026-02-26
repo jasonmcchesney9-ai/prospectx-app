@@ -14,10 +14,12 @@ import {
   ExternalLink,
   Trash2,
   MapPin,
+  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import { formatLeague } from "@/lib/leagues";
 import HockeyRink from "@/components/HockeyRink";
 import type { AgentClient, AgentClientStatus } from "@/types/api";
@@ -52,6 +54,26 @@ function calcAge(dob: string | null): number | null {
 // ══════════════════════════════════════════════════════════════
 
 export default function MyClientsPage() {
+  const _user = getUser();
+  const _role = _user?.hockey_role || "";
+  const _allowed = _role === "agent";
+  if (!_allowed) {
+    return (
+      <ProtectedRoute>
+        <NavBar />
+        <main className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <Shield size={48} className="text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-navy mb-2">Access Denied</h2>
+          <p className="text-muted text-sm mb-1">This page is available to Agent accounts only.</p>
+          <p className="text-muted/60 text-xs mb-6">Your current role: <span className="font-medium text-navy">{_role || "none"}</span></p>
+          <a href="/" className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors">
+            Go to Dashboard
+          </a>
+        </main>
+      </ProtectedRoute>
+    );
+  }
+
   return (
     <ProtectedRoute>
       <NavBar />

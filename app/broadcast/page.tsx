@@ -15,6 +15,7 @@ import {
   GripVertical,
   CheckCircle2,
   SkipForward,
+  Shield,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -32,6 +33,7 @@ import InterviewQuestions from "@/components/broadcast/InterviewQuestions";
 import PostGameScript from "@/components/broadcast/PostGameScript";
 import StorylineTimeline from "@/components/broadcast/StorylineTimeline";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import type {
   Player,
   GameState,
@@ -109,6 +111,8 @@ function genTimelineId(): string {
   _tlSeq += 1;
   return `tl_${Date.now()}_${_tlSeq}`;
 }
+
+const BROADCAST_ALLOWED_ROLES = ["broadcaster", "producer", "scout", "coach", "gm", "admin"];
 
 export default function BroadcastPage() {
   // Game context
@@ -647,6 +651,27 @@ export default function BroadcastPage() {
         return null;
     }
   };
+
+  const _user = getUser();
+  const _role = _user?.hockey_role || "";
+  const _roleAllowed = BROADCAST_ALLOWED_ROLES.includes(_role);
+
+  if (!_roleAllowed) {
+    return (
+      <ProtectedRoute>
+        <NavBar />
+        <main className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <Shield size={48} className="text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-navy mb-2">Access Denied</h2>
+          <p className="text-muted text-sm mb-1">This page is available to Media and Pro accounts only.</p>
+          <p className="text-muted/60 text-xs mb-6">Your current role: <span className="font-medium text-navy">{_role || "none"}</span></p>
+          <a href="/" className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors">
+            Go to Dashboard
+          </a>
+        </main>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>
