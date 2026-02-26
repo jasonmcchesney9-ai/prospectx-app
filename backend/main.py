@@ -28481,6 +28481,11 @@ BENCH_TALK_TOOLS = [
             },
             "required": ["player_name"]
         }
+    },
+    # ── Web Search (Anthropic server-side tool) ──────────────────
+    {
+        "type": "web_search_20250305",
+        "name": "web_search",
     }
 ]
 
