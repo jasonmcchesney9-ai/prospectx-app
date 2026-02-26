@@ -356,6 +356,20 @@ export default function PlayerCardPage() {
                   </span>
                 )}
               </div>
+              {/* Scout Now — below photo */}
+              {userRole !== "parent" && (
+                <button
+                  onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
+                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgName: "ProspectX" },
+                    page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
+                    entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
+                  })}
+                  className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors print:hidden"
+                >
+                  <Search size={11} />
+                  Scout Now
+                </button>
+              )}
             </div>
 
             {/* Bio details */}
@@ -473,19 +487,6 @@ export default function PlayerCardPage() {
                     Needs Scouting
                   </span>
                   <p className="text-[10px] text-gray-400 mb-3">No intelligence data yet.</p>
-                  {userRole !== "parent" && (
-                    <button
-                      onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
-                        user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgName: "ProspectX" },
-                        page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
-                        entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
-                      })}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
-                    >
-                      <Search size={11} />
-                      Scout Now
-                    </button>
-                  )}
                 </div>
               </div>
             )}
