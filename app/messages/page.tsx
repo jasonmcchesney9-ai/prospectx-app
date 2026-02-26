@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { MessageSquare, ArrowLeft } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -238,6 +239,14 @@ export default function MessagesPage() {
   return (
     <ProtectedRoute>
       <main className="h-[calc(100vh-64px)] flex flex-col">
+        <div className="px-4 pt-3 pb-0">
+          <Link
+            href="/"
+            className="flex items-center gap-1 text-sm text-muted hover:text-navy"
+          >
+            <ArrowLeft size={14} /> Dashboard
+          </Link>
+        </div>
         {/* Safety banner */}
         <div className="px-4 pt-3 pb-2">
           <SafetyBanner />
