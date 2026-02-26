@@ -120,6 +120,21 @@ function fullPosition(pos: string | null | undefined): string {
   return POSITION_LABELS[pos.toUpperCase()] || pos;
 }
 
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = Math.max(0, now - then);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 // Section titles for the 9-section development plan model
 const DEV_PLAN_SECTION_TITLES: Record<number, string> = {
   1: "Player Snapshot & Identity",
@@ -1673,15 +1688,12 @@ export default function PlayerDetailPage() {
                         </button>
                       </div>
                     ) : (
-                      <div>
-                        <p className="text-sm text-muted mb-2">No archetype assigned yet.</p>
-                        <button
-                          onClick={() => setEditingArchetype(true)}
-                          className="text-xs text-teal hover:underline"
-                        >
-                          + Assign archetype
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => setEditingArchetype(true)}
+                        className="text-xs text-teal hover:underline"
+                      >
+                        + Assign archetype
+                      </button>
                     )}
                     {player.archetype && (
                       <p className="text-xs text-muted/70 mt-2 leading-relaxed">
@@ -2015,9 +2027,9 @@ export default function PlayerDetailPage() {
 
             {/* Generate Intelligence CTA (when no intelligence exists) */}
             {(!intelligence || intelligence.version === 0) && (stats.length > 0 || goalieStats.length > 0 || notes.length > 0) && (
-              <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-5 text-center">
-                <Brain size={28} className="mx-auto text-teal/40 mb-2" />
-                <p className="text-sm text-navy/70 mb-2">No intelligence data yet. Upload player stats or sync roster data to populate this card.</p>
+              <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-4 text-center">
+                <Brain size={20} className="mx-auto text-teal/40 mb-1.5" />
+                <p className="text-xs text-muted mb-2">No intelligence data yet — generate a profile to unlock AI scouting insights.</p>
                 <button
                   onClick={handleRefreshIntelligence}
                   disabled={refreshingIntel}
@@ -2359,9 +2371,7 @@ export default function PlayerDetailPage() {
                 </div>
 
                 {stats.length === 0 && goalieStats.length === 0 && (
-                  <p className="text-xs text-muted mt-2">
-                    No stats yet. Upload a CSV or Excel file with columns: season, gp, g, a, p, plus_minus, pim, shots, sog, shooting_pct
-                  </p>
+                  <p className="text-xs text-muted/60 mt-2">No stats yet — import via CSV/XLSX or sync from HockeyTech.</p>
                 )}
 
                 {/* Extended Stats (Advanced Analytics) */}
@@ -2580,11 +2590,8 @@ export default function PlayerDetailPage() {
                               <Lock size={10} /> Private
                             </span>
                           )}
-                          <span className="text-xs text-muted">
-                            {new Date(note.created_at).toLocaleDateString("en-US", {
-                              month: "short", day: "numeric", year: "numeric",
-                              hour: "numeric", minute: "2-digit",
-                            })}
+                          <span className="text-xs text-muted" title={new Date(note.created_at).toLocaleString()}>
+                            {relativeTime(note.created_at)}
                           </span>
                         </div>
 
