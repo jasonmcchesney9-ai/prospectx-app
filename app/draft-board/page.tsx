@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronUp, ChevronDown, Download, RotateCcw } from "lucide-react";
+import { ChevronUp, ChevronDown, Download, RotateCcw, ArrowLeft } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 
@@ -193,6 +193,9 @@ export default function DraftBoardPage() {
   return (
     <ProtectedRoute>
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Link href="/" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-3 no-print">
+          <ArrowLeft size={14} /> Dashboard
+        </Link>
         {/* Header */}
         <div className="flex items-center justify-between mb-5 no-print">
           <div>

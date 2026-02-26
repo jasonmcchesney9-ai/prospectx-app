@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Trophy } from "lucide-react";
+import { Trophy, ArrowLeft } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -159,6 +159,9 @@ export default function LeaderboardPage() {
     <ProtectedRoute>
       <NavBar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Link href="/" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-3">
+          <ArrowLeft size={14} /> Dashboard
+        </Link>
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-1">
