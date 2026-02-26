@@ -5449,6 +5449,35 @@ MANDATORY: Begin your practice plan output with:
 """
 
 # ─────────────────────────────────────────────────────────
+# PXR PILLAR-GUIDED DRILL SELECTION RULES
+# ─────────────────────────────────────────────────────────
+
+PXR_PILLAR_DRILL_RULES = """
+PXR PILLAR-GUIDED DRILL SELECTION:
+
+PILLAR → DRILL FOCUS MAPPING:
+- P1 Offense weak → prioritize: zone entry drills, power play execution, net-front presence, shooting drills, offensive zone cycle
+- P2 Defense weak → prioritize: gap control, defensive zone coverage, shot blocking, neutral zone defense, breakout under pressure
+- P3 Possession weak → prioritize: puck battle drills, board battles, possession cycling, controlled zone entries/exits, puck protection
+- P4 Physical weak → prioritize: compete drills, battle drills, conditioning, physicality in corners, net-front battles
+
+WEIGHTING RULE:
+- If pillar data exists: at least 40% of drills should target the two weakest pillars
+- Remaining 60% balanced across LTPD stage and coach focus
+- If no pillar data: use coach-provided focus areas and LTPD stage only
+
+INDIVIDUAL PLAYER CONTEXT:
+If practice plan is for a specific player, use that player's individual PXR pillar scores instead of team averages.
+
+Always explain briefly why you chose focus drills — one sentence referencing the pillar weakness.
+
+DRILL LIBRARY RULE:
+Always use the internal ProspectX drill library first for all drill selection.
+The internal library covers all categories — web search is never needed for drills.
+Web search is only for league context.
+"""
+
+# ─────────────────────────────────────────────────────────
 # N1) format_pxi_context — render PxiContext dict for prompt
 # ─────────────────────────────────────────────────────────
 def format_pxi_context(ctx: dict) -> str:

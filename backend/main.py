@@ -13617,6 +13617,43 @@ async def remove_drill_from_plan(plan_id: str, ppd_id: str, token_data: dict = D
 # AI PRACTICE PLAN GENERATION
 # ============================================================
 
+
+def get_team_pxr_pillar_summary(conn, team_name: str, season: str = "2025-26"):
+    """Get average PXR pillar scores for a team's players, ranked weakest→strongest."""
+    rows = conn.execute("""
+        SELECT
+            AVG(ps.p1_offense) as avg_p1,
+            AVG(ps.p2_defense) as avg_p2,
+            AVG(ps.p3_possession) as avg_p3,
+            AVG(ps.p4_physical) as avg_p4,
+            COUNT(*) as players_scored
+        FROM pxr_scores ps
+        JOIN players p ON ps.player_id = p.id
+        WHERE LOWER(p.current_team) = LOWER(?)
+        AND ps.season = ?
+        AND ps.pxr_score IS NOT NULL
+    """, (team_name, season)).fetchone()
+
+    if not rows or rows["players_scored"] == 0:
+        return None
+
+    pillars = {
+        "P1 Offense": round(rows["avg_p1"] or 0, 1),
+        "P2 Defense": round(rows["avg_p2"] or 0, 1),
+        "P3 Possession": round(rows["avg_p3"] or 0, 1),
+        "P4 Physical": round(rows["avg_p4"] or 0, 1),
+    }
+    ranked = sorted(pillars.items(), key=lambda x: x[1])
+
+    return {
+        "pillars": pillars,
+        "weakest": ranked[0][0],
+        "second_weakest": ranked[1][0],
+        "strongest": ranked[-1][0],
+        "players_scored": rows["players_scored"],
+    }
+
+
 @app.post("/practice-plans/generate", status_code=201)
 async def generate_practice_plan(body: PracticePlanGenerateRequest, token_data: dict = Depends(verify_token)):
     """AI-powered practice plan generation using team context and drill library."""
@@ -13670,6 +13707,21 @@ async def generate_practice_plan(body: PracticePlanGenerateRequest, token_data: 
         ltpd_guidelines = build_practice_plan_guidelines(_ltpd_org, _ltpd_age)
     except Exception as e:
         logger.warning("LTPD guidelines injection failed: %s", e)
+
+    # 1d. PXR pillar context for drill selection
+    pxr_pillar_context = ""
+    try:
+        pxr_summary = get_team_pxr_pillar_summary(conn, body.team_name)
+        if pxr_summary:
+            pxr_pillar_context = (
+                f"\nPXR TEAM PILLAR AVERAGES ({pxr_summary['players_scored']} players scored):\n"
+                + "\n".join(f"  {k}: {v}" for k, v in pxr_summary["pillars"].items())
+                + f"\n  Weakest pillar: {pxr_summary['weakest']}"
+                + f"\n  Second weakest: {pxr_summary['second_weakest']}"
+                + f"\n  Strongest pillar: {pxr_summary['strongest']}"
+            )
+    except Exception as e:
+        logger.warning("PXR pillar context injection failed: %s", e)
 
     # 2. Query matching drills
     # IMPORTANT: Only query drills table, never chalk_talks
@@ -13753,6 +13805,10 @@ Do NOT select systems/tactics drills for U8 teams. Do NOT select simple fun game
     if ltpd_guidelines:
         system_prompt += "\n" + ltpd_guidelines
 
+    # Inject PXR pillar drill selection rules from pxi_prompt_core
+    from pxi_prompt_core import PXR_PILLAR_DRILL_RULES
+    system_prompt += "\n" + PXR_PILLAR_DRILL_RULES
+
     focus_str = ", ".join(body.focus_areas) if body.focus_areas else "general skills"
     user_prompt = f"""Generate a {body.duration_minutes}-minute practice plan for the {body.team_name}.
 
@@ -13765,6 +13821,7 @@ ROSTER ({len(roster_summary)} players):
 
 {f"TEAM SYSTEM: Forecheck={team_system.get('forecheck','N/A')}, DZ={team_system.get('dz_structure','N/A')}, OZ={team_system.get('oz_setup','N/A')}, PP={team_system.get('pp_formation','N/A')}, PK={team_system.get('pk_formation','N/A')}" if team_system else "No team system configured"}
 {chr(10) + fw_context if fw_context else ''}
+{pxr_pillar_context if pxr_pillar_context else 'No PXR pillar data available for this team.'}
 
 AVAILABLE DRILLS:
 {json.dumps(available_drills, indent=1)}
@@ -29234,6 +29291,19 @@ def _pt_generate_practice_plan(params: dict, org_id: str, user_id: str) -> tuple
 
         focus_str = ", ".join(body.focus_areas) if body.focus_areas else "general skills"
 
+        # PXR pillar context for drill selection
+        pxr_bt_context = ""
+        try:
+            pxr_bt_summary = get_team_pxr_pillar_summary(conn, body.team_name)
+            if pxr_bt_summary:
+                pxr_bt_context = (
+                    f"\nPXR PILLAR AVERAGES ({pxr_bt_summary['players_scored']} players): "
+                    f"Weakest={pxr_bt_summary['weakest']}, Second={pxr_bt_summary['second_weakest']}, "
+                    f"Strongest={pxr_bt_summary['strongest']}"
+                )
+        except Exception:
+            pass
+
         # Build a simple mock plan (Bench Talk will present it nicely)
         warmup = [d for d in available_drills if d["category"] == "warm_up"][:1]
         skills = [d for d in available_drills if d["category"] in ("passing", "shooting", "skating")][:2]
@@ -29266,14 +29336,17 @@ def _pt_generate_practice_plan(params: dict, org_id: str, user_id: str) -> tuple
         client = get_anthropic_client()
         if client:
             try:
+                from pxi_prompt_core import PXR_PILLAR_DRILL_RULES
                 system_prompt = """You are ProspectX Practice Plan Intelligence. Generate a structured practice plan in JSON format.
 Return ONLY valid JSON with phases: warm_up, skill_work, systems, scrimmage, conditioning, cool_down.
 Each phase has drills from the provided library with drill_id, drill_name, duration_minutes, coaching_notes.
-AGE-LEVEL RULES: U8=maximum fun, games, no systems/tactics, constant puck touches. U10=intro skills, still game-heavy. U12=begin team concepts, basic forecheck/breakout. U14+=full systems, PP/PK, tactical depth. Do NOT assign systems drills to U8/U10."""
+AGE-LEVEL RULES: U8=maximum fun, games, no systems/tactics, constant puck touches. U10=intro skills, still game-heavy. U12=begin team concepts, basic forecheck/breakout. U14+=full systems, PP/PK, tactical depth. Do NOT assign systems drills to U8/U10.
+""" + PXR_PILLAR_DRILL_RULES
 
                 user_prompt = f"""Generate a {body.duration_minutes}-minute practice for {body.team_name}.
 Age: {body.age_level}. Focus: {focus_str}. {f'Notes: {body.notes}' if body.notes else ''}
 Roster: {len(roster_summary)} players. {f'System: {team_system.get("forecheck","N/A")} forecheck' if team_system else ''}
+{pxr_bt_context}
 Available drills: {json.dumps(available_drills[:40], indent=1)}"""
 
                 msg = client.messages.create(
