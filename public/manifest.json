@@ -1,0 +1,21 @@
+{
+  "name": "ProspectX Intelligence",
+  "short_name": "ProspectX",
+  "description": "AI-powered hockey scouting and analytics",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0F2942",
+  "theme_color": "#0D9488",
+  "icons": [
+    {
+      "src": "/pxilogosmall.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pxilogoprimary.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
