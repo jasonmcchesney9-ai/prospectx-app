@@ -847,30 +847,28 @@ export default function PlayerDetailPage() {
                   {player.weight_kg && `${player.weight_kg}kg`}
                 </p>
               )}
-              {/* Inline Score Badges (from intelligence) */}
-              {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" && (
-                <div className="flex items-center gap-1.5 mt-2">
-                  {([
-                    { label: "OVR", grade: intelligence.overall_grade },
-                    { label: "OFF", grade: intelligence.offensive_grade },
-                    { label: "DEF", grade: intelligence.defensive_grade },
-                    { label: "SKT", grade: intelligence.skating_grade },
-                    { label: "IQ", grade: intelligence.hockey_iq_grade },
-                    { label: "CMP", grade: intelligence.compete_grade },
-                  ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => {
-                    const numVal = gradeToNumber(grade);
-                    return (
-                      <div key={label} className="flex items-center gap-0.5">
-                        <span
-                          className="w-7 h-7 rounded flex items-center justify-center text-white font-oswald font-bold text-[11px] bg-teal"
-                          title={`${label}: ${numVal > 0 ? numVal.toFixed(1) : "—"}`}
-                        >
-                          {numVal > 0 ? numVal.toFixed(1) : "—"}
-                        </span>
-                        <span className="text-[8px] text-white/40 font-oswald uppercase">{label}</span>
-                      </div>
-                    );
-                  })}
+              {/* Inline OVR Badge or Generate Assessment CTA (hidden for parents) */}
+              {!FAMILY_ROLES.has(userRole) && (
+                <div className="mt-2">
+                  {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" ? (
+                    <div className="flex items-center gap-1">
+                      <span
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-oswald font-bold text-sm bg-teal shadow-sm"
+                        title={`OVR: ${gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}`}
+                      >
+                        {gradeToNumber(intelligence.overall_grade) > 0 ? gradeToNumber(intelligence.overall_grade).toFixed(1) : "—"}
+                      </span>
+                      <span className="text-[9px] text-white/40 font-oswald uppercase tracking-wider">OVR</span>
+                    </div>
+                  ) : (
+                    <Link
+                      href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
+                    >
+                      <Wand2 size={12} />
+                      Generate PXI Assessment
+                    </Link>
+                  )}
                 </div>
               )}
               </div>
