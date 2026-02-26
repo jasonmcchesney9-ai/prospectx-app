@@ -402,30 +402,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Who It's For ────────────────────────── */}
-      <section className="bg-navy-light/30 border-y border-white/5">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-          <h2 className="text-2xl sm:text-3xl font-oswald font-bold text-white text-center mb-10">
-            Who Uses ProspectX
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {USERS.map((u) => (
-              <div key={u.label} className="text-center p-4">
-                <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mx-auto mb-3">
-                  <u.icon size={22} className="text-teal" />
-                </div>
-                <h3 className="font-oswald text-xs font-semibold text-white uppercase tracking-wider mb-1">
-                  {u.label}
-                </h3>
-                <p className="text-xs text-white/40 leading-relaxed">
-                  {u.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── PXI Section ──────────────────────────── */}
       <section className="bg-navy border-y border-white/5">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-20">
@@ -524,6 +500,30 @@ export default function LandingPage() {
                 Sign In
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Who It's For ────────────────────────── */}
+      <section className="bg-navy-light/30 border-y border-white/5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
+          <h2 className="text-2xl sm:text-3xl font-oswald font-bold text-white text-center mb-10">
+            Who Uses ProspectX
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {USERS.map((u) => (
+              <div key={u.label} className="text-center p-4">
+                <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mx-auto mb-3">
+                  <u.icon size={22} className="text-teal" />
+                </div>
+                <h3 className="font-oswald text-xs font-semibold text-white uppercase tracking-wider mb-1">
+                  {u.label}
+                </h3>
+                <p className="text-xs text-white/40 leading-relaxed">
+                  {u.desc}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
