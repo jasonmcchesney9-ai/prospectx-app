@@ -3574,10 +3574,13 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
             idx.percentile >= 25 ? "Below Avg" : "Developing";
           const dashOffset = CIRCUMFERENCE * (1 - idx.value / 99);
 
+          const bgOpacity = Math.max(0.02, (idx.value / 99) * 0.08);
+
           return (
             <div
               key={key}
-              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg bg-navy/[0.02] border border-navy/[0.06] hover:border-teal/20 transition-all duration-300"
+              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg border border-navy/[0.06] hover:border-teal/20 transition-all duration-300"
+              style={{ backgroundColor: color + Math.round(bgOpacity * 255).toString(16).padStart(2, "0") }}
               title={idx.description}
             >
               <div className="relative w-[76px] h-[76px]">
@@ -3594,7 +3597,7 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-xs leading-none mb-0.5">{icon}</span>
                   <span
-                    className="text-lg font-oswald font-bold leading-none tabular-nums"
+                    className="text-xl font-oswald font-bold leading-none tabular-nums"
                     style={{ color }}
                   >
                     {idx.value}
@@ -3608,7 +3611,7 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
                 className="text-[7px] font-medium px-1.5 py-0.5 rounded-full mt-0.5"
                 style={{ backgroundColor: color + "12", color }}
               >
-                {pctLabel}
+                {pctLabel} · P{idx.percentile}
               </span>
             </div>
           );
