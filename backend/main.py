@@ -115,6 +115,7 @@ from pxi_prompt_core import (
     TILE_SEEDED_PROMPTS,
     EMOTION_CONTEXT_MAP,
     AFTER_GAME_SEED_TEMPLATE,
+    build_practice_plan_guidelines,
 )
 
 # Load .env from the backend directory (works regardless of CWD)
@@ -13660,6 +13661,16 @@ async def generate_practice_plan(body: PracticePlanGenerateRequest, token_data: 
             org_country = team_row_fw["country"]
     fw_context = framework_context(org_country, team_age_div, org_framework)
 
+    # 1c. LTPD guidelines injection (from pxi_prompt_core)
+    _AGE_LEVEL_TO_INT = {"U8": 7, "U10": 9, "U12": 11, "U14": 13, "U16_U18": 16, "JUNIOR_COLLEGE_PRO": 19}
+    _ltpd_age = _AGE_LEVEL_TO_INT.get(body.age_level, 19)
+    _ltpd_org = {"country": org_country, "province_state": "", "governing_body": org_framework or "hockey_canada"}
+    ltpd_guidelines = ""
+    try:
+        ltpd_guidelines = build_practice_plan_guidelines(_ltpd_org, _ltpd_age)
+    except Exception as e:
+        logger.warning("LTPD guidelines injection failed: %s", e)
+
     # 2. Query matching drills
     # IMPORTANT: Only query drills table, never chalk_talks
     # PXI must never use chalk_talks for drill selection
@@ -13738,6 +13749,9 @@ AGE-APPROPRIATE COACHING — THIS IS CRITICAL:
 - JUNIOR_COLLEGE_PRO: Elite detail. Advanced analytics references. Positional nuance. Professional-level coaching points. Complex systems integration.
 
 Do NOT select systems/tactics drills for U8 teams. Do NOT select simple fun games for Junior/Pro teams. Match the drill complexity to the age level."""
+
+    if ltpd_guidelines:
+        system_prompt += "\n" + ltpd_guidelines
 
     focus_str = ", ".join(body.focus_areas) if body.focus_areas else "general skills"
     user_prompt = f"""Generate a {body.duration_minutes}-minute practice plan for the {body.team_name}.
