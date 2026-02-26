@@ -265,12 +265,12 @@ export default function LandingPage() {
             >
               Sign In
             </Link>
-            <Link
-              href="/login"
+            <a
+              href="mailto:jason@prospectxintelligence.com?subject=ProspectX Demo Request"
               className="text-sm font-oswald font-semibold uppercase tracking-wider px-4 py-2 bg-teal text-white rounded-lg hover:bg-teal/90 transition-colors"
             >
-              Start Free Trial
-            </Link>
+              Request Access
+            </a>
           </div>
         </div>
       </nav>
@@ -302,17 +302,11 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-10">
-            <Link
-              href="/onboarding"
-              className="flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
-            >
-              Get Started for Free <ArrowRight size={16} />
-            </Link>
             <a
               href="mailto:jason@prospectxintelligence.com?subject=ProspectX Demo Request"
-              className="flex items-center gap-2 px-8 py-3 border border-teal/30 text-teal font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/10 transition-colors text-sm"
+              className="flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
             >
-              Book a Demo
+              Book a Demo <ArrowRight size={16} />
             </a>
           </div>
           <div className="mt-3">
@@ -331,7 +325,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-xs text-white/30 mt-4">
-            2-week free trial. No credit card required.
+            Contact us to get started. We&apos;ll have you set up in 24 hours.
           </p>
 
           {/* Hero Stats Bar */}
@@ -507,14 +501,14 @@ export default function LandingPage() {
           {/* Section CTA */}
           <div className="text-center mt-10">
             <p className="text-white/50 text-sm mb-4">
-              Try Bench Talk free — no credit card required.
+              See PXI in action — request a walkthrough.
             </p>
-            <Link
-              href="/onboarding"
+            <a
+              href="mailto:jason@prospectxintelligence.com?subject=ProspectX Demo Request"
               className="inline-flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
             >
-              Get Started for Free <ArrowRight size={16} />
-            </Link>
+              Request Access <ArrowRight size={16} />
+            </a>
             <div className="mt-3">
               <Link
                 href="/login"
@@ -666,7 +660,7 @@ export default function LandingPage() {
           </p>
 
           <p className="text-center text-xs text-white/30 mt-4">
-            Rookie tier is free forever. Paid plans are month-to-month &mdash; cancel anytime. Your data is always yours.
+            All plans are month-to-month &mdash; cancel anytime. Your data is always yours. Contact us to get started.
           </p>
         </div>
       </section>
@@ -717,16 +711,16 @@ export default function LandingPage() {
           </h2>
           <p className="text-white/50 text-sm max-w-lg mx-auto mb-8">
             Send us your roster. We&apos;ll show you what ProspectX sees in 24 hours.
-            No commitment. No credit card.
+            No commitment required.
           </p>
 
           <div className="flex flex-col items-center gap-3">
-            <Link
-              href="/onboarding"
+            <a
+              href="mailto:jason@prospectxintelligence.com?subject=ProspectX Demo Request"
               className="flex items-center gap-2 px-8 py-3 bg-orange text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors text-sm"
             >
-              Get Started for Free <ArrowRight size={16} />
-            </Link>
+              Book a Demo <ArrowRight size={16} />
+            </a>
             <Link
               href="/login"
               className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
