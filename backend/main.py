@@ -18743,6 +18743,22 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
 
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
+            # ── PXR Score Context Injection (append to system prompt for player-facing types) ──
+            try:
+                _pxr_score_ctx = input_data.get("pxr_context", {}).get("pxr_score_data", {})
+                if _pxr_score_ctx.get("pxr_context_available"):
+                    _pxr_block = format_pxr_prompt_block(
+                        _pxr_score_ctx,
+                        player_name=player_name,
+                        birth_year=str(player.get("birth_year", "")),
+                        league=player.get("current_league", ""),
+                        position=player.get("position", ""),
+                    )
+                    if _pxr_block:
+                        system_prompt += _pxr_block
+            except Exception as e:
+                logger.warning("PXR prompt block injection failed: %s", e)
+
             # Per-report-type token limits
             _type_tokens = {
                 "elite_profile": 12000,
@@ -19817,10 +19833,119 @@ async def pxr_reference_league_context(league_id: str):
     return result
 
 
+# ── PXR Score Context Fetcher (for prompt injection) ──
+
+_PXR_TIERS = [
+    (90, 100, "1A", "ELITE"),
+    (80, 89,  "1B", "HIGH IMPACT"),
+    (70, 79,  "2A", "SOLID STARTER"),
+    (60, 69,  "2B", "DEPTH PLAYER"),
+    (50, 59,  "3A", "DEVELOPING"),
+    (0,  49,  "3B", "EARLY STAGE"),
+]
+
+
+def get_player_pxr_context(player_id: str, conn) -> dict:
+    """Fetch a single player's PXR score data for prompt injection.
+
+    Returns dict with pxr_context_available=True and all score fields,
+    or pxr_context_available=False if no score exists.
+    """
+    try:
+        row = conn.execute("""
+            SELECT pxr_score, league_percentile, cohort_percentile, age_modifier,
+                   p1_offense, p2_defense, p3_possession, p4_physical,
+                   data_completeness, season, position_group
+            FROM pxr_scores
+            WHERE player_id = %s AND pxr_score IS NOT NULL
+            ORDER BY season DESC
+            LIMIT 1
+        """, (player_id,)).fetchone()
+        if not row:
+            return {"pxr_context_available": False}
+
+        score = row["pxr_score"]
+        tier_id = "3B"
+        tier_label = "EARLY STAGE"
+        for lo, hi, tid, tlabel in _PXR_TIERS:
+            if lo <= score <= hi:
+                tier_id = tid
+                tier_label = tlabel
+                break
+
+        return {
+            "pxr_context_available": True,
+            "pxr_score": round(score, 1),
+            "tier": tier_id,
+            "tier_label": tier_label,
+            "league_percentile": round(row["league_percentile"], 1) if row["league_percentile"] is not None else None,
+            "cohort_percentile": round(row["cohort_percentile"], 1) if row["cohort_percentile"] is not None else None,
+            "age_modifier": round(row["age_modifier"], 1) if row["age_modifier"] is not None else None,
+            "p1_offense": round(row["p1_offense"], 1) if row["p1_offense"] is not None else None,
+            "p2_defense": round(row["p2_defense"], 1) if row["p2_defense"] is not None else None,
+            "p3_possession": round(row["p3_possession"], 1) if row["p3_possession"] is not None else None,
+            "p4_physical": round(row["p4_physical"], 1) if row["p4_physical"] is not None else None,
+            "data_completeness": round(row["data_completeness"], 1) if row["data_completeness"] is not None else None,
+            "season": row["season"],
+            "position_group": row["position_group"],
+        }
+    except Exception as e:
+        logger.warning("get_player_pxr_context failed for %s: %s", player_id, e)
+        return {"pxr_context_available": False}
+
+
+def format_pxr_prompt_block(pxr: dict, player_name: str = "", birth_year: str = "", league: str = "", position: str = "") -> str:
+    """Format PXR score data into a human-readable prompt injection block.
+
+    Returns empty string if pxr_context_available is False.
+    """
+    if not pxr.get("pxr_context_available"):
+        return ""
+
+    lp = pxr.get("league_percentile")
+    cp = pxr.get("cohort_percentile")
+    am = pxr.get("age_modifier")
+
+    league_pct_str = f"Top {max(1, round(100 - lp))}% among {position or 'players'} in {league or 'their league'} this season" if lp is not None else "Not available"
+    cohort_pct_str = f"Top {max(1, round(100 - cp))}% among all {birth_year}-born players across 8 leagues" if cp is not None and birth_year else "Not available"
+
+    if am is not None and am > 0:
+        am_str = f"+{am} (playing young for their cohort — positive signal)"
+    elif am is not None and am < 0:
+        am_str = f"{am} (overage relative to cohort — context matters)"
+    else:
+        am_str = "0.0 (age-neutral)"
+
+    p1 = pxr.get("p1_offense")
+    p2 = pxr.get("p2_defense")
+    p3 = pxr.get("p3_possession")
+    p4 = pxr.get("p4_physical")
+    pillar_str = f"Offense {p1 if p1 is not None else '—'} · Defense {p2 if p2 is not None else '—'} · Possession {p3 if p3 is not None else '—'} · Physical {p4 if p4 is not None else '—'}"
+    dc = pxr.get("data_completeness")
+
+    return f"""
+--- PXR INTELLIGENCE CONTEXT ---
+PXR Score: {pxr['pxr_score']} / 100 (Tier {pxr['tier']} — {pxr['tier_label']})
+League Ranking: {league_pct_str}
+Cohort Ranking: {cohort_pct_str}
+Age Modifier: {am_str}
+Pillar Breakdown: {pillar_str}
+Data Completeness: {dc}%{' — sparse data, use cautiously' if dc is not None and dc < 50 else ''}
+
+Use this context to add percentile perspective to your analysis. Reference
+the cohort ranking when discussing developmental trajectory. Reference the
+league ranking when discussing current impact. Do not just repeat these
+numbers — interpret them. A player ranked in the top percentiles of their
+birth year cohort across 8 leagues is a meaningful signal worth explaining.
+--- END PXR CONTEXT ---
+"""
+
+
 def _build_pxr_context(player_id: str, org_id: str, player: dict, conn) -> dict:
     """Build PXR reference context for report generation.
 
     Internally computes benchmarks, league-context, filtered systems, and glossary.
+    Also fetches PXR score data from pxr_scores table.
     Returns a dict to inject into input_data, or None on complete failure.
     """
     pxr = {}
@@ -19853,6 +19978,14 @@ def _build_pxr_context(player_id: str, org_id: str, player: dict, conn) -> dict:
     if age_note:
         player_canonical["age_note"] = age_note
     pxr["player_canonical"] = player_canonical
+
+    # 1b. PXR score data from pxr_scores table
+    try:
+        pxr_score_data = get_player_pxr_context(player_id, conn)
+        if pxr_score_data.get("pxr_context_available"):
+            pxr["pxr_score_data"] = pxr_score_data
+    except Exception as e:
+        logger.warning("PXR score lookup failed for %s: %s", player_id, e)
 
     # 2. League context (cached)
     league = player.get("current_league", "")
@@ -28655,7 +28788,31 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
         if recent_form:
             input_data["recent_form_last_10"] = recent_form
 
+        # ── PXR Context for background reports ──
+        try:
+            bg_pxr_context = _build_pxr_context(player_id, org_id, player, conn)
+            if bg_pxr_context:
+                input_data["pxr_context"] = bg_pxr_context
+        except Exception as e:
+            logger.warning("BG PXR context injection failed for %s: %s", player_id, e)
+
         user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+
+        # ── PXR Score Context Injection (background path) ──
+        try:
+            _bg_pxr_ctx = input_data.get("pxr_context", {}).get("pxr_score_data", {})
+            if _bg_pxr_ctx.get("pxr_context_available"):
+                _bg_pxr_block = format_pxr_prompt_block(
+                    _bg_pxr_ctx,
+                    player_name=player_name,
+                    birth_year=str(player.get("birth_year", "")),
+                    league=player.get("current_league", ""),
+                    position=player.get("position", ""),
+                )
+                if _bg_pxr_block:
+                    bg_system_prompt += _bg_pxr_block
+        except Exception as e:
+            logger.warning("BG PXR prompt block injection failed: %s", e)
 
         _bg_type_tokens = {
             "elite_profile": 12000,
