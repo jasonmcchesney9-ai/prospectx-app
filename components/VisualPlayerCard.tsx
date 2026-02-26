@@ -116,14 +116,18 @@ function MetricCircle({ label, value }: { label: string; value: number | null })
   );
 }
 
-/** "Needs Scouting" badge for unscouted players */
+/** "Needs Scouting" badge for unscouted players — dashed circles per axis */
 function NeedsScoutingBadge() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center h-[130px] gap-2">
-      <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider">
-        Needs Scouting
+      <div className="flex items-center gap-2">
+        {RADAR_AXES.map(({ label }) => (
+          <MetricCircle key={label} label={label} value={null} />
+        ))}
+      </div>
+      <span className="text-[9px] text-muted/50 text-center leading-tight max-w-[200px]">
+        No intelligence grades yet. Generate a PXI Assessment to grade this player.
       </span>
-      <span className="text-[9px] text-muted/50">No intelligence data yet</span>
     </div>
   );
 }
