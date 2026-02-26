@@ -88,6 +88,16 @@ const GRADE_LABELS: Record<string, string> = {
   compete_grade: "Compete",
 };
 
+const GRADE_TO_SCORE: Record<string, number> = {
+  "A+": 10, "A": 9.5, "A-": 9, "B+": 8.5, "B": 8, "B-": 7.5,
+  "C+": 7, "C": 6.5, "C-": 6, "D+": 5.5, "D": 5, "D-": 4.5, "F": 3, "NR": 0,
+};
+function gradeToScore(grade: unknown): number {
+  if (!grade || grade === "NR") return 0;
+  const s = String(grade);
+  return GRADE_TO_SCORE[s] ?? (parseFloat(s) || 0);
+}
+
 // ── Page Component ──
 
 export default function PlayerCardPage() {
@@ -417,7 +427,7 @@ export default function PlayerCardPage() {
             {/* Intelligence radar */}
             {radarData.length >= 3 && !allZeroRadar && (
               <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Grade Profile</h3>
+                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Score Profile</h3>
                 {intel?.archetype ? (
                   <p className="text-xs text-teal font-semibold mb-2">{String(intel.archetype)}</p>
                 ) : null}
@@ -438,15 +448,16 @@ export default function PlayerCardPage() {
                 </div>
                 {intel?.overall_grade != null && (
                   <div className="text-center mt-1">
-                    <span className="text-lg font-bold text-navy">{String(intel.overall_grade)}</span>
-                    <span className="text-[10px] text-muted ml-1 font-oswald uppercase tracking-wider">OVR</span>
+                    <span className="text-lg font-bold text-teal">{gradeToScore(intel.overall_grade) > 0 ? gradeToScore(intel.overall_grade).toFixed(1) : "—"}</span>
+                    <span className="text-sm text-muted ml-1 font-oswald">/ 10</span>
+                    <span className="text-[10px] text-muted ml-1 font-oswald uppercase tracking-wider">PXI Score</span>
                   </div>
                 )}
               </div>
             )}
             {(radarData.length < 3 || allZeroRadar) && (
               <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Grade Profile</h3>
+                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Score Profile</h3>
                 <div className="flex flex-col items-center justify-center py-6">
                   <div className="flex items-center gap-3 mb-3">
                     {["SNP", "IQ", "PLY", "TRN", "DEF", "CMP"].map((label) => (

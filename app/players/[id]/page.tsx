@@ -66,7 +66,7 @@ import ProgressionChart from "@/components/ProgressionChart";
 import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse } from "@/types/api";
-import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, GRADE_COLORS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
+import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports" | "player" | "video";
 type StatsSubView = "current" | "progression" | "gamelog";
@@ -82,14 +82,22 @@ const POSITION_LABELS: Record<string, string> = {
   RD: "Right Defense",
 };
 
-// Grade-to-number for MetricCircle intensity
+// Grade/score-to-number conversion (1-10 scale)
 const GRADE_TO_NUMBER: Record<string, number> = {
-  "A+": 10, "A": 9, "A-": 8, "B+": 7, "B": 6, "B-": 5,
-  "C+": 4, "C": 3, "C-": 2, "D+": 1.5, "D": 1, "NR": 0,
+  "A+": 10, "A": 9.5, "A-": 9, "B+": 8.5, "B": 8, "B-": 7.5,
+  "C+": 7, "C": 6.5, "C-": 6, "D+": 5.5, "D": 5, "D-": 4.5, "F": 3, "NR": 0,
 };
 function gradeToNumber(grade: string | null | undefined): number {
-  if (!grade) return 0;
+  if (!grade || grade === "NR") return 0;
   return GRADE_TO_NUMBER[grade] ?? (parseFloat(grade) || 0);
+}
+function scoreLabel(score: number): string {
+  if (score >= 9.0) return "Elite";
+  if (score >= 8.0) return "Excellent";
+  if (score >= 7.0) return "Strong";
+  if (score >= 6.0) return "Developing";
+  if (score >= 5.0) return "Building";
+  return "Early Stage";
 }
 
 function fullPosition(pos: string | null | undefined): string {
@@ -839,7 +847,7 @@ export default function PlayerDetailPage() {
                   {player.weight_kg && `${player.weight_kg}kg`}
                 </p>
               )}
-              {/* Inline Grade Badges (from intelligence) */}
+              {/* Inline Score Badges (from intelligence) */}
               {intelligence && intelligence.version > 0 && intelligence.overall_grade && intelligence.overall_grade !== "NR" && (
                 <div className="flex items-center gap-1.5 mt-2">
                   {([
@@ -849,18 +857,20 @@ export default function PlayerDetailPage() {
                     { label: "SKT", grade: intelligence.skating_grade },
                     { label: "IQ", grade: intelligence.hockey_iq_grade },
                     { label: "CMP", grade: intelligence.compete_grade },
-                  ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => (
-                    <div key={label} className="flex items-center gap-0.5">
-                      <span
-                        className="w-7 h-7 rounded flex items-center justify-center text-white font-oswald font-bold text-[11px]"
-                        style={{ backgroundColor: GRADE_COLORS[grade!] || "#9ca3af" }}
-                        title={`${label}: ${grade}`}
-                      >
-                        {grade}
-                      </span>
-                      <span className="text-[8px] text-white/40 font-oswald uppercase">{label}</span>
-                    </div>
-                  ))}
+                  ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => {
+                    const numVal = gradeToNumber(grade);
+                    return (
+                      <div key={label} className="flex items-center gap-0.5">
+                        <span
+                          className="w-7 h-7 rounded flex items-center justify-center text-white font-oswald font-bold text-[11px] bg-teal"
+                          title={`${label}: ${numVal > 0 ? numVal.toFixed(1) : "—"}`}
+                        >
+                          {numVal > 0 ? numVal.toFixed(1) : "—"}
+                        </span>
+                        <span className="text-[8px] text-white/40 font-oswald uppercase">{label}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               </div>
@@ -1453,7 +1463,7 @@ export default function PlayerDetailPage() {
                       ProspectX Metrics
                     </h4>
                     <p className="text-[10px] text-muted/50 mb-2">
-                      PXI grades across 6 dimensions — derived from stats, scouting notes, and AI analysis
+                      PXI scores across 6 dimensions — derived from stats, scouting notes, and AI analysis
                     </p>
                     {playerMetrics ? (
                       <>
@@ -1499,40 +1509,45 @@ export default function PlayerDetailPage() {
                 </div>
 
                 <div className="p-5 space-y-5">
-                  {/* Grades Row — Enhanced MetricCircles */}
-                  {intelligence.overall_grade && intelligence.overall_grade !== "NR" && (
-                    <div>
-                      <div className="flex flex-wrap gap-3">
-                        {([
-                          { label: "OVR", grade: intelligence.overall_grade },
-                          { label: "OFF", grade: intelligence.offensive_grade },
-                          { label: "DEF", grade: intelligence.defensive_grade },
-                          { label: "SKT", grade: intelligence.skating_grade },
-                          { label: "IQ", grade: intelligence.hockey_iq_grade },
-                          { label: "CMP", grade: intelligence.compete_grade },
-                        ] as const).filter(g => g.grade && g.grade !== "NR").map(({ label, grade }) => {
-                          const numVal = gradeToNumber(grade);
-                          const intensity = 0.2 + (numVal / 10) * 0.8;
-                          const baseColor = GRADE_COLORS[grade!] || "#9ca3af";
-                          return (
-                            <div key={label} className="flex flex-col items-center gap-0.5">
-                              <div
-                                className="w-11 h-11 rounded-full flex items-center justify-center text-white font-oswald font-bold text-sm border-2"
-                                style={{
-                                  backgroundColor: baseColor,
-                                  opacity: intensity,
-                                  borderColor: baseColor,
-                                }}
-                              >
-                                {numVal > 0 ? numVal.toFixed(1) : grade}
+                  {/* PXI Intelligence Score */}
+                  {intelligence.overall_grade && intelligence.overall_grade !== "NR" && (() => {
+                    const compositeVal = gradeToNumber(intelligence.overall_grade);
+                    const subScores = [
+                      { label: "Offense", grade: intelligence.offensive_grade },
+                      { label: "Defense", grade: intelligence.defensive_grade },
+                      { label: "Skating", grade: intelligence.skating_grade },
+                      { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
+                      { label: "Compete", grade: intelligence.compete_grade },
+                      { label: "Overall", grade: intelligence.overall_grade },
+                    ] as const;
+                    return (
+                      <div>
+                        {/* Composite score */}
+                        <div className="flex items-baseline gap-2 mb-3">
+                          <span className="text-2xl font-bold text-teal font-oswald">
+                            {compositeVal > 0 ? compositeVal.toFixed(1) : "—"}
+                          </span>
+                          <span className="text-sm text-muted font-oswald">/ 10</span>
+                          <span className="text-[10px] font-oswald uppercase tracking-wider text-muted ml-1">PXI Intelligence Score</span>
+                          {FAMILY_ROLES.has(userRole) && compositeVal > 0 && (
+                            <span className="text-xs font-semibold text-teal ml-1">{scoreLabel(compositeVal)}</span>
+                          )}
+                        </div>
+                        {/* 2-column sub-score grid */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {subScores.filter(s => s.grade && s.grade !== "NR").map(({ label, grade }) => {
+                            const val = gradeToNumber(grade);
+                            return (
+                              <div key={label} className="flex items-center justify-between bg-navy/[0.03] rounded-lg px-3 py-1.5">
+                                <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
+                                <span className="text-sm font-bold text-navy font-oswald">{val > 0 ? val.toFixed(1) : "—"}</span>
                               </div>
-                              <span className="text-[9px] font-oswald uppercase tracking-wider text-muted">{label}</span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Archetype + Confidence */}
                   {intelligence.archetype && (
@@ -1660,8 +1675,8 @@ export default function PlayerDetailPage() {
                             <span className="font-medium text-navy/50">v{h.version}</span>
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.04]">{h.trigger || "—"}</span>
                             <span>{h.archetype || "—"}</span>
-                            <span className="font-medium" style={{ color: GRADE_COLORS[h.overall_grade || "NR"] || "#9ca3af" }}>
-                              {h.overall_grade || "NR"}
+                            <span className="font-medium text-teal">
+                              {h.overall_grade ? (gradeToNumber(h.overall_grade) > 0 ? gradeToNumber(h.overall_grade).toFixed(1) : "—") : "—"}
                             </span>
                             <span className="ml-auto text-[10px]">
                               {h.created_at ? new Date(h.created_at).toLocaleDateString() : "—"}

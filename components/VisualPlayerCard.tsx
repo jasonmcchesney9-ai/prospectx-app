@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { PlayerCardData } from "@/types/api";
-import { GRADE_COLORS, METRIC_COLORS, COMMITMENT_STATUS_COLORS } from "@/types/api";
+import { METRIC_COLORS, COMMITMENT_STATUS_COLORS } from "@/types/api";
 import PlayerStatusBadges from "./PlayerStatusBadges";
 import { assetUrl, hasRealImage } from "@/lib/api";
 import { getUser } from "@/lib/auth";
@@ -31,15 +31,23 @@ const GOALIE_POSITIONS = new Set(["G", "GK", "Goalie"]);
 
 // ── Sub-Components ──────────────────────────────────────────
 
-function GradeBadge({ grade }: { grade: string | null }) {
+const GRADE_TO_SCORE: Record<string, number> = {
+  "A+": 10, "A": 9.5, "A-": 9, "B+": 8.5, "B": 8, "B-": 7.5,
+  "C+": 7, "C": 6.5, "C-": 6, "D+": 5.5, "D": 5, "D-": 4.5, "F": 3, "NR": 0,
+};
+function gradeToScore(grade: string | null | undefined): number {
+  if (!grade || grade === "NR") return 0;
+  return GRADE_TO_SCORE[grade] ?? (parseFloat(grade) || 0);
+}
+
+function ScoreBadge({ grade }: { grade: string | null }) {
   if (!grade || grade === "NR") return null;
-  const color = GRADE_COLORS[grade] || "#9ca3af";
+  const score = gradeToScore(grade);
   return (
     <span
-      className="inline-flex items-center justify-center w-9 h-9 rounded-lg font-oswald font-bold text-sm text-white shadow-sm"
-      style={{ backgroundColor: color }}
+      className="inline-flex items-center justify-center w-9 h-9 rounded-lg font-oswald font-bold text-sm text-white shadow-sm bg-teal"
     >
-      {grade}
+      {score > 0 ? score.toFixed(1) : "—"}
     </span>
   );
 }
@@ -261,7 +269,7 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
           <div className="flex flex-col items-center gap-1 mr-2">
             {player.overall_grade && player.overall_grade !== "NR" ? (
               <>
-                <GradeBadge grade={player.overall_grade} />
+                <ScoreBadge grade={player.overall_grade} />
                 <span className="text-[9px] text-muted font-oswald uppercase tracking-wider">OVR</span>
               </>
             ) : (
