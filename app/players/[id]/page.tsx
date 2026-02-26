@@ -1535,10 +1535,22 @@ export default function PlayerDetailPage() {
                         <div className="grid grid-cols-2 gap-2">
                           {subScores.filter(s => s.grade && s.grade !== "NR").map(({ label, grade }) => {
                             const val = gradeToNumber(grade);
+                            const isOverall = label === "Overall";
                             return (
-                              <div key={label} className="flex items-center justify-between bg-navy/[0.03] rounded-lg px-3 py-1.5">
-                                <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
-                                <span className="text-sm font-bold text-navy font-oswald">{val > 0 ? val.toFixed(1) : "—"}</span>
+                              <div
+                                key={label}
+                                className="flex items-center justify-between transition-colors"
+                                style={{
+                                  backgroundColor: "#162E4A",
+                                  border: "1px solid rgba(255,255,255,0.08)",
+                                  borderRadius: "10px",
+                                  padding: "14px 18px",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,148,136,0.4)"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
+                              >
+                                <span className="text-[10px] font-oswald uppercase tracking-wider font-bold" style={{ letterSpacing: "0.1em", color: "#64748B" }}>{label}</span>
+                                <span className="font-bold font-oswald" style={{ fontSize: "22px", color: isOverall ? "#14B8A8" : "#FFFFFF" }}>{val > 0 ? val.toFixed(1) : "—"}</span>
                               </div>
                             );
                           })}
