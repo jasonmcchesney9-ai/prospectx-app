@@ -1,7 +1,7 @@
 // ProspectX Service Worker — Network First
 // Prevents stale JS bundle conflicts after Vercel deploys
 
-const CACHE_NAME = 'prospectx-v1';
+const CACHE_NAME = 'prospectx-v2';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
