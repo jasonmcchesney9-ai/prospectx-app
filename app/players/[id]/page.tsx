@@ -223,7 +223,7 @@ export default function PlayerDetailPage() {
   const [gameLogOffset, setGameLogOffset] = useState(0);
   const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
   const [trendlineData, setTrendlineData] = useState<import("@/types/api").TrendlineResponse | null>(null);
-  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null } | null>(null);
+  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null } | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
 
@@ -1744,44 +1744,90 @@ export default function PlayerDetailPage() {
           );
         })()}
 
-        {/* SkillBars — PXR pillar scores (hidden for parent/player roles) */}
+        {/* PXR Score Block (hidden for parent/player roles) */}
         {!FAMILY_ROLES.has(userRole) && (
-          <div className="bg-white border border-border rounded-xl px-5 py-3 mt-2 mb-1">
-            <h4 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">PXR Pillar Scores</h4>
-            {pxrData ? (
-              <div className="space-y-2">
-                {([
-                  { label: "P1 Offense", value: pxrData.p1_offense },
-                  { label: "P2 Defense", value: pxrData.p2_defense },
-                  { label: "P3 Possession", value: pxrData.p3_possession },
-                  { label: "P4 Physical", value: pxrData.p4_physical },
-                ] as const).map(({ label, value }) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-24 shrink-0">{label}</span>
-                    <div className="flex-1 h-3 bg-navy/[0.06] rounded-full overflow-hidden">
-                      {value != null && value > 0 && (
-                        <div
-                          className="h-full bg-teal rounded-full transition-all"
-                          style={{ width: `${Math.min(value, 100)}%` }}
-                        />
+          <div className="bg-white border border-border rounded-xl px-5 py-4 mt-2 mb-1">
+            {pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 ? (() => {
+              const score = pxrData.pxr_score;
+              const tier = score >= 90 ? { id: "1A", label: "ELITE", color: "#0D9488" }
+                : score >= 80 ? { id: "1B", label: "HIGH IMPACT", color: "#0D9488" }
+                : score >= 70 ? { id: "2A", label: "SOLID STARTER", color: "#1B2A4A" }
+                : score >= 60 ? { id: "2B", label: "DEPTH PLAYER", color: "#1B2A4A" }
+                : score >= 50 ? { id: "3A", label: "DEVELOPING", color: "#6B7280" }
+                : { id: "3B", label: "EARLY STAGE", color: "#6B7280" };
+              const lp = pxrData.league_percentile;
+              const cp = pxrData.cohort_percentile;
+              const am = pxrData.age_modifier;
+              return (
+                <div className="space-y-3">
+                  {/* Score + Tier Badge */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl font-bold font-oswald text-teal">{score.toFixed(1)}</span>
+                    <span
+                      className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white"
+                      style={{ backgroundColor: tier.color }}
+                    >
+                      {tier.id} {tier.label}
+                    </span>
+                    {am != null && am !== 0 && (
+                      <span
+                        className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white"
+                        style={{ backgroundColor: am > 0 ? "#10B981" : "#E87722" }}
+                      >
+                        {am > 0 ? "+" : ""}{am.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                  {/* Percentile Bars */}
+                  {(lp != null || cp != null) && (
+                    <div className="space-y-1.5">
+                      {lp != null && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0">League %</span>
+                          <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
+                            <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(lp, 100)}%` }} />
+                          </div>
+                          <span className="text-xs font-oswald font-bold text-navy w-10 text-right">{Math.round(lp)}%</span>
+                        </div>
+                      )}
+                      {cp != null && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0">Cohort %</span>
+                          <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
+                            <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(cp, 100)}%` }} />
+                          </div>
+                          <span className="text-xs font-oswald font-bold text-navy w-10 text-right">{Math.round(cp)}%</span>
+                        </div>
                       )}
                     </div>
-                    <span className="text-xs font-oswald font-bold text-navy w-8 text-right">
-                      {value != null && value > 0 ? Math.round(value) : "—"}
-                    </span>
+                  )}
+                  {/* Pillar Mini-Bars */}
+                  <div className="space-y-1.5 pt-1 border-t border-border">
+                    {([
+                      { label: "P1 OFF", value: pxrData.p1_offense },
+                      { label: "P2 DEF", value: pxrData.p2_defense },
+                      { label: "P3 POSS", value: pxrData.p3_possession },
+                      { label: "P4 PHYS", value: pxrData.p4_physical },
+                    ] as const).map(({ label, value }) => (
+                      <div key={label} className="flex items-center gap-3">
+                        <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0">{label}</span>
+                        <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
+                          {value != null && value > 0 && (
+                            <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(value, 100)}%` }} />
+                          )}
+                        </div>
+                        <span className="text-xs font-oswald font-bold text-navy w-8 text-right">
+                          {value != null && value > 0 ? Math.round(value) : "—"}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {(["P1 Offense", "P2 Defense", "P3 Possession", "P4 Physical"]).map((label) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/30 w-24 shrink-0">{label}</span>
-                    <div className="flex-1 h-3 rounded-full border border-dashed border-navy/15" />
-                    <span className="text-xs font-oswald text-navy/30 w-8 text-right">—</span>
-                  </div>
-                ))}
-                <p className="text-[9px] text-muted/50 text-center mt-1">No PXR data — minimum 60 min TOI required</p>
+                </div>
+              );
+            })() : (
+              <div className="text-center py-3">
+                <span className="text-sm font-oswald text-navy/40 uppercase tracking-wider">Insufficient Data</span>
+                <p className="text-[10px] text-muted/50 mt-1">Minimum 60 min TOI required for PXR scoring</p>
               </div>
             )}
           </div>
