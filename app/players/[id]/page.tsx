@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -201,7 +201,7 @@ export default function PlayerDetailPage() {
   const params = useParams();
   const router = useRouter();
   const playerId = params.id as string;
-  const currentUser = getUser();
+  const currentUser = useMemo(() => getUser(), []);
   const userRole = currentUser?.hockey_role || "scout";
   const { openBenchTalk, setActivePxiContext } = useBenchTalk();
 
