@@ -25751,6 +25751,10 @@ def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: 
     pim = player_stats.get("pim") or 0
     shots = player_stats.get("sog") or player_stats.get("shots") or 0
     shoot_pct = player_stats.get("shooting_pct", None)
+    try:
+        shoot_pct = float(shoot_pct) if shoot_pct is not None else None
+    except (ValueError, TypeError):
+        shoot_pct = None
 
     # Per-game rates
     gpg = g / gp
@@ -25956,7 +25960,11 @@ def _compute_prospectx_indices(player_stats: dict, position: str, league_stats: 
         lpm = ls.get("plus_minus") or 0
         lpim = ls.get("pim") or 0
         lshots = ls.get("sog") or ls.get("shots") or 0
-        lshoot = ls.get("shooting_pct") or None
+        lshoot = ls.get("shooting_pct")
+        try:
+            lshoot = float(lshoot) if lshoot else None
+        except (ValueError, TypeError):
+            lshoot = None
         if lshoot is None and lshots > 0:
             lshoot = (lg / lshots) * 100
         elif lshoot is None:
