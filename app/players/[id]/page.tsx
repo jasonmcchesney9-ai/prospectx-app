@@ -1995,9 +1995,9 @@ export default function PlayerDetailPage() {
                   )}
 
                   {/* Strengths + Development Areas */}
-                  {(intelligence.strengths.length > 0 || intelligence.development_areas.length > 0) && (
+                  {((intelligence.strengths?.length ?? 0) > 0 || (intelligence.development_areas?.length ?? 0) > 0) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {intelligence.strengths.length > 0 && (
+                      {(intelligence.strengths?.length ?? 0) > 0 && (
                         <div>
                           <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
                             <Star size={11} className="text-green-500" /> Strengths
@@ -2012,7 +2012,7 @@ export default function PlayerDetailPage() {
                           </ul>
                         </div>
                       )}
-                      {intelligence.development_areas.length > 0 && (
+                      {(intelligence.development_areas?.length ?? 0) > 0 && (
                         <div>
                           <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
                             <AlertTriangle size={11} className="text-orange" /> Development Areas
@@ -2063,7 +2063,7 @@ export default function PlayerDetailPage() {
                   )}
 
                   {/* Comparable Players */}
-                  {intelligence.comparable_players.length > 0 && (
+                  {(intelligence.comparable_players?.length ?? 0) > 0 && (
                     <div>
                       <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-1">Comparable Players</h4>
                       <div className="space-y-1">
