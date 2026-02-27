@@ -16,19 +16,6 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (e) => {
-  // Skip external URLs — let the browser handle CDN images, fonts, etc.
-  if (!e.request.url.startsWith(self.location.origin)) {
-    return;
-  }
-  // Never cache API calls — always network
-  if (e.request.url.includes('/api/') ||
-       e.request.url.includes('railway.app')) {
-    e.respondWith(fetch(e.request));
-    return;
-  }
-  // Network first for everything else
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
-  );
-});
+// Fetch listener disabled — SW should not intercept any requests.
+// Install + activate handlers above still clear caches and claim clients.
+// Re-enable with proper origin/external checks when needed.

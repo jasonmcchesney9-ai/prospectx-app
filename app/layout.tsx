@@ -28,7 +28,7 @@ export default function RootLayout({
       <body className="antialiased" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
-            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}`,
+            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'});}`,
           }}
         />
         <Toaster
