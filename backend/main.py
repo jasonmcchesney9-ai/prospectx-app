@@ -23873,6 +23873,37 @@ async def import_cross_league(
 
 # ── PXR Admin Endpoints ──
 
+@app.get("/admin/audit/instat-uuid-mismatch")
+async def audit_instat_uuid_mismatch(token_data: dict = Depends(verify_token)):
+    """TEMPORARY AUDIT — count instat rows on donor UUIDs from player_merges. Remove after use."""
+    _require_admin(token_data)
+    conn = get_db()
+    try:
+        orphan_count = conn.execute("""
+            SELECT COUNT(*) AS cnt FROM instat_player_stats ips
+            WHERE ips.player_id IN (
+                SELECT json_array_elements_text(duplicate_player_ids::json) FROM player_merges
+            )
+        """).fetchone()["cnt"]
+        scored_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM pxr_scores WHERE pxr_score IS NOT NULL"
+        ).fetchone()["cnt"]
+        total_instat = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM instat_player_stats"
+        ).fetchone()["cnt"]
+        total_merges = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM player_merges"
+        ).fetchone()["cnt"]
+    finally:
+        conn.close()
+    return {
+        "instat_rows_on_donor_uuids": orphan_count,
+        "pxr_scored_before_fix": scored_count,
+        "total_instat_rows": total_instat,
+        "total_merge_records": total_merges,
+    }
+
+
 @app.post("/admin/pxr/recalculate")
 async def recalculate_pxr(
     season: str = Query(default="2025-26"),
