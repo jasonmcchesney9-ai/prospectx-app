@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -197,14 +197,30 @@ interface DevPlanV2 {
 const COACH_ROLES = new Set(["coach", "gm", "admin", "scout"]);
 const FAMILY_ROLES = new Set(["parent", "player"]);
 
+// Tiny isolated component — reads search params inside Suspense boundary
+function SearchParamsReader({ onParams }: { onParams: (tab: string | null, autoGen: string | null) => void }) {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    onParams(searchParams.get("tab"), searchParams.get("autoGenerate"));
+  }, [searchParams, onParams]);
+  return null;
+}
+
 export default function PlayerDetailPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const playerId = params.id as string;
   const currentUser = getUser();
   const userRole = currentUser?.hockey_role || "scout";
   const { openBenchTalk, setActivePxiContext } = useBenchTalk();
+
+  // Search params read via Suspense-wrapped child to avoid React #185
+  const [spTab, setSpTab] = useState<string | null>(null);
+  const [spAutoGen, setSpAutoGen] = useState<string | null>(null);
+  const handleSearchParams = useCallback((tab: string | null, autoGen: string | null) => {
+    setSpTab(tab);
+    setSpAutoGen(autoGen);
+  }, []);
 
   const [player, setPlayer] = useState<Player | null>(null);
   const [stats, setStats] = useState<PlayerStats[]>([]);
@@ -767,12 +783,10 @@ export default function PlayerDetailPage() {
 
   // Auto-trigger: deep-link from dashboard with ?tab=player&autoGenerate=true
   useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    const autoGen = searchParams.get("autoGenerate");
-    if (tabParam === "player") {
+    if (spTab === "player") {
       setActiveTab("player");
     }
-    if (autoGen === "true" && !loading && !devPlanV2 && planStatus === "empty") {
+    if (spAutoGen === "true" && !loading && !devPlanV2 && planStatus === "empty") {
       // Auto-trigger generation
       setActiveTab("player");
       handleGenerateV2();
@@ -780,7 +794,7 @@ export default function PlayerDetailPage() {
       router.replace(`/players/${playerId}?tab=player`, { scroll: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, searchParams]);
+  }, [loading, spTab, spAutoGen]);
 
   // Close overflow menu on outside click
   useEffect(() => {
@@ -855,6 +869,7 @@ export default function PlayerDetailPage() {
 
   return (
     <ProtectedRoute>
+      <Suspense fallback={null}><SearchParamsReader onParams={handleSearchParams} /></Suspense>
       <NavBar />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <Link href="/players" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-6 no-print">
