@@ -8293,6 +8293,7 @@ PILLAR_METRICS = {
     'P3': [('corsi_pct', 0.30), ('entry_success_rate', 0.25), ('bkouts_60', 0.25), ('pass_pct', 0.20)],
     'P4_F': [('hits_60', 0.35), ('fo_pct', 0.30), ('battles_pct', 0.20), ('losses_60_inv', 0.15)],
     'P4_D': [('hits_60', 0.50), ('battles_pct', 0.28), ('losses_60_inv', 0.22)],
+    'P5': [('g_sv_pct', 0.25), ('g_gsax', 0.25), ('g_sc_sv_pct', 0.20), ('g_sv_pct_hd', 0.15), ('g_xg_per_shot_inv', 0.15)],
 }
 
 COMPOSITE_WEIGHTS = {
@@ -8331,6 +8332,25 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         AND i.toi_total IS NOT NULL
     """, (season,)).fetchall()
 
+    # Step 1b: Fetch goalie InStat data
+    goalie_rows = conn.execute("""
+        SELECT
+            g.player_id,
+            p.birth_year,
+            p.position,
+            p.current_league,
+            g.toi_total,
+            g.sv_pct, g.gsax, g.sc_sv_pct, g.sv_pct_high_danger, g.xg_per_shot
+        FROM instat_goalie_stats g
+        JOIN players p ON p.id = g.player_id
+        WHERE g.season = ?
+        AND g.toi_total IS NOT NULL
+    """, (season,)).fetchall()
+    goalie_lookup = {}  # player_id -> goalie row dict
+    for gr in goalie_rows:
+        gd = dict(gr)
+        goalie_lookup[gd['player_id']] = gd
+
     null_toi = 0
     null_data = 0
     players_data = []
@@ -8358,6 +8378,33 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         rd['position_group'] = pos_group
         players_data.append(rd)
 
+    # Step 2b: Add goalies from instat_goalie_stats not already in players_data
+    existing_pids = {p['player_id'] for p in players_data}
+    for pid, gd in goalie_lookup.items():
+        if pid in existing_pids:
+            continue
+        # Also include goalies who passed TOI gate but weren't in skater stats
+        toi_seconds = parse_toi(gd['toi_total'])
+        pos_group = get_position_group(gd['position'])
+        if toi_seconds < TOI_GATE_SECONDS:
+            null_toi += 1
+            conn.execute("""
+                INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
+                    pxr_score, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    toi_gate_met = 0, pxr_score = NULL,
+                    p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
+                    p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
+                    league_percentile = NULL, cohort_percentile = NULL,
+                    data_completeness = NULL, calc_timestamp = CURRENT_TIMESTAMP
+            """, (pid, season, pos_group))
+            continue
+        gd['toi_seconds'] = toi_seconds
+        gd['position_group'] = pos_group
+        existing_pids.add(pid)
+        players_data.append(gd)
+
     if not players_data:
         conn.commit()
         duration_ms = int((_time.time() - start) * 1000)
@@ -8366,25 +8413,35 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     # Step 3: Per-60 normalization (counting stats only — percentages used raw)
     for p in players_data:
         ts = p['toi_seconds']
-        p['goals_60'] = per60(p['goals'], ts)
-        p['assists_60'] = per60(p['primary_assists'], ts)
-        p['xg_60'] = per60(p['xg'], ts)
-        p['shots_60'] = per60(p['shots_on_goal'], ts)
-        p['sc_60'] = per60(p['scoring_chances'], ts)
-        p['pp_60'] = per60(p['pp_goals'], ts)
-        p['opp_xg_60'] = per60(p['opp_xg_on'], ts)
-        p['takeaways_60'] = per60(p['takeaways'], ts)
-        p['blocks_60'] = per60(p['blocked_shots'], ts)
-        p['hits_60'] = per60(p['hits'], ts)
-        p['losses_60'] = per60(p['puck_losses'], ts)
-        p['bkouts_60'] = per60(p['breakouts_carry'], ts)
-        # Raw percentages — use as-is (already 0-100 scale)
-        p['corsi_pct'] = float(p.get('corsi_pct') or 0)
-        p['entry_success_rate'] = float(p.get('entry_success_rate') or 0)
-        p['pass_pct'] = float(p.get('pass_pct') or 0)
-        p['fo_pct'] = float(p.get('fo_pct') or 0)
-        p['battles_pct'] = float(p.get('battles_pct') or 0)
-        p['pk_appearances'] = float(p.get('pk_appearances') or 0)
+        if p['position_group'] != 'G':
+            # Skater per-60 metrics
+            p['goals_60'] = per60(p['goals'], ts)
+            p['assists_60'] = per60(p['primary_assists'], ts)
+            p['xg_60'] = per60(p['xg'], ts)
+            p['shots_60'] = per60(p['shots_on_goal'], ts)
+            p['sc_60'] = per60(p['scoring_chances'], ts)
+            p['pp_60'] = per60(p['pp_goals'], ts)
+            p['opp_xg_60'] = per60(p['opp_xg_on'], ts)
+            p['takeaways_60'] = per60(p['takeaways'], ts)
+            p['blocks_60'] = per60(p['blocked_shots'], ts)
+            p['hits_60'] = per60(p['hits'], ts)
+            p['losses_60'] = per60(p['puck_losses'], ts)
+            p['bkouts_60'] = per60(p['breakouts_carry'], ts)
+            # Raw percentages — use as-is (already 0-100 scale)
+            p['corsi_pct'] = float(p.get('corsi_pct') or 0)
+            p['entry_success_rate'] = float(p.get('entry_success_rate') or 0)
+            p['pass_pct'] = float(p.get('pass_pct') or 0)
+            p['fo_pct'] = float(p.get('fo_pct') or 0)
+            p['battles_pct'] = float(p.get('battles_pct') or 0)
+            p['pk_appearances'] = float(p.get('pk_appearances') or 0)
+        else:
+            # Goalie P5 metrics — from goalie_lookup
+            gd = goalie_lookup.get(p['player_id'], {})
+            p['g_sv_pct'] = float(gd.get('sv_pct') or 0)
+            p['g_gsax'] = float(gd.get('gsax') or 0)
+            p['g_sc_sv_pct'] = float(gd.get('sc_sv_pct') or 0)
+            p['g_sv_pct_hd'] = float(gd.get('sv_pct_high_danger') or 0)
+            p['g_xg_per_shot'] = float(gd.get('xg_per_shot') or 0)
 
     # Step 4: League z-scores + global percentiles for all metrics
     all_metrics = [
@@ -8398,12 +8455,23 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         z = league_zscore(players_data, metric)
         percentiles[metric] = global_percentile(z)
 
+    # Step 4b: Goalie-only percentiles (computed among goalies only)
+    goalies_only = [p for p in players_data if p['position_group'] == 'G']
+    goalie_metrics = ['g_sv_pct', 'g_gsax', 'g_sc_sv_pct', 'g_sv_pct_hd', 'g_xg_per_shot']
+    if goalies_only:
+        for metric in goalie_metrics:
+            z = league_zscore(goalies_only, metric)
+            percentiles[metric] = global_percentile(z)
+
     # Step 5: Inverted metrics (lower is better -> invert after percentile)
     for pid in percentiles.get('opp_xg_60', {}):
         percentiles.setdefault('opp_xg_60_inv', {})[pid] = 100 - percentiles['opp_xg_60'].get(pid, 50)
         percentiles.setdefault('losses_60_inv', {})[pid] = 100 - percentiles['losses_60'].get(pid, 50)
     # Defensive corsi = same as corsi_pct percentile (higher corsi = better defense)
     percentiles['corsi_pct_def'] = percentiles.get('corsi_pct', {})
+    # Goalie xg_per_shot: lower is better -> invert
+    for pid in percentiles.get('g_xg_per_shot', {}):
+        percentiles.setdefault('g_xg_per_shot_inv', {})[pid] = 100 - percentiles['g_xg_per_shot'].get(pid, 50)
 
     # Step 6: Pillar scores + data completeness
     scored = 0
@@ -8411,28 +8479,29 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         pid = p['player_id']
         pos_group = p['position_group']
 
+        # Compute pillar helper (used by both skaters and goalies)
+        def _compute_pillar(pillar_key, _pid=pid, _percentiles=percentiles):
+            metrics_list = PILLAR_METRICS.get(pillar_key, [])
+            total_weight = 0.0
+            weighted_sum = 0.0
+            available = 0
+            for metric, weight in metrics_list:
+                pct = _percentiles.get(metric, {}).get(_pid)
+                if pct is not None:
+                    weighted_sum += pct * weight
+                    total_weight += weight
+                    available += 1
+            if total_weight == 0:
+                return None, 0, len(metrics_list)
+            return weighted_sum / total_weight, available, len(metrics_list)
+
         if pos_group == 'G':
-            # Goalie: P5 = 50.0 placeholder (no goalie InStat metrics yet)
-            p5 = 50.0
+            # Goalie: compute P5 from instat_goalie_stats metrics
+            p5, p5_avail, p5_total = _compute_pillar('P5')
             composite = p5
             pillar_scores = {'P1': None, 'P2': None, 'P3': None, 'P4': None, 'P5': p5}
-            data_comp = 0.0
+            data_comp = round((p5_avail / p5_total) * 100, 1) if p5_total > 0 else 0.0
         else:
-            # Compute each pillar
-            def _compute_pillar(pillar_key, _pid=pid, _percentiles=percentiles):
-                metrics_list = PILLAR_METRICS.get(pillar_key, [])
-                total_weight = 0.0
-                weighted_sum = 0.0
-                available = 0
-                for metric, weight in metrics_list:
-                    pct = _percentiles.get(metric, {}).get(_pid)
-                    if pct is not None:
-                        weighted_sum += pct * weight
-                        total_weight += weight
-                        available += 1
-                if total_weight == 0:
-                    return None, 0, len(metrics_list)
-                return weighted_sum / total_weight, available, len(metrics_list)
 
             p1, p1_avail, p1_total = _compute_pillar('P1')
             p2, p2_avail, p2_total = _compute_pillar('P2')
