@@ -56,6 +56,7 @@ interface LeaderboardPlayer {
   p4_physical: number | null;
   data_completeness: number | null;
   season: string;
+  ppg?: number;
 }
 
 interface FilterOptions {
@@ -73,6 +74,7 @@ export default function LeaderboardPage() {
   const [allPlayers, setAllPlayers] = useState<LeaderboardPlayer[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({ leagues: [], birth_years: [], seasons: [], positions: [] });
   const [loading, setLoading] = useState(true);
+  const [ppgFallbackMode, setPpgFallbackMode] = useState(false);
 
   const [activeTab, setActiveTab] = useState<Tab>("By League");
 
@@ -88,8 +90,8 @@ export default function LeaderboardPage() {
     setLoading(true);
     api
       .get("/pxr/draft-board?season=2025-26")
-      .then((res) => {
-        setAllPlayers(res.data.players || []);
+      .then(async (res) => {
+        const players: LeaderboardPlayer[] = res.data.players || [];
         if (res.data.filter_options) setFilterOptions(res.data.filter_options);
         // Default league/birthYear to first available
         if (res.data.filter_options?.leagues?.length > 0) {
@@ -97,6 +99,43 @@ export default function LeaderboardPage() {
         }
         if (res.data.filter_options?.birth_years?.length > 0) {
           setSelectedBirthYear(String(res.data.filter_options.birth_years[0]));
+        }
+
+        // Check if ALL pxr_scores are NULL or 0 — PPG fallback
+        const hasPxr = players.some((p) => p.pxr_score != null && p.pxr_score > 0);
+        if (!hasPxr) {
+          // Fetch scoring leaders as fallback
+          try {
+            const fallback = await api.get("/analytics/scoring-leaders?limit=25&min_gp=5");
+            const ppgPlayers: LeaderboardPlayer[] = (fallback.data || []).map((r: { id: string; first_name: string; last_name: string; current_team: string | null; position: string | null; ppg: number; gp: number; g: number; a: number; p: number; season: string }) => ({
+              player_id: r.id,
+              first_name: r.first_name,
+              last_name: r.last_name,
+              current_team: r.current_team,
+              current_league: null,
+              position: r.position,
+              birth_year: null,
+              position_group: r.position === "G" ? "G" : (r.position === "LD" || r.position === "RD" || r.position === "D") ? "D" : "F",
+              pxr_score: 0,
+              league_percentile: null,
+              cohort_percentile: null,
+              age_modifier: null,
+              p1_offense: null,
+              p2_defense: null,
+              p3_possession: null,
+              p4_physical: null,
+              data_completeness: null,
+              season: r.season || "2025-26",
+              ppg: r.ppg ?? (r.gp > 0 ? r.p / r.gp : 0),
+            }));
+            setAllPlayers(ppgPlayers);
+            setPpgFallbackMode(true);
+          } catch {
+            setAllPlayers([]);
+          }
+        } else {
+          setAllPlayers(players);
+          setPpgFallbackMode(false);
         }
       })
       .catch(() => {
@@ -107,6 +146,16 @@ export default function LeaderboardPage() {
 
   // ── View 1: By League — Top 25 in selected league+position ──
   const byLeaguePlayers = useMemo(() => {
+    if (ppgFallbackMode) {
+      // In PPG fallback mode, show all players sorted by PPG (no league filter — scoring-leaders already filtered)
+      let filtered = [...allPlayers];
+      if (selectedPosition) {
+        filtered = filtered.filter((p) => p.position_group === selectedPosition);
+      }
+      return filtered
+        .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
+        .slice(0, 25);
+    }
     if (!selectedLeague) return [];
     let filtered = allPlayers.filter((p) => p.current_league === selectedLeague);
     if (selectedPosition) {
@@ -115,7 +164,7 @@ export default function LeaderboardPage() {
     return filtered
       .sort((a, b) => (b.pxr_score ?? 0) - (a.pxr_score ?? 0))
       .slice(0, 25);
-  }, [allPlayers, selectedLeague, selectedPosition]);
+  }, [allPlayers, selectedLeague, selectedPosition, ppgFallbackMode]);
 
   // ── View 2: By Cohort — Top 25 in selected birth year across all leagues ──
   const byCohortPlayers = useMemo(() => {
@@ -192,6 +241,15 @@ export default function LeaderboardPage() {
           ))}
         </div>
 
+        {/* PPG Fallback Banner */}
+        {ppgFallbackMode && !loading && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+            <p className="text-sm text-amber-800">
+              PXR scores are being calculated. Showing PPG leaders in the meantime.
+            </p>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center min-h-[30vh]">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
@@ -231,17 +289,17 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12">#</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League %</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PPG" : "PXR Score"}</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PXR Status" : "League %"}</th>
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>}
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>}
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {byLeaguePlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={ppgFallbackMode ? 5 : 8} className="px-4 py-12 text-center text-muted text-sm">
                               No players found for this league and position.
                             </td>
                           </tr>
@@ -263,13 +321,26 @@ export default function LeaderboardPage() {
                                 </Link>
                               </td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.current_team || "—"}</td>
-                              <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</td>
-                              <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
-                              <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
-                              <td className={`px-3 py-2.5 text-xs font-medium ${p.age_modifier != null && p.age_modifier > 0 ? "text-green-600" : p.age_modifier != null && p.age_modifier < 0 ? "text-orange" : "text-muted/40"}`}>
-                                {p.age_modifier != null ? (p.age_modifier > 0 ? `+${p.age_modifier.toFixed(1)}` : p.age_modifier.toFixed(1)) : "0.0"}
-                              </td>
-                              <td className="px-3 py-2.5"><TierBadge score={p.pxr_score} /></td>
+                              {ppgFallbackMode ? (
+                                <>
+                                  <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.ppg?.toFixed(2) ?? "—"}</td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-gray-400 bg-gray-100">
+                                      PXR Pending
+                                    </span>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</td>
+                                  <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
+                                  <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
+                                  <td className={`px-3 py-2.5 text-xs font-medium ${p.age_modifier != null && p.age_modifier > 0 ? "text-green-600" : p.age_modifier != null && p.age_modifier < 0 ? "text-orange" : "text-muted/40"}`}>
+                                    {p.age_modifier != null ? (p.age_modifier > 0 ? `+${p.age_modifier.toFixed(1)}` : p.age_modifier.toFixed(1)) : "0.0"}
+                                  </td>
+                                  <td className="px-3 py-2.5"><TierBadge score={p.pxr_score} /></td>
+                                </>
+                              )}
                             </tr>
                           ))
                         )}
