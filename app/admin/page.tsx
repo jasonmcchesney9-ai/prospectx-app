@@ -462,6 +462,11 @@ function PxrOpsTab() {
   const [nsResult, setNsResult] = useState<{ status: string; total_rows_fixed: number; tables_updated: Record<string, { rows_fixed?: number; error?: string }> } | null>(null);
   const [nsError, setNsError] = useState("");
 
+  // PXR Recalculate state
+  const [pxrLoading, setPxrLoading] = useState(false);
+  const [pxrResult, setPxrResult] = useState<{ status: string; season: string; players_scored: number; players_null_toi: number; players_null_data: number; duration_seconds: number; message: string } | null>(null);
+  const [pxrError, setPxrError] = useState("");
+
   const handleNormalizeLeagues = async () => {
     setNlLoading(true);
     setNlResult(null);
@@ -519,6 +524,21 @@ function PxrOpsTab() {
       setNsError(typeof msg === "string" ? msg : JSON.stringify(msg));
     } finally {
       setNsLoading(false);
+    }
+  };
+
+  const handlePxrRecalculate = async () => {
+    setPxrLoading(true);
+    setPxrResult(null);
+    setPxrError("");
+    try {
+      const { data } = await api.post("/admin/pxr/recalculate?season=2025-26");
+      setPxrResult(data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to recalculate PXR";
+      setPxrError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setPxrLoading(false);
     }
   };
 
@@ -583,6 +603,20 @@ function PxrOpsTab() {
           >
             {nsLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Run Normalize
+          </button>
+        </div>
+
+        {/* PXR Recalculate */}
+        <div className="bg-white rounded-xl border border-teal/20 p-5 flex flex-col">
+          <h3 className="text-sm font-semibold text-navy uppercase tracking-wider mb-2">PXR Recalculate</h3>
+          <p className="text-xs text-muted mb-4 flex-1">Run full PXR scoring engine for 2025-26 season.</p>
+          <button
+            onClick={handlePxrRecalculate}
+            disabled={pxrLoading}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-orange rounded-lg hover:bg-orange/90 transition-colors disabled:opacity-50"
+          >
+            {pxrLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {pxrLoading ? "Calculating…" : "Recalculate PXR"}
           </button>
         </div>
       </div>
@@ -719,6 +753,25 @@ function PxrOpsTab() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* PXR Recalculate Result */}
+      {pxrError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{pxrError}</div>
+      )}
+      {pxrResult && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle2 size={16} />
+            <span className="font-semibold">{pxrResult.message}</span>
+          </div>
+          <div className="mt-2 text-xs grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div><span className="font-semibold">Season:</span> {pxrResult.season}</div>
+            <div><span className="font-semibold">Scored:</span> {pxrResult.players_scored}</div>
+            <div><span className="font-semibold">Null TOI:</span> {pxrResult.players_null_toi}</div>
+            <div><span className="font-semibold">Duration:</span> {pxrResult.duration_seconds}s</div>
+          </div>
         </div>
       )}
     </div>
