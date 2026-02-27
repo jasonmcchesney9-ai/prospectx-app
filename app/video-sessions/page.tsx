@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Video,
   Search,
@@ -97,7 +97,6 @@ export default function VideoSessionsPage() {
 }
 
 function VideoSessionsContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
 
   /* ── Filter state ───────────────────────────────────────── */
@@ -149,11 +148,13 @@ function VideoSessionsContent() {
 
   /* ── Load initial params from URL ───────────────────────── */
   useEffect(() => {
-    const pid = searchParams.get("player_id");
-    const act = searchParams.get("action");
-    const zone = searchParams.get("zone");
-    const from = searchParams.get("from_date");
-    const to = searchParams.get("to_date");
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const pid = sp.get("player_id");
+    const act = sp.get("action");
+    const zone = sp.get("zone");
+    const from = sp.get("from_date");
+    const to = sp.get("to_date");
     if (pid) {
       // Load player info
       api.get(`/players/${pid}`).then((r) => {
