@@ -17,6 +17,10 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Skip external URLs — let the browser handle CDN images, fonts, etc.
+  if (!e.request.url.startsWith(self.location.origin)) {
+    return;
+  }
   // Never cache API calls — always network
   if (e.request.url.includes('/api/') ||
        e.request.url.includes('railway.app')) {

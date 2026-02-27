@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https://assets.leaguestat.com https://lscluster.hockeytech.com https://*.up.railway.app http://localhost:8000 http://127.0.0.1:8000",
-              "connect-src 'self' https://*.up.railway.app http://localhost:8000 http://127.0.0.1:8000",
+              "connect-src 'self' https://assets.leaguestat.com https://lscluster.hockeytech.com https://*.up.railway.app http://localhost:8000 http://127.0.0.1:8000",
               "frame-src 'none'",
             ].join("; "),
           },
