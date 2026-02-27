@@ -1117,22 +1117,21 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* PXI Score Tiles — numeric 1-10 above the fold */}
-        {intelligence && intelligence.overall_grade && intelligence.overall_grade !== "NR" && (() => {
-          const subScores = [
-            { label: "Offense", grade: intelligence.offensive_grade },
-            { label: "Defense", grade: intelligence.defensive_grade },
-            { label: "Skating", grade: intelligence.skating_grade },
-            { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
-            { label: "Compete", grade: intelligence.compete_grade },
-            { label: "Overall", grade: intelligence.overall_grade },
-          ] as const;
-          const validScores = subScores.filter(s => s.grade && s.grade !== "NR");
-          if (validScores.length === 0) return null;
+        {/* PXI Score Tiles — numeric 1-10 above the fold (PXR-gated) */}
+        {pxrData && pxrData.pxr_score > 0 && (() => {
+          const pxrTiles = [
+            { label: "Offense", value: pxrData.p1_offense },
+            { label: "Defense", value: pxrData.p2_defense },
+            { label: "Possession", value: pxrData.p3_possession },
+            { label: "Physical", value: pxrData.p4_physical },
+            { label: "Overall", value: pxrData.pxr_score },
+          ];
+          const validTiles = pxrTiles.filter(t => t.value != null && t.value > 0);
+          if (validTiles.length === 0) return null;
           return (
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-2 mb-1">
-              {validScores.map(({ label, grade }) => {
-                const val = gradeToNumber(grade);
+            <div className="grid grid-cols-5 gap-2 mt-2 mb-1">
+              {validTiles.map(({ label, value }) => {
+                const val = (value ?? 0) / 10;
                 const isOverall = label === "Overall";
                 return (
                   <div
