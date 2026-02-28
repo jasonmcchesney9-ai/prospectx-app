@@ -18861,6 +18861,50 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                         intel["stat_signature"] = {}
                 input_data["intelligence"] = intel
 
+            # ── Gather transfer history ──
+            fg_transfer_rows = conn.execute("""
+                SELECT from_team_name, to_team_name, transfer_date, season, transfer_type
+                FROM player_transfers
+                WHERE player_id = ?
+                ORDER BY transfer_date DESC
+                LIMIT 5
+            """, (request.player_id,)).fetchall()
+            fg_transfer_context = []
+            for t in fg_transfer_rows:
+                fg_transfer_context.append({
+                    "season": t["season"],
+                    "from_team": t["from_team_name"],
+                    "to_team": t["to_team_name"],
+                    "date": t["transfer_date"],
+                    "type": t["transfer_type"],
+                })
+            if fg_transfer_context:
+                input_data["transfers"] = fg_transfer_context
+
+            # ── Gather team splits for current season ──
+            _fg_now = datetime.now(timezone.utc)
+            _fg_sy = _fg_now.year if _fg_now.month >= 9 else _fg_now.year - 1
+            _fg_cur_season = f"{_fg_sy}-{(_fg_sy + 1) % 100:02d}"
+            fg_split_rows = conn.execute("""
+                SELECT team_name, league, gp, g, a, p, pim
+                FROM player_stats
+                WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
+                ORDER BY created_at ASC
+            """, (request.player_id, _fg_cur_season)).fetchall()
+            fg_team_splits = []
+            if len(fg_split_rows) > 1:
+                for ts in fg_split_rows:
+                    fg_team_splits.append({
+                        "team": ts["team_name"],
+                        "league": ts["league"],
+                        "gp": ts["gp"] or 0,
+                        "g": ts["g"] or 0,
+                        "a": ts["a"] or 0,
+                        "p": ts["p"] or 0,
+                        "pim": ts["pim"] or 0,
+                    })
+                input_data["team_splits"] = fg_team_splits
+
             # ── Gather historical progression (season-over-season) ──
             try:
                 hist_rows = conn.execute("""
@@ -19052,6 +19096,22 @@ EVIDENCE DISCIPLINE:
 Include quantitative analysis where stats exist. If data is limited, note what additional scouting data would strengthen the assessment.
 
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by the section content."""
+
+            # ── Inject transfer context into foreground system prompt ──
+            if fg_transfer_context or fg_team_splits:
+                _fg_xfer_block = "\n\nTRANSFER & MULTI-TEAM CONTEXT:\n"
+                if fg_transfer_context:
+                    _fg_xfer_block += "Transfer History:\n" + json.dumps(fg_transfer_context, indent=2, default=str) + "\n"
+                if fg_team_splits:
+                    _fg_xfer_block += "Team Splits (current season):\n" + json.dumps(fg_team_splits, indent=2, default=str) + "\n"
+                _fg_xfer_block += """
+When a player has transfers or team splits:
+- Reference the split contexts explicitly: e.g. "18 GP with Sarnia, 22 GP with Sudbury"
+- Note the trade date and circumstances if relevant
+- Analyze stat differences between deployments (usage, linemates, system fit)
+- Use the season_total stats for overall grades, but explain split context narratively
+"""
+                system_prompt += _fg_xfer_block
 
             # ── PXI Mode injection (guardrails + mode block + action plans) ──
             # Fetch user hockey_role for mode resolution fallback
@@ -29222,6 +29282,47 @@ def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, pl
                 "development_areas": json.loads(intel_row["development_areas"]) if intel_row["development_areas"] else [],
             }
 
+        # ── Gather transfer history ──
+        transfer_rows = conn.execute("""
+            SELECT from_team_name, to_team_name, transfer_date, season, transfer_type
+            FROM player_transfers
+            WHERE player_id = ?
+            ORDER BY transfer_date DESC
+            LIMIT 5
+        """, (player_id,)).fetchall()
+        transfer_context = []
+        for t in transfer_rows:
+            transfer_context.append({
+                "season": t["season"],
+                "from_team": t["from_team_name"],
+                "to_team": t["to_team_name"],
+                "date": t["transfer_date"],
+                "type": t["transfer_type"],
+            })
+
+        # ── Gather team splits for current season ──
+        _now_ts = datetime.now(timezone.utc)
+        _sy_ts = _now_ts.year if _now_ts.month >= 9 else _now_ts.year - 1
+        _cur_season_ts = f"{_sy_ts}-{(_sy_ts + 1) % 100:02d}"
+        team_split_rows = conn.execute("""
+            SELECT team_name, league, gp, g, a, p, pim
+            FROM player_stats
+            WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
+            ORDER BY created_at ASC
+        """, (player_id, _cur_season_ts)).fetchall()
+        team_splits = []
+        if len(team_split_rows) > 1:
+            for ts in team_split_rows:
+                team_splits.append({
+                    "team": ts["team_name"],
+                    "league": ts["league"],
+                    "gp": ts["gp"] or 0,
+                    "g": ts["g"] or 0,
+                    "a": ts["a"] or 0,
+                    "p": ts["p"] or 0,
+                    "pim": ts["pim"] or 0,
+                })
+
         # Get template
         template = conn.execute(
             "SELECT * FROM report_templates WHERE report_type = ? AND (org_id = ? OR is_global = 1) LIMIT 1",
@@ -29312,6 +29413,22 @@ EVIDENCE DISCIPLINE:
 Format each section header on its own line in ALL_CAPS_WITH_UNDERSCORES format, followed by content.
 Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
 
+        # ── Inject transfer context into system prompt ──
+        if transfer_context or team_splits:
+            _xfer_block = "\n\nTRANSFER & MULTI-TEAM CONTEXT:\n"
+            if transfer_context:
+                _xfer_block += "Transfer History:\n" + json.dumps(transfer_context, indent=2, default=str) + "\n"
+            if team_splits:
+                _xfer_block += "Team Splits (current season):\n" + json.dumps(team_splits, indent=2, default=str) + "\n"
+            _xfer_block += """
+When a player has transfers or team splits:
+- Reference the split contexts explicitly: e.g. "18 GP with Sarnia, 22 GP with Sudbury"
+- Note the trade date and circumstances if relevant
+- Analyze stat differences between deployments (usage, linemates, system fit)
+- Use the season_total stats for overall grades, but explain split context narratively
+"""
+            _bg_base_prompt += _xfer_block
+
         # Resolve mode and build full system prompt with guardrails + action plans
         _bg_mode = resolve_mode(template_slug=report_type)
         bg_tpl_prompt = template["prompt_text"] if template else None
@@ -29342,6 +29459,10 @@ Do NOT use === delimiters. Do NOT use markdown code blocks or formatting."""
             input_data["historical_progression"] = progression
         if recent_form:
             input_data["recent_form_last_10"] = recent_form
+        if transfer_context:
+            input_data["transfers"] = transfer_context
+        if team_splits:
+            input_data["team_splits"] = team_splits
 
         # ── PXR Context for background reports ──
         try:
