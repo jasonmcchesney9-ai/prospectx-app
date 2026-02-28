@@ -7859,6 +7859,8 @@ seed_drills()
 seed_drills_v2()
 seed_drills_pxi()
 seed_drills_v3()
+from seed_drills_v4 import seed_drills_v4 as _seed_drills_v4
+_seed_drills_v4()
 generate_missing_diagrams()
 seed_glossary_v2()
 _seed_superadmin_user()
