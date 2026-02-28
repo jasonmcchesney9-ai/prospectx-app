@@ -1555,16 +1555,22 @@ export type PxiContext = {
     id: string;
     name: string;
     role: 'COACH' | 'PARENT' | 'SCOUT' | 'GM' | 'AGENT' | 'BROADCASTER' | 'ANALYST';
+    orgId: string;
     orgName: string;
   };
   page: {
-    id: 'DASHBOARD' | 'PLAYER_CARD' | 'TEAM_ROSTER' | 'GAME_SUMMARY'
-       | 'RINK_BUILDER' | 'REPORTS' | 'FAMILY_GUIDE' | 'MY_PLAYER'
-       | 'SETTINGS' | 'OTHER';
+    id: 'DASHBOARD' | 'PLAYER_CARD' | 'TEAM_ROSTER' | 'TEAM_PAGE'
+       | 'GAME_SUMMARY' | 'RINK_BUILDER' | 'REPORTS' | 'REPORT_DETAIL'
+       | 'FAMILY_GUIDE' | 'MY_PLAYER' | 'SETTINGS'
+       | 'LEADERBOARD' | 'DRAFT_BOARD' | 'ANALYTICS'
+       | 'GAME_PLAN' | 'PRACTICE_BUILDER' | 'SERIES_PLAN'
+       | 'SCOUTING_LIST' | 'SCOUT_NOTES' | 'DRILL_LIBRARY'
+       | 'BROADCAST_HUB' | 'SCHEDULE' | 'ADMIN'
+       | 'OTHER';
     route?: string;
   };
   entity?: {
-    type: 'PLAYER' | 'TEAM' | 'GAME' | 'REPORT';
+    type: 'PLAYER' | 'TEAM' | 'GAME' | 'REPORT' | 'PRACTICE' | 'LIST' | 'DRILL';
     id: string;
     name?: string;
     metadata?: {
@@ -1579,6 +1585,9 @@ export type PxiContext = {
       archetype?: string;
       overall_band?: string;
       pxr_score?: number;
+      report_type?: string;
+      opponent?: string;
+      age_group?: string;
     };
   };
 };

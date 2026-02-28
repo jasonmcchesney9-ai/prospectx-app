@@ -5496,24 +5496,22 @@ def format_pxi_context(ctx: dict) -> str:
         f"Org: {user.get('orgName', 'ProspectX')}",
         f"Page: {page.get('id', 'DASHBOARD')}",
     ]
+    if page.get('route'):
+        lines.append(f"Route: {page['route']}")
     if entity:
         lines.append(f"Viewing: {entity.get('type')} — {entity.get('name', '')}")
-    if meta.get('level'):
-        lines.append(f"Level: {meta['level']}")
-    if meta.get('position'):
-        lines.append(f"Position: {meta['position']}")
-    if meta.get('team'):
-        lines.append(f"Team: {meta['team']}")
-    if meta.get('birthYear'):
-        lines.append(f"Birth year: {meta['birthYear']}")
-    if meta.get('roleRelationship'):
-        lines.append(f"Relationship: {meta['roleRelationship']}")
-    if meta.get('archetype'):
-        lines.append(f"Archetype: {meta['archetype']}")
-    if meta.get('overall_band'):
-        lines.append(f"Overall Band: {meta['overall_band']}")
-    if meta.get('pxr_score'):
-        lines.append(f"PXR Score: {meta['pxr_score']}")
+    for key, label in [
+        ('level', 'Level'), ('position', 'Position'),
+        ('handedness', 'Handedness'), ('team', 'Team'),
+        ('league', 'League'), ('season', 'Season'),
+        ('birthYear', 'Birth year'), ('roleRelationship', 'Relationship'),
+        ('opponent', 'Opponent'), ('report_type', 'Report Type'),
+        ('age_group', 'Age Group'),
+        ('archetype', 'Archetype'), ('overall_band', 'Overall Band'),
+        ('pxr_score', 'PXR Score'),
+    ]:
+        if meta.get(key):
+            lines.append(f"{label}: {meta[key]}")
 
     # Player profile proactive prompt
     if page.get('id') == 'PLAYER_CARD' and entity and entity.get('type') == 'PLAYER':

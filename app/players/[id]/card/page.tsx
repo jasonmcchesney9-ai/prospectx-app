@@ -360,7 +360,7 @@ export default function PlayerCardPage() {
               {userRole !== "parent" && (
                 <button
                   onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
-                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgName: "ProspectX" },
+                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
                     page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
                     entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
                   })}
@@ -838,7 +838,7 @@ export default function PlayerCardPage() {
                 <div className="flex gap-2 mb-2">
                   <button
                     onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
-                      user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgName: "ProspectX" },
+                      user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
                       page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
                       entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
                     })}

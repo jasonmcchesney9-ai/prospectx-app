@@ -534,7 +534,7 @@ export default function MyPlayerPage() {
               {/* Ask PXI */}
               <button
                 onClick={() => openBenchTalk(`[Parent Mode] How is ${selectedPlayer.first_name} ${selectedPlayer.last_name} doing this season? Give me a plain-language summary.`, "parent", {
-                  user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgName: "ProspectX" },
+                  user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
                   page: { id: "MY_PLAYER" },
                   entity: { type: "PLAYER", id: selectedPlayer.id, name: `${selectedPlayer.first_name} ${selectedPlayer.last_name}`, metadata: { position: selectedPlayer.position || undefined, team: selectedPlayer.current_team || undefined, league: selectedPlayer.current_league || undefined, roleRelationship: "MY_CHILD" } },
                 })}
@@ -719,7 +719,7 @@ export default function MyPlayerPage() {
           <FamilyGuideTiles
             selectedPlayer={selectedPlayer}
             onAskPxi={(msg) => openBenchTalk(msg, "parent", selectedPlayer ? {
-              user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgName: "ProspectX" },
+              user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
               page: { id: "MY_PLAYER" },
               entity: { type: "PLAYER", id: selectedPlayer.id, name: `${selectedPlayer.first_name} ${selectedPlayer.last_name}`, metadata: { position: selectedPlayer.position || undefined, team: selectedPlayer.current_team || undefined, roleRelationship: "MY_CHILD" } },
             } : undefined)}
@@ -799,7 +799,7 @@ export default function MyPlayerPage() {
                   const ctx = AFTER_GAME_SCRIPTS[selectedEmotion!].emotionContext;
                   const msg = `I'm a hockey parent. My player just had a game and ${ctx}. What should I say \u2014 and what should I avoid \u2014 in the car ride home? Keep it short and practical.`;
                   openBenchTalk(msg, "parent", selectedPlayer ? {
-                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgName: "ProspectX" },
+                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "PARENT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
                     page: { id: "MY_PLAYER" },
                     entity: { type: "PLAYER", id: selectedPlayer.id, name: `${selectedPlayer.first_name} ${selectedPlayer.last_name}`, metadata: { position: selectedPlayer.position || undefined, team: selectedPlayer.current_team || undefined, roleRelationship: "MY_CHILD" } },
                   } : undefined);

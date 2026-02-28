@@ -743,6 +743,7 @@ export default function PlayerDetailPage() {
           id: currentUser?.id || "",
           name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
           role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "SCOUT" | "COACH" | "GM" | "PARENT" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgId: currentUser?.org_id || "",
           orgName: "ProspectX",
         },
         page: { id: "PLAYER_CARD", route: `/players/${playerId}` },
