@@ -1276,7 +1276,7 @@ def seed_drills_v4():
     conn = get_db()
     try:
         existing = conn.execute(
-            "SELECT concept_id FROM drills WHERE concept_id LIKE 'v4_%'"
+            "SELECT concept_id FROM drills WHERE concept_id LIKE ?", ("v4_%",)
         ).fetchall()
         existing_ids = {r[0] for r in existing}
         added = 0
@@ -1288,7 +1288,7 @@ def seed_drills_v4():
                 INSERT INTO drills (id, org_id, name, category, description, coaching_points, setup,
                     duration_minutes, players_needed, ice_surface, equipment, age_levels, tags,
                     skill_focus, intensity, concept_id)
-                VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (str(uuid.uuid4()), *d))
             added += 1
         conn.commit()
