@@ -22550,27 +22550,22 @@ def _classify_junk_reason(row: dict) -> str:
 def _pick_keeper(rows: list[dict]) -> dict:
     """Pick the keeper from a list of duplicate player rows.
 
-    Priority 1: Has hockeytech_id → earliest created_at → smallest id
-    Priority 2: Has non-null team + sane league → earliest created_at → smallest id
-    Priority 3: Fallback → earliest created_at → smallest id
+    Priority 1: Most (stat_count + note_count + report_count) combined
+    Priority 2: If tied — most stat_count alone
+    Priority 3: If still tied — earliest created_at, then smallest id
+    Never keep a 0-stats record if another record has stats.
+
+    Rows MUST include stat_count, note_count, report_count keys
+    (subqueries in the caller's SELECT). Falls back to 0 if missing.
     """
     def sort_key(r):
-        return (r.get("created_at") or "9999", r.get("id") or "zzzz")
+        stats = r.get("stat_count", 0) or 0
+        notes = r.get("note_count", 0) or 0
+        reports = r.get("report_count", 0) or 0
+        total = stats + notes + reports
+        # Negate so max sorts first; then negate stats; then earliest created_at
+        return (-total, -stats, r.get("created_at") or "9999", r.get("id") or "zzzz")
 
-    # Priority 1: rows with hockeytech_id
-    ht_rows = [r for r in rows if r.get("hockeytech_id")]
-    if ht_rows:
-        return min(ht_rows, key=sort_key)
-
-    # Priority 2: rows with a real team and sane league
-    clean_rows = [r for r in rows
-                  if r.get("current_team")
-                  and not _is_schedule_garbage(r.get("current_league") or "")
-                  and not _is_old_league_name(r.get("current_league") or "")]
-    if clean_rows:
-        return min(clean_rows, key=sort_key)
-
-    # Priority 3: fallback
     return min(rows, key=sort_key)
 
 
@@ -22621,12 +22616,15 @@ async def admin_player_dedup_preview(token_data: dict = Depends(verify_token)):
         team = dg["current_team"] if hasattr(dg, 'keys') else dg[3]
 
         rows = conn.execute("""
-            SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
-            FROM players
-            WHERE first_name = ? AND last_name = ? AND org_id = ?
-              AND current_team = ?
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY created_at
+            SELECT p.id, p.org_id, p.current_team, p.current_league, p.hockeytech_id, p.created_at,
+                   (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
+                   (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
+                   (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count
+            FROM players p
+            WHERE p.first_name = ? AND p.last_name = ? AND p.org_id = ?
+              AND p.current_team = ?
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY p.created_at
         """, (fn, ln, org, team)).fetchall()
         rows_dicts = [dict(r) for r in rows]
         if len(rows_dicts) < 2:
@@ -22668,12 +22666,15 @@ async def admin_player_dedup_preview(token_data: dict = Depends(verify_token)):
         org = ntg["org_id"] if hasattr(ntg, 'keys') else ntg[2]
 
         rows = conn.execute("""
-            SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
-            FROM players
-            WHERE first_name = ? AND last_name = ? AND org_id = ?
-              AND (current_team IS NULL OR current_team = '')
-              AND (is_deleted = 0 OR is_deleted IS NULL)
-            ORDER BY created_at
+            SELECT p.id, p.org_id, p.current_team, p.current_league, p.hockeytech_id, p.created_at,
+                   (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
+                   (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
+                   (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count
+            FROM players p
+            WHERE p.first_name = ? AND p.last_name = ? AND p.org_id = ?
+              AND (p.current_team IS NULL OR p.current_team = '')
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY p.created_at
         """, (fn, ln, org)).fetchall()
         rows_dicts = [dict(r) for r in rows]
         if len(rows_dicts) < 2:
@@ -22828,14 +22829,17 @@ async def admin_player_dedup_execute(
 
     for fn, ln, grp_org, team_sql, team_params in groups_to_process:
         try:
-            # Fetch rows for this group
+            # Fetch rows for this group (include data counts for keeper selection)
             rows = conn.execute(f"""
-                SELECT id, org_id, current_team, current_league, hockeytech_id, created_at
-                FROM players
-                WHERE first_name = ? AND last_name = ? AND org_id = ?
+                SELECT p.id, p.org_id, p.current_team, p.current_league, p.hockeytech_id, p.created_at,
+                       (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
+                       (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
+                       (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count
+                FROM players p
+                WHERE p.first_name = ? AND p.last_name = ? AND p.org_id = ?
                   {team_sql}
-                  AND (is_deleted = 0 OR is_deleted IS NULL)
-                ORDER BY created_at
+                  AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+                ORDER BY p.created_at
             """, [fn, ln, grp_org] + team_params).fetchall()
             rows_dicts = [dict(r) for r in rows]
 
