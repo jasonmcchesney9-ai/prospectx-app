@@ -23262,10 +23262,10 @@ async def admin_player_dedup_execute(
                 conn.execute(f"ROLLBACK TO SAVEPOINT dedup_group_{idx}")
             except Exception:
                 pass
-            summary["errors"].append(f"{fn} {ln}: {err_detail[-500:]}")
-            if len(summary["errors"]) > 10:
-                summary["errors"].append("... (truncated)")
-                break
+            if len(summary["errors"]) < 100:
+                summary["errors"].append(f"{fn} {ln}: {err_detail[-500:]}")
+            elif len(summary["errors"]) == 100:
+                summary["errors"].append("... (further errors truncated from response)")
 
     conn.commit()
     conn.close()
