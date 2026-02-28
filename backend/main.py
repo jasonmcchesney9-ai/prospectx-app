@@ -22827,8 +22827,11 @@ async def admin_player_dedup_execute(
         "samples": [],  # first 5 groups for verification
     }
 
-    for fn, ln, grp_org, team_sql, team_params in groups_to_process:
+    for idx, (fn, ln, grp_org, team_sql, team_params) in enumerate(groups_to_process):
         try:
+            # PostgreSQL: use SAVEPOINT so one failed group doesn't abort the whole transaction
+            conn.execute(f"SAVEPOINT dedup_group_{idx}")
+
             # Fetch rows for this group (include data counts for keeper selection)
             rows = conn.execute(f"""
                 SELECT p.id, p.org_id, p.current_team, p.current_league, p.hockeytech_id, p.created_at,
@@ -22926,7 +22929,15 @@ async def admin_player_dedup_execute(
                     "junk": junk_info,
                 })
 
+            # Release savepoint on success
+            conn.execute(f"RELEASE SAVEPOINT dedup_group_{idx}")
+
         except Exception as e:
+            # Rollback to savepoint so the transaction stays alive for remaining groups
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT dedup_group_{idx}")
+            except Exception:
+                pass
             summary["errors"].append(f"{fn} {ln}: {str(e)}")
             if len(summary["errors"]) > 10:
                 summary["errors"].append("... (truncated)")
