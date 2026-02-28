@@ -16067,19 +16067,19 @@ async def deduplicate_player_stats(player_id: str, token_data: dict = Depends(ve
         dupes = conn.execute("""
             SELECT season, stat_type, COUNT(*) as cnt
             FROM player_stats WHERE player_id = ? AND stat_type = 'season'
-            GROUP BY season, stat_type HAVING cnt > 1
+            GROUP BY season, stat_type HAVING COUNT(*) > 1
         """, (player_id,)).fetchall()
 
         removed = 0
         for d in dupes:
-            # Keep the most recent row, delete the rest
+            # Keep the row with highest GP (most complete), break ties by most recent
             rows = conn.execute("""
                 SELECT id FROM player_stats
                 WHERE player_id = ? AND season = ? AND stat_type = ?
-                ORDER BY created_at DESC
+                ORDER BY COALESCE(gp, 0) DESC, created_at DESC
             """, (player_id, d["season"], d["stat_type"])).fetchall()
 
-            # Delete all but the first (most recent)
+            # Delete all but the first (best)
             for row in rows[1:]:
                 conn.execute("DELETE FROM player_stats WHERE id = ?", (row["id"],))
                 removed += 1
@@ -16101,15 +16101,16 @@ async def deduplicate_all_stats(token_data: dict = Depends(verify_token)):
             FROM player_stats ps
             JOIN players p ON p.id = ps.player_id
             WHERE p.org_id = ? AND ps.stat_type = 'season'
-            GROUP BY ps.player_id, ps.season, ps.stat_type HAVING cnt > 1
+            GROUP BY ps.player_id, ps.season, ps.stat_type HAVING COUNT(*) > 1
         """, (org_id,)).fetchall()
 
         removed = 0
         for d in dupes:
+            # Keep the row with highest GP (most complete), break ties by most recent
             rows = conn.execute("""
                 SELECT id FROM player_stats
                 WHERE player_id = ? AND season = ? AND stat_type = ?
-                ORDER BY created_at DESC
+                ORDER BY COALESCE(gp, 0) DESC, created_at DESC
             """, (d["player_id"], d["season"], d["stat_type"])).fetchall()
 
             for row in rows[1:]:
