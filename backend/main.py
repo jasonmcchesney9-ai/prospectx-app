@@ -3644,6 +3644,22 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_score ON pxr_scores(pxr_score DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_position ON pxr_scores(position_group)")
 
+    # Migrate: add confidence_tier column to pxr_scores
+    try:
+        conn.execute("ALTER TABLE pxr_scores ADD COLUMN confidence_tier TEXT DEFAULT 'small_sample'")
+    except Exception:
+        pass  # Column already exists
+
+    try:
+        conn.execute("ALTER TABLE pxr_scores ADD COLUMN gp INTEGER")
+    except Exception:
+        pass  # Column already exists
+
+    try:
+        conn.execute("ALTER TABLE pxr_scores ADD COLUMN toi_minutes REAL")
+    except Exception:
+        pass  # Column already exists
+
     # ── PXR Run Log (nightly cron tracking) ──
     if USE_PG:
         c.execute("""
@@ -8407,7 +8423,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             p.birth_year,
             p.position,
             p.current_league,
-            i.toi_total,
+            i.gp, i.toi_total,
             i.goals, i.primary_assists, i.xg, i.shots_on_goal,
             i.scoring_chances, i.pp_goals,
             i.opp_xg_on, i.takeaways, i.blocked_shots,
@@ -8428,7 +8444,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             p.birth_year,
             p.position,
             p.current_league,
-            g.toi_total,
+            g.gp, g.toi_total,
             g.sv_pct, g.gsax, g.sc_sv_pct, g.sv_pct_high_danger, g.xg_per_shot
         FROM instat_goalie_stats g
         JOIN players p ON p.id = g.player_id
@@ -8452,17 +8468,21 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         pos_group = get_position_group(rd['position'])
         if toi_seconds < TOI_GATE_SECONDS:
             null_toi += 1
+            _gp_val = int(rd.get('gp') or 0)
+            _toi_min = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
                     p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
                     league_percentile = NULL, cohort_percentile = NULL,
-                    data_completeness = NULL, calc_timestamp = CURRENT_TIMESTAMP
-            """, (rd['player_id'], season, pos_group))
+                    data_completeness = NULL, confidence_tier = 'small_sample',
+                    gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    calc_timestamp = CURRENT_TIMESTAMP
+            """, (rd['player_id'], season, pos_group, _gp_val, _toi_min))
             continue
         rd['toi_seconds'] = toi_seconds
         rd['position_group'] = pos_group
@@ -8478,17 +8498,21 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         pos_group = get_position_group(gd['position'])
         if toi_seconds < TOI_GATE_SECONDS:
             null_toi += 1
+            _gp_val_g = int(gd.get('gp') or 0)
+            _toi_min_g = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
                     p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
                     league_percentile = NULL, cohort_percentile = NULL,
-                    data_completeness = NULL, calc_timestamp = CURRENT_TIMESTAMP
-            """, (pid, season, pos_group))
+                    data_completeness = NULL, confidence_tier = 'small_sample',
+                    gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    calc_timestamp = CURRENT_TIMESTAMP
+            """, (pid, season, pos_group, _gp_val_g, _toi_min_g))
             continue
         gd['toi_seconds'] = toi_seconds
         gd['position_group'] = pos_group
@@ -8619,15 +8643,19 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
 
         if composite is None:
             null_data += 1
+            _gp_nd = int(p.get('gp') or 0)
+            _toi_nd = round(p.get('toi_seconds', 0) / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, data_completeness, calc_timestamp)
-                VALUES (?, ?, ?, 1, NULL, ?, CURRENT_TIMESTAMP)
+                    pxr_score, data_completeness, confidence_tier, gp, toi_minutes, calc_timestamp)
+                VALUES (?, ?, ?, 1, NULL, ?, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 1, pxr_score = NULL,
                     data_completeness = EXCLUDED.data_completeness,
+                    confidence_tier = 'small_sample',
+                    gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
                     calc_timestamp = CURRENT_TIMESTAMP
-            """, (pid, season, pos_group, data_comp))
+            """, (pid, season, pos_group, data_comp, _gp_nd, _toi_nd))
             continue
 
         p['composite'] = composite
@@ -8668,17 +8696,28 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         # Final PXR score = composite + age_modifier
         p['pxr_final'] = round(p['composite'] + p['age_mod'], 1)
 
-    # Step 8: Upsert pxr_scores
+    # Step 8: Upsert pxr_scores (with confidence tier)
     for p in composited:
         ps = p['pillar_scores']
+        _gp_s = int(p.get('gp') or 0)
+        _toi_min_s = round(p.get('toi_seconds', 0) / 60.0, 1)
+        # Confidence tier calculation
+        _pillars_populated = sum(1 for k in ('P1', 'P2', 'P3', 'P4') if ps.get(k) is not None)
+        if _gp_s >= 20 and _toi_min_s >= 200 and _pillars_populated >= 4:
+            _conf_tier = 'high'
+        elif _gp_s < 10 or _toi_min_s < 100:
+            _conf_tier = 'small_sample'
+        else:
+            _conf_tier = 'moderate'
         conn.execute("""
             INSERT INTO pxr_scores (
                 player_id, season, position_group,
                 pxr_score, p1_offense, p2_defense, p3_possession,
                 p4_physical, p5_goalie, age_modifier,
                 league_percentile, cohort_percentile,
-                toi_gate_met, data_completeness, calc_timestamp
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,CURRENT_TIMESTAMP)
+                toi_gate_met, data_completeness,
+                confidence_tier, gp, toi_minutes, calc_timestamp
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,CURRENT_TIMESTAMP)
             ON CONFLICT (player_id, season) DO UPDATE SET
                 pxr_score = EXCLUDED.pxr_score,
                 p1_offense = EXCLUDED.p1_offense,
@@ -8691,6 +8730,9 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                 cohort_percentile = EXCLUDED.cohort_percentile,
                 toi_gate_met = 1,
                 data_completeness = EXCLUDED.data_completeness,
+                confidence_tier = EXCLUDED.confidence_tier,
+                gp = EXCLUDED.gp,
+                toi_minutes = EXCLUDED.toi_minutes,
                 calc_timestamp = CURRENT_TIMESTAMP
         """, (
             p['player_id'], season, p['position_group'],
@@ -8704,6 +8746,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             round(p['league_percentile'], 1),
             round(p['cohort_percentile'], 1),
             p['data_completeness'],
+            _conf_tier, _gp_s, _toi_min_s,
         ))
         scored += 1
 
@@ -24438,7 +24481,8 @@ async def pxr_leaderboard(
                    p.current_league, p.position,
                    px.pxr_score, px.league_percentile, px.cohort_percentile,
                    px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
-                   px.age_modifier, px.data_completeness
+                   px.age_modifier, px.data_completeness,
+                   px.confidence_tier, px.gp, px.toi_minutes
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL
@@ -24513,7 +24557,8 @@ async def pxr_draft_board(
                    px.pxr_score, px.league_percentile, px.cohort_percentile,
                    px.age_modifier,
                    px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
-                   px.data_completeness, px.season
+                   px.data_completeness, px.season,
+                   px.confidence_tier, px.gp, px.toi_minutes
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE {where_sql}

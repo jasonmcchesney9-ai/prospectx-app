@@ -38,6 +38,29 @@ function TierBadge({ score }: { score: number | null }) {
   );
 }
 
+function ConfidenceBadge({ tier, gp }: { tier?: string | null; gp?: number | null }) {
+  if (!tier) return null;
+  if (tier === "high") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">
+        High
+      </span>
+    );
+  }
+  if (tier === "moderate") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
+        Moderate
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
+      Small Sample{gp != null && gp < 15 ? ` (${gp} GP)` : ""}
+    </span>
+  );
+}
+
 // ── Types ──
 interface LeaderboardPlayer {
   player_id: string;
@@ -59,6 +82,9 @@ interface LeaderboardPlayer {
   data_completeness: number | null;
   season: string;
   ppg?: number;
+  confidence_tier?: string | null;
+  gp?: number | null;
+  toi_minutes?: number | null;
 }
 
 interface FilterOptions {
@@ -315,21 +341,25 @@ export default function LeaderboardPage() {
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>}
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {byLeaguePlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={ppgFallbackMode ? 5 : 8} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={ppgFallbackMode ? 5 : 9} className="px-4 py-12 text-center text-muted text-sm">
                               No players found for this league and position.
                             </td>
                           </tr>
                         ) : (
-                          byLeaguePlayers.map((p, i) => (
+                          byLeaguePlayers.map((p, i) => {
+                            const isSmallSample = p.confidence_tier === "small_sample";
+                            return (
                             <tr
                               key={p.player_id}
                               onClick={() => handleRowClick(p.player_id)}
                               className={`cursor-pointer hover:bg-teal/5 transition-colors ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                              style={isSmallSample ? { opacity: 0.55 } : undefined}
                             >
                               <td className="px-3 py-2.5 text-xs text-muted font-oswald">{i + 1}</td>
                               <td className="px-3 py-2.5">
@@ -353,17 +383,24 @@ export default function LeaderboardPage() {
                                 </>
                               ) : (
                                 <>
-                                  <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
+                                    {p.gp != null && p.gp < 15 && (
+                                      <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
+                                    )}
+                                  </td>
                                   <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                                   <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                   <td className={`px-3 py-2.5 text-xs font-medium ${p.age_modifier != null && p.age_modifier > 0 ? "text-green-600" : p.age_modifier != null && p.age_modifier < 0 ? "text-orange" : "text-muted/40"}`}>
                                     {p.age_modifier != null ? (p.age_modifier > 0 ? `+${p.age_modifier.toFixed(1)}` : p.age_modifier.toFixed(1)) : "0.0"}
                                   </td>
                                   <td className="px-3 py-2.5"><TierBadge score={p.pxr_score} /></td>
+                                  <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
                                 </>
                               )}
                             </tr>
-                          ))
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -399,12 +436,13 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
                       </thead>
                       <tbody>
                         {byCohortPlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={8} className="px-4 py-12 text-center text-muted text-sm">
                               No players found for this birth year.
                             </td>
                           </tr>
@@ -414,11 +452,13 @@ export default function LeaderboardPage() {
                               p.cohort_percentile != null &&
                               p.league_percentile != null &&
                               p.cohort_percentile - p.league_percentile > 20;
+                            const isSmallSample = p.confidence_tier === "small_sample";
                             return (
                               <tr
                                 key={p.player_id}
                                 onClick={() => handleRowClick(p.player_id)}
                                 className={`cursor-pointer hover:bg-teal/5 transition-colors ${playingDown ? "bg-amber-50/60" : i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                                style={isSmallSample ? { opacity: 0.55 } : undefined}
                               >
                                 <td className="px-3 py-2.5 text-xs text-muted font-oswald">{i + 1}</td>
                                 <td className="px-3 py-2.5">
@@ -435,9 +475,15 @@ export default function LeaderboardPage() {
                                 </td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.current_team || "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.current_league || "—"}</td>
-                                <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</td>
+                                <td className="px-3 py-2.5">
+                                  <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
+                                  {p.gp != null && p.gp < 15 && (
+                                    <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
+                                  )}
+                                </td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
+                                <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
                               </tr>
                             );
                           })
@@ -472,21 +518,25 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Gap</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
                       </thead>
                       <tbody>
                         {undervaluedPlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={10} className="px-4 py-12 text-center text-muted text-sm">
                               No undervalued players found with current data.
                             </td>
                           </tr>
                         ) : (
-                          undervaluedPlayers.map((p, i) => (
+                          undervaluedPlayers.map((p, i) => {
+                            const isSmallSample = p.confidence_tier === "small_sample";
+                            return (
                             <tr
                               key={p.player_id}
                               onClick={() => handleRowClick(p.player_id)}
                               className={`cursor-pointer hover:bg-teal/5 transition-colors ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                              style={isSmallSample ? { opacity: 0.55 } : undefined}
                             >
                               <td className="px-3 py-2.5 text-xs text-muted font-oswald">{i + 1}</td>
                               <td className="px-3 py-2.5">
@@ -501,12 +551,19 @@ export default function LeaderboardPage() {
                               <td className="px-3 py-2.5 text-xs text-muted">{p.current_team || "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.current_league || "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.birth_year || "—"}</td>
-                              <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</td>
+                              <td className="px-3 py-2.5">
+                                <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
+                                {p.gp != null && p.gp < 15 && (
+                                  <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
+                                )}
+                              </td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">+{Math.round(p.gap)}</td>
+                              <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
                             </tr>
-                          ))
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -536,21 +593,25 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Advantage</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
                       </thead>
                       <tbody>
                         {topMoversPlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={8} className="px-4 py-12 text-center text-muted text-sm">
                               No players with positive age advantage found.
                             </td>
                           </tr>
                         ) : (
-                          topMoversPlayers.map((p, i) => (
+                          topMoversPlayers.map((p, i) => {
+                            const isSmallSample = p.confidence_tier === "small_sample";
+                            return (
                             <tr
                               key={p.player_id}
                               onClick={() => handleRowClick(p.player_id)}
                               className={`cursor-pointer hover:bg-teal/5 transition-colors ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                              style={isSmallSample ? { opacity: 0.55 } : undefined}
                             >
                               <td className="px-3 py-2.5 text-xs text-muted font-oswald">{i + 1}</td>
                               <td className="px-3 py-2.5">
@@ -564,13 +625,20 @@ export default function LeaderboardPage() {
                               </td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.current_team || "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.current_league || "—"}</td>
-                              <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</td>
+                              <td className="px-3 py-2.5">
+                                <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
+                                {p.gp != null && p.gp < 15 && (
+                                  <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
+                                )}
+                              </td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-semibold text-green-600">
                                 +{p.age_modifier?.toFixed(1)}
                               </td>
+                              <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
                             </tr>
-                          ))
+                            );
+                          })
                         )}
                       </tbody>
                     </table>

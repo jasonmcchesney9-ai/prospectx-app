@@ -225,7 +225,7 @@ export default function PlayerDetailPage() {
   const [gameLogOffset, setGameLogOffset] = useState(0);
   const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
   const [trendlineData, setTrendlineData] = useState<import("@/types/api").TrendlineResponse | null>(null);
-  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null } | null>(null);
+  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null; confidence_tier?: string | null; gp?: number | null; toi_minutes?: number | null } | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
 
@@ -1808,6 +1808,20 @@ export default function PlayerDetailPage() {
                         {am > 0 ? "+" : ""}{am.toFixed(1)}
                       </span>
                     )}
+                    {pxrData.confidence_tier && (() => {
+                      const ct = pxrData.confidence_tier;
+                      if (ct === "high") return (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">High Confidence</span>
+                      );
+                      if (ct === "moderate") return (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">Moderate</span>
+                      );
+                      return (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
+                          Small Sample{pxrData.gp != null && pxrData.gp < 15 ? ` (${pxrData.gp} GP)` : ""}
+                        </span>
+                      );
+                    })()}
                   </div>
                   {/* Percentile Bars */}
                   {(lp != null || cp != null) && (

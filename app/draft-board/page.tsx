@@ -24,6 +24,29 @@ function getTier(score: number | null) {
   return PXR_TIERS.find((t) => score >= t.min && score <= t.max) || PXR_TIERS[PXR_TIERS.length - 1];
 }
 
+function ConfidenceBadge({ tier, gp }: { tier?: string | null; gp?: number | null }) {
+  if (!tier) return null;
+  if (tier === "high") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">
+        High
+      </span>
+    );
+  }
+  if (tier === "moderate") {
+    return (
+      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
+        Moderate
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
+      Small Sample{gp != null && gp < 15 ? ` (${gp} GP)` : ""}
+    </span>
+  );
+}
+
 // ── Types ──
 interface DraftPlayer {
   player_id: string;
@@ -44,6 +67,9 @@ interface DraftPlayer {
   p4_physical: number | null;
   data_completeness: number | null;
   season: string;
+  confidence_tier?: string | null;
+  gp?: number | null;
+  toi_minutes?: number | null;
 }
 
 interface FilterOptions {
@@ -329,6 +355,7 @@ export default function DraftBoardPage() {
                   <SortHeader label="P2 Def" sortId="p2_defense" />
                   <SortHeader label="P3 Poss" sortId="p3_possession" />
                   <SortHeader label="P4 Phys" sortId="p4_physical" />
+                  <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -370,7 +397,7 @@ export default function DraftBoardPage() {
                         className={`cursor-pointer hover:bg-teal/5 transition-colors border-l-3 ${tier?.borderColor || ""} ${
                           idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
                         }`}
-                        style={{ borderLeftWidth: "3px" }}
+                        style={{ borderLeftWidth: "3px", ...(p.confidence_tier === "small_sample" ? { opacity: 0.55 } : {}) }}
                       >
                         <td className="px-3 py-2.5 text-xs text-muted font-oswald">{row.rank}</td>
                         <td className="px-3 py-2.5">
@@ -389,6 +416,9 @@ export default function DraftBoardPage() {
                         <td className="px-3 py-2.5 text-xs text-muted">{p.current_league || "—"}</td>
                         <td className="px-3 py-2.5">
                           <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
+                          {p.gp != null && p.gp < 15 && (
+                            <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-muted">
                           {p.league_percentile != null ? `Top ${Math.max(1, Math.round(100 - p.league_percentile))}%` : "—"}
@@ -403,6 +433,7 @@ export default function DraftBoardPage() {
                         <td className="px-3 py-2.5 text-xs text-muted">{p.p2_defense?.toFixed(1) ?? "—"}</td>
                         <td className="px-3 py-2.5 text-xs text-muted">{p.p3_possession?.toFixed(1) ?? "—"}</td>
                         <td className="px-3 py-2.5 text-xs text-muted">{p.p4_physical?.toFixed(1) ?? "—"}</td>
+                        <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
                       </tr>
                     );
                   })

@@ -159,6 +159,15 @@ export default function PlayerCardPage() {
 
   useEffect(() => { loadTrendline(); }, [loadTrendline]);
 
+  // ── PXR confidence data ──
+  const [pxrConfidence, setPxrConfidence] = useState<{ confidence_tier?: string | null; gp?: number | null } | null>(null);
+  useEffect(() => {
+    api.get("/pxr/draft-board?season=2025-26").then((res) => {
+      const match = (res.data.players || []).find((p: { player_id: string }) => p.player_id === playerId);
+      if (match) setPxrConfidence({ confidence_tier: match.confidence_tier, gp: match.gp });
+    }).catch(() => {});
+  }, [playerId]);
+
   // ── Overflow click-outside ──
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -471,7 +480,15 @@ export default function PlayerCardPage() {
             {/* Intelligence radar */}
             {radarData.length >= 3 && !allZeroRadar && (
               <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Score Profile</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">Score Profile</h3>
+                  {pxrConfidence?.confidence_tier && (() => {
+                    const ct = pxrConfidence.confidence_tier;
+                    if (ct === "high") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">High</span>;
+                    if (ct === "moderate") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">Moderate</span>;
+                    return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">Small Sample</span>;
+                  })()}
+                </div>
                 {intel?.archetype ? (
                   <p className="text-xs text-teal font-semibold mb-2">{String(intel.archetype)}</p>
                 ) : null}
@@ -501,7 +518,15 @@ export default function PlayerCardPage() {
             )}
             {(radarData.length < 3 || allZeroRadar) && (
               <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Score Profile</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">Score Profile</h3>
+                  {pxrConfidence?.confidence_tier && (() => {
+                    const ct = pxrConfidence.confidence_tier;
+                    if (ct === "high") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">High</span>;
+                    if (ct === "moderate") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">Moderate</span>;
+                    return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">Small Sample</span>;
+                  })()}
+                </div>
                 <div className="flex flex-col items-center justify-center py-6">
                   <div className="flex items-center gap-3 mb-3">
                     {["SNP", "IQ", "PLY", "TRN", "DEF", "CMP"].map((label) => (
