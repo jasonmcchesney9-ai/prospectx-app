@@ -735,7 +735,7 @@ export default function BenchTalkDrawer() {
     mental_coach: ["Build a pre-game routine", "Confidence strategies", "Focus techniques"],
   };
 
-  // Context-aware chip matrix — keyed by role_pageId
+  // Context-aware chip matrix — keyed by role_pageId, then fallback to _pageId
   const CONTEXT_CHIPS: Record<string, string[]> = {
     // Scout chips by page
     "scout_PLAYER_CARD": ["Scout this player", "Strengths & weaknesses", "System fit analysis"],
@@ -761,6 +761,24 @@ export default function BenchTalkDrawer() {
     // Analyst chips by page
     "analyst_PLAYER_CARD": ["Advanced stats breakdown", "Trend analysis", "Projection model"],
     "analyst_DASHBOARD": ["Advanced stats breakdown", "Trend analysis", "Regression candidates"],
+    // ── Page-level chips (role-agnostic fallback) ──
+    "_TEAM_PAGE": ["Team identity report", "Game plan vs opponent", "Line deployment"],
+    "_LEADERBOARD": ["Top players by PXR", "Compare two players", "League percentiles"],
+    "_DRAFT_BOARD": ["Top players by PXR", "Compare two players", "League percentiles"],
+    "_ANALYTICS": ["Top players by PXR", "Compare two players", "League percentiles"],
+    "_REPORT_DETAIL": ["Explain this report", "Compare players", "Run a new report"],
+    "_REPORTS": ["Run a new report", "Compare players", "Explain a report"],
+    "_GAME_PLAN": ["Adjust this plan", "Match their lines", "PP/PK breakdown"],
+    "_PRACTICE_BUILDER": ["Suggest drills", "Adjust intensity", "Save as template"],
+    "_SERIES_PLAN": ["Adjust series plan", "Opponent breakdown", "Line matching"],
+    "_SCOUTING_LIST": ["Rank this list", "Scout report", "Add a note"],
+    "_SCOUT_NOTES": ["Scout report", "Compare players", "Add a note"],
+    "_DRILL_LIBRARY": ["Find a drill", "Build a practice", "Drills for skating"],
+    "_RINK_BUILDER": ["Draw a play", "Save this drill", "Add to practice"],
+    "_BROADCAST_HUB": ["Story angles", "Player spotlight", "Team narrative"],
+    "_ADMIN": ["Recalculate PXR", "Check sync status", "Platform summary"],
+    "_SCHEDULE": ["Upcoming games", "Game plan for next game", "Season overview"],
+    "_FAMILY_GUIDE": ["How is my player developing?", "Explain PXI score", "What should we focus on?"],
   };
 
   // Usage/limit state
@@ -947,9 +965,10 @@ export default function BenchTalkDrawer() {
               const rg = getRoleGroup(effectiveHockeyRole);
               const theme = BENCH_TALK_THEMES[rg];
               const modeKey = effectiveHockeyRole === "player" ? "parent" : (effectiveHockeyRole || "scout");
-              // Context-aware chip resolution: role_pageId → role_DASHBOARD → fallback
-              const chipKey = `${modeKey}_${pageContext?.page?.id || "DASHBOARD"}`;
-              const chips = CONTEXT_CHIPS[chipKey] || CONTEXT_CHIPS[`${modeKey}_DASHBOARD`] || ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
+              // Context-aware chip resolution: role_pageId → _pageId → role_DASHBOARD → fallback
+              const pageId = pageContext?.page?.id || "DASHBOARD";
+              const chipKey = `${modeKey}_${pageId}`;
+              const chips = CONTEXT_CHIPS[chipKey] || CONTEXT_CHIPS[`_${pageId}`] || CONTEXT_CHIPS[`${modeKey}_DASHBOARD`] || ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
               return (
             <div className="flex flex-col items-center justify-center h-full px-4">
               <div className="mb-3 drop-shadow-lg">
@@ -960,23 +979,64 @@ export default function BenchTalkDrawer() {
               </h2>
               <p className="text-muted text-sm text-center mb-3 max-w-xs leading-relaxed">
                 {(() => {
-                  if (!pageContext?.entity) {
-                    return "Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.";
+                  const pid = pageContext?.page?.id;
+                  const eName = pageContext?.entity?.name || "this entity";
+                  const rel = pageContext?.entity?.metadata?.roleRelationship;
+                  const fallback = "Ask anything about hockey, players, or your team.";
+
+                  // Entity-aware subtext (player/team/report on the page)
+                  if (pageContext?.entity) {
+                    switch (pageContext.entity.type) {
+                      case "PLAYER":
+                        if (rel === "MY_CHILD") return `Ask about ${eName}'s progress, development, or next steps.`;
+                        return `Ask about ${eName}, run a report, or get development intel.`;
+                      case "TEAM":
+                        return `Ask about ${eName}, game plans, or line deployment.`;
+                      case "GAME":
+                        return `Ask about ${eName}, matchups, key players, or tactical adjustments.`;
+                      case "REPORT":
+                        return `Ask about this report, request a new one, or compare players.`;
+                    }
                   }
-                  const eName = pageContext.entity.name || "this entity";
-                  const rel = pageContext.entity.metadata?.roleRelationship;
-                  switch (pageContext.entity.type) {
-                    case "PLAYER":
-                      if (rel === "MY_CHILD") return `You're viewing ${eName}'s profile. Ask me anything about their development, stats, or what to focus on next.`;
-                      return `Viewing ${eName}. Ask me anything — scouting report, stats breakdown, development outlook, system fit.`;
-                    case "TEAM":
-                      return `Viewing ${eName}. Ask me about roster depth, line combinations, system identity, or trade targets.`;
-                    case "GAME":
-                      return `Viewing ${eName}. Ask me about matchups, key players, tactical adjustments, or post-game analysis.`;
-                    case "REPORT":
-                      return `Viewing ${eName}. Ask me to explain findings, dive deeper into sections, or generate follow-up analysis.`;
+
+                  // Page-aware subtext (no entity, or entity didn't match above)
+                  switch (pid) {
+                    case "DASHBOARD":
+                      return "Ask anything — reports, players, game plans, or analytics.";
+                    case "LEADERBOARD":
+                    case "DRAFT_BOARD":
+                    case "ANALYTICS":
+                      return "Ask about player rankings, PXR scores, or cross-league comparisons.";
+                    case "REPORTS":
+                    case "REPORT_DETAIL":
+                      return "Ask about a report, request a new one, or compare players.";
+                    case "GAME_PLAN":
+                      return "Ask about this game plan, opponent adjustments, or lines.";
+                    case "PRACTICE_BUILDER":
+                      return "Ask about this practice, drills, or session focus.";
+                    case "SERIES_PLAN":
+                      return "Ask about this series, opponent tendencies, or line matching.";
+                    case "SCOUTING_LIST":
+                    case "SCOUT_NOTES":
+                      return "Ask about players on this list or get scouting guidance.";
+                    case "DRILL_LIBRARY":
+                      return "Find drills, build a practice, or get coaching tips.";
+                    case "RINK_BUILDER":
+                      return "Ask about plays, drills, or save this diagram.";
+                    case "BROADCAST_HUB":
+                      return "Ask for story angles, player spotlights, or team narratives.";
+                    case "ADMIN":
+                      return "Ask about platform status, PXR scores, or sync health.";
+                    case "SCHEDULE":
+                      return "Ask about upcoming games or get a game plan.";
+                    case "TEAM_PAGE":
+                    case "TEAM_ROSTER":
+                      return "Ask about this team, game plans, or line deployment.";
+                    case "FAMILY_GUIDE":
+                    case "MY_PLAYER":
+                      return "Ask about your player's progress, development, or next steps.";
                     default:
-                      return "Your private conversation with PXI, your AI hockey intelligence partner. Ask anything — scouting, game plans, development, stats, strategy.";
+                      return fallback;
                   }
                 })()}
               </p>
