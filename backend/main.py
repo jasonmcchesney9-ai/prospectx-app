@@ -27353,11 +27353,34 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
 
             # 1. Check by hockeytech_id first (exact match)
             existing = conn.execute(
-                "SELECT id, first_name, last_name FROM players WHERE hockeytech_id = ? AND org_id = ?",
+                "SELECT id, first_name, last_name, current_team, current_league FROM players WHERE hockeytech_id = ? AND org_id = ?",
                 (ht_id, org_id)
             ).fetchone()
 
             if existing:
+                # ── Transfer detection: check if team changed ──
+                old_team = existing["current_team"] or ""
+                old_league_val = existing["current_league"] or ""
+                if old_team and old_team != team_name and team_name:
+                    # Derive current hockey season string
+                    _now_dt = datetime.now(timezone.utc)
+                    _sy = _now_dt.year if _now_dt.month >= 9 else _now_dt.year - 1
+                    _cur_season = f"{_sy}-{(_sy + 1) % 100:02d}"
+                    # Check for duplicate transfer record
+                    dup_xfer = conn.execute("""
+                        SELECT id FROM player_transfers
+                        WHERE player_id = ? AND from_team_name = ? AND to_team_name = ? AND season = ?
+                    """, (existing[0], old_team, team_name, _cur_season)).fetchone()
+                    if not dup_xfer:
+                        conn.execute("""
+                            INSERT INTO player_transfers
+                            (id, player_id, org_id, from_team_name, from_league,
+                             to_team_name, to_league, transfer_date, season, transfer_type, source)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'trade', 'hockeytech')
+                        """, (gen_id(), existing[0], org_id, old_team, old_league_val,
+                              team_name, league_name, _now_dt.strftime('%Y-%m-%d'), _cur_season))
+                        logger.info(f"Transfer detected: {first} {last} from {old_team} to {team_name}")
+
                 # PXR 3B: Check manual_override — skip bio updates if set
                 mo_row = conn.execute("SELECT manual_override FROM players WHERE id = ?", (existing[0],)).fetchone()
                 if mo_row and mo_row["manual_override"]:
@@ -27403,6 +27426,30 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     break
 
             if matched_id:
+                # ── Transfer detection on fuzzy match ──
+                fm_row = conn.execute(
+                    "SELECT current_team, current_league FROM players WHERE id = ?", (matched_id,)
+                ).fetchone()
+                fm_old_team = (fm_row["current_team"] or "") if fm_row else ""
+                fm_old_league = (fm_row["current_league"] or "") if fm_row else ""
+                if fm_old_team and fm_old_team != team_name and team_name:
+                    _now_dt2 = datetime.now(timezone.utc)
+                    _sy2 = _now_dt2.year if _now_dt2.month >= 9 else _now_dt2.year - 1
+                    _cur_season2 = f"{_sy2}-{(_sy2 + 1) % 100:02d}"
+                    dup_xfer2 = conn.execute("""
+                        SELECT id FROM player_transfers
+                        WHERE player_id = ? AND from_team_name = ? AND to_team_name = ? AND season = ?
+                    """, (matched_id, fm_old_team, team_name, _cur_season2)).fetchone()
+                    if not dup_xfer2:
+                        conn.execute("""
+                            INSERT INTO player_transfers
+                            (id, player_id, org_id, from_team_name, from_league,
+                             to_team_name, to_league, transfer_date, season, transfer_type, source)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'trade', 'hockeytech')
+                        """, (gen_id(), matched_id, org_id, fm_old_team, fm_old_league,
+                              team_name, league_name, _now_dt2.strftime('%Y-%m-%d'), _cur_season2))
+                        logger.info(f"Transfer detected (fuzzy): {first} {last} from {fm_old_team} to {team_name}")
+
                 # PXR 3B: Check manual_override — skip bio updates if set
                 mo_row = conn.execute("SELECT manual_override FROM players WHERE id = ?", (matched_id,)).fetchone()
                 if mo_row and mo_row["manual_override"]:
