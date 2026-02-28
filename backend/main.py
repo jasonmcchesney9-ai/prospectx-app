@@ -1262,6 +1262,20 @@ def _repoint_player_data(conn, from_id: str, to_id: str) -> dict:
     )
     counts["intel_moved"] += result.rowcount
 
+    # ── PXR scores dedup: delete from_id rows where to_id already has same season ──
+    conn.execute("""
+        DELETE FROM pxr_scores
+        WHERE player_id = ?
+          AND season IN (
+              SELECT season FROM pxr_scores WHERE player_id = ?
+          )
+    """, (from_id, to_id))
+    result = conn.execute(
+        "UPDATE pxr_scores SET player_id = ? WHERE player_id = ?",
+        (to_id, from_id)
+    )
+    counts["other_moved"] += result.rowcount
+
     # ── All other FK tables (15 remaining) ──
     other_tables = [
         "player_stats_history", "player_archetypes", "system_adherence",
@@ -8402,6 +8416,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         JOIN players p ON p.id = i.player_id
         WHERE i.season = ?
         AND i.toi_total IS NOT NULL
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     """, (season,)).fetchall()
 
     # Step 1b: Fetch goalie InStat data
@@ -8417,6 +8432,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         JOIN players p ON p.id = g.player_id
         WHERE g.season = ?
         AND g.toi_total IS NOT NULL
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     """, (season,)).fetchall()
     goalie_lookup = {}  # player_id -> goalie row dict
     for gr in goalie_rows:
@@ -13877,6 +13893,7 @@ def get_team_pxr_pillar_summary(conn, team_name: str, season: str = "2025-26"):
         WHERE LOWER(p.current_team) = LOWER(?)
         AND ps.season = ?
         AND ps.pxr_score IS NOT NULL
+        AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
     """, (team_name, season)).fetchone()
 
     if not rows or rows["players_scored"] == 0:
@@ -24423,6 +24440,7 @@ async def pxr_leaderboard(
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             ORDER BY px.pxr_score DESC
             LIMIT %s
         """, (limit,)).fetchall()
@@ -24435,6 +24453,7 @@ async def pxr_leaderboard(
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             GROUP BY p.current_league
             ORDER BY avg_score DESC
         """).fetchall()
@@ -24467,7 +24486,8 @@ async def pxr_draft_board(
     """Draft Board — ranked player list from pxr_scores. Authenticated users."""
     conn = get_db()
     try:
-        where_clauses = ["px.pxr_score IS NOT NULL", "px.season = %s"]
+        where_clauses = ["px.pxr_score IS NOT NULL", "px.season = %s",
+                         "(p.is_deleted = 0 OR p.is_deleted IS NULL)"]
         params: list = [season]
 
         if league:
@@ -24504,6 +24524,7 @@ async def pxr_draft_board(
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL AND px.season = %s
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             ORDER BY p.current_league
         """, (season,)).fetchall()
 
@@ -24512,6 +24533,7 @@ async def pxr_draft_board(
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL AND px.season = %s AND p.birth_year IS NOT NULL
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             ORDER BY p.birth_year
         """, (season,)).fetchall()
 
