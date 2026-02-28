@@ -177,12 +177,13 @@ export default function TeamDetailPage() {
   const [savingFramework, setSavingFramework] = useState(false);
 
   useEffect(() => {
+    const u = getUser();
     setActivePxiContext({
       user: {
-        id: currentUser?.id || "",
-        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
-        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
-        orgId: currentUser?.org_id || "",
+        id: u?.id || "",
+        name: `${u?.first_name || ""} ${u?.last_name || ""}`.trim() || "User",
+        role: (u?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: u?.org_id || "",
         orgName: "ProspectX",
       },
       page: { id: "TEAM_PAGE", route: `/teams/${teamName}` },
@@ -196,7 +197,8 @@ export default function TeamDetailPage() {
       },
     });
     return () => { setActivePxiContext(null); };
-  }, [teamName, teamRef, currentUser, setActivePxiContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamName, teamRef]);
 
   const getDivisionsForCountry = (country: string) => {
     const fwKey = COUNTRY_FRAMEWORKS[country];

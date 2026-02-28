@@ -786,18 +786,20 @@ function AdminDashboard() {
   const { setActivePxiContext } = useBenchTalk();
 
   useEffect(() => {
+    const u = getUser();
     setActivePxiContext({
       user: {
-        id: user?.id || "",
-        name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || "User",
-        role: (user?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
-        orgId: user?.org_id || "",
+        id: u?.id || "",
+        name: `${u?.first_name || ""} ${u?.last_name || ""}`.trim() || "User",
+        role: (u?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: u?.org_id || "",
         orgName: "ProspectX",
       },
       page: { id: "ADMIN", route: "/admin" },
     });
     return () => { setActivePxiContext(null); };
-  }, [user, setActivePxiContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Check admin role
   if (user && user.role !== "admin" && user.role !== "superadmin") {

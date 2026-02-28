@@ -95,12 +95,13 @@ function GamePlanDetail() {
 
   useEffect(() => {
     if (plan) {
+      const u = getUser();
       setActivePxiContext({
         user: {
-          id: currentUser?.id || "",
-          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
-          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
-          orgId: currentUser?.org_id || "",
+          id: u?.id || "",
+          name: `${u?.first_name || ""} ${u?.last_name || ""}`.trim() || "User",
+          role: (u?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgId: u?.org_id || "",
           orgName: "ProspectX",
         },
         page: { id: "GAME_PLAN", route: `/game-plans/${planId}` },
@@ -116,7 +117,8 @@ function GamePlanDetail() {
       });
     }
     return () => { setActivePxiContext(null); };
-  }, [plan, planId, currentUser, setActivePxiContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, planId]);
 
   useEffect(() => {
     async function load() {

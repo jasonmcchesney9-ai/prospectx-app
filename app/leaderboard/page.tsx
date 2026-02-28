@@ -77,18 +77,20 @@ export default function LeaderboardPage() {
   const { setActivePxiContext } = useBenchTalk();
 
   useEffect(() => {
+    const u = getUser();
     setActivePxiContext({
       user: {
-        id: currentUser?.id || "",
-        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
-        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
-        orgId: currentUser?.org_id || "",
+        id: u?.id || "",
+        name: `${u?.first_name || ""} ${u?.last_name || ""}`.trim() || "User",
+        role: (u?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: u?.org_id || "",
         orgName: "ProspectX",
       },
       page: { id: "LEADERBOARD", route: "/leaderboard" },
     });
     return () => { setActivePxiContext(null); };
-  }, [currentUser, setActivePxiContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [allPlayers, setAllPlayers] = useState<LeaderboardPlayer[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({ leagues: [], birth_years: [], seasons: [], positions: [] });

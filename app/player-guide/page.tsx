@@ -120,18 +120,20 @@ export default function PlayerGuidePage() {
   const _roleAllowed = _role === "parent" || _role === "player";
 
   useEffect(() => {
+    const u = getUser();
     setActivePxiContext({
       user: {
-        id: _user?.id || "",
-        name: `${_user?.first_name || ""} ${_user?.last_name || ""}`.trim() || "User",
-        role: (_user?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
-        orgId: _user?.org_id || "",
+        id: u?.id || "",
+        name: `${u?.first_name || ""} ${u?.last_name || ""}`.trim() || "User",
+        role: (u?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: u?.org_id || "",
         orgName: "ProspectX",
       },
       page: { id: "FAMILY_GUIDE", route: "/player-guide" },
     });
     return () => { setActivePxiContext(null); };
-  }, [_user, setActivePxiContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!_roleAllowed) {
     return (
