@@ -22827,6 +22827,13 @@ async def admin_player_dedup_execute(
         "samples": [],  # first 5 groups for verification
     }
 
+    # Verify DB connection is healthy before starting
+    try:
+        conn.execute("SELECT 1")
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"DB connection unhealthy before merge: {str(e)}")
+
     for idx, (fn, ln, grp_org, team_sql, team_params) in enumerate(groups_to_process):
         try:
             # PostgreSQL: use SAVEPOINT so one failed group doesn't abort the whole transaction
@@ -22933,12 +22940,14 @@ async def admin_player_dedup_execute(
             conn.execute(f"RELEASE SAVEPOINT dedup_group_{idx}")
 
         except Exception as e:
+            import traceback as _tb
+            err_detail = _tb.format_exc()
             # Rollback to savepoint so the transaction stays alive for remaining groups
             try:
                 conn.execute(f"ROLLBACK TO SAVEPOINT dedup_group_{idx}")
             except Exception:
                 pass
-            summary["errors"].append(f"{fn} {ln}: {str(e)}")
+            summary["errors"].append(f"{fn} {ln}: {err_detail[-500:]}")
             if len(summary["errors"]) > 10:
                 summary["errors"].append("... (truncated)")
                 break
