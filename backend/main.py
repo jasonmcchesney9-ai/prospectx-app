@@ -27799,6 +27799,10 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
             season_name = _normalize_season(s.get("name", str(season_id)))
             break
 
+    # Derive league display name for stat rows
+    ht_display_name = HT_LEAGUES.get(league, {}).get("name", league.upper())
+    league_name = _normalize_league_safe(ht_display_name, "full")
+
     # Fetch stats from HT
     skater_stats = await client.get_skater_stats(season_id, team_id=team_id, limit=200)
     goalie_stats_list = await client.get_goalie_stats(season_id, team_id=team_id, limit=50)
@@ -27860,24 +27864,74 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
             except (ValueError, TypeError):
                 shooting_pct = 0.0
 
-            # Upsert player_stats (current season)
-            existing = conn.execute(
-                "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source = 'hockeytech'",
-                (player_id, season_name)
+            # ── Multi-team stat model: upsert team_season row, recompute season_total ──
+            ht_team_name = hs.get("team_name", "") or ""
+
+            # 1. Upsert team_season row (keyed on player + season + team_name)
+            existing_team = conn.execute(
+                "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND team_name = ? AND stat_row_type = 'team_season'",
+                (player_id, season_name, ht_team_name)
             ).fetchone()
 
-            if existing:
+            if existing_team:
                 conn.execute("""
                     UPDATE player_stats SET gp = ?, g = ?, a = ?, p = ?, plus_minus = ?, pim = ?,
                         shots = ?, shooting_pct = ?, data_source = 'hockeytech'
                     WHERE id = ?
-                """, (gp, g, a, p, plus_minus, pim, shots, shooting_pct, existing["id"]))
+                """, (gp, g, a, p, plus_minus, pim, shots, shooting_pct, existing_team["id"]))
             else:
                 conn.execute("""
-                    INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p,
-                        plus_minus, pim, shots, shooting_pct, data_source)
-                    VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, 'hockeytech')
-                """, (gen_id(), player_id, season_name, gp, g, a, p, plus_minus, pim, shots, shooting_pct))
+                    INSERT INTO player_stats (id, player_id, season, stat_type, team_name, league,
+                        gp, g, a, p, plus_minus, pim, shots, shooting_pct, data_source, stat_row_type)
+                    VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'hockeytech', 'team_season')
+                """, (gen_id(), player_id, season_name, ht_team_name, league_name,
+                      gp, g, a, p, plus_minus, pim, shots, shooting_pct))
+
+            # 2. Recompute season_total by summing all team_season rows
+            all_splits = conn.execute("""
+                SELECT gp, g, a, p, plus_minus, pim, shots
+                FROM player_stats
+                WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
+            """, (player_id, season_name)).fetchall()
+
+            tot_gp = sum(r["gp"] or 0 for r in all_splits)
+            tot_g = sum(r["g"] or 0 for r in all_splits)
+            tot_a = sum(r["a"] or 0 for r in all_splits)
+            tot_p = sum(r["p"] or 0 for r in all_splits)
+            tot_pm = sum(r["plus_minus"] or 0 for r in all_splits)
+            tot_pim = sum(r["pim"] or 0 for r in all_splits)
+            tot_shots = sum(r["shots"] or 0 for r in all_splits)
+            tot_spct = round((tot_g / tot_shots * 100) if tot_shots > 0 else 0.0, 1)
+
+            existing_total = conn.execute(
+                "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND stat_row_type = 'season_total'",
+                (player_id, season_name)
+            ).fetchone()
+
+            if existing_total:
+                conn.execute("""
+                    UPDATE player_stats SET gp = ?, g = ?, a = ?, p = ?, plus_minus = ?, pim = ?,
+                        shots = ?, shooting_pct = ?, data_source = 'hockeytech', stat_type = 'season'
+                    WHERE id = ?
+                """, (tot_gp, tot_g, tot_a, tot_p, tot_pm, tot_pim, tot_shots, tot_spct, existing_total["id"]))
+            else:
+                # Check for legacy stat row (no stat_row_type) and upgrade it
+                legacy_row = conn.execute(
+                    "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source = 'hockeytech' AND (stat_row_type IS NULL OR stat_row_type = 'season_total')",
+                    (player_id, season_name)
+                ).fetchone()
+                if legacy_row:
+                    conn.execute("""
+                        UPDATE player_stats SET gp = ?, g = ?, a = ?, p = ?, plus_minus = ?, pim = ?,
+                            shots = ?, shooting_pct = ?, stat_row_type = 'season_total'
+                        WHERE id = ?
+                    """, (tot_gp, tot_g, tot_a, tot_p, tot_pm, tot_pim, tot_shots, tot_spct, legacy_row["id"]))
+                else:
+                    conn.execute("""
+                        INSERT INTO player_stats (id, player_id, season, stat_type,
+                            gp, g, a, p, plus_minus, pim, shots, shooting_pct, data_source, stat_row_type)
+                        VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, 'hockeytech', 'season_total')
+                    """, (gen_id(), player_id, season_name, tot_gp, tot_g, tot_a, tot_p, tot_pm, tot_pim, tot_shots, tot_spct))
 
             # Append to player_stats_history (skip if same player+season+date exists)
             already = conn.execute(
