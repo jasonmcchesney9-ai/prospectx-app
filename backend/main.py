@@ -1262,13 +1262,13 @@ def _repoint_player_data(conn, from_id: str, to_id: str) -> dict:
     )
     counts["intel_moved"] += result.rowcount
 
-    # ── All other FK tables (13 remaining) ──
+    # ── All other FK tables (15 remaining) ──
     other_tables = [
         "player_stats_history", "player_archetypes", "system_adherence",
         "player_corrections", "development_plans", "player_parents",
         "player_stat_snapshots", "player_drill_logs", "player_events",
         "family_cards", "scouting_list", "instat_player_stats",
-        "instat_player_game_log",
+        "instat_player_game_log", "player_transfers", "player_achievements",
     ]
     for tbl in other_tables:
         try:
@@ -22975,6 +22975,8 @@ async def admin_player_dedup_execute(
         "scouting_list",
         "instat_player_stats",
         "instat_player_game_log",
+        "player_transfers",
+        "player_achievements",
     ]
 
     # ── Dedup tables where we need to avoid duplicate key conflicts ──
@@ -23038,6 +23040,9 @@ async def admin_player_dedup_execute(
             group_intel_moved = 0
             group_other_moved = 0
 
+            _dd_keeper_team = keeper.get("current_team")
+            _dd_keeper_league = keeper.get("current_league")
+
             for junk_id in junk_ids:
                 # ── Repoint all 19 tables via shared PXR helper ──
                 rc = _repoint_player_data(conn, junk_id, keeper_id)
@@ -23046,6 +23051,34 @@ async def admin_player_dedup_execute(
                 group_reports_moved += rc["reports_moved"]
                 group_intel_moved += rc["intel_moved"]
                 group_other_moved += rc["other_moved"]
+
+                # ── Transfer record: if junk and keeper are on different teams ──
+                _dd_junk_row = next((r for r in rows_dicts if r["id"] == junk_id), {})
+                _dd_junk_team = _dd_junk_row.get("current_team")
+                _dd_junk_league = _dd_junk_row.get("current_league")
+                if (_dd_junk_team and _dd_keeper_team
+                        and _dd_junk_team != _dd_keeper_team):
+                    _dd_has_stats = conn.execute(
+                        "SELECT 1 FROM player_stats WHERE player_id = ? AND gp > 0 LIMIT 1", (keeper_id,)
+                    ).fetchone()
+                    if _dd_has_stats:
+                        _dd_stat_row = conn.execute(
+                            "SELECT season FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1", (keeper_id,)
+                        ).fetchone()
+                        _dd_season = _dd_stat_row["season"] if _dd_stat_row else None
+                        if not _dd_season:
+                            _dd_now = datetime.now(timezone.utc)
+                            _dd_sy = _dd_now.year if _dd_now.month >= 9 else _dd_now.year - 1
+                            _dd_season = f"{_dd_sy}-{(_dd_sy + 1) % 100:02d}"
+                        conn.execute("""
+                            INSERT INTO player_transfers
+                            (id, player_id, org_id, from_team_name, from_league,
+                             to_team_name, to_league, transfer_date, season, transfer_type, source, notes)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'merge_inferred', 'dedup_merge', ?)
+                        """, (gen_id(), keeper_id, grp_org, _dd_junk_team, _dd_junk_league,
+                              _dd_keeper_team, _dd_keeper_league,
+                              datetime.now(timezone.utc).strftime('%Y-%m-%d'), _dd_season,
+                              f"Transfer inferred from duplicate merge — donor player_id: {junk_id}"))
 
                 # ── Soft-delete the junk player row ──
                 conn.execute("""
@@ -26609,6 +26642,13 @@ async def merge_players(
                 pass
         data_snapshot[mid] = donor_snap
 
+    # ── Pre-fetch keeper player row for transfer detection ──
+    _merge_keeper_row = conn.execute(
+        "SELECT current_team, current_league FROM players WHERE id = ?", (keep_id,)
+    ).fetchone()
+    _merge_keeper_team = _merge_keeper_row["current_team"] if _merge_keeper_row else None
+    _merge_keeper_league = _merge_keeper_row["current_league"] if _merge_keeper_row else None
+
     for mid in merge_ids:
         # ── Repoint all 19 tables via shared PXR helper (with stats dedup) ──
         rc = _repoint_player_data(conn, mid, keep_id)
@@ -26617,6 +26657,38 @@ async def merge_players(
         reports_moved += rc["reports_moved"]
         intel_moved += rc["intel_moved"]
         other_moved += rc["other_moved"]
+
+        # ── Transfer record: if donor and keeper are on different teams ──
+        _merge_donor_row = conn.execute(
+            "SELECT current_team, current_league FROM players WHERE id = ?", (mid,)
+        ).fetchone()
+        _merge_donor_team = _merge_donor_row["current_team"] if _merge_donor_row else None
+        _merge_donor_league = _merge_donor_row["current_league"] if _merge_donor_row else None
+        if (_merge_donor_team and _merge_keeper_team
+                and _merge_donor_team != _merge_keeper_team):
+            # Only create transfer if donor has real stats (gp > 0)
+            _donor_has_stats = conn.execute(
+                "SELECT 1 FROM player_stats WHERE player_id = ? AND gp > 0 LIMIT 1", (keep_id,)
+            ).fetchone()
+            if _donor_has_stats:
+                # Derive season from donor's most recent stat row
+                _donor_stat_row = conn.execute(
+                    "SELECT season FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1", (keep_id,)
+                ).fetchone()
+                _merge_season = _donor_stat_row["season"] if _donor_stat_row else None
+                if not _merge_season:
+                    _ms_now = datetime.now(timezone.utc)
+                    _ms_sy = _ms_now.year if _ms_now.month >= 9 else _ms_now.year - 1
+                    _merge_season = f"{_ms_sy}-{(_ms_sy + 1) % 100:02d}"
+                conn.execute("""
+                    INSERT INTO player_transfers
+                    (id, player_id, org_id, from_team_name, from_league,
+                     to_team_name, to_league, transfer_date, season, transfer_type, source, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'merge_inferred', 'dedup_merge', ?)
+                """, (gen_id(), keep_id, org_id, _merge_donor_team, _merge_donor_league,
+                      _merge_keeper_team, _merge_keeper_league,
+                      datetime.now(timezone.utc).strftime('%Y-%m-%d'), _merge_season,
+                      f"Transfer inferred from duplicate merge — donor player_id: {mid}"))
 
         # Soft-delete the merged player record (instead of hard delete)
         conn.execute("""
