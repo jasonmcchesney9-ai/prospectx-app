@@ -1864,6 +1864,31 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="flex gap-1 mt-3 mb-4 no-print">
+          {([
+            { key: "profile" as Tab, label: "Profile", count: null },
+            { key: "stats" as Tab, label: "Stats", count: stats.length },
+            { key: "notes" as Tab, label: "Notes", count: notes.length },
+            { key: "reports" as Tab, label: "Reports", count: reports.length },
+            { key: "player" as Tab, label: "Player", count: devPlanV2History.length || devPlanVersions.length || null },
+            { key: "video" as Tab, label: "Video", count: null },
+          ]).map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
+                activeTab === key
+                  ? "bg-navy text-white"
+                  : "bg-navy/5 text-navy hover:bg-navy/10"
+              }`}
+            >
+              {label}
+              {count !== null && <span className="ml-1.5 text-xs opacity-60">({count})</span>}
+            </button>
+          ))}
+        </div>
+
         {/* QuickActions — Scout + Report + overflow (hidden for parent/player) */}
         {!FAMILY_ROLES.has(userRole) && player && (
           <div className="flex gap-1.5 mt-2 mb-1 no-print">
@@ -1926,33 +1951,6 @@ export default function PlayerDetailPage() {
             </div>
           </div>
         )}
-
-        <div className="ice-stripe mb-6 rounded-b-full" />
-
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 no-print">
-          {([
-            { key: "profile" as Tab, label: "Profile", count: null },
-            { key: "stats" as Tab, label: "Stats", count: stats.length },
-            { key: "notes" as Tab, label: "Notes", count: notes.length },
-            { key: "reports" as Tab, label: "Reports", count: reports.length },
-            { key: "player" as Tab, label: "Player", count: devPlanV2History.length || devPlanVersions.length || null },
-            { key: "video" as Tab, label: "Video", count: null },
-          ]).map(({ key, label, count }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
-                activeTab === key
-                  ? "bg-navy text-white"
-                  : "bg-navy/5 text-navy hover:bg-navy/10"
-              }`}
-            >
-              {label}
-              {count !== null && <span className="ml-1.5 text-xs opacity-60">({count})</span>}
-            </button>
-          ))}
-        </div>
 
         {/* Profile Tab */}
         {activeTab === "profile" && (
