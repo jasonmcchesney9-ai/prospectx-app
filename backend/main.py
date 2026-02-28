@@ -11997,16 +11997,63 @@ async def transfer_player(
 
 @app.get("/players/{player_id}/transfers")
 async def get_player_transfers(player_id: str, token_data: dict = Depends(verify_token)):
-    """Get transfer history for a player."""
+    """Get transfer history for a player from player_transfers table."""
     org_id = token_data["org_id"]
     conn = get_db()
     rows = conn.execute("""
-        SELECT h.*, u.first_name as changed_by_name, u.last_name as changed_by_last
-        FROM player_team_history h
-        LEFT JOIN users u ON h.changed_by = u.id
-        WHERE h.player_id = ? AND h.org_id = ?
-        ORDER BY h.changed_at DESC
+        SELECT id, player_id, from_team_id, from_team_name, from_league,
+               to_team_id, to_team_name, to_league, transfer_date,
+               season, transfer_type, source, notes, created_at
+        FROM player_transfers
+        WHERE player_id = ? AND org_id = ?
+        ORDER BY transfer_date DESC
     """, (player_id, org_id)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/players/{player_id}/achievements")
+async def get_player_achievements(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get achievements/awards for a player."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT id, player_id, achievement_type, season, league,
+               team_id, team_name, description, source,
+               awarded_date, meta, created_at
+        FROM player_achievements
+        WHERE player_id = ? AND org_id = ?
+        ORDER BY awarded_date DESC, created_at DESC
+    """, (player_id, org_id)).fetchall()
+    conn.close()
+    results = []
+    for r in rows:
+        d = dict(r)
+        if d.get("meta") and isinstance(d["meta"], str):
+            try:
+                d["meta"] = json.loads(d["meta"])
+            except Exception:
+                pass
+        results.append(d)
+    return results
+
+
+@app.get("/players/{player_id}/team-splits")
+async def get_player_team_splits(player_id: str, season: str = None, token_data: dict = Depends(verify_token)):
+    """Get per-team stat splits for a player. Defaults to current season."""
+    conn = get_db()
+    if not season:
+        _now_sp = datetime.now(timezone.utc)
+        _sy_sp = _now_sp.year if _now_sp.month >= 9 else _now_sp.year - 1
+        season = f"{_sy_sp}-{(_sy_sp + 1) % 100:02d}"
+    rows = conn.execute("""
+        SELECT id, player_id, season, team_name, league, stat_type,
+               gp, g, a, p, plus_minus, pim, shots, sog, shooting_pct,
+               toi_seconds, stat_row_type, created_at
+        FROM player_stats
+        WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
+        ORDER BY created_at ASC
+    """, (player_id, season)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
