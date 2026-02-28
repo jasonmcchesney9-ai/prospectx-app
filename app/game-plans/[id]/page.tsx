@@ -26,6 +26,8 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { GamePlan, SessionType } from "@/types/api";
 import { SESSION_TYPES, TACTICAL_OPTIONS } from "@/types/api";
 
@@ -58,6 +60,8 @@ function GamePlanDetail() {
   const params = useParams();
   const router = useRouter();
   const planId = params.id as string;
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
 
   const [plan, setPlan] = useState<GamePlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,6 +92,31 @@ function GamePlanDetail() {
     game_result: "",
     game_score: "",
   });
+
+  useEffect(() => {
+    if (plan) {
+      setActivePxiContext({
+        user: {
+          id: currentUser?.id || "",
+          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgId: currentUser?.org_id || "",
+          orgName: "ProspectX",
+        },
+        page: { id: "GAME_PLAN", route: `/game-plans/${planId}` },
+        entity: {
+          type: "GAME",
+          id: planId,
+          name: `${plan.team_name} vs ${plan.opponent_team_name}`,
+          metadata: {
+            opponent: plan.opponent_team_name,
+            team: plan.team_name,
+          },
+        },
+      });
+    }
+    return () => { setActivePxiContext(null); };
+  }, [plan, planId, currentUser, setActivePxiContext]);
 
   useEffect(() => {
     async function load() {

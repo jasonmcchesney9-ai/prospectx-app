@@ -13,6 +13,8 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { GamePlan, SessionType } from "@/types/api";
 import { SESSION_TYPES } from "@/types/api";
 
@@ -20,6 +22,23 @@ type StatusFilter = "all" | "draft" | "active" | "completed";
 type SessionFilter = "all" | SessionType;
 
 export default function GamePlansPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "GAME_PLAN", route: "/game-plans" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   return (
     <ProtectedRoute>
       <NavBar />

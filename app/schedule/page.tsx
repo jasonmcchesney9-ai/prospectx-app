@@ -29,6 +29,7 @@ import FeedConnectModal from "@/components/calendar/FeedConnectModal";
 import AddEventModal from "@/components/calendar/AddEventModal";
 import api from "@/lib/api";
 import { getUser, getToken } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { CalendarEvent, CalendarFeed, Team } from "@/types/api";
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS, PURPOSE_LABELS, PURPOSE_COLORS } from "@/types/api";
 
@@ -106,7 +107,22 @@ const EVENT_TYPE_OPTIONS = ["GAME", "PRACTICE", "TOURNAMENT", "SHOWCASE", "MEETI
 
 export default function SchedulePage() {
   const user = getUser();
+  const { setActivePxiContext } = useBenchTalk();
   const roleGroup = ROLE_GROUP_MAP[user?.hockey_role || "scout"] || "PRO";
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: user?.id || "",
+        name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || "User",
+        role: (user?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: user?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "SCHEDULE", route: "/schedule" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [user, setActivePxiContext]);
 
   // ── Calendar state ─────────────────────────────────────────
   const now = new Date();

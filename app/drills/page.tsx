@@ -7,10 +7,29 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { assetUrl } from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { Drill } from "@/types/api";
 import { DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS, ICE_SURFACES, INTENSITY_COLORS, DRILL_FRAMEWORK_OPTIONS } from "@/types/api";
 
 export default function DrillsPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "DRILL_LIBRARY", route: "/drills" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   const [drills, setDrills] = useState<Drill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

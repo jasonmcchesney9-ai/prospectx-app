@@ -24,6 +24,8 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api, { assetUrl } from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type {
   HTLeague,
   HTTeam,
@@ -63,6 +65,23 @@ const LEAGUE_OPTIONS = [
 ];
 
 export default function LeagueHubPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "OTHER", route: "/leagues" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   const [league, setLeague] = useState("gojhl");
   const [tab, setTab] = useState<Tab>("standings");
   const [loading, setLoading] = useState(true);

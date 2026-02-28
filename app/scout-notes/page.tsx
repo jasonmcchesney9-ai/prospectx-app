@@ -15,10 +15,28 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ScoutNoteCard from "@/components/ScoutNoteCard";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { ScoutNote } from "@/types/api";
 import { COMPETITION_LEVEL_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
 export default function ScoutNotesPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "SCOUT_NOTES", route: "/scout-notes" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   return (
     <ProtectedRoute>
       <NavBar />

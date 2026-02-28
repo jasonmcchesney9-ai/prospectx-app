@@ -17,6 +17,7 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { AdminUser, AdminStats, AdminErrorLog } from "@/types/api";
 
 type Tab = "users" | "platform" | "errors" | "pxr_ops";
@@ -782,6 +783,21 @@ function PxrOpsTab() {
 function AdminDashboard() {
   const [tab, setTab] = useState<Tab>("users");
   const user = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: user?.id || "",
+        name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || "User",
+        role: (user?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: user?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "ADMIN", route: "/admin" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [user, setActivePxiContext]);
 
   // Check admin role
   if (user && user.role !== "admin" && user.role !== "superadmin") {

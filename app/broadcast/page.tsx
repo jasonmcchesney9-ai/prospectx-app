@@ -34,6 +34,7 @@ import PostGameScript from "@/components/broadcast/PostGameScript";
 import StorylineTimeline from "@/components/broadcast/StorylineTimeline";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type {
   Player,
   GameState,
@@ -115,6 +116,23 @@ function genTimelineId(): string {
 const BROADCAST_ALLOWED_ROLES = ["broadcaster", "producer", "scout", "coach", "gm", "admin"];
 
 export default function BroadcastPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "BROADCAST_HUB", route: "/broadcast" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   // Game context
   const [teams, setTeams] = useState<TeamRef[]>([]);
   const [homeTeam, setHomeTeam] = useState("");

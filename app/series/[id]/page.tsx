@@ -24,6 +24,8 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { SeriesPlan } from "@/types/api";
 import { SERIES_FORMATS } from "@/types/api";
 
@@ -118,6 +120,8 @@ function SeriesDetail() {
   const params = useParams();
   const router = useRouter();
   const seriesId = params.id as string;
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
 
   const [series, setSeries] = useState<SeriesPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,6 +150,31 @@ function SeriesDetail() {
   const [newGameResult, setNewGameResult] = useState("win");
   const [newGameNotes, setNewGameNotes] = useState("");
   const [newGameMomentum, setNewGameMomentum] = useState(50);
+
+  useEffect(() => {
+    if (series) {
+      setActivePxiContext({
+        user: {
+          id: currentUser?.id || "",
+          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgId: currentUser?.org_id || "",
+          orgName: "ProspectX",
+        },
+        page: { id: "SERIES_PLAN", route: `/series/${seriesId}` },
+        entity: {
+          type: "GAME",
+          id: seriesId,
+          name: `${series.team_name} vs ${series.opponent_team_name}`,
+          metadata: {
+            opponent: series.opponent_team_name,
+            team: series.team_name,
+          },
+        },
+      });
+    }
+    return () => { setActivePxiContext(null); };
+  }, [series, seriesId, currentUser, setActivePxiContext]);
 
   // ── Load data ──────────────────────────────────────────────
   useEffect(() => {

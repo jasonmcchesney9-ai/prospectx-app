@@ -20,6 +20,8 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { formatLeague } from "@/lib/leagues";
 import type {
   AnalyticsOverview,
@@ -82,6 +84,23 @@ export default function AnalyticsPage() {
 }
 
 function AnalyticsDashboard() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "ANALYTICS", route: "/analytics" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   // Filter state
   const [filterOptions, setFilterOptions] = useState<AnalyticsFilterOptions | null>(null);
   const [selectedLeague, setSelectedLeague] = useState("");

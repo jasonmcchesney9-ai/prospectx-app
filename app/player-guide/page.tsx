@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Apple,
   Dumbbell,
@@ -14,6 +14,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import DevelopmentJourneyTracker from "@/components/player-guide/DevelopmentJourneyTracker";
 import NutritionSection from "@/components/player-guide/NutritionSection";
 import WorkoutsSection from "@/components/player-guide/WorkoutsSection";
@@ -114,8 +115,23 @@ const GUIDE_SECTIONS: GuideSection[] = [
 export default function PlayerGuidePage() {
   const [activeTab, setActiveTab] = useState("nutrition");
   const _user = getUser();
+  const { setActivePxiContext } = useBenchTalk();
   const _role = _user?.hockey_role || "";
   const _roleAllowed = _role === "parent" || _role === "player";
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: _user?.id || "",
+        name: `${_user?.first_name || ""} ${_user?.last_name || ""}`.trim() || "User",
+        role: (_user?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: _user?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "FAMILY_GUIDE", route: "/player-guide" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [_user, setActivePxiContext]);
 
   if (!_roleAllowed) {
     return (

@@ -159,8 +159,22 @@ const ALERT_STATUS_STYLES: Record<string, { label: string; bg: string; text: str
 // ── Dashboard ────────────────────────────────────────────────
 function Dashboard() {
   const user = getUser();
-  useBenchTalk(); // Keep provider active for header/sidebar access
+  const { setActivePxiContext } = useBenchTalk();
   const roleGroup = getRoleGroup(user?.hockey_role);
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: user?.id || "",
+        name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || "User",
+        role: (user?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: user?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "DASHBOARD", route: "/" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [user, setActivePxiContext]);
 
   // ── Team context ─────────────────────────────────────────
   const [teams, setTeams] = useState<Team[]>([]);

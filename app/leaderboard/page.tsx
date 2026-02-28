@@ -7,6 +7,8 @@ import { Trophy, ArrowLeft } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 
 // ── PXR Tier Definitions (from PXR Engine Spec v1.0, Section 6) ──
 const PXR_TIERS = [
@@ -71,6 +73,23 @@ type Tab = (typeof TABS)[number];
 
 export default function LeaderboardPage() {
   const router = useRouter();
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "LEADERBOARD", route: "/leaderboard" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   const [allPlayers, setAllPlayers] = useState<LeaderboardPlayer[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({ leagues: [], birth_years: [], seasons: [], positions: [] });
   const [loading, setLoading] = useState(true);

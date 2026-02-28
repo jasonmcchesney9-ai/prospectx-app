@@ -6,6 +6,8 @@ import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, Chevro
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { PracticePlan } from "@/types/api";
 import { PRACTICE_PHASES, PRACTICE_FOCUS_LABELS, DRILL_AGE_LEVEL_LABELS } from "@/types/api";
 
@@ -16,6 +18,23 @@ const STATUS_COLORS: Record<string, { label: string; bg: string; text: string }>
 };
 
 export default function PracticePlansPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "PRACTICE_BUILDER", route: "/practice-plans" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   const [plans, setPlans] = useState<PracticePlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");

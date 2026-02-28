@@ -22,6 +22,8 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportSection from "@/components/ReportSection";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { Report, Player } from "@/types/api";
 import { REPORT_TYPE_LABELS, SECTION_LABELS, PROSPECT_GRADES } from "@/types/api";
 import HockeyRink from "@/components/HockeyRink";
@@ -107,6 +109,8 @@ function gradeColors(grade: string): { bg: string; text: string; ring: string } 
 export default function ReportViewerPage() {
   const params = useParams();
   const reportId = params.id as string;
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
 
   const [report, setReport] = useState<Report | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
@@ -118,6 +122,30 @@ export default function ReportViewerPage() {
   // Share state
   const [copied, setCopied] = useState(false);
   const [sharedWithOrg, setSharedWithOrg] = useState(false);
+
+  useEffect(() => {
+    if (report) {
+      setActivePxiContext({
+        user: {
+          id: currentUser?.id || "",
+          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgId: currentUser?.org_id || "",
+          orgName: "ProspectX",
+        },
+        page: { id: "REPORT_DETAIL", route: `/reports/${reportId}` },
+        entity: {
+          type: "REPORT",
+          id: reportId,
+          name: report.title || REPORT_TYPE_LABELS[report.report_type] || report.report_type,
+          metadata: {
+            report_type: report.report_type,
+          },
+        },
+      });
+    }
+    return () => { setActivePxiContext(null); };
+  }, [report, reportId, currentUser, setActivePxiContext]);
 
   useEffect(() => {
     let pollInterval: ReturnType<typeof setInterval> | null = null;

@@ -40,6 +40,8 @@ import LineCombinations from "@/components/LineCombinations";
 import LineBuilder from "@/components/LineBuilder";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { formatLeague } from "@/lib/leagues";
 import type { Player, RosterPlayer, Report, TeamSystem, TeamReference, SystemLibraryEntry, TeamStats, LineCombination, TeamGame, TeamIntelligence } from "@/types/api";
 import { SUPPORTED_COUNTRIES, COUNTRY_FRAMEWORKS, FRAMEWORK_LABELS, HC_DIVISIONS, USA_DIVISIONS, IIHF_DIVISIONS } from "@/types/api";
@@ -134,6 +136,8 @@ function SystemSelect({
 export default function TeamDetailPage() {
   const params = useParams();
   const teamName = decodeURIComponent(params.name as string);
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
 
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -171,6 +175,28 @@ export default function TeamDetailPage() {
   const [teamCountry, setTeamCountry] = useState<string>("");
   const [teamAgeDivision, setTeamAgeDivision] = useState<string>("");
   const [savingFramework, setSavingFramework] = useState(false);
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "TEAM_PAGE", route: `/teams/${teamName}` },
+      entity: {
+        type: "TEAM",
+        id: teamName,
+        name: teamName,
+        metadata: {
+          league: teamRef?.league || undefined,
+        },
+      },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [teamName, teamRef, currentUser, setActivePxiContext]);
 
   const getDivisionsForCountry = (country: string) => {
     const fwKey = COUNTRY_FRAMEWORKS[country];

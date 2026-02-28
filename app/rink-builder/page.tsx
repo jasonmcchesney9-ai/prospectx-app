@@ -5,7 +5,7 @@
 // Interactive diagram creation — save as drill or export
 // ============================================================
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
@@ -13,6 +13,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import RinkCanvas from "@/components/RinkCanvas";
 import type { RinkCanvasHandle } from "@/components/RinkCanvas";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { DRILL_CATEGORIES } from "@/types/api";
 import type { RinkDiagramData } from "@/types/rink";
 import { RINK_DIMENSIONS } from "@/types/rink";
@@ -35,6 +37,23 @@ const INTENSITY_OPTIONS = [
 ];
 
 export default function RinkBuilderPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "RINK_BUILDER", route: "/rink-builder" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState<{ name: string; id: string } | null>(null);

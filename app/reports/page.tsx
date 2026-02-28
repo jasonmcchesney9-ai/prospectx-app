@@ -8,10 +8,29 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportCard from "@/components/ReportCard";
 import PXIBadge from "@/components/PXIBadge";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { Report } from "@/types/api";
 import { REPORT_TYPE_LABELS, REPORT_CATEGORIES, REPORT_AUDIENCE_MAP, WIRED_REPORT_TYPES, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES } from "@/types/api";
 
 export default function ReportsPage() {
+  const currentUser = getUser();
+  const { setActivePxiContext } = useBenchTalk();
+
+  useEffect(() => {
+    setActivePxiContext({
+      user: {
+        id: currentUser?.id || "",
+        name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+        role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "COACH" | "PARENT" | "SCOUT" | "GM" | "AGENT" | "BROADCASTER" | "ANALYST",
+        orgId: currentUser?.org_id || "",
+        orgName: "ProspectX",
+      },
+      page: { id: "REPORTS", route: "/reports" },
+    });
+    return () => { setActivePxiContext(null); };
+  }, [currentUser, setActivePxiContext]);
+
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
