@@ -1272,13 +1272,19 @@ def _repoint_player_data(conn, from_id: str, to_id: str) -> dict:
     ]
     for tbl in other_tables:
         try:
+            conn.execute(f"SAVEPOINT repoint_{tbl}")
             result = conn.execute(
                 f"UPDATE {tbl} SET player_id = ? WHERE player_id = ?",
                 (to_id, from_id)
             )
             counts["other_moved"] += result.rowcount
+            conn.execute(f"RELEASE SAVEPOINT repoint_{tbl}")
         except Exception:
-            pass  # Table might not exist yet — harmless
+            # Table might not exist yet — rollback the failed statement so PG transaction stays alive
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT repoint_{tbl}")
+            except Exception:
+                pass
 
     return counts
 
