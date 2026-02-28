@@ -1919,6 +1919,10 @@ def init_db():
         conn.execute("ALTER TABLE player_stats ADD COLUMN notes TEXT")
         conn.commit()
         logger.info("Migration: added notes column to player_stats")
+    if "stat_row_type" not in ps_cols:
+        conn.execute("ALTER TABLE player_stats ADD COLUMN stat_row_type TEXT DEFAULT 'season_total'")
+        conn.commit()
+        logger.info("Migration: added stat_row_type column to player_stats")
 
     # Add logo_url column to teams
     teams_cols = _get_table_columns(conn, "teams")
@@ -2366,6 +2370,58 @@ def init_db():
             triggered_by TEXT
         )
     """)
+
+    # ── Transfer Tracking: player_transfers table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_transfers (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            from_team_id TEXT,
+            from_team_name TEXT,
+            from_league TEXT,
+            to_team_id TEXT,
+            to_team_name TEXT,
+            to_league TEXT,
+            transfer_date TEXT,
+            season TEXT,
+            transfer_type TEXT,
+            source TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+            FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transfers_player ON player_transfers(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transfers_org ON player_transfers(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transfers_season ON player_transfers(season)")
+
+    # ── Transfer Tracking: player_achievements table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS player_achievements (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            achievement_type TEXT NOT NULL,
+            season TEXT,
+            league TEXT,
+            team_id TEXT,
+            team_name TEXT,
+            description TEXT NOT NULL,
+            source TEXT,
+            awarded_date TEXT,
+            meta TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+            FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_achievements_player ON player_achievements(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_achievements_org ON player_achievements(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_achievements_season ON player_achievements(season)")
 
     # ── NEW: game_plans table ──
     conn.execute("""
