@@ -15123,6 +15123,61 @@ def _norm_get(row: dict, instat_col: str):
     return None
 
 
+def _extract_team_from_filename(filename: str) -> str | None:
+    """Extract team name from InStat filename, stripping the opponent portion.
+
+    InStat filenames follow the pattern:
+        Skaters - Team-Opponent_Date.xlsx
+        Goalies - Team-Opponent_Date.xlsx
+        Lines - Team-Opponent_Date.xlsx
+    Only the first part before the hyphen separator is the team name.
+    """
+    import re as _re
+    name = filename.rsplit(".", 1)[0] if "." in filename else filename
+    # Strip common InStat prefixes: "Skaters - ", "Goalies - ", "Lines - ", etc.
+    name = _re.sub(r'^(Skaters|Goalies|Lines|Games)\s*-\s*', '', name, flags=_re.IGNORECASE).strip()
+    if not name:
+        return None
+    # Strip trailing date portion: _DD-Mon-YYYY or _DD_MM_YYYY
+    name = _re.sub(r'[_,]\s*\d{2}[-_]\w{3}[-_]\d{4}$', '', name).strip()
+    name = _re.sub(r'[_,]\s*\d{2}_\d{2}_\d{4}$', '', name).strip()
+    if not name:
+        return None
+    # Split on hyphen to separate Team from Opponent — take only the first part
+    # But preserve legitimate hyphens in team names (Tri-City, Baie-Comeau, etc.)
+    # Legitimate name hyphens connect a short prefix to a city (Tri-City, Baie-Comeau)
+    # Team-Opponent hyphens connect two full team names (Chatham Maroons-Leamington Flyers)
+    # Strategy: find the right hyphen by checking if the word before it is long (4+ chars)
+    if " - " in name:
+        team_part = name.split(" - ")[0].strip()
+    elif "-" in name:
+        # Find all hyphen positions and pick the one that separates team from opponent
+        best_split = None
+        for i, ch in enumerate(name):
+            if ch != "-":
+                continue
+            before = name[:i].strip()
+            after = name[i+1:].strip()
+            if not before or not after:
+                continue
+            # The word immediately before the hyphen
+            last_word = before.split()[-1] if before.split() else ""
+            # Team-Opponent split: the last word before hyphen is 4+ chars (not a prefix)
+            # and both sides have 2+ words total (both are full team names)
+            if len(last_word) >= 4 and len(before.split()) >= 2 and len(after.split()) >= 1:
+                best_split = i
+                break  # Take the first valid split point
+        if best_split is not None:
+            team_part = name[:best_split].strip()
+        else:
+            team_part = name  # Keep full name (probably a legitimate hyphenated name)
+    else:
+        team_part = name
+    # Clean up underscores
+    team_part = team_part.replace("_", " ").strip()
+    return team_part if team_part else None
+
+
 def _norm_detect_file_type(filename: str, sheet_name: str = "") -> dict:
     """Detect InStat file type from filename and sheet name."""
     fn = filename.lower()
@@ -21938,6 +21993,15 @@ async def instat_import(
     fname = (file.filename or "").lower()
     if not any(fname.endswith(ext) for ext in (".csv", ".xlsx", ".xls", ".xlsm", ".xml")):
         raise HTTPException(status_code=400, detail="File must be .csv, .xlsx, .xls, or .xml")
+
+    # Auto-detect team name from filename if not provided
+    # InStat filenames: "Skaters - Team-Opponent_Date.xlsx" → extract "Team"
+    if not team_name:
+        original_fname = file.filename or ""
+        detected = _extract_team_from_filename(original_fname)
+        if detected:
+            team_name = detected
+            logger.info("Auto-detected team name from filename: '%s' → '%s'", original_fname, team_name)
 
     content = await file.read()
 
