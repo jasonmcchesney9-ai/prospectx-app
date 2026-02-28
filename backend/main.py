@@ -11709,6 +11709,84 @@ async def compare_players(
         conn.close()
 
 
+@app.get("/players/duplicates")
+async def find_duplicate_players(token_data: dict = Depends(verify_token)):
+    """Detect potential duplicate player profiles.
+    Groups players by exact name match and by same-last-name + same-DOB.
+    Returns groups of likely duplicates for admin review."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+
+    rows = conn.execute("""
+        SELECT p.id, p.first_name, p.last_name, p.current_team, p.current_league,
+               p.position, p.dob, p.shoots, p.created_at,
+               (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
+               (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
+               (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count,
+               (SELECT COUNT(*) FROM player_intelligence pi WHERE pi.player_id = p.id) as intel_count
+        FROM players p WHERE p.org_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        ORDER BY p.last_name, p.first_name
+    """, (org_id,)).fetchall()
+
+    # Group 1: Exact first+last name matches
+    from collections import defaultdict
+    by_full_name = defaultdict(list)
+    for r in rows:
+        key = f"{r['first_name'].lower().strip()} {r['last_name'].lower().strip()}"
+        by_full_name[key].append(dict(r))
+
+    # Group 2: Same last name + same DOB (different first name — name variants)
+    by_last_dob = defaultdict(list)
+    for r in rows:
+        dob = r["dob"] or ""
+        if dob and dob not in ("-", ""):
+            key = f"{r['last_name'].lower().strip()}|{dob}"
+            by_last_dob[key].append(dict(r))
+
+    duplicate_groups = []
+
+    # Add exact name matches
+    for name, group in by_full_name.items():
+        if len(group) > 1:
+            duplicate_groups.append({
+                "match_type": "exact_name",
+                "match_key": name,
+                "confidence": "high",
+                "players": group,
+            })
+
+    # Add DOB matches (only if not already covered by exact name)
+    exact_ids = set()
+    for g in duplicate_groups:
+        for p in g["players"]:
+            exact_ids.add(p["id"])
+
+    for key, group in by_last_dob.items():
+        if len(group) > 1:
+            # Check if first names differ (otherwise it's already in exact matches)
+            names = set(p["first_name"].lower().strip() for p in group)
+            if len(names) > 1:
+                # Only add if not all players are already in exact-name groups
+                group_ids = set(p["id"] for p in group)
+                if not group_ids.issubset(exact_ids):
+                    duplicate_groups.append({
+                        "match_type": "name_variant",
+                        "match_key": key,
+                        "confidence": "medium",
+                        "players": group,
+                    })
+
+    # Sort by confidence (high first), then by player count
+    duplicate_groups.sort(key=lambda g: (0 if g["confidence"] == "high" else 1, -len(g["players"])))
+
+    conn.close()
+    return {
+        "total_groups": len(duplicate_groups),
+        "total_duplicate_players": sum(len(g["players"]) for g in duplicate_groups),
+        "groups": duplicate_groups,
+    }
+
+
 @app.post("/players/{player_id}/restore")
 async def restore_player(player_id: str, token_data: dict = Depends(verify_token)):
     """Restore a soft-deleted player within the 30-day recovery window."""
@@ -26299,84 +26377,6 @@ async def get_league_indices(
 # ============================================================
 # PLAYER MANAGEMENT — Duplicates, Merge, Bulk Operations
 # ============================================================
-
-@app.get("/players/duplicates")
-async def find_duplicate_players(token_data: dict = Depends(verify_token)):
-    """Detect potential duplicate player profiles.
-    Groups players by exact name match and by same-last-name + same-DOB.
-    Returns groups of likely duplicates for admin review."""
-    org_id = token_data["org_id"]
-    conn = get_db()
-
-    rows = conn.execute("""
-        SELECT p.id, p.first_name, p.last_name, p.current_team, p.current_league,
-               p.position, p.dob, p.shoots, p.created_at,
-               (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
-               (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
-               (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count,
-               (SELECT COUNT(*) FROM player_intelligence pi WHERE pi.player_id = p.id) as intel_count
-        FROM players p WHERE p.org_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
-        ORDER BY p.last_name, p.first_name
-    """, (org_id,)).fetchall()
-
-    # Group 1: Exact first+last name matches
-    from collections import defaultdict
-    by_full_name = defaultdict(list)
-    for r in rows:
-        key = f"{r['first_name'].lower().strip()} {r['last_name'].lower().strip()}"
-        by_full_name[key].append(dict(r))
-
-    # Group 2: Same last name + same DOB (different first name — name variants)
-    by_last_dob = defaultdict(list)
-    for r in rows:
-        dob = r["dob"] or ""
-        if dob and dob not in ("-", ""):
-            key = f"{r['last_name'].lower().strip()}|{dob}"
-            by_last_dob[key].append(dict(r))
-
-    duplicate_groups = []
-
-    # Add exact name matches
-    for name, group in by_full_name.items():
-        if len(group) > 1:
-            duplicate_groups.append({
-                "match_type": "exact_name",
-                "match_key": name,
-                "confidence": "high",
-                "players": group,
-            })
-
-    # Add DOB matches (only if not already covered by exact name)
-    exact_ids = set()
-    for g in duplicate_groups:
-        for p in g["players"]:
-            exact_ids.add(p["id"])
-
-    for key, group in by_last_dob.items():
-        if len(group) > 1:
-            # Check if first names differ (otherwise it's already in exact matches)
-            names = set(p["first_name"].lower().strip() for p in group)
-            if len(names) > 1:
-                # Only add if not all players are already in exact-name groups
-                group_ids = set(p["id"] for p in group)
-                if not group_ids.issubset(exact_ids):
-                    duplicate_groups.append({
-                        "match_type": "name_variant",
-                        "match_key": key,
-                        "confidence": "medium",
-                        "players": group,
-                    })
-
-    # Sort by confidence (high first), then by player count
-    duplicate_groups.sort(key=lambda g: (0 if g["confidence"] == "high" else 1, -len(g["players"])))
-
-    conn.close()
-    return {
-        "total_groups": len(duplicate_groups),
-        "total_duplicate_players": sum(len(g["players"]) for g in duplicate_groups),
-        "groups": duplicate_groups,
-    }
-
 
 @app.post("/players/merge")
 async def merge_players(
