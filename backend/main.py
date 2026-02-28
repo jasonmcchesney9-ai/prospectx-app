@@ -11712,8 +11712,8 @@ async def compare_players(
 @app.get("/players/duplicates")
 async def find_duplicate_players(token_data: dict = Depends(verify_token)):
     """Detect potential duplicate player profiles.
-    Groups players by exact name match and by same-last-name + same-DOB.
-    Returns groups of likely duplicates for admin review."""
+    Groups players by exact match on ALL THREE: first name + last name + DOB.
+    Players without DOB are excluded (can't confirm duplicate)."""
     org_id = token_data["org_id"]
     conn = get_db()
 
@@ -11728,56 +11728,28 @@ async def find_duplicate_players(token_data: dict = Depends(verify_token)):
         ORDER BY p.last_name, p.first_name
     """, (org_id,)).fetchall()
 
-    # Group 1: Exact first+last name matches
+    # Group by ALL THREE: normalized first name + normalized last name + exact DOB
+    # Players without DOB are skipped (can't confirm duplicate without DOB)
     from collections import defaultdict
-    by_full_name = defaultdict(list)
-    for r in rows:
-        key = f"{r['first_name'].lower().strip()} {r['last_name'].lower().strip()}"
-        by_full_name[key].append(dict(r))
-
-    # Group 2: Same last name + same DOB (different first name — name variants)
-    by_last_dob = defaultdict(list)
+    by_name_dob = defaultdict(list)
     for r in rows:
         dob = r["dob"] or ""
         if dob and dob not in ("-", ""):
-            key = f"{r['last_name'].lower().strip()}|{dob}"
-            by_last_dob[key].append(dict(r))
+            key = (r['first_name'].lower().strip(), r['last_name'].lower().strip(), dob)
+            by_name_dob[key].append(dict(r))
 
     duplicate_groups = []
-
-    # Add exact name matches
-    for name, group in by_full_name.items():
+    for (first, last, dob), group in by_name_dob.items():
         if len(group) > 1:
             duplicate_groups.append({
-                "match_type": "exact_name",
-                "match_key": name,
+                "match_type": "exact_name_dob",
+                "match_key": f"{first} {last} ({dob})",
                 "confidence": "high",
                 "players": group,
             })
 
-    # Add DOB matches (only if not already covered by exact name)
-    exact_ids = set()
-    for g in duplicate_groups:
-        for p in g["players"]:
-            exact_ids.add(p["id"])
-
-    for key, group in by_last_dob.items():
-        if len(group) > 1:
-            # Check if first names differ (otherwise it's already in exact matches)
-            names = set(p["first_name"].lower().strip() for p in group)
-            if len(names) > 1:
-                # Only add if not all players are already in exact-name groups
-                group_ids = set(p["id"] for p in group)
-                if not group_ids.issubset(exact_ids):
-                    duplicate_groups.append({
-                        "match_type": "name_variant",
-                        "match_key": key,
-                        "confidence": "medium",
-                        "players": group,
-                    })
-
-    # Sort by confidence (high first), then by player count
-    duplicate_groups.sort(key=lambda g: (0 if g["confidence"] == "high" else 1, -len(g["players"])))
+    # Sort by player count descending
+    duplicate_groups.sort(key=lambda g: -len(g["players"]))
 
     conn.close()
     return {
