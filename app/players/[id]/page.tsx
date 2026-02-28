@@ -70,7 +70,9 @@ import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import TrendlineChart from "@/components/TrendlineChart";
-import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse } from "@/types/api";
+import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse, PlayerTransfer, PlayerAchievement, TeamSplit } from "@/types/api";
+import CareerHistoryAccordion from "@/components/player/CareerHistoryAccordion";
+import AchievementsAccordion from "@/components/player/AchievementsAccordion";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
 type Tab = "profile" | "stats" | "notes" | "reports" | "player" | "video";
@@ -267,6 +269,11 @@ export default function PlayerDetailPage() {
   const [transferCustomLeague, setTransferCustomLeague] = useState(false);
   const [transferCustomTeam, setTransferCustomTeam] = useState(false);
   const [submittingTransfer, setSubmittingTransfer] = useState(false);
+
+  // Transfer tracking
+  const [playerTransfers, setPlayerTransfers] = useState<PlayerTransfer[]>([]);
+  const [playerAchievements, setPlayerAchievements] = useState<PlayerAchievement[]>([]);
+  const [teamSplits, setTeamSplits] = useState<TeamSplit[]>([]);
 
   // CSV upload
   const [uploading, setUploading] = useState(false);
@@ -718,6 +725,24 @@ export default function PlayerDetailPage() {
           setDrillLogData(dlRes.data);
         } catch { /* Non-critical */ }
 
+        // Load transfer history (non-blocking)
+        try {
+          const xferRes = await api.get<PlayerTransfer[]>(`/players/${playerId}/transfers`);
+          setPlayerTransfers(xferRes.data);
+        } catch { /* Non-critical */ }
+
+        // Load achievements (non-blocking)
+        try {
+          const achRes = await api.get<PlayerAchievement[]>(`/players/${playerId}/achievements`);
+          setPlayerAchievements(achRes.data);
+        } catch { /* Non-critical */ }
+
+        // Load team splits (non-blocking)
+        try {
+          const splitsRes = await api.get<TeamSplit[]>(`/players/${playerId}/team-splits`);
+          setTeamSplits(splitsRes.data);
+        } catch { /* Non-critical */ }
+
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
           const match = sysRes.value.data.find(
@@ -929,6 +954,11 @@ export default function PlayerDetailPage() {
                       <span className="text-white/30">·</span>
                       <span className="text-white/50">{formatLeague(player.current_league)}</span>
                     </>
+                  )}
+                  {playerTransfers.length > 0 && playerTransfers[0].from_team_name && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange/20 text-orange/90 font-medium">
+                      Acquired from {playerTransfers[0].from_team_name}
+                    </span>
                   )}
                   {player.commitment_status && player.commitment_status !== "Uncommitted" && (
                     <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs ${
@@ -2511,6 +2541,12 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* Career History Accordion */}
+            <CareerHistoryAccordion transfers={playerTransfers} />
+
+            {/* Achievements Accordion */}
+            <AchievementsAccordion achievements={playerAchievements} />
           </section>
         )}
 
@@ -2658,6 +2694,46 @@ export default function PlayerDetailPage() {
                           source={s.data_source || undefined}
                         />
                       ))}
+                  </div>
+                )}
+
+                {/* Team Splits (multi-team season) */}
+                {teamSplits.length > 1 && (
+                  <div className="mt-6">
+                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
+                      <ArrowRightLeft size={14} className="text-teal" />
+                      Team Splits (Current Season)
+                    </h3>
+                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-navy/[0.04] border-b border-border">
+                            <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-navy/60">Team</th>
+                            <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-navy/60">League</th>
+                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">GP</th>
+                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">G</th>
+                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">A</th>
+                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">P</th>
+                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">+/-</th>
+                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">PIM</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {teamSplits.map((ts) => (
+                            <tr key={ts.id} className="border-b border-border/50 hover:bg-navy/[0.02]">
+                              <td className="px-3 py-2 font-medium text-navy">{ts.team_name || "—"}</td>
+                              <td className="px-3 py-2 text-navy/60">{ts.league || "—"}</td>
+                              <td className="px-3 py-2 text-center">{ts.gp}</td>
+                              <td className="px-3 py-2 text-center">{ts.g}</td>
+                              <td className="px-3 py-2 text-center">{ts.a}</td>
+                              <td className="px-3 py-2 text-center font-bold text-navy">{ts.p}</td>
+                              <td className="px-3 py-2 text-center">{ts.plus_minus ?? "—"}</td>
+                              <td className="px-3 py-2 text-center">{ts.pim ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </>

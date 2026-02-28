@@ -2183,6 +2183,71 @@ export interface CorrectionCreate {
 }
 
 // ============================================================
+// Player Transfers
+// ============================================================
+
+export interface PlayerTransfer {
+  id: string;
+  player_id: string;
+  from_team_id: string | null;
+  from_team_name: string | null;
+  from_league: string | null;
+  to_team_id: string | null;
+  to_team_name: string | null;
+  to_league: string | null;
+  transfer_date: string | null;
+  season: string | null;
+  transfer_type: string | null;
+  source: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// ============================================================
+// Player Achievements
+// ============================================================
+
+export interface PlayerAchievement {
+  id: string;
+  player_id: string;
+  achievement_type: string;
+  season: string | null;
+  league: string | null;
+  team_id: string | null;
+  team_name: string | null;
+  description: string | null;
+  source: string | null;
+  awarded_date: string | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ============================================================
+// Team Splits (per-team stat rows)
+// ============================================================
+
+export interface TeamSplit {
+  id: string;
+  player_id: string;
+  season: string;
+  team_name: string | null;
+  league: string | null;
+  stat_type: string;
+  gp: number;
+  g: number;
+  a: number;
+  p: number;
+  plus_minus: number | null;
+  pim: number | null;
+  shots: number | null;
+  sog: number | null;
+  shooting_pct: number | null;
+  toi_seconds: number | null;
+  stat_row_type: string;
+  created_at: string;
+}
+
+// ============================================================
 // Merge History
 // ============================================================
 
