@@ -16122,6 +16122,69 @@ async def deduplicate_all_stats(token_data: dict = Depends(verify_token)):
         conn.close()
 
 
+def _upsert_season_stat(conn, player_id: str, season: str, team_name: str | None,
+                         stat_row_type: str, stat_values: dict, *,
+                         data_source: str | None = None) -> str:
+    """Upsert a season-level stat row.
+
+    Dedup key: (player_id, season, team_name, stat_row_type).
+    If a matching row exists, UPDATE it in-place; otherwise INSERT a new row.
+    Returns the row id (existing or newly created).
+    """
+    tn = team_name or ""
+    srt = stat_row_type or "season_total"
+
+    existing = conn.execute(
+        """SELECT id FROM player_stats
+           WHERE player_id = ? AND season = ?
+           AND COALESCE(team_name, '') = ?
+           AND COALESCE(stat_row_type, 'season_total') = ?
+           AND stat_type = 'season'""",
+        (player_id, season, tn, srt)
+    ).fetchone()
+
+    if existing:
+        row_id = existing["id"]
+        # Build SET clause from stat_values
+        set_parts = []
+        params = []
+        for col, val in stat_values.items():
+            set_parts.append(f"{col} = ?")
+            params.append(val)
+        if data_source is not None:
+            set_parts.append("data_source = ?")
+            params.append(data_source)
+        params.append(row_id)
+        conn.execute(
+            f"UPDATE player_stats SET {', '.join(set_parts)} WHERE id = ?",
+            params
+        )
+        logger.debug("Upsert UPDATE player_stats id=%s for player=%s season=%s team=%s srt=%s",
+                      row_id, player_id, season, tn, srt)
+        return row_id
+    else:
+        row_id = gen_id()
+        # Build INSERT
+        cols = ["id", "player_id", "season", "stat_type", "team_name", "stat_row_type"]
+        vals = [row_id, player_id, season, "season", team_name, stat_row_type]
+        if data_source is not None:
+            cols.append("data_source")
+            vals.append(data_source)
+        for col, val in stat_values.items():
+            cols.append(col)
+            vals.append(val)
+        cols.append("created_at")
+        vals.append(now_iso())
+        placeholders = ", ".join(["?"] * len(cols))
+        conn.execute(
+            f"INSERT INTO player_stats ({', '.join(cols)}) VALUES ({placeholders})",
+            vals
+        )
+        logger.debug("Upsert INSERT player_stats id=%s for player=%s season=%s team=%s srt=%s",
+                      row_id, player_id, season, tn, srt)
+        return row_id
+
+
 @app.post("/stats/ingest")
 async def ingest_stats(
     file: UploadFile = File(...),
@@ -16244,18 +16307,8 @@ async def ingest_stats(
         conn.commit()
 
         # ── Auto-aggregate game logs into a season summary row ──────
-        # Delete any existing auto-generated season summary for this player/season
-        # (so re-importing doesn't create duplicates)
+        # Use upsert to avoid creating duplicate season rows
         if default_season and inserted > 0:
-            conn.execute("""
-                DELETE FROM player_stats
-                WHERE player_id = ? AND season = ? AND stat_type = 'season'
-                AND id IN (
-                    SELECT id FROM player_stats
-                    WHERE player_id = ? AND season = ? AND stat_type = 'season'
-                )
-            """, (player_id, default_season, player_id, default_season))
-
             # Aggregate all game rows for this player/season
             agg = conn.execute("""
                 SELECT
@@ -16275,18 +16328,15 @@ async def ingest_stats(
                 total_sog = agg["sog"] or 0
                 season_shooting_pct = round((total_g / total_sog * 100), 1) if total_sog > 0 else None
 
-                conn.execute("""
-                    INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
-                                              toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct, created_at)
-                    VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    gen_id(), player_id, default_season,
-                    agg["gp"], total_g, agg["a"] or 0, agg["p"] or 0,
-                    agg["plus_minus"] or 0, agg["pim"] or 0,
-                    agg["toi_seconds"] or 0, agg["pp_toi_seconds"] or 0, agg["pk_toi_seconds"] or 0,
-                    agg["shots"] or 0, total_sog, season_shooting_pct,
-                    now_iso(),
-                ))
+                _upsert_season_stat(conn, player_id, default_season, None, "season_total", {
+                    "gp": agg["gp"], "g": total_g, "a": agg["a"] or 0, "p": agg["p"] or 0,
+                    "plus_minus": agg["plus_minus"] or 0, "pim": agg["pim"] or 0,
+                    "toi_seconds": agg["toi_seconds"] or 0,
+                    "pp_toi_seconds": agg["pp_toi_seconds"] or 0,
+                    "pk_toi_seconds": agg["pk_toi_seconds"] or 0,
+                    "shots": agg["shots"] or 0, "sog": total_sog,
+                    "shooting_pct": season_shooting_pct,
+                })
                 conn.commit()
                 logger.info("Auto-generated season summary for %s %s (%s): %dGP %dG %dA %dP",
                             player["first_name"], player["last_name"], default_season,
@@ -16346,28 +16396,22 @@ async def ingest_stats(
             pim = _parse_pim(row.get("penalty_time", ""))
 
             try:
-                conn.execute("""
-                    INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
-                                              toi_seconds, shots, sog, shooting_pct, microstats, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    gen_id(), pid, "", "season",
-                    _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
-                    g, a, p,
-                    _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−")),
-                    pim,
-                    toi,
-                    _to_int(row.get("shots")),
-                    _to_int(row.get("shots_on_goal") or row.get("sog")),
-                    _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
-                    json.dumps({
+                _upsert_season_stat(conn, pid, "", None, "season_total", {
+                    "gp": _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
+                    "g": g, "a": a, "p": p,
+                    "plus_minus": _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−")),
+                    "pim": pim,
+                    "toi_seconds": toi,
+                    "shots": _to_int(row.get("shots")),
+                    "sog": _to_int(row.get("shots_on_goal") or row.get("sog")),
+                    "shooting_pct": _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
+                    "microstats": json.dumps({
                         "faceoffs": _to_int(row.get("faceoffs")),
                         "faceoffs_won": _to_int(row.get("faceoffs_won")),
                         "hits": _to_int(row.get("hits")),
                         "blocked_shots": _to_int(row.get("blocked_shots")),
                     }),
-                    now_iso(),
-                ))
+                })
                 inserted += 1
                 _imported_player_ids.add(pid)
             except Exception as e:
@@ -16406,26 +16450,39 @@ async def ingest_stats(
         a = _to_int(row.get("a") or row.get("assists"))
         p = _to_int(row.get("p") or row.get("pts") or row.get("points"), g + a)
 
-        conn.execute("""
-            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
-                                      toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            gen_id(), pid,
-            _normalize_season(row.get("season", "")),
-            row.get("stat_type", "season"),
-            _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
-            g, a, p,
-            _to_int(row.get("plus_minus") or row.get("+/-") or row.get("plusminus")),
-            _parse_pim(row.get("pim") or row.get("penalty_minutes")),
-            _to_int(row.get("toi_seconds") or row.get("toi")),
-            _to_int(row.get("pp_toi_seconds") or row.get("pp_toi")),
-            _to_int(row.get("pk_toi_seconds") or row.get("pk_toi")),
-            _to_int(row.get("shots")),
-            _to_int(row.get("sog") or row.get("shots_on_goal")),
-            _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
-            now_iso(),
-        ))
+        row_stat_type = row.get("stat_type", "season")
+        season_val = _normalize_season(row.get("season", ""))
+        team_val = row.get("team_name") or row.get("team") or None
+
+        stat_vals = {
+            "gp": _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
+            "g": g, "a": a, "p": p,
+            "plus_minus": _to_int(row.get("plus_minus") or row.get("+/-") or row.get("plusminus")),
+            "pim": _parse_pim(row.get("pim") or row.get("penalty_minutes")),
+            "toi_seconds": _to_int(row.get("toi_seconds") or row.get("toi")),
+            "pp_toi_seconds": _to_int(row.get("pp_toi_seconds") or row.get("pp_toi")),
+            "pk_toi_seconds": _to_int(row.get("pk_toi_seconds") or row.get("pk_toi")),
+            "shots": _to_int(row.get("shots")),
+            "sog": _to_int(row.get("sog") or row.get("shots_on_goal")),
+            "shooting_pct": _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
+        }
+
+        if row_stat_type == "season":
+            # Upsert keyed on (player_id, season, team_name, stat_row_type)
+            _upsert_season_stat(conn, pid, season_val, team_val, "season_total", stat_vals)
+        else:
+            # Game rows: always INSERT (each game is unique)
+            conn.execute("""
+                INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
+                                          toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                gen_id(), pid, season_val, row_stat_type,
+                stat_vals["gp"], g, a, p, stat_vals["plus_minus"], stat_vals["pim"],
+                stat_vals["toi_seconds"], stat_vals["pp_toi_seconds"], stat_vals["pk_toi_seconds"],
+                stat_vals["shots"], stat_vals["sog"], stat_vals["shooting_pct"],
+                now_iso(),
+            ))
         inserted += 1
         _std_player_ids.add(pid)
 
@@ -21076,32 +21133,29 @@ async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: di
                         g = safe_int(rd.get("g")) or 0
                         a = safe_int(rd.get("a")) or 0
                         p = safe_int(rd.get("p")) or (g + a)
-                        conn.execute("""
-                            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
-                            VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                        """, (gen_id(), player_id, _normalize_season(rd.get("season", "")), safe_int(rd.get("gp")) or 0,
-                              g, a, p, safe_int(rd.get("plus_minus")) or 0,
-                              safe_int(rd.get("pim")) or 0, now))
+                        _upsert_season_stat(conn, player_id, _normalize_season(rd.get("season", "")),
+                                            rd.get("current_team"), "season_total", {
+                            "gp": safe_int(rd.get("gp")) or 0,
+                            "g": g, "a": a, "p": p,
+                            "plus_minus": safe_int(rd.get("plus_minus")) or 0,
+                            "pim": safe_int(rd.get("pim")) or 0,
+                        })
 
                 elif action == "merge":
-                    # Update existing player's stats — delete old season stats first to prevent doubling
+                    # Update existing player's stats via upsert
                     existing_id = dup["existing_id"]
                     if rd.get("gp"):
-                        season_val = rd.get("season", "")
                         g = safe_int(rd.get("g")) or 0
                         a = safe_int(rd.get("a")) or 0
                         p = safe_int(rd.get("p")) or (g + a)
-                        # Remove existing season stats for this player/season to prevent duplicates
-                        conn.execute(
-                            "DELETE FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source IS NULL",
-                            (existing_id, season_val)
-                        )
-                        conn.execute("""
-                            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
-                            VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                        """, (gen_id(), existing_id, season_val, safe_int(rd.get("gp")) or 0,
-                              g, a, p, safe_int(rd.get("plus_minus")) or 0,
-                              safe_int(rd.get("pim")) or 0, now))
+                        _upsert_season_stat(conn, existing_id,
+                                            _normalize_season(rd.get("season", "")),
+                                            rd.get("current_team"), "season_total", {
+                            "gp": safe_int(rd.get("gp")) or 0,
+                            "g": g, "a": a, "p": p,
+                            "plus_minus": safe_int(rd.get("plus_minus")) or 0,
+                            "pim": safe_int(rd.get("pim")) or 0,
+                        })
                     merged += 1
             else:
                 # New player — create
@@ -21122,12 +21176,13 @@ async def execute_import(job_id: str, body: ImportExecuteRequest, token_data: di
                         g = safe_int(rd.get("g")) or 0
                         a = safe_int(rd.get("a")) or 0
                         p = safe_int(rd.get("p")) or (g + a)
-                        conn.execute("""
-                            INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim, created_at)
-                            VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?)
-                        """, (gen_id(), player_id, _normalize_season(rd.get("season", "")), safe_int(rd.get("gp")) or 0,
-                              g, a, p, safe_int(rd.get("plus_minus")) or 0,
-                              safe_int(rd.get("pim")) or 0, now))
+                        _upsert_season_stat(conn, player_id, _normalize_season(rd.get("season", "")),
+                                            rd.get("current_team"), "season_total", {
+                            "gp": safe_int(rd.get("gp")) or 0,
+                            "g": g, "a": a, "p": p,
+                            "plus_minus": safe_int(rd.get("plus_minus")) or 0,
+                            "pim": safe_int(rd.get("pim")) or 0,
+                        })
                 except Exception as e:
                     errors.append(f"Row {idx+1}: {str(e)}")
 
@@ -22378,24 +22433,17 @@ def _import_league_skaters(rows, season, org_id):
             # Parse stats
             core, extended = _parse_instat_row(row, INSTAT_SKATER_CORE_MAP, INSTAT_SKATER_EXTENDED_MAP)
 
-            # Delete existing InStat season stats for this player/season (replace)
-            conn.execute(
-                "DELETE FROM player_stats WHERE player_id = ? AND season = ? AND data_source IN ('instat_league', 'instat_team')",
-                (player_id, season)
-            )
-
-            # Insert stats
-            conn.execute(
-                """INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p,
-                   plus_minus, pim, toi_seconds, shots, sog, shooting_pct,
-                   extended_stats, data_source)
-                   VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'instat_league')""",
-                (gen_id(), player_id, season,
-                 core.get("gp", 0), core.get("g", 0), core.get("a", 0), core.get("p", 0),
-                 core.get("plus_minus", 0), core.get("pim", 0), core.get("toi_seconds", 0),
-                 core.get("shots", 0), core.get("sog", 0), core.get("shooting_pct"),
-                 json.dumps(extended) if extended else None)
-            )
+            # Upsert season stat (keyed on player_id, season, team_name, stat_row_type)
+            instat_team = team or None
+            _upsert_season_stat(conn, player_id, season, instat_team, "season_total", {
+                "gp": core.get("gp", 0), "g": core.get("g", 0),
+                "a": core.get("a", 0), "p": core.get("p", 0),
+                "plus_minus": core.get("plus_minus", 0), "pim": core.get("pim", 0),
+                "toi_seconds": core.get("toi_seconds", 0),
+                "shots": core.get("shots", 0), "sog": core.get("sog", 0),
+                "shooting_pct": core.get("shooting_pct"),
+                "extended_stats": json.dumps(extended) if extended else None,
+            }, data_source="instat_league")
             stats_imported += 1
             _affected_player_ids.add(player_id)
 
@@ -24281,32 +24329,20 @@ async def import_cross_league(
                 else:
                     pim = int(parse_dash(pim_raw) or 0)
 
-            # Check if basic stats already exist for this player+season
-            existing_ps = conn.execute(
-                "SELECT id FROM player_stats WHERE player_id = %s AND season = %s AND stat_type = 'season'",
-                (player_id, season)
-            ).fetchone()
-            if not existing_ps:
-                ps_id = gen_id()
-                conn.execute("""
-                    INSERT INTO player_stats (
-                        id, player_id, season, stat_type,
-                        gp, g, a, p, plus_minus, pim,
-                        toi_seconds, pp_toi_seconds, pk_toi_seconds,
-                        shots, sog, created_at
-                    ) VALUES (%s,%s,%s,'season',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)
-                """, (ps_id, player_id, season,
-                      int(gp) if gp else 0,
-                      int(goals) if goals else 0,
-                      int(assists) if assists else 0,
-                      int(points) if points else 0,
-                      int(plus_minus) if plus_minus else 0,
-                      pim or 0,
-                      int(toi_seconds) if toi_seconds else 0,
-                      int(pp_toi_seconds) if pp_toi_seconds else 0,
-                      int(pk_toi_seconds) if pk_toi_seconds else 0,
-                      int(shots) if shots else 0,
-                      int(sog) if sog else 0))
+            # Upsert season stat (keyed on player_id, season, team_name, stat_row_type)
+            _upsert_season_stat(conn, player_id, season, None, "season_total", {
+                "gp": int(gp) if gp else 0,
+                "g": int(goals) if goals else 0,
+                "a": int(assists) if assists else 0,
+                "p": int(points) if points else 0,
+                "plus_minus": int(plus_minus) if plus_minus else 0,
+                "pim": pim or 0,
+                "toi_seconds": int(toi_seconds) if toi_seconds else 0,
+                "pp_toi_seconds": int(pp_toi_seconds) if pp_toi_seconds else 0,
+                "pk_toi_seconds": int(pk_toi_seconds) if pk_toi_seconds else 0,
+                "shots": int(shots) if shots else 0,
+                "sog": int(sog) if sog else 0,
+            }, data_source="instat_league")
             basic_imported += 1
 
         conn.commit()
