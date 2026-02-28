@@ -3592,6 +3592,16 @@ def init_db():
             )
         """)
 
+    # ── Migration: add source_filename to instat stat tables ──
+    ips_cols = _get_table_columns(conn, "instat_player_stats")
+    if "source_filename" not in ips_cols:
+        conn.execute("ALTER TABLE instat_player_stats ADD COLUMN source_filename TEXT")
+        logger.info("Migration: added source_filename to instat_player_stats")
+    igs_cols = _get_table_columns(conn, "instat_goalie_stats")
+    if "source_filename" not in igs_cols:
+        conn.execute("ALTER TABLE instat_goalie_stats ADD COLUMN source_filename TEXT")
+        logger.info("Migration: added source_filename to instat_goalie_stats")
+
     conn.commit()
 
     conn.close()
@@ -14999,6 +15009,18 @@ def _norm_upsert_player(conn, org_id: str, player_data: dict) -> str:
         (org_id, player_name)
     ).fetchone()
 
+    # Name-flip matching: try "Last First" → "First Last" and vice versa
+    if not existing:
+        name_parts = player_name.split(None, 1)
+        if len(name_parts) == 2:
+            flipped_name = f"{name_parts[1]} {name_parts[0]}"
+            existing = conn.execute(
+                "SELECT id FROM instat_players WHERE org_id = ? AND player_name = ?",
+                (org_id, flipped_name)
+            ).fetchone()
+            if existing:
+                logger.info(f"Name-flip match: '{player_name}' matched existing '{flipped_name}'")
+
     if existing:
         player_id = existing[0]
         conn.execute("""
@@ -15247,7 +15269,7 @@ def _norm_map_row(row_dict: dict, mapping: dict) -> dict:
 
 # ── Stat Normalizer — process functions ──────────────────────
 
-def _norm_process_skater(conn, org_id, season, row_dict, unmapped):
+def _norm_process_skater(conn, org_id, season, row_dict, unmapped, source_filename=None):
     """Process a skater row into instat_player_stats."""
     mapped = _norm_map_row(row_dict, NORM_SKATER_MAP)
     player_name = row_dict.get("Player", "").strip() if row_dict.get("Player") else ""
@@ -15329,7 +15351,8 @@ def _norm_process_skater(conn, org_id, season, row_dict, unmapped):
             oz_possession, dz_possession, puck_touches, puck_control_time,
             pp_appearances, pp_goals, pp_toi,
             pk_appearances, pk_toi, sh_goals,
-            dekes_total, dekes_pct
+            dekes_total, dekes_pct,
+            source_filename
         ) VALUES (
             ?, ?, ?, ?, ?,
             ?, ?, ?,
@@ -15357,7 +15380,8 @@ def _norm_process_skater(conn, org_id, season, row_dict, unmapped):
             ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?,
-            ?, ?
+            ?, ?,
+            ?
         )
     """, (
         row_id, player_id, org_id, season, now_iso(),
@@ -15387,11 +15411,12 @@ def _norm_process_skater(conn, org_id, season, row_dict, unmapped):
         stat_fields.get("pp_appearances"), stat_fields.get("pp_goals"), stat_fields.get("pp_toi"),
         stat_fields.get("pk_appearances"), stat_fields.get("pk_toi"), stat_fields.get("sh_goals"),
         stat_fields.get("dekes_total"), stat_fields.get("dekes_pct"),
+        source_filename,
     ))
     return "updated" if was_update else "inserted"
 
 
-def _norm_process_goalie(conn, org_id, season, row_dict, unmapped):
+def _norm_process_goalie(conn, org_id, season, row_dict, unmapped, source_filename=None):
     """Process a goalie row into instat_goalie_stats."""
     mapped = _norm_map_row(row_dict, NORM_GOALIE_MAP)
     player_name = row_dict.get("Player", "").strip() if row_dict.get("Player") else ""
@@ -15433,8 +15458,9 @@ def _norm_process_goalie(conn, org_id, season, row_dict, unmapped):
             xg_conceded, xg_per_shot, gsax,
             sv_pct_high_danger,
             scoring_chances_faced, sc_saves, sc_sv_pct,
-            shootout_saves, shootout_faced, passes_accurate_pct
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            shootout_saves, shootout_faced, passes_accurate_pct,
+            source_filename
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         row_id, player_id, org_id, season, now_iso(),
         mapped.get("gp"), mapped.get("toi_total"),
@@ -15443,6 +15469,7 @@ def _norm_process_goalie(conn, org_id, season, row_dict, unmapped):
         mapped.get("sv_pct_high_danger"),
         mapped.get("scoring_chances_faced"), mapped.get("sc_saves"), mapped.get("sc_sv_pct"),
         mapped.get("shootout_saves"), mapped.get("shootout_faced"), mapped.get("passes_accurate_pct"),
+        source_filename,
     ))
     return "updated" if was_update else "inserted"
 
@@ -16259,12 +16286,12 @@ async def upload_stats(
 
         try:
             if file_info["type"] == "skater":
-                result = _norm_process_skater(conn, org_id, season, row_dict, unmapped)
+                result = _norm_process_skater(conn, org_id, season, row_dict, unmapped, source_filename=fname)
             elif file_info["type"] == "goalie":
                 if file_info.get("subtype") == "league":
                     result = _norm_process_league_skater(conn, league_name, season, row_dict, unmapped)
                 else:
-                    result = _norm_process_goalie(conn, org_id, season, row_dict, unmapped)
+                    result = _norm_process_goalie(conn, org_id, season, row_dict, unmapped, source_filename=fname)
             elif file_info["type"] == "lines":
                 result = _norm_process_line(conn, org_id, season, file_info["subtype"] or "basic", row_dict, unmapped)
             elif file_info["type"] == "team_game_log":
@@ -21993,9 +22020,12 @@ def _import_league_skaters(rows, season, org_id):
                     bio[field] = val
 
             # Match against existing players — multi-signal matching
+            # Step 1: Try exact name + DOB, Step 2: Try flipped name + DOB
             player_id = None
             csv_name = f"{first_name} {last_name}".lower()
+            csv_name_flipped = f"{last_name} {first_name}".lower()
             csv_last = last_name.lower().strip()
+            csv_first = first_name.lower().strip()
             csv_dob = bio.get("dob", "")
             best_score = 0.0
             best_match = None
@@ -22003,17 +22033,27 @@ def _import_league_skaters(rows, season, org_id):
             for ep in existing_list:
                 existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
                 existing_last = ep["last_name"].lower().strip()
+                existing_first = ep["first_name"].lower().strip()
                 existing_dob = ep.get("dob", "") or ""
 
-                # Start with name similarity
+                # Start with name similarity (original order)
                 score = _fuzzy_name_match(csv_name, existing_name)
+
+                # Name-flip matching: also try swapped first/last
+                flipped_score = _fuzzy_name_match(csv_name_flipped, existing_name)
+                if flipped_score > score:
+                    score = flipped_score
 
                 # DOB match is a very strong signal
                 if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
                     if csv_dob == existing_dob:
-                        # Same DOB: huge boost — if last names also match, it's nearly certain
+                        # Same DOB + same last name = same person (original order)
                         if csv_last == existing_last:
-                            score = max(score, 0.98)  # Same last name + same DOB = same person
+                            score = max(score, 0.98)
+                        # Same DOB + flipped: csv_first matches existing_last (e.g. "McChesney Ewan" → "Ewan McChesney")
+                        elif csv_first == existing_last and csv_last == existing_first:
+                            score = max(score, 0.98)
+                            logger.info(f"Name-flip match: '{first_name} {last_name}' → '{ep['first_name']} {ep['last_name']}'")
                         else:
                             score += 0.15  # Same DOB, different last name — minor boost
 
@@ -22047,19 +22087,10 @@ def _import_league_skaters(rows, season, org_id):
                     conn.execute(f"UPDATE players SET {', '.join(updates)} WHERE id = ?", params)
                 updated += 1
             else:
-                # Create new player
-                player_id = gen_id()
-                conn.execute(
-                    """INSERT INTO players (id, org_id, first_name, last_name, position, shoots,
-                       current_team, current_league, dob)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (player_id, org_id, first_name, last_name, position,
-                     bio.get("shoots", ""), team, _normalize_league_safe("GOHL", "full"), bio.get("dob", ""))
-                )
-                # Add to existing list for matching remaining rows (include DOB for future matching)
-                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
-                                     "current_team": team, "position": position, "dob": bio.get("dob", "")})
-                created += 1
+                # NEVER create new player — log as unmatched
+                logger.warning(f"Skater import: no match for '{first_name} {last_name}' (DOB: {csv_dob}) — skipping, not creating new player")
+                errors.append(f"Row {i+1}: unmatched player '{first_name} {last_name}' (DOB: {csv_dob}) — skipped")
+                continue
 
             # Parse stats
             core, extended = _parse_instat_row(row, INSTAT_SKATER_CORE_MAP, INSTAT_SKATER_EXTENDED_MAP)
@@ -22127,10 +22158,13 @@ def _import_league_goalies(rows, season, org_id):
                 if val:
                     bio[field] = val
 
-            # Match player — multi-signal matching (same as skaters)
+            # Match player — multi-signal matching with name-flip detection
+            # Step 1: Try exact name + DOB, Step 2: Try flipped name + DOB
             player_id = None
             csv_name = f"{first_name} {last_name}".lower()
+            csv_name_flipped = f"{last_name} {first_name}".lower()
             csv_last = last_name.lower().strip()
+            csv_first = first_name.lower().strip()
             csv_dob = bio.get("dob", "")
             best_score = 0.0
             best_match = None
@@ -22138,14 +22172,27 @@ def _import_league_goalies(rows, season, org_id):
             for ep in existing_list:
                 existing_name = f"{ep['first_name']} {ep['last_name']}".lower()
                 existing_last = ep["last_name"].lower().strip()
+                existing_first = ep["first_name"].lower().strip()
                 existing_dob = ep.get("dob", "") or ""
 
+                # Start with name similarity (original order)
                 score = _fuzzy_name_match(csv_name, existing_name)
+
+                # Name-flip matching: also try swapped first/last
+                flipped_score = _fuzzy_name_match(csv_name_flipped, existing_name)
+                if flipped_score > score:
+                    score = flipped_score
 
                 # DOB match is a very strong signal
                 if csv_dob and existing_dob and csv_dob not in ("-", "") and existing_dob not in ("-", ""):
-                    if csv_dob == existing_dob and csv_last == existing_last:
-                        score = max(score, 0.98)
+                    if csv_dob == existing_dob:
+                        # Same DOB + same last name = same person (original order)
+                        if csv_last == existing_last:
+                            score = max(score, 0.98)
+                        # Same DOB + flipped: csv_first matches existing_last
+                        elif csv_first == existing_last and csv_last == existing_first:
+                            score = max(score, 0.98)
+                            logger.info(f"Name-flip match (goalie): '{first_name} {last_name}' → '{ep['first_name']} {ep['last_name']}'")
 
                 if team and ep.get("current_team") and ep["current_team"].lower() == team.lower():
                     score += 0.1
@@ -22160,17 +22207,10 @@ def _import_league_goalies(rows, season, org_id):
                 # Update position to G
                 conn.execute("UPDATE players SET position = 'G' WHERE id = ?", (player_id,))
             else:
-                player_id = gen_id()
-                conn.execute(
-                    """INSERT INTO players (id, org_id, first_name, last_name, position, shoots,
-                       current_team, current_league, dob)
-                       VALUES (?, ?, ?, ?, 'G', ?, ?, ?, ?)""",
-                    (player_id, org_id, first_name, last_name,
-                     bio.get("shoots", ""), team, _normalize_league_safe("GOHL", "full"), bio.get("dob", ""))
-                )
-                existing_list.append({"id": player_id, "first_name": first_name, "last_name": last_name,
-                                     "current_team": team, "position": "G", "dob": bio.get("dob", "")})
-                created += 1
+                # NEVER create new player — log as unmatched
+                logger.warning(f"Goalie import: no match for '{first_name} {last_name}' (DOB: {csv_dob}) — skipping, not creating new player")
+                errors.append(f"Row {i+1}: unmatched goalie '{first_name} {last_name}' (DOB: {csv_dob}) — skipped")
+                continue
 
             # Parse goalie stats
             core, extended = _parse_instat_row(row, INSTAT_GOALIE_CORE_MAP, INSTAT_GOALIE_EXTENDED_MAP)
@@ -23671,11 +23711,20 @@ async def import_cross_league(
 
             # Also upsert into instat_players (FK target for instat_player_stats)
             # Has UNIQUE(org_id, player_name) — check-then-insert to handle dupes
+            # Includes name-flip matching: try "First Last" then "Last First"
             player_name_full = f"{first_name} {last_name}"
+            flipped_name_full = f"{last_name} {first_name}"
             existing_instat = conn.execute(
                 "SELECT id FROM instat_players WHERE org_id = %s AND player_name = %s",
                 (org_id, player_name_full)
             ).fetchone()
+            if not existing_instat and first_name and last_name:
+                existing_instat = conn.execute(
+                    "SELECT id FROM instat_players WHERE org_id = %s AND player_name = %s",
+                    (org_id, flipped_name_full)
+                ).fetchone()
+                if existing_instat:
+                    logger.info(f"Name-flip match (admin XLSX): '{player_name_full}' matched existing '{flipped_name_full}'")
             if existing_instat:
                 instat_pid = existing_instat[0]
                 conn.execute("""
@@ -23790,7 +23839,8 @@ async def import_cross_league(
                     takeaways, puck_losses,
                     passes_total, pass_pct,
                     fo_pct,
-                    pp_toi, pk_toi
+                    pp_toi, pk_toi,
+                    source_filename
                 ) VALUES (
                     %s,%s,%s,%s,CURRENT_TIMESTAMP,
                     %s,%s,%s,
@@ -23805,7 +23855,8 @@ async def import_cross_league(
                     %s,%s,
                     %s,%s,
                     %s,
-                    %s,%s
+                    %s,%s,
+                    %s
                 )
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     gp = EXCLUDED.gp,
@@ -23834,7 +23885,8 @@ async def import_cross_league(
                     fo_pct = EXCLUDED.fo_pct,
                     pp_toi = EXCLUDED.pp_toi,
                     pk_toi = EXCLUDED.pk_toi,
-                    uploaded_at = CURRENT_TIMESTAMP
+                    uploaded_at = CURRENT_TIMESTAMP,
+                    source_filename = EXCLUDED.source_filename
             """, (stat_id, player_id, org_id, season,
                   gp, toi_total, toi_per_game,
                   goals, points, ppg_val,
@@ -23848,7 +23900,8 @@ async def import_cross_league(
                   takeaways, puck_losses,
                   passes_total, pass_pct,
                   fo_pct,
-                  pp_toi, pk_toi))
+                  pp_toi, pk_toi,
+                  file.filename))
 
             stats_imported += 1
 
