@@ -1291,6 +1291,8 @@ MODE_TEMPLATE_WIRING = {
     "next_season_projection":    {"primary": "analyst", "secondary": "gm"},
     "metrics_dashboard":         {"primary": "analyst", "secondary": "scout"},
     "free_agent_target":         {"primary": "gm",      "secondary": "scout"},
+    # Addendum — Special Teams Audit
+    "special_teams_audit":       {"primary": "analyst", "secondary": "scout"},
 }
 
 # ─────────────────────────────────────────────────────────
