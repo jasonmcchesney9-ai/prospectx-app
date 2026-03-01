@@ -1907,6 +1907,43 @@ def init_db():
 
     conn.commit()
 
+    # ── Org Foundation: organizations table columns ──────────
+    org_cols = _get_table_columns(conn, "organizations")
+    for col_name, col_def in [
+        ("short_name", "TEXT"),
+        ("plan", "TEXT DEFAULT 'pro'"),
+        ("primary_color", "TEXT DEFAULT '#0D9488'"),
+        ("secondary_color", "TEXT DEFAULT '#F97316'"),
+        ("logo_url", "TEXT"),
+        ("city", "TEXT"),
+        ("arena", "TEXT"),
+        ("league", "TEXT"),
+        ("is_active", "INTEGER DEFAULT 1"),
+    ]:
+        if col_name not in org_cols:
+            conn.execute(f"ALTER TABLE organizations ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to organizations", col_name)
+
+    # ── Org Foundation: users table columns ──────────────────
+    user_cols = _get_table_columns(conn, "users")
+    for col_name, col_def in [
+        ("status", "TEXT DEFAULT 'active'"),
+        ("invited_by", "INTEGER"),
+        ("dashboard_layout", "TEXT"),
+    ]:
+        if col_name not in user_cols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to users", col_name)
+
+    # ── Org Foundation: import_jobs import_type column ───────
+    ij_cols = _get_table_columns(conn, "import_jobs")
+    if "import_type" not in ij_cols:
+        conn.execute("ALTER TABLE import_jobs ADD COLUMN import_type TEXT")
+        conn.commit()
+        logger.info("Migration: added import_type column to import_jobs")
+
     # ── Migrations for existing databases ───────────────────
     # Add image_url column if it doesn't exist
     cols = _get_table_columns(conn, "players")
@@ -9262,6 +9299,11 @@ def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(s
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+def get_current_org(token_data: dict = Depends(verify_token)) -> str:
+    """Convenience dependency — extracts org_id from JWT. Use for new routes."""
+    return token_data["org_id"]
+
+
 # ============================================================
 # AUTH ENDPOINTS
 # ============================================================
@@ -9870,7 +9912,9 @@ async def superadmin_list_orgs(token_data: dict = Depends(verify_token)):
     conn = get_db()
     try:
         orgs_raw = conn.execute(
-            "SELECT id, name, org_type, created_at FROM organizations ORDER BY created_at DESC"
+            """SELECT id, name, org_type, created_at, short_name, plan,
+                      primary_color, secondary_color, logo_url, city, arena, league, is_active
+               FROM organizations ORDER BY created_at DESC"""
         ).fetchall()
 
         orgs = []
@@ -9898,7 +9942,16 @@ async def superadmin_list_orgs(token_data: dict = Depends(verify_token)):
             orgs.append({
                 "org_id": org_id,
                 "name": org["name"],
+                "short_name": org["short_name"],
                 "org_type": org["org_type"],
+                "plan": org["plan"],
+                "primary_color": org["primary_color"],
+                "secondary_color": org["secondary_color"],
+                "logo_url": org["logo_url"],
+                "city": org["city"],
+                "arena": org["arena"],
+                "league": org["league"],
+                "is_active": org["is_active"],
                 "created_at": org["created_at"],
                 "user_count": user_count,
                 "highest_tier": highest_tier,
@@ -10090,6 +10143,206 @@ async def superadmin_platform_stats(token_data: dict = Depends(verify_token)):
         ).fetchone()[0]
 
         return stats
+    finally:
+        conn.close()
+
+
+# ── Org Foundation: Create Org (superadmin only) ─────────────
+
+class CreateOrgRequest(BaseModel):
+    id: str  # slug e.g. 'saginaw-spirit-demo'
+    name: str
+    short_name: Optional[str] = None
+    plan: str = "pro"
+    primary_color: str = "#0D9488"
+    secondary_color: str = "#F97316"
+    logo_url: Optional[str] = None
+    city: Optional[str] = None
+    arena: Optional[str] = None
+    league: Optional[str] = None
+
+
+@app.post("/superadmin/orgs")
+async def superadmin_create_org(req: CreateOrgRequest, token_data: dict = Depends(verify_token)):
+    """Create a new organization (superadmin only)."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT id FROM organizations WHERE id = ?", (req.id,)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Organization '{req.id}' already exists")
+
+        conn.execute(
+            """INSERT INTO organizations (id, name, short_name, plan, primary_color, secondary_color,
+                                          logo_url, city, arena, league, is_active, org_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'team')""",
+            (req.id, req.name, req.short_name, req.plan, req.primary_color, req.secondary_color,
+             req.logo_url, req.city, req.arena, req.league),
+        )
+        conn.commit()
+        logger.info("Superadmin created org: %s (%s)", req.name, req.id)
+        return {
+            "success": True,
+            "org_id": req.id,
+            "name": req.name,
+            "message": f"Organization '{req.name}' created successfully",
+        }
+    finally:
+        conn.close()
+
+
+# ── Org Foundation: Create User in Org (superadmin only) ─────
+
+class CreateOrgUserRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=8)
+    first_name: str
+    last_name: str
+    role: str = "coach"  # gm | coach | scout | analyst | player | parent | agent | admin
+    hockey_role: Optional[str] = None  # defaults to role if not specified
+    subscription_tier: str = "pro"
+    onboarding_completed: int = 0
+
+
+@app.post("/superadmin/orgs/{org_id}/users")
+async def superadmin_create_org_user(org_id: str, req: CreateOrgUserRequest,
+                                      token_data: dict = Depends(verify_token)):
+    """Create a user in a specific org with a temp password (superadmin only). V1 flow — no email."""
+    _require_superadmin(token_data)
+
+    conn = get_db()
+    try:
+        # Verify org exists
+        org = conn.execute("SELECT id, name FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail=f"Organization '{org_id}' not found")
+
+        # Check for duplicate email
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (req.email,)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"User with email '{req.email}' already exists")
+
+        user_id = gen_id()
+        password_hash = pwd_context.hash(req.password)
+        hockey_role = req.hockey_role or req.role
+
+        conn.execute(
+            """INSERT INTO users (id, org_id, email, password_hash, first_name, last_name,
+                                  role, hockey_role, subscription_tier, status, invited_by,
+                                  onboarding_completed, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+            (user_id, org_id, req.email, password_hash, req.first_name, req.last_name,
+             req.role, hockey_role, req.subscription_tier, token_data["user_id"],
+             req.onboarding_completed, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        logger.info("Superadmin created user %s (%s) in org %s as %s",
+                     req.email, user_id, org_id, req.role)
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": req.email,
+            "org_id": org_id,
+            "role": req.role,
+            "message": f"User '{req.email}' created in org '{org['name']}' as {req.role}",
+        }
+    finally:
+        conn.close()
+
+
+# ── Org Foundation: Org Admin — invite, manage users ─────────
+
+@app.post("/api/org/users/invite")
+async def org_admin_invite_user(req: CreateOrgUserRequest,
+                                 token_data: dict = Depends(verify_token)):
+    """Org admin creates a user in their own org. V1 flow — temp password, no email."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    conn = get_db()
+    try:
+        org = conn.execute("SELECT id, name FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        # Cannot assign superadmin role
+        if req.role == "superadmin":
+            raise HTTPException(status_code=403, detail="Cannot assign superadmin role via org admin")
+
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (req.email,)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"User with email '{req.email}' already exists")
+
+        user_id = gen_id()
+        password_hash = pwd_context.hash(req.password)
+        hockey_role = req.hockey_role or req.role
+
+        conn.execute(
+            """INSERT INTO users (id, org_id, email, password_hash, first_name, last_name,
+                                  role, hockey_role, subscription_tier, status, invited_by,
+                                  onboarding_completed, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+            (user_id, org_id, req.email, password_hash, req.first_name, req.last_name,
+             req.role, hockey_role, req.subscription_tier, token_data["user_id"],
+             req.onboarding_completed, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+        logger.info("Org admin %s created user %s in org %s as %s",
+                     token_data["user_id"], req.email, org_id, req.role)
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": req.email,
+            "org_id": org_id,
+            "role": req.role,
+            "message": f"User '{req.email}' created as {req.role}",
+        }
+    finally:
+        conn.close()
+
+
+@app.put("/api/org/users/{user_id}/role")
+async def org_admin_change_role(user_id: str, role: str = Query(...),
+                                 token_data: dict = Depends(verify_token)):
+    """Org admin changes a user's role within their org."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    valid_roles = ["gm", "coach", "scout", "analyst", "player", "parent", "agent", "admin"]
+    if role not in valid_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Valid: {', '.join(valid_roles)}")
+
+    conn = get_db()
+    try:
+        user = conn.execute("SELECT id, org_id, role FROM users WHERE id = ? AND org_id = ?",
+                             (user_id, org_id)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found in your organization")
+
+        conn.execute("UPDATE users SET role = ?, hockey_role = ? WHERE id = ?", (role, role, user_id))
+        conn.commit()
+        return {"success": True, "user_id": user_id, "role": role}
+    finally:
+        conn.close()
+
+
+@app.put("/api/org/users/{user_id}/deactivate")
+async def org_admin_deactivate_user(user_id: str, token_data: dict = Depends(verify_token)):
+    """Org admin deactivates a user in their org."""
+    _require_admin(token_data)
+    org_id = token_data["org_id"]
+
+    conn = get_db()
+    try:
+        user = conn.execute("SELECT id, org_id FROM users WHERE id = ? AND org_id = ?",
+                             (user_id, org_id)).fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found in your organization")
+
+        conn.execute("UPDATE users SET status = 'inactive' WHERE id = ?", (user_id,))
+        conn.commit()
+        return {"success": True, "user_id": user_id, "status": "inactive"}
     finally:
         conn.close()
 
