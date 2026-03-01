@@ -32636,6 +32636,90 @@ async def get_bench_talk_context(req: BenchTalkContextRequest, token_data: dict 
         conn.close()
 
 
+# ── Bench Talk Export ────────────────────────────────────────────────
+
+class BenchTalkExportPayload(BaseModel):
+    export_type: str
+    format: str  # 'xlsx' or 'csv'
+    columns: list
+    data: list
+    suggested_filename: str = "bench_talk_export"
+
+
+def generate_xlsx_from_bench_talk(payload: BenchTalkExportPayload):
+    import io
+    from datetime import date
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = payload.export_type[:31]  # Excel tab name limit
+
+    # Header row — ProspectX navy background, white text
+    for ci, col in enumerate(payload.columns, 1):
+        cell = ws.cell(row=1, column=ci, value=str(col).upper())
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="0F2B46")
+
+    # Data rows
+    for ri, row in enumerate(payload.data, 2):
+        for ci, col in enumerate(payload.columns, 1):
+            if isinstance(row, dict):
+                ws.cell(row=ri, column=ci, value=row.get(col, ""))
+            else:
+                ws.cell(row=ri, column=ci, value="")
+
+    # Auto-size columns
+    for col in ws.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=8)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+
+    # Stream response
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    filename = f"{payload.suggested_filename}_{date.today()}.xlsx"
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+def generate_csv_from_bench_talk(payload: BenchTalkExportPayload):
+    import io
+    import csv
+    from datetime import date
+
+    stream = io.StringIO()
+    writer = csv.DictWriter(stream, fieldnames=payload.columns, extrasaction="ignore")
+    writer.writeheader()
+    for row in payload.data:
+        if isinstance(row, dict):
+            writer.writerow({col: row.get(col, "") for col in payload.columns})
+
+    filename = f"{payload.suggested_filename}_{date.today()}.csv"
+    return StreamingResponse(
+        io.BytesIO(stream.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.post("/bench-talk/export")
+async def bench_talk_export(
+    payload: BenchTalkExportPayload,
+    token_data: dict = Depends(verify_token),
+):
+    if payload.format == "xlsx":
+        return generate_xlsx_from_bench_talk(payload)
+    elif payload.format == "csv":
+        return generate_csv_from_bench_talk(payload)
+    else:
+        raise HTTPException(status_code=400, detail="Format must be xlsx or csv")
+
+
 # ============================================================
 # GAME PLANS
 # ============================================================
