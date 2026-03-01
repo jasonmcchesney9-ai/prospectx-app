@@ -3644,21 +3644,18 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_score ON pxr_scores(pxr_score DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_position ON pxr_scores(position_group)")
 
-    # Migrate: add confidence_tier column to pxr_scores
-    try:
-        conn.execute("ALTER TABLE pxr_scores ADD COLUMN confidence_tier TEXT DEFAULT 'small_sample'")
-    except Exception:
-        pass  # Column already exists
-
-    try:
-        conn.execute("ALTER TABLE pxr_scores ADD COLUMN gp INTEGER")
-    except Exception:
-        pass  # Column already exists
-
-    try:
-        conn.execute("ALTER TABLE pxr_scores ADD COLUMN toi_minutes REAL")
-    except Exception:
-        pass  # Column already exists
+    # Migrate: add confidence_tier, gp, toi_minutes columns to pxr_scores
+    # Uses _get_table_columns() to check before ALTER — avoids InFailedSqlTransaction on PostgreSQL
+    pxr_cols = _get_table_columns(conn, "pxr_scores")
+    for col_name, col_def in [
+        ("confidence_tier", "TEXT DEFAULT 'small_sample'"),
+        ("gp", "INTEGER"),
+        ("toi_minutes", "REAL"),
+    ]:
+        if col_name not in pxr_cols:
+            conn.execute(f"ALTER TABLE pxr_scores ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to pxr_scores", col_name)
 
     # ── PXR Run Log (nightly cron tracking) ──
     if USE_PG:
