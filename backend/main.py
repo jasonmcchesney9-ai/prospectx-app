@@ -2074,6 +2074,80 @@ def init_db():
         conn.commit()
         logger.info("Migration: added league column to player_stats")
 
+    # ── Dedup player_stats season rows + UNIQUE constraint ──────────────
+    # One-time migration: remove duplicate season stat rows, keep highest GP
+    try:
+        # Check if unique index already exists (idempotent)
+        if USE_PG:
+            idx_check = conn.execute(
+                "SELECT 1 FROM pg_indexes WHERE indexname = 'idx_player_stats_season_unique'"
+            ).fetchone()
+        else:
+            idx_check = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_player_stats_season_unique'"
+            ).fetchone()
+
+        if not idx_check:
+            # Step 1: Find and delete duplicate season rows (keep highest GP, then newest)
+            dup_query = """
+                SELECT player_id, season, COALESCE(team_name, '') as tn,
+                       COALESCE(stat_row_type, 'season_total') as srt, COUNT(*) as cnt
+                FROM player_stats
+                WHERE stat_type = 'season'
+                GROUP BY player_id, season, COALESCE(team_name, ''),
+                         COALESCE(stat_row_type, 'season_total')
+                HAVING COUNT(*) > 1
+            """
+            dup_groups = conn.execute(dup_query).fetchall()
+            total_deleted = 0
+            for row in dup_groups:
+                pid, season, tn, srt = row[0], row[1], row[2], row[3]
+                # Find the keeper: highest GP, then newest created_at
+                keeper = conn.execute("""
+                    SELECT id FROM player_stats
+                    WHERE player_id = ? AND season = ?
+                      AND COALESCE(team_name, '') = ?
+                      AND COALESCE(stat_row_type, 'season_total') = ?
+                      AND stat_type = 'season'
+                    ORDER BY COALESCE(gp, 0) DESC, created_at DESC
+                    LIMIT 1
+                """, (pid, season, tn, srt)).fetchone()
+                if keeper:
+                    result = conn.execute("""
+                        DELETE FROM player_stats
+                        WHERE player_id = ? AND season = ?
+                          AND COALESCE(team_name, '') = ?
+                          AND COALESCE(stat_row_type, 'season_total') = ?
+                          AND stat_type = 'season'
+                          AND id != ?
+                    """, (pid, season, tn, srt, keeper[0]))
+                    total_deleted += result.rowcount
+            conn.commit()
+            if total_deleted > 0:
+                logger.info("Migration: deleted %d duplicate player_stats season rows", total_deleted)
+
+            # Step 2: Create unique index to prevent future duplicates
+            if USE_PG:
+                conn.execute("""
+                    CREATE UNIQUE INDEX idx_player_stats_season_unique
+                    ON player_stats (player_id, season, COALESCE(team_name, ''), COALESCE(stat_row_type, 'season_total'))
+                    WHERE stat_type = 'season'
+                """)
+            else:
+                conn.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_player_stats_season_unique
+                    ON player_stats (player_id, season, COALESCE(team_name, ''), COALESCE(stat_row_type, 'season_total'))
+                    WHERE stat_type = 'season'
+                """)
+            conn.commit()
+            logger.info("Migration: created idx_player_stats_season_unique on player_stats")
+    except Exception as e:
+        logger.warning("Migration: player_stats dedup skipped — %s", e)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+
     # Add logo_url column to teams
     teams_cols = _get_table_columns(conn, "teams")
     if "logo_url" not in teams_cols:
