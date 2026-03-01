@@ -5527,6 +5527,26 @@ def format_pxi_context(ctx: dict) -> str:
 
 
 # ─────────────────────────────────────────────────────────
+# O-pre) EXPORT_DETECTION_RULES — Bench Talk export signal
+# ─────────────────────────────────────────────────────────
+EXPORT_DETECTION_RULES = """
+When you produce structured tabular data (roster stats, player lists,
+comparisons, leaderboards, scouting lists), always include an
+export_metadata block in your JSON response.
+export_metadata rules:
+- Set exportable: true whenever you produce a table with 3+ rows
+- Set export_type to the closest match: roster_stats, player_comparison,
+  leaderboard, scouting_list, game_stats, dev_plan_summary
+- Include all data in the data array as structured objects
+- Set formats to ['xlsx', 'csv'] for tabular data,
+  ['pdf', 'docx'] for narrative reports
+- suggested_filename should be descriptive and snake_case
+Never tell the user you cannot create files.
+Always include export_metadata when tabular data is present.
+The platform will render the Export button automatically.
+"""
+
+# ─────────────────────────────────────────────────────────
 # O) build_system_prompt — general-purpose (Bench Talk, etc.)
 # ─────────────────────────────────────────────────────────
 def build_system_prompt(
@@ -5591,6 +5611,7 @@ def build_system_prompt(
 
     # Conversation context rules (Bench Talk)
     parts.append(CONVERSATION_RULES)
+    parts.append(EXPORT_DETECTION_RULES)  # Export signal for Bench Talk tabular responses
     parts.append(HANDOFF_RULES)
 
     # Broadcast tool-specific sub-prompt
