@@ -7991,6 +7991,101 @@ def framework_context(country: str, age_division: str = None, framework_key: str
     return "\n".join(lines)
 
 
+# ── Saginaw Spirit Demo Seed ────────────────────────────────────
+def seed_spirit_demo():
+    """Create the Saginaw Spirit demo org + 3 demo accounts.
+
+    Idempotent — uses INSERT ... ON CONFLICT DO NOTHING (PG) or INSERT OR IGNORE (SQLite).
+    Runs on every startup safely.
+    """
+    conn = get_db()
+    try:
+        SPIRIT_ORG_ID = "saginaw-spirit-demo"
+
+        # ── 1. Create org record ──────────────────────────────────
+        if USE_PG:
+            conn.execute(
+                "INSERT INTO organizations (id, name, short_name, org_type, plan, "
+                "primary_color, secondary_color, logo_url, city, arena, league, country) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (id) DO NOTHING",
+                (SPIRIT_ORG_ID, "Saginaw Spirit", "Spirit", "team", "pro",
+                 "#003087", "#C8102E", "/logos/saginaw-spirit.png",
+                 "Saginaw, MI", "Dow Event Center", "OHL", "USA"),
+            )
+        else:
+            conn.execute(
+                "INSERT OR IGNORE INTO organizations (id, name, short_name, org_type, plan, "
+                "primary_color, secondary_color, logo_url, city, arena, league, country) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (SPIRIT_ORG_ID, "Saginaw Spirit", "Spirit", "team", "pro",
+                 "#003087", "#C8102E", "/logos/saginaw-spirit.png",
+                 "Saginaw, MI", "Dow Event Center", "OHL", "USA"),
+            )
+        conn.commit()
+
+        # ── 2. Create 3 demo accounts ─────────────────────────────
+        demo_password_hash = pwd_context.hash("SpiritDemo2026!"[:72])
+
+        demo_accounts = [
+            {
+                "id": f"{SPIRIT_ORG_ID}-gm",
+                "email": "gm@saginawspirit.demo",
+                "first_name": "Spirit",
+                "last_name": "GM",
+                "role": "admin",
+                "hockey_role": "gm",
+                "subscription_tier": "pro",
+            },
+            {
+                "id": f"{SPIRIT_ORG_ID}-coach",
+                "email": "coach@saginawspirit.demo",
+                "first_name": "Spirit",
+                "last_name": "Coach",
+                "role": "admin",
+                "hockey_role": "coach",
+                "subscription_tier": "pro",
+            },
+            {
+                "id": f"{SPIRIT_ORG_ID}-scout",
+                "email": "scout@saginawspirit.demo",
+                "first_name": "Spirit",
+                "last_name": "Scout",
+                "role": "admin",
+                "hockey_role": "scout",
+                "subscription_tier": "pro",
+            },
+        ]
+
+        for acct in demo_accounts:
+            if USE_PG:
+                conn.execute(
+                    "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, "
+                    "role, hockey_role, subscription_tier, onboarding_completed, email_verified) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1) "
+                    "ON CONFLICT (id) DO NOTHING",
+                    (acct["id"], SPIRIT_ORG_ID, acct["email"], demo_password_hash,
+                     acct["first_name"], acct["last_name"], acct["role"],
+                     acct["hockey_role"], acct["subscription_tier"]),
+                )
+            else:
+                conn.execute(
+                    "INSERT OR IGNORE INTO users (id, org_id, email, password_hash, first_name, last_name, "
+                    "role, hockey_role, subscription_tier, onboarding_completed, email_verified) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)",
+                    (acct["id"], SPIRIT_ORG_ID, acct["email"], demo_password_hash,
+                     acct["first_name"], acct["last_name"], acct["role"],
+                     acct["hockey_role"], acct["subscription_tier"]),
+                )
+        conn.commit()
+        logger.info("Saginaw Spirit demo seed complete — org=%s, 3 demo accounts", SPIRIT_ORG_ID)
+
+    except Exception as e:
+        logger.warning("Spirit demo seed note: %s", e)
+    finally:
+        conn.close()
+
+
 # Run on import
 init_db()
 seed_templates()
@@ -8011,6 +8106,7 @@ _seed_drills_v4()
 # Run manually via POST /admin/regenerate-diagrams if needed.
 seed_glossary_v2()
 _seed_superadmin_user()
+seed_spirit_demo()
 
 # Seed skills library
 from seed_skills import seed_skills as _seed_skills_fn
