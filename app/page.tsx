@@ -203,6 +203,23 @@ function Dashboard() {
   const [teamDataLoading, setTeamDataLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // ── Dashboard layout (widget visibility) ──────────────────
+  const [dashboardWidgets, setDashboardWidgets] = useState<string[] | null>(null);
+  useEffect(() => {
+    api.get("/api/dashboard/layout")
+      .then((res) => {
+        if (res.data?.layout?.widgets) {
+          setDashboardWidgets(res.data.layout.widgets);
+        }
+      })
+      .catch(() => {
+        // Non-critical — show all widgets if layout fails to load
+      });
+  }, []);
+
+  // Helper: check if a widget is enabled (null = show all — backwards compatible)
+  const showWidget = (widgetId: string) => dashboardWidgets === null || dashboardWidgets.includes(widgetId);
+
   // ── Wall Board (pinned players) ───────────────────────────
   const [pinnedPlayers, setPinnedPlayers] = useState<Player[]>([]);
   useEffect(() => {
@@ -543,6 +560,7 @@ function Dashboard() {
               {/* LEFT: Operations */}
               <div className="lg:col-span-3 space-y-5">
                 {/* Active Series */}
+                {showWidget("active_series") && (
                 <DashboardCard
                   icon={<Trophy size={15} className="text-orange" />}
                   title="Active Series"
@@ -574,8 +592,10 @@ function Dashboard() {
                     ))}
                   </div>
                 </DashboardCard>
+                )}
 
                 {/* Chalk Talk Sessions */}
+                {showWidget("chalk_talk") && (
                 <DashboardCard
                   icon={<Swords size={15} className="text-teal" />}
                   title="Chalk Talk"
@@ -610,6 +630,7 @@ function Dashboard() {
                     ))}
                   </div>
                 </DashboardCard>
+                )}
 
                 {/* Players Without Development Plans */}
                 {(user?.hockey_role === "coach" || user?.hockey_role === "admin" || user?.hockey_role === "gm") && (
@@ -647,6 +668,7 @@ function Dashboard() {
                 )}
 
                 {/* Quick Actions */}
+                {showWidget("quick_actions") && (
                 <div className="flex flex-wrap gap-2">
                   <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all">
                     <Zap size={14} /> New Report
@@ -655,6 +677,7 @@ function Dashboard() {
                     <Swords size={14} /> Chalk Talk
                   </Link>
                 </div>
+                )}
               </div>
 
               {/* RIGHT: Intelligence */}
@@ -689,13 +712,17 @@ function Dashboard() {
                 </DashboardCard>
 
                 {/* Scouting List */}
-                <ScoutingListSection scoutingList={scoutingList} loading={loading} />
+                {showWidget("scouting_list") && (
+                  <ScoutingListSection scoutingList={scoutingList} loading={loading} />
+                )}
 
                 {/* Top Prospects */}
-                <TopProspectsSection prospects={topProspects} loading={loading} />
+                {showWidget("top_prospects") && (
+                  <TopProspectsSection prospects={topProspects} loading={loading} />
+                )}
 
                 {/* Team Leaders */}
-                {!teamDataLoading && scoringLeaders.length > 0 && (
+                {showWidget("scoring_leaders") && !teamDataLoading && scoringLeaders.length > 0 && (
                   <DashboardCard
                     icon={<BarChart3 size={15} className="text-teal" />}
                     title={`${activeTeam?.name || "Team"} Leaders`}

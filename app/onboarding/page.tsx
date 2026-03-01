@@ -8,19 +8,57 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser, setUser } from "@/lib/auth";
 import type { OnboardingState } from "@/types/api";
-import StepLeagueTeam from "@/components/onboarding/StepLeagueTeam";
 import StepRole from "@/components/onboarding/StepRole";
 import StepPlayers from "@/components/onboarding/StepPlayers";
-import StepSchedule from "@/components/onboarding/StepSchedule";
 import StepComplete from "@/components/onboarding/StepComplete";
 
 const STEPS = [
-  { label: "League & Team", number: 1 },
-  { label: "Role", number: 2 },
-  { label: "Players", number: 3 },
-  { label: "Schedule", number: 4 },
-  { label: "Ready!", number: 5 },
+  { label: "Welcome", number: 1 },
+  { label: "Dashboard", number: 2 },
+  { label: "Import", number: 3 },
+  { label: "Done", number: 4 },
 ];
+
+// ── All available widgets by ID ────────────────────────────────
+const ALL_WIDGETS: { id: string; label: string; staffOnly?: boolean }[] = [
+  { id: "roster_overview", label: "Roster Overview", staffOnly: true },
+  { id: "standings", label: "Standings" },
+  { id: "recent_reports", label: "Recent Reports" },
+  { id: "active_series", label: "Active Series", staffOnly: true },
+  { id: "chalk_talk", label: "Chalk Talk", staffOnly: true },
+  { id: "scouting_list", label: "Scouting List", staffOnly: true },
+  { id: "top_prospects", label: "Top Prospects", staffOnly: true },
+  { id: "scoring_leaders", label: "Scoring Leaders" },
+  { id: "wall_board", label: "Wall Board", staffOnly: true },
+  { id: "quick_actions", label: "Quick Actions" },
+  { id: "scorebar", label: "Live Scorebar" },
+  { id: "schedule", label: "Upcoming Schedule" },
+  { id: "dev_plans_needed", label: "Dev Plans Needed", staffOnly: true },
+  { id: "practice_plans", label: "Practice Plans", staffOnly: true },
+  { id: "draft_board", label: "Draft Board", staffOnly: true },
+  { id: "broadcast_hub", label: "Broadcast Hub" },
+  { id: "my_profile", label: "My Profile" },
+  { id: "my_player", label: "My Player" },
+  { id: "my_clients", label: "My Clients" },
+  { id: "messages", label: "Messages" },
+  { id: "dev_plan", label: "Dev Plan" },
+];
+
+// Role-default widget presets (mirrors backend ROLE_DEFAULT_WIDGETS)
+const ROLE_DEFAULTS: Record<string, string[]> = {
+  gm: ["roster_overview", "standings", "recent_reports", "active_series", "chalk_talk", "scouting_list", "top_prospects", "scoring_leaders", "wall_board", "quick_actions", "scorebar", "schedule"],
+  coach: ["roster_overview", "scoring_leaders", "active_series", "chalk_talk", "practice_plans", "dev_plans_needed", "schedule", "scorebar", "quick_actions"],
+  scout: ["scouting_list", "recent_reports", "top_prospects", "wall_board", "draft_board", "scoring_leaders", "schedule", "scorebar", "quick_actions"],
+  analyst: ["scoring_leaders", "standings", "recent_reports", "top_prospects", "schedule", "scorebar"],
+  admin: ["roster_overview", "standings", "recent_reports", "scouting_list", "scoring_leaders", "schedule", "scorebar", "quick_actions"],
+  broadcaster: ["scoring_leaders", "schedule", "recent_reports", "scorebar", "broadcast_hub"],
+  player: ["my_profile", "schedule", "messages", "dev_plan"],
+  parent: ["my_player", "schedule", "messages", "recent_reports"],
+  agent: ["my_clients", "recent_reports", "schedule", "messages", "scouting_list"],
+};
+
+// Staff roles (PRO group) that see the Import step
+const STAFF_ROLES = new Set(["scout", "coach", "gm", "analyst", "admin"]);
 
 interface WizardData {
   preferredLeague: string | null;
@@ -33,6 +71,7 @@ interface WizardData {
   coveredTeams: string[];
   scheduleConnected: boolean;
   rosterCount: number;
+  selectedWidgets: string[];
 }
 
 const DEFAULT_WIZARD_DATA: WizardData = {
@@ -46,6 +85,7 @@ const DEFAULT_WIZARD_DATA: WizardData = {
   coveredTeams: [],
   scheduleConnected: false,
   rosterCount: 0,
+  selectedWidgets: [],
 };
 
 export default function OnboardingPage() {
@@ -72,15 +112,17 @@ function OnboardingWizard() {
           router.replace("/");
           return;
         }
-        const resumeStep = Math.max(1, Math.min((data.onboarding_step || 0) + 1, 5));
+        const resumeStep = Math.max(1, Math.min((data.onboarding_step || 0) + 1, 4));
         setCurrentStep(resumeStep);
+        const role = data.hockey_role || "scout";
         setWizardData((prev) => ({
           ...prev,
           preferredLeague: data.preferred_league,
           preferredTeamId: data.preferred_team_id,
-          hockeyRole: data.hockey_role || "scout",
+          hockeyRole: role,
           linkedPlayerId: data.linked_player_id,
           coveredTeams: data.covered_teams || [],
+          selectedWidgets: ROLE_DEFAULTS[role] || ROLE_DEFAULTS.scout,
         }));
       } catch {
         // If state fails, start from step 1
@@ -100,14 +142,13 @@ function OnboardingWizard() {
       setSaving(true);
       try {
         const body: Record<string, unknown> = {};
+        // Step 1 (Welcome): save role selection
         if (stepNumber === 1) {
-          body.preferred_league = wizardData.preferredLeague;
-          body.preferred_team_id = wizardData.preferredTeamId;
-          body.team_name = wizardData.teamName;
-          body.team_league_name = wizardData.teamLeagueName;
-        } else if (stepNumber === 2) {
           body.hockey_role = wizardData.hockeyRole;
-        } else if (stepNumber === 3) {
+        }
+        // Step 2 (Dashboard): no backend save needed — widgets saved on complete
+        // Step 3 (Import): save linked player / covered teams if set
+        else if (stepNumber === 3) {
           if (wizardData.linkedPlayerId) {
             body.linked_player_id = wizardData.linkedPlayerId;
           }
@@ -123,13 +164,7 @@ function OnboardingWizard() {
           setUser({
             ...user,
             onboarding_step: stepNumber,
-            ...(stepNumber === 1
-              ? {
-                  preferred_league: wizardData.preferredLeague,
-                  preferred_team_id: wizardData.preferredTeamId,
-                }
-              : {}),
-            ...(stepNumber === 2 ? { hockey_role: wizardData.hockeyRole } : {}),
+            ...(stepNumber === 1 ? { hockey_role: wizardData.hockeyRole } : {}),
           });
         }
       } catch {
@@ -142,11 +177,16 @@ function OnboardingWizard() {
   );
 
   const handleNext = useCallback(async () => {
-    if (currentStep <= 4) {
+    if (currentStep <= 3) {
       await saveStep(currentStep);
-      setCurrentStep((s) => s + 1);
+      let nextStep = currentStep + 1;
+      // Auto-skip Import step (3) for non-staff roles
+      if (nextStep === 3 && !STAFF_ROLES.has(wizardData.hockeyRole)) {
+        nextStep = 4;
+      }
+      setCurrentStep(nextStep);
     }
-  }, [currentStep, saveStep]);
+  }, [currentStep, saveStep, wizardData.hockeyRole]);
 
   const handleBack = useCallback(() => {
     if (currentStep > 1) {
@@ -155,7 +195,8 @@ function OnboardingWizard() {
   }, [currentStep]);
 
   const handleSkipStep = useCallback(async () => {
-    if (currentStep === 3 || currentStep === 4) {
+    // Allow skipping Import step (3) and Dashboard step (2)
+    if (currentStep === 2 || currentStep === 3) {
       await saveStep(currentStep);
       setCurrentStep((s) => s + 1);
     }
@@ -165,7 +206,7 @@ function OnboardingWizard() {
     // Always update localStorage first to prevent redirect loops
     const user = getUser();
     if (user) {
-      setUser({ ...user, onboarding_completed: true, onboarding_step: 5 });
+      setUser({ ...user, onboarding_completed: true, onboarding_step: 4 });
     }
     try {
       await api.post("/onboarding/skip");
@@ -179,22 +220,25 @@ function OnboardingWizard() {
     // Always update localStorage first to prevent redirect loops
     const user = getUser();
     if (user) {
-      setUser({ ...user, onboarding_completed: true, onboarding_step: 5 });
+      setUser({ ...user, onboarding_completed: true, onboarding_step: 4 });
     }
     try {
-      await api.post("/onboarding/complete");
+      // Save dashboard_layout along with onboarding completion
+      await api.post("/onboarding/complete", {
+        dashboard_layout: { widgets: wizardData.selectedWidgets },
+      });
     } catch {
       // API fail is non-blocking — localStorage already updated
     }
     router.push("/");
-  }, [router]);
+  }, [router, wizardData.selectedWidgets]);
 
   // Can proceed to next step?
   const canProceed =
     currentStep === 1
-      ? !!(wizardData.preferredLeague && (wizardData.preferredTeamId || wizardData.teamName))
+      ? !!wizardData.hockeyRole // Step 1 (Welcome): must select a role
       : currentStep === 2
-        ? !!wizardData.hockeyRole
+        ? wizardData.selectedWidgets.length > 0 // Step 2 (Dashboard): must have at least 1 widget
         : true;
 
   if (loading) {
@@ -272,27 +316,36 @@ function OnboardingWizard() {
       <div className="flex-1 flex items-start justify-center px-4 pb-8 pt-2">
         <div className="w-full max-w-3xl">
           <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+            {/* Step 1 — Welcome: confirm role */}
             {currentStep === 1 && (
-              <StepLeagueTeam
-                selectedLeague={wizardData.preferredLeague}
-                selectedTeamId={wizardData.preferredTeamId}
-                onSelect={(league, teamId, teamName, teamLeagueName, teamLogo) => {
+              <StepRole
+                selectedRole={wizardData.hockeyRole}
+                onSelect={(role) => updateWizardData({
+                  hockeyRole: role,
+                  selectedWidgets: ROLE_DEFAULTS[role] || ROLE_DEFAULTS.scout,
+                })}
+              />
+            )}
+            {/* Step 2 — Dashboard: choose widgets */}
+            {currentStep === 2 && (
+              <StepDashboardWidgets
+                hockeyRole={wizardData.hockeyRole}
+                selectedWidgets={wizardData.selectedWidgets}
+                onToggle={(widgetId) => {
                   updateWizardData({
-                    preferredLeague: league,
-                    preferredTeamId: teamId,
-                    teamName: teamName,
-                    teamLeagueName: teamLeagueName,
-                    teamLogo: teamLogo,
+                    selectedWidgets: wizardData.selectedWidgets.includes(widgetId)
+                      ? wizardData.selectedWidgets.filter((w) => w !== widgetId)
+                      : [...wizardData.selectedWidgets, widgetId],
+                  });
+                }}
+                onResetDefaults={() => {
+                  updateWizardData({
+                    selectedWidgets: ROLE_DEFAULTS[wizardData.hockeyRole] || ROLE_DEFAULTS.scout,
                   });
                 }}
               />
             )}
-            {currentStep === 2 && (
-              <StepRole
-                selectedRole={wizardData.hockeyRole}
-                onSelect={(role) => updateWizardData({ hockeyRole: role })}
-              />
-            )}
+            {/* Step 3 — Import (Staff only) */}
             {currentStep === 3 && (
               <StepPlayers
                 hockeyRole={wizardData.hockeyRole}
@@ -306,12 +359,8 @@ function OnboardingWizard() {
                 onRosterSynced={(count) => updateWizardData({ rosterCount: count })}
               />
             )}
+            {/* Step 4 — Done */}
             {currentStep === 4 && (
-              <StepSchedule
-                onFeedConnected={() => updateWizardData({ scheduleConnected: true })}
-              />
-            )}
-            {currentStep === 5 && (
               <StepComplete
                 teamName={wizardData.teamName}
                 teamLogo={wizardData.teamLogo}
@@ -324,7 +373,7 @@ function OnboardingWizard() {
           </div>
 
           {/* Navigation Buttons */}
-          {currentStep < 5 && (
+          {currentStep < 4 && (
             <div className="flex items-center justify-between mt-6">
               <div>
                 {currentStep > 1 && (
@@ -337,7 +386,7 @@ function OnboardingWizard() {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                {(currentStep === 3 || currentStep === 4) && (
+                {(currentStep === 2 || currentStep === 3) && (
                   <button
                     onClick={handleSkipStep}
                     disabled={saving}
@@ -361,6 +410,77 @@ function OnboardingWizard() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 2: Dashboard Widget Picker ──────────────────────────
+function StepDashboardWidgets({
+  hockeyRole,
+  selectedWidgets,
+  onToggle,
+  onResetDefaults,
+}: {
+  hockeyRole: string;
+  selectedWidgets: string[];
+  onToggle: (widgetId: string) => void;
+  onResetDefaults: () => void;
+}) {
+  const isStaff = STAFF_ROLES.has(hockeyRole);
+
+  // Filter widgets appropriate for this role
+  const availableWidgets = ALL_WIDGETS.filter((w) => {
+    if (w.staffOnly && !isStaff) return false;
+    return true;
+  });
+
+  return (
+    <div className="p-6">
+      <h2 className="font-oswald text-lg font-bold text-navy uppercase tracking-wider mb-1">
+        Your Dashboard
+      </h2>
+      <p className="text-sm text-muted mb-1">
+        Choose which widgets appear on your dashboard. You can change this later.
+      </p>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-muted">
+          {selectedWidgets.length} widget{selectedWidgets.length !== 1 ? "s" : ""} selected
+        </p>
+        <button
+          onClick={onResetDefaults}
+          className="text-xs text-teal hover:text-teal/80 font-oswald uppercase tracking-wider transition-colors"
+        >
+          Reset to defaults
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        {availableWidgets.map((widget) => {
+          const isSelected = selectedWidgets.includes(widget.id);
+          return (
+            <button
+              key={widget.id}
+              onClick={() => onToggle(widget.id)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left text-sm transition-all ${
+                isSelected
+                  ? "border-teal bg-teal/5 text-navy font-medium"
+                  : "border-border text-muted hover:border-teal/40 hover:bg-navy/[0.02]"
+              }`}
+            >
+              <div
+                className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                  isSelected
+                    ? "bg-teal border-teal text-white"
+                    : "border-border"
+                }`}
+              >
+                {isSelected && <Check size={10} />}
+              </div>
+              <span className="truncate">{widget.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -35109,14 +35109,24 @@ async def save_onboarding_step(step_number: int, body: OnboardingStepData, token
     return {"onboarding_step": step_number, "detail": f"Step {step_number} saved"}
 
 
+class OnboardingCompleteBody(BaseModel):
+    dashboard_layout: Optional[dict] = None
+
+
 @app.post("/onboarding/complete")
-async def complete_onboarding(token_data: dict = Depends(verify_token)):
-    """Mark onboarding as finished."""
+async def complete_onboarding(body: OnboardingCompleteBody = None, token_data: dict = Depends(verify_token)):
+    """Mark onboarding as finished. Optionally save dashboard_layout."""
     conn = get_db()
-    conn.execute(
-        "UPDATE users SET onboarding_completed = 1, onboarding_step = 5 WHERE id = ?",
-        (token_data["user_id"],),
-    )
+    if body and body.dashboard_layout:
+        conn.execute(
+            "UPDATE users SET onboarding_completed = 1, onboarding_step = 5, dashboard_layout = ? WHERE id = ?",
+            (json.dumps(body.dashboard_layout), token_data["user_id"]),
+        )
+    else:
+        conn.execute(
+            "UPDATE users SET onboarding_completed = 1, onboarding_step = 5 WHERE id = ?",
+            (token_data["user_id"],),
+        )
     conn.commit()
     conn.close()
     logger.info("Onboarding completed for user %s", token_data["user_id"])
@@ -35135,6 +35145,94 @@ async def skip_onboarding(token_data: dict = Depends(verify_token)):
     conn.close()
     logger.info("Onboarding skipped for user %s", token_data["user_id"])
     return {"onboarding_completed": True, "detail": "Onboarding skipped"}
+
+
+# ============================================================
+# DASHBOARD LAYOUT
+# ============================================================
+
+# Role-default widget presets — used when user has no saved layout
+ROLE_DEFAULT_WIDGETS: dict = {
+    "gm": {
+        "widgets": ["roster_overview", "standings", "recent_reports", "active_series",
+                     "chalk_talk", "scouting_list", "top_prospects", "scoring_leaders",
+                     "wall_board", "quick_actions", "scorebar", "schedule"],
+    },
+    "coach": {
+        "widgets": ["roster_overview", "scoring_leaders", "active_series", "chalk_talk",
+                     "practice_plans", "dev_plans_needed", "schedule", "scorebar",
+                     "quick_actions"],
+    },
+    "scout": {
+        "widgets": ["scouting_list", "recent_reports", "top_prospects", "wall_board",
+                     "draft_board", "scoring_leaders", "schedule", "scorebar",
+                     "quick_actions"],
+    },
+    "analyst": {
+        "widgets": ["scoring_leaders", "standings", "recent_reports", "top_prospects",
+                     "schedule", "scorebar"],
+    },
+    "admin": {
+        "widgets": ["roster_overview", "standings", "recent_reports", "scouting_list",
+                     "scoring_leaders", "schedule", "scorebar", "quick_actions"],
+    },
+    "broadcaster": {
+        "widgets": ["scoring_leaders", "schedule", "recent_reports", "scorebar",
+                     "broadcast_hub"],
+    },
+    "player": {
+        "widgets": ["my_profile", "schedule", "messages", "dev_plan"],
+    },
+    "parent": {
+        "widgets": ["my_player", "schedule", "messages", "recent_reports"],
+    },
+    "agent": {
+        "widgets": ["my_clients", "recent_reports", "schedule", "messages",
+                     "scouting_list"],
+    },
+}
+
+
+@app.get("/api/dashboard/layout")
+async def get_dashboard_layout(token_data: dict = Depends(verify_token)):
+    """Return user's saved dashboard layout or role-default."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT dashboard_layout, hockey_role FROM users WHERE id = ?",
+        (token_data["user_id"],),
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    if row["dashboard_layout"]:
+        try:
+            return {"layout": json.loads(row["dashboard_layout"]), "source": "saved"}
+        except Exception:
+            pass
+
+    # Return role-default
+    role = row["hockey_role"] or "scout"
+    default = ROLE_DEFAULT_WIDGETS.get(role, ROLE_DEFAULT_WIDGETS["scout"])
+    return {"layout": default, "source": "default"}
+
+
+class DashboardLayoutBody(BaseModel):
+    widgets: list
+
+
+@app.put("/api/dashboard/layout")
+async def save_dashboard_layout(body: DashboardLayoutBody, token_data: dict = Depends(verify_token)):
+    """Save user's dashboard layout preferences."""
+    layout = {"widgets": body.widgets}
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET dashboard_layout = ? WHERE id = ?",
+        (json.dumps(layout), token_data["user_id"]),
+    )
+    conn.commit()
+    conn.close()
+    return {"detail": "Dashboard layout saved", "layout": layout}
 
 
 # ============================================================
