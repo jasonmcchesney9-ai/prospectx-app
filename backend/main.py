@@ -33994,6 +33994,126 @@ async def get_unread_count(token_data: dict = Depends(verify_token)):
 
 
 # ============================================================
+# SHARING LAYER — Content Share Actions
+# ============================================================
+
+# Maps content_type to the table + visibility column + id column
+SHAREABLE_CONTENT: dict = {
+    "report": {"table": "reports", "id_col": "id"},
+    "practice_plan": {"table": "practice_plans", "id_col": "id"},
+    "game_plan": {"table": "game_plans", "id_col": "id"},
+    "film_clip": {"table": "film_clips", "id_col": "id"},
+    "series_plan": {"table": "series_plans", "id_col": "id"},
+}
+
+# Maps share audience to visibility value
+SHARE_AUDIENCE_MAP: dict = {
+    "player": "shared_with_player",
+    "family": "shared_with_family",
+    "agent": "shared_with_agent",
+    "org": "org_wide",
+    "staff": "staff_only",
+    "private": "private",
+}
+
+
+class ShareContentBody(BaseModel):
+    content_type: str        # report | practice_plan | game_plan | film_clip | series_plan
+    content_id: str           # ID of the content item
+    share_with: str           # player | family | agent | org | staff | private
+    recipient_id: Optional[str] = None  # specific user ID (for player/family/agent)
+    message_text: Optional[str] = None  # optional context message
+
+
+@app.post("/api/share")
+async def share_content(body: ShareContentBody, token_data: dict = Depends(verify_token)):
+    """Share a content item — sets visibility + creates message delivery record."""
+    user_id = token_data["user_id"]
+    org_id = token_data.get("org_id")
+
+    # Validate content type
+    content_cfg = SHAREABLE_CONTENT.get(body.content_type)
+    if not content_cfg:
+        raise HTTPException(status_code=400, detail=f"Invalid content_type: {body.content_type}. Must be one of: {', '.join(SHAREABLE_CONTENT.keys())}")
+
+    # Validate audience
+    visibility = SHARE_AUDIENCE_MAP.get(body.share_with)
+    if not visibility:
+        raise HTTPException(status_code=400, detail=f"Invalid share_with: {body.share_with}. Must be one of: {', '.join(SHARE_AUDIENCE_MAP.keys())}")
+
+    conn = get_db()
+    try:
+        table = content_cfg["table"]
+        id_col = content_cfg["id_col"]
+
+        # Verify content exists and user has access
+        content = conn.execute(f"SELECT * FROM {table} WHERE {id_col} = ?", (body.content_id,)).fetchone()
+        if not content:
+            raise HTTPException(status_code=404, detail=f"{body.content_type} not found")
+
+        # Check visibility column exists on this table
+        tbl_cols = _get_table_columns(conn, table)
+        if "visibility" in tbl_cols:
+            conn.execute(f"UPDATE {table} SET visibility = ? WHERE {id_col} = ?", (visibility, body.content_id))
+            conn.commit()
+            logger.info("Share: updated %s %s visibility to %s", body.content_type, body.content_id, visibility)
+
+        # Create message delivery record if recipient specified
+        if body.recipient_id and org_id:
+            msg_id = gen_id()
+            conn.execute(
+                """INSERT INTO messages (id, org_id, sender_id, recipient_id, content_type, content_id, message_text, is_read, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)""",
+                (msg_id, org_id, user_id, body.recipient_id, body.content_type, body.content_id, body.message_text or ""),
+            )
+            conn.commit()
+            logger.info("Share: created message %s for %s → %s (%s)", msg_id, user_id, body.recipient_id, body.content_type)
+
+        return {
+            "detail": f"{body.content_type} shared successfully",
+            "visibility": visibility,
+            "message_created": bool(body.recipient_id),
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/shared-with-me")
+async def get_shared_with_me(token_data: dict = Depends(verify_token)):
+    """Get content shared with the current user via messages table."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT m.id, m.sender_id, m.content_type, m.content_id, m.message_text,
+                      m.is_read, m.created_at,
+                      u.first_name || ' ' || u.last_name as sender_name
+               FROM messages m
+               LEFT JOIN users u ON u.id = m.sender_id
+               WHERE m.recipient_id = ?
+               ORDER BY m.created_at DESC
+               LIMIT 50""",
+            (user_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.put("/api/shared-with-me/{message_id}/read")
+async def mark_shared_read(message_id: str, token_data: dict = Depends(verify_token)):
+    """Mark a shared content message as read."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE messages SET is_read = 1 WHERE id = ? AND recipient_id = ?",
+        (message_id, token_data["user_id"]),
+    )
+    conn.commit()
+    conn.close()
+    return {"detail": "Marked as read"}
+
+
+# ============================================================
 # BROADCAST — AI-POWERED BROADCAST INTELLIGENCE
 # ============================================================
 
