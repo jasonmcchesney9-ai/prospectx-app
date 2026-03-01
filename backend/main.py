@@ -2069,6 +2069,10 @@ def init_db():
         conn.execute("ALTER TABLE player_stats ADD COLUMN stat_row_type TEXT DEFAULT 'season_total'")
         conn.commit()
         logger.info("Migration: added stat_row_type column to player_stats")
+    if "league" not in ps_cols:
+        conn.execute("ALTER TABLE player_stats ADD COLUMN league TEXT")
+        conn.commit()
+        logger.info("Migration: added league column to player_stats")
 
     # Add logo_url column to teams
     teams_cols = _get_table_columns(conn, "teams")
