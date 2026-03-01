@@ -2018,6 +2018,27 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_saved_views_user ON saved_views(user_id)")
     conn.commit()
 
+    # ── Org Foundation: messages table (sharing layer) ───────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            sender_id TEXT,
+            recipient_id TEXT,
+            content_type TEXT,
+            content_id TEXT,
+            message_text TEXT,
+            is_read INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (sender_id) REFERENCES users(id),
+            FOREIGN KEY (recipient_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_org ON messages(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_recipient ON messages(recipient_id, is_read)")
+    conn.commit()
+
     # ── Migrations for existing databases ───────────────────
     # Add image_url column if it doesn't exist
     cols = _get_table_columns(conn, "players")

@@ -47,14 +47,18 @@ import PXIIcon from "./PXIIcon";
 import PlayerSearchDropdown from "./PlayerSearchDropdown";
 
 // ── Role Group Mapping ─────────────────────────────────────────
-// Maps hockey_role to a nav group (PRO, MEDIA, FAMILY, AGENT)
-type RoleGroup = "PRO" | "MEDIA" | "FAMILY" | "AGENT";
+// Maps hockey_role to a nav group. Each group is an isolated environment.
+// PRO = staff (GM/Coach/Scout/Analyst/Admin), MEDIA = broadcaster/producer,
+// PLAYER = athlete, FAMILY = parent/guardian, AGENT = player agent
+type RoleGroup = "PRO" | "MEDIA" | "PLAYER" | "FAMILY" | "AGENT";
 
 const ROLE_GROUP_MAP: Record<string, RoleGroup> = {
   scout: "PRO",
   coach: "PRO",
   gm: "PRO",
-  player: "FAMILY", // Players see the family view
+  analyst: "PRO",
+  admin: "PRO",
+  player: "PLAYER",
   parent: "FAMILY",
   broadcaster: "MEDIA",
   producer: "MEDIA",
@@ -64,6 +68,7 @@ const ROLE_GROUP_MAP: Record<string, RoleGroup> = {
 const ROLE_GROUP_COLORS: Record<RoleGroup, string> = {
   PRO: "bg-teal/20 text-teal",
   MEDIA: "bg-orange/20 text-orange",
+  PLAYER: "bg-[#3B6B8A]/20 text-[#3B6B8A]",
   FAMILY: "bg-[#3B6B8A]/20 text-[#3B6B8A]",
   AGENT: "bg-[#475569]/20 text-[#475569]",
 };
@@ -85,40 +90,51 @@ const PRO_NAV_RIGHT: NavItem[] = [
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
-// MEDIA nav
+// MEDIA nav — isolated broadcaster environment (Table 12 in spec)
 const MEDIA_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/players", label: "Players", icon: Users },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/teams", label: "Teams", icon: Building2 },
+  { href: "/broadcast", label: "Broadcast Hub", icon: Radio },
 ];
 const MEDIA_NAV_RIGHT: NavItem[] = [
   { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
 ];
 
-// FAMILY nav
+// PLAYER nav — athlete's isolated environment (Table 13 in spec)
+const PLAYER_NAV_LEFT: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/my-profile", label: "My Profile", icon: UserCheck },
+  { href: "/dev-plan", label: "Dev Plan", icon: BookOpen },
+  { href: "/film", label: "Film", icon: Video },
+];
+const PLAYER_NAV_RIGHT: NavItem[] = [
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
+];
+
+// FAMILY nav — parent/guardian environment (Table 14 in spec)
 const FAMILY_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-player", label: "My Player", icon: Heart },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
+  { href: "/dev-plan", label: "Dev Plan", icon: BookOpen },
+  { href: "/film", label: "Film", icon: Video },
 ];
 const FAMILY_NAV_RIGHT: NavItem[] = [
-  { href: "/player-guide", label: "Guide", icon: BookOpen },
-  { href: "/reports", label: "Reports", icon: FileText },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
 ];
 
-// AGENT nav
+// AGENT nav — agent's isolated environment (Table 15 in spec)
 const AGENT_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/my-clients", label: "Clients", icon: Briefcase },
-  { href: "/players", label: "Players", icon: Users },
+  { href: "/my-clients", label: "My Clients", icon: Briefcase },
+  { href: "/reports", label: "Reports", icon: FileText },
 ];
 const AGENT_NAV_RIGHT: NavItem[] = [
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/schedule", label: "Schedule", icon: Calendar },
 ];
 
 // Players dropdown items (PRO only)
@@ -154,15 +170,23 @@ const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/team-systems", label: "Team Systems", icon: Shield },
 ];
 
-// Coaching items (PRO only)
+// Coaching items (PRO only — spec Table 11)
 const COACHING_ITEMS: NavItem[] = [
   { href: "/drills", label: "Drill Library", icon: BookOpen },
+  { href: "/skill-development-lab", label: "Skills Library", icon: Dumbbell },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
-  { href: "/practice-plans/from-game-issue", label: "Game Issue Practice", icon: AlertTriangle },
-  { href: "/video-sessions", label: "Game Video Sessions", icon: Video },
-  { href: "/skill-development-lab", label: "Skill Development Lab", icon: Dumbbell },
+  { href: "/game-plans", label: "Chalk Talk", icon: Swords },
+  { href: "/series", label: "Series Plans", icon: Trophy },
+  { href: "/game-plans/new", label: "Game Plans", icon: ClipboardCheck },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
+];
+
+// Org Hub items (PRO only — spec Table 11)
+const ORG_HUB_ITEMS: NavItem[] = [
+  { href: "/film-room", label: "Film Room", icon: Video },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/whiteboards", label: "Whiteboard", icon: PenTool },
 ];
 
 // Broadcast items (PRO dropdown — MEDIA gets a direct link)
@@ -180,16 +204,37 @@ const IMPORT_ITEMS: NavItem[] = [
 ];
 
 // ── Role-aware nav items function ──────────────────────────────
-function getNavItems(group: RoleGroup): { left: NavItem[]; right: NavItem[]; showPlayersDropdown: boolean; showScoutingDropdown: boolean; showReportsDropdown: boolean; showCoaching: boolean; showImports: boolean; showBroadcastDropdown: boolean; showTeamsDropdown: boolean } {
+function getNavItems(group: RoleGroup, hockeyRole?: string): {
+  left: NavItem[]; right: NavItem[];
+  showPlayersDropdown: boolean; showScoutingDropdown: boolean;
+  showReportsDropdown: boolean; showCoaching: boolean;
+  showImports: boolean; showBroadcastDropdown: boolean;
+  showTeamsDropdown: boolean; showOrgHub: boolean;
+} {
+  const base = {
+    showPlayersDropdown: false, showScoutingDropdown: false,
+    showReportsDropdown: false, showCoaching: false,
+    showImports: false, showBroadcastDropdown: false,
+    showTeamsDropdown: false, showOrgHub: false,
+  };
   switch (group) {
-    case "PRO":
-      return { left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT, showPlayersDropdown: true, showScoutingDropdown: true, showReportsDropdown: true, showCoaching: true, showImports: true, showBroadcastDropdown: true, showTeamsDropdown: true };
+    case "PRO": {
+      // Coach doesn't see Imports dropdown (spec Table 11 note)
+      const canImport = hockeyRole !== "coach";
+      return { ...base, left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT,
+        showPlayersDropdown: true, showScoutingDropdown: true,
+        showReportsDropdown: true, showCoaching: true,
+        showImports: canImport, showBroadcastDropdown: true,
+        showTeamsDropdown: true, showOrgHub: true };
+    }
     case "MEDIA":
-      return { left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT, showPlayersDropdown: false, showScoutingDropdown: false, showReportsDropdown: false, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
+      return { ...base, left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT };
+    case "PLAYER":
+      return { ...base, left: PLAYER_NAV_LEFT, right: PLAYER_NAV_RIGHT };
     case "FAMILY":
-      return { left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT, showPlayersDropdown: false, showScoutingDropdown: false, showReportsDropdown: false, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
+      return { ...base, left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT };
     case "AGENT":
-      return { left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT, showPlayersDropdown: false, showScoutingDropdown: false, showReportsDropdown: false, showCoaching: false, showImports: false, showBroadcastDropdown: false, showTeamsDropdown: false };
+      return { ...base, left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT };
   }
 }
 
@@ -219,6 +264,7 @@ function NavLink({ href, label, icon: Icon, pathname, badge }: { href: string; l
 // ── Role Override Mapping (admin preview → hockey_role equivalent) ───
 const ROLE_GROUP_TO_HOCKEY_ROLE: Record<RoleGroup, string> = {
   PRO: "scout",
+  PLAYER: "player",
   FAMILY: "parent",
   MEDIA: "broadcaster",
   AGENT: "agent",
@@ -238,7 +284,7 @@ export default function NavBar() {
   const effectiveHockeyRole = roleOverride || user?.hockey_role;
   const roleGroup = getRoleGroup(effectiveHockeyRole);
   const isAgent = roleGroup === "AGENT";
-  const hasMessages = roleGroup === "MEDIA" || roleGroup === "FAMILY" || roleGroup === "AGENT";
+  const hasMessages = roleGroup === "MEDIA" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "AGENT";
 
   // Fetch client count for agent badge
   useEffect(() => {
@@ -263,7 +309,7 @@ export default function NavBar() {
 
   if (pathname === "/login") return null;
 
-  const navConfig = getNavItems(roleGroup);
+  const navConfig = getNavItems(roleGroup, effectiveHockeyRole);
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const isPreviewing = !!roleOverride;
 
@@ -342,6 +388,9 @@ export default function NavBar() {
 
             {/* Imports dropdown (PRO only) */}
             {navConfig.showImports && <ImportDropdown pathname={pathname} />}
+
+            {/* Org Hub dropdown (PRO only) */}
+            {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
 
             {navConfig.right.map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
@@ -662,6 +711,31 @@ export default function NavBar() {
                 Broadcast
               </p>
               {BROADCAST_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Org Hub section (PRO only — mobile) */}
+          {navConfig.showOrgHub && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Org Hub
+              </p>
+              {ORG_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
                 const active = pathname.startsWith(href);
                 return (
                   <Link
@@ -1077,6 +1151,63 @@ function BroadcastDropdown({ pathname }: { pathname: string }) {
   );
 }
 
+function OrgHubDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = ORG_HUB_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "text-white/70 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <Video size={16} />
+        Org Hub
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {ORG_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminRoleSwitcher({ currentGroup, onSwitch, onReset, isPreviewing }: { currentGroup: RoleGroup; onSwitch: (group: RoleGroup) => void; onReset: () => void; isPreviewing: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1093,6 +1224,7 @@ function AdminRoleSwitcher({ currentGroup, onSwitch, onReset, isPreviewing }: { 
 
   const groups: { group: RoleGroup; label: string; desc: string }[] = [
     { group: "PRO", label: "PRO", desc: "Scout / Coach / GM" },
+    { group: "PLAYER", label: "PLAYER", desc: "Athlete" },
     { group: "FAMILY", label: "FAMILY", desc: "Parent" },
     { group: "MEDIA", label: "MEDIA", desc: "Broadcaster" },
     { group: "AGENT", label: "AGENT", desc: "Agent" },
