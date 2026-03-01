@@ -7877,7 +7877,9 @@ seed_drills_pxi()
 seed_drills_v3()
 from seed_drills_v4 import seed_drills_v4 as _seed_drills_v4
 _seed_drills_v4()
-generate_missing_diagrams()
+# NOTE: generate_missing_diagrams() removed from startup — it regenerates
+# 500+ SVG files on every Railway deploy (ephemeral FS) and causes timeout/OOM.
+# Run manually via POST /admin/regenerate-diagrams if needed.
 seed_glossary_v2()
 _seed_superadmin_user()
 
