@@ -18351,6 +18351,9 @@ TEAM_REPORT_TYPES = [
     "practice_plan", "playoff_series", "goalie_tandem",
     "league_benchmarks", "season_projection", "free_agent_market",
     "pre_game_intel",
+    "playoff_series_prep",
+    "special_teams_audit",
+    "in_season_projections",
 ]
 
 # ── Custom Report Focus Areas → Prompt Sections Map ───────────
