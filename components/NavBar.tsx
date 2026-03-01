@@ -378,13 +378,8 @@ export default function NavBar() {
             {/* Coaching dropdown (PRO only) */}
             {navConfig.showCoaching && <CoachingDropdown pathname={pathname} />}
 
-            {/* Broadcast dropdown (PRO only — MEDIA gets direct link in nav) */}
+            {/* Broadcast dropdown (PRO only — MEDIA gets direct link via MEDIA_NAV_LEFT) */}
             {navConfig.showBroadcastDropdown && <BroadcastDropdown pathname={pathname} />}
-
-            {/* MEDIA: direct Broadcast link */}
-            {roleGroup === "MEDIA" && (
-              <NavLink href="/broadcast" label="Broadcast" icon={Radio} pathname={pathname} />
-            )}
 
             {/* Imports dropdown (PRO only) */}
             {navConfig.showImports && <ImportDropdown pathname={pathname} />}
@@ -564,20 +559,6 @@ export default function NavBar() {
               </Link>
             );
           })}
-
-          {/* MEDIA: Broadcast link in mobile */}
-          {roleGroup === "MEDIA" && (
-            <Link
-              href="/broadcast"
-              onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                pathname.startsWith("/broadcast") ? "text-teal" : "text-white/70"
-              }`}
-            >
-              <Radio size={16} />
-              Broadcast
-            </Link>
-          )}
 
           {/* Players section (PRO only — mobile) */}
           {navConfig.showPlayersDropdown && (
