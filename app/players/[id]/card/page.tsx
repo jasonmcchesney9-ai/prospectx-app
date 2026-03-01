@@ -538,7 +538,7 @@ export default function PlayerCardPage() {
                       </div>
                     ))}
                   </div>
-                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider mb-2">
+                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider mb-2 cursor-help" title="Needs Scouting — This player has no PXI intelligence data yet. Generate a scouting assessment or add scout notes to populate this profile.">
                     Needs Scouting
                   </span>
                   <p className="text-[10px] text-gray-400 mb-3">No intelligence data yet.</p>

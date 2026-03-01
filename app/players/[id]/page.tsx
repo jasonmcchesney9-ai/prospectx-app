@@ -922,7 +922,7 @@ export default function PlayerDetailPage() {
                   </div>
                 )}
                 {intelligence?.overall_grade && gradeToNumber(intelligence.overall_grade) > 0 && (
-                  <div className="mt-2 text-center">
+                  <div className="mt-2 text-center cursor-help" title="PXI Scout Grade — An AI-generated assessment of this player's abilities across skating, hockey IQ, compete level, and more. Based on available scouting data.">
                     <div className="text-lg font-bold text-teal">
                       {gradeToNumber(intelligence.overall_grade).toFixed(1)}
                       <span className="text-xs text-white/50 font-normal"> / 10</span>
@@ -1119,7 +1119,7 @@ export default function PlayerDetailPage() {
             ) : (
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider">
+                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider cursor-help" title="Needs Scouting — This player has no PXI intelligence data yet. Generate a scouting assessment or add scout notes to populate this profile.">
                     Needs Scouting
                   </span>
                   <span className="text-xs text-muted">No intelligence data yet</span>
@@ -1151,27 +1151,28 @@ export default function PlayerDetailPage() {
         {/* PXI Score Tiles — numeric 1-10 above the fold (PXR-gated) */}
         {pxrData && pxrData.pxr_score > 0 && (() => {
           const pxrTiles = [
-            { label: "Offense", value: pxrData.p1_offense },
-            { label: "Defense", value: pxrData.p2_defense },
-            { label: "Possession", value: pxrData.p3_possession },
-            { label: "Physical", value: pxrData.p4_physical },
-            { label: "Overall", value: pxrData.pxr_score },
+            { label: "Offense", value: pxrData.p1_offense, tip: "Offense — Goal scoring, shot generation, and power play impact." },
+            { label: "Defense", value: pxrData.p2_defense, tip: "Defense — Shot suppression, takeaways, and defensive reads." },
+            { label: "Possession", value: pxrData.p3_possession, tip: "Possession — Puck control, zone entries, and play-driving ability." },
+            { label: "Physical", value: pxrData.p4_physical, tip: "Physical — Board battles, hits, and competitive intensity." },
+            { label: "Overall", value: pxrData.pxr_score, tip: "Overall PXR Score — Composite rating across all four performance pillars." },
           ];
           const validTiles = pxrTiles.filter(t => t.value != null && t.value > 0);
           if (validTiles.length === 0) return null;
           return (
             <div className="grid grid-cols-5 gap-2 mt-2 mb-1">
-              {validTiles.map(({ label, value }) => {
+              {validTiles.map(({ label, value, tip }) => {
                 const val = (value ?? 0) / 10;
                 const isOverall = label === "Overall";
                 return (
                   <div
                     key={label}
-                    className="flex flex-col items-center justify-center py-3 rounded-xl transition-colors"
+                    className="flex flex-col items-center justify-center py-3 rounded-xl transition-colors cursor-help"
                     style={{
                       backgroundColor: "#162E4A",
                       border: "1px solid rgba(255,255,255,0.08)",
                     }}
+                    title={tip}
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,148,136,0.4)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
                   >
@@ -1793,31 +1794,38 @@ export default function PlayerDetailPage() {
                 <div className="space-y-3">
                   {/* Score + Tier Badge */}
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl font-bold font-oswald text-teal">{score.toFixed(1)}</span>
+                    <span className="text-3xl font-bold font-oswald text-teal cursor-help" title="PXR Score — A composite rating (0-100) reflecting this player's overall performance across offense, defense, possession, and physicality.">{score.toFixed(1)}</span>
                     <span
-                      className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white"
+                      className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white cursor-help"
                       style={{ backgroundColor: tier.color }}
+                      title="Tier — Players are grouped into performance tiers based on their PXR score. Higher tiers indicate stronger overall impact."
                     >
                       {tier.id} {tier.label}
                     </span>
                     {am != null && am !== 0 && (
                       <span
-                        className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white"
+                        className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white cursor-help"
                         style={{ backgroundColor: am > 0 ? "#10B981" : "#E87722" }}
+                        title="Age Modifier — Adjusts for relative age within a birth-year cohort. Positive values indicate a younger player performing above age expectations."
                       >
                         {am > 0 ? "+" : ""}{am.toFixed(1)}
                       </span>
                     )}
                     {pxrData.confidence_tier && (() => {
                       const ct = pxrData.confidence_tier;
+                      const confTip = ct === "high"
+                        ? "High Confidence — Sufficient games played, ice time, and data across all four pillars to produce a reliable rating."
+                        : ct === "moderate"
+                        ? "Moderate Confidence — Some data limitations (fewer games or missing pillar data). Rating is directionally useful but may shift with more games."
+                        : "Small Sample — Limited games played or ice time. This rating may change significantly as more data becomes available.";
                       if (ct === "high") return (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">High Confidence</span>
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700 cursor-help" title={confTip}>High Confidence</span>
                       );
                       if (ct === "moderate") return (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">Moderate</span>
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700 cursor-help" title={confTip}>Moderate</span>
                       );
                       return (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500 cursor-help" title={confTip}>
                           Small Sample{pxrData.gp != null && pxrData.gp < 15 ? ` (${pxrData.gp} GP)` : ""}
                         </span>
                       );
@@ -1828,7 +1836,7 @@ export default function PlayerDetailPage() {
                     <div className="space-y-1.5">
                       {lp != null && (
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0">League %</span>
+                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0 cursor-help" title="League Percentile — Where this player ranks among all players in their league. Higher is better.">League %</span>
                           <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
                             <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(lp, 100)}%` }} />
                           </div>
@@ -1837,7 +1845,7 @@ export default function PlayerDetailPage() {
                       )}
                       {cp != null && (
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0">Cohort %</span>
+                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0 cursor-help" title="Cohort Percentile — Where this player ranks among all players born in the same year, across all leagues. Useful for spotting age-relative talent.">Cohort %</span>
                           <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
                             <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(cp, 100)}%` }} />
                           </div>
@@ -1849,13 +1857,13 @@ export default function PlayerDetailPage() {
                   {/* Pillar Mini-Bars */}
                   <div className="space-y-1.5 pt-1 border-t border-border">
                     {([
-                      { label: "P1 OFF", value: pxrData.p1_offense },
-                      { label: "P2 DEF", value: pxrData.p2_defense },
-                      { label: "P3 POSS", value: pxrData.p3_possession },
-                      { label: "P4 PHYS", value: pxrData.p4_physical },
-                    ] as const).map(({ label, value }) => (
+                      { label: "P1 OFF", value: pxrData.p1_offense, tip: "Offense Pillar — Measures goal scoring, shot generation, expected goals, and power play contributions." },
+                      { label: "P2 DEF", value: pxrData.p2_defense, tip: "Defense Pillar — Measures defensive impact including shot suppression, takeaways, and blocked shots." },
+                      { label: "P3 POSS", value: pxrData.p3_possession, tip: "Possession Pillar — Measures puck control, zone entries, and ability to drive play in the offensive zone." },
+                      { label: "P4 PHYS", value: pxrData.p4_physical, tip: "Physical Pillar — Measures physicality, board battles, hits, and competitive intensity." },
+                    ] as const).map(({ label, value, tip }) => (
                       <div key={label} className="flex items-center gap-3">
-                        <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0">{label}</span>
+                        <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0 cursor-help" title={tip}>{label}</span>
                         <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
                           {value != null && value > 0 && (
                             <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(value, 100)}%` }} />
@@ -1969,6 +1977,7 @@ export default function PlayerDetailPage() {
         {/* Profile Tab */}
         {activeTab === "profile" && (
           <section className="space-y-6">
+            <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-3">Intelligence overview, archetype, and AI-generated scouting assessment.</p>
             {/* ── PXI Scout Summary Panel ── */}
             {intelligence && intelligence.version > 0 && (
               <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
@@ -2019,7 +2028,7 @@ export default function PlayerDetailPage() {
                             {compositeVal > 0 ? compositeVal.toFixed(1) : "—"}
                           </span>
                           <span className="text-sm text-muted font-oswald">/ 10</span>
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-muted ml-1">PXI Intelligence Score</span>
+                          <span className="text-[10px] font-oswald uppercase tracking-wider text-muted ml-1 cursor-help" title="PXI Scout Grade — An AI-generated assessment across offense, defense, skating, hockey IQ, and compete level. Based on available scouting data.">PXI Intelligence Score</span>
                           {FAMILY_ROLES.has(userRole) && compositeVal > 0 && (
                             <span className="text-xs font-semibold text-teal ml-1">{scoreLabel(compositeVal)}</span>
                           )}
@@ -2565,6 +2574,7 @@ export default function PlayerDetailPage() {
         {/* Stats Tab */}
         {activeTab === "stats" && (
           <section>
+            <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">Season stats, game log, and performance progression over time.</p>
             {/* Sub-view switcher */}
             <div className="flex items-center gap-1 mb-4 p-0.5 bg-navy/[0.04] rounded-lg w-fit">
               {([
@@ -2791,6 +2801,7 @@ export default function PlayerDetailPage() {
         {/* Notes Tab */}
         {activeTab === "notes" && (
           <section>
+            <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">Game observations, scouting notes, and tagged assessments from your team.</p>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-navy">Scout Notes</h2>
               <div className="flex items-center gap-2">
@@ -3028,6 +3039,7 @@ export default function PlayerDetailPage() {
         {/* Reports Tab */}
         {activeTab === "reports" && (
           <section>
+            <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">AI-generated scouting reports and custom analysis for this player.</p>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold text-navy">Reports</h2>
               <span className="text-xs text-muted">{reports.length} total</span>
@@ -3050,6 +3062,7 @@ export default function PlayerDetailPage() {
         {/* Player Tab */}
         {activeTab === "player" && (
           <section className="space-y-4">
+            <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Player card, development plan, and long-term projection tools.</p>
             {/* ── Section 1: Player Card ──────────────────────────── */}
             {player && (
               <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-4">
@@ -3560,6 +3573,7 @@ export default function PlayerDetailPage() {
         {/* Video Tab */}
         {activeTab === "video" && (
           <section className="space-y-4">
+            <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Video sessions, game film clips, and tagged highlights.</p>
             <div className="bg-white rounded-xl border border-teal/20 p-5">
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
                 <Video size={14} className="text-teal" /> Game Film
