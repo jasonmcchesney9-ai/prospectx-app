@@ -37,27 +37,27 @@ import type {
 
 type Tab = "standings" | "player-stats" | "schedule" | "teams";
 
-const LEAGUE_OPTIONS = [
+const LEAGUE_OPTIONS: { code: string; label: string; full: string; logo?: string }[] = [
   // Professional
   { code: "ahl", label: "AHL", full: "American Hockey League" },
   { code: "echl", label: "ECHL", full: "ECHL" },
   { code: "sphl", label: "SPHL", full: "Southern Professional Hockey League" },
   { code: "pwhl", label: "PWHL", full: "Professional Women's Hockey League" },
   // Major Junior (CHL)
-  { code: "ohl", label: "OHL", full: "Ontario Hockey League" },
+  { code: "ohl", label: "OHL", full: "Ontario Hockey League", logo: "/logos/ohl.png" },
   { code: "whl", label: "WHL", full: "Western Hockey League" },
-  { code: "lhjmq", label: "QMJHL", full: "Quebec Major Junior Hockey League" },
+  { code: "lhjmq", label: "QMJHL", full: "Quebec Major Junior Hockey League", logo: "/logos/qmjhl.png" },
   // Junior A
-  { code: "bchl", label: "BCHL", full: "British Columbia Hockey League" },
+  { code: "bchl", label: "BCHL", full: "British Columbia Hockey League", logo: "/logos/bchl.png" },
   { code: "ajhl", label: "AJHL", full: "Alberta Junior Hockey League" },
   { code: "sjhl", label: "SJHL", full: "Saskatchewan Junior Hockey League" },
   { code: "mjhl", label: "MJHL", full: "Manitoba Junior Hockey League" },
   { code: "ushl", label: "USHL", full: "United States Hockey League" },
-  { code: "ojhl", label: "OJHL", full: "Ontario Junior Hockey League" },
+  { code: "ojhl", label: "OJHL", full: "Ontario Junior Hockey League", logo: "/logos/ojhl.png" },
   { code: "cchl", label: "CCHL", full: "Central Canada Hockey League" },
   { code: "nojhl", label: "NOJHL", full: "Northern Ontario Junior Hockey League" },
   { code: "mhl", label: "MHL", full: "Maritime Hockey League" },
-  { code: "gojhl", label: "GOHL", full: "Greater Ontario Hockey League" },
+  { code: "gojhl", label: "GOHL", full: "Greater Ontario Hockey League", logo: "/logos/gojhl.png" },
   // Junior B
   { code: "kijhl", label: "KIJHL", full: "Kootenay International Junior Hockey League" },
   { code: "pjhl", label: "PJHL", full: "Provincial Junior Hockey League" },
@@ -205,8 +205,12 @@ export default function LeagueHubPage() {
               {standings.length} teams &middot; Data from league sync
             </p>
           </div>
-          <div className="text-right text-sm text-white/40">
-            {leagueInfo.label.toUpperCase()}
+          <div className="flex items-center justify-end">
+            {leagueInfo.logo ? (
+              <img src={leagueInfo.logo} alt={`${leagueInfo.label} logo`} className="h-10 w-auto object-contain opacity-80" />
+            ) : (
+              <span className="text-sm text-white/40">{leagueInfo.label.toUpperCase()}</span>
+            )}
           </div>
         </div>
 
