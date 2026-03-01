@@ -781,6 +781,13 @@ export default function BenchTalkDrawer() {
     "_FAMILY_GUIDE": ["How is my player developing?", "Explain PXI score", "What should we focus on?"],
   };
 
+  // ── Spirit org-specific chips ──
+  const SPIRIT_CHIPS: Record<string, string[]> = {
+    gm: ["Roster depth analysis", "Trade target profile", "Playoff readiness"],
+    coach: ["Tonight's game plan", "Line combinations", "Opponent breakdown"],
+    scout: ["Scout Klepov", "OHL Draft prospects", "Compare players"],
+  };
+
   // Usage/limit state
   const [usageWarning, setUsageWarning] = useState<{ remaining: number; limit: number } | null>(null);
 
@@ -965,10 +972,12 @@ export default function BenchTalkDrawer() {
               const rg = getRoleGroup(effectiveHockeyRole);
               const theme = BENCH_TALK_THEMES[rg];
               const modeKey = effectiveHockeyRole === "player" ? "parent" : (effectiveHockeyRole || "scout");
-              // Context-aware chip resolution: role_pageId → _pageId → role_DASHBOARD → fallback
+              // Spirit org override: show Spirit-specific chips on dashboard
+              const isSpirit = getUser()?.org_id === "saginaw-spirit-demo";
               const pageId = pageContext?.page?.id || "DASHBOARD";
+              // Context-aware chip resolution: Spirit org chips → role_pageId → _pageId → role_DASHBOARD → fallback
               const chipKey = `${modeKey}_${pageId}`;
-              const chips = CONTEXT_CHIPS[chipKey] || CONTEXT_CHIPS[`_${pageId}`] || CONTEXT_CHIPS[`${modeKey}_DASHBOARD`] || ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
+              const chips = (isSpirit && pageId === "DASHBOARD" && SPIRIT_CHIPS[modeKey]) || CONTEXT_CHIPS[chipKey] || CONTEXT_CHIPS[`_${pageId}`] || CONTEXT_CHIPS[`${modeKey}_DASHBOARD`] || ROLE_SUGGESTION_CHIPS[modeKey] || ROLE_SUGGESTION_CHIPS.scout;
               return (
             <div className="flex flex-col items-center justify-center h-full px-4">
               <div className="mb-3 drop-shadow-lg">

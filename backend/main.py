@@ -31680,6 +31680,17 @@ async def send_bench_talk_message(
             if pxi_context_str:
                 system_prompt += "\n\n" + pxi_context_str
 
+        # ── Spirit org context injection ──
+        if org_id == "saginaw-spirit-demo":
+            system_prompt += (
+                "\n\n## ORGANIZATION CONTEXT\n"
+                "You are working with the Saginaw Spirit Hockey Club, an OHL team based in Saginaw, "
+                "Michigan. The Spirit play in the OHL West Division at the Dow Event Center. "
+                "They are 2024 Memorial Cup Champions. Primary colors: navy (#003087) and red (#C8102E). "
+                "When referencing the team use 'the Spirit' or 'Saginaw'. "
+                "Tailor all analysis to OHL-level hockey and the Spirit's current roster."
+            )
+
         # First API call (may include tool use)
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
