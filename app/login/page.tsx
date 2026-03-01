@@ -6,6 +6,13 @@ import api from "@/lib/api";
 import { setToken, setUser } from "@/lib/auth";
 import type { TokenResponse } from "@/types/api";
 
+const SPIRIT_DEMO_ACCOUNTS = [
+  { label: "Login as GM", email: "gm@saginawspirit.demo", role: "GM" },
+  { label: "Login as Coach", email: "coach@saginawspirit.demo", role: "Coach" },
+  { label: "Login as Scout", email: "scout@saginawspirit.demo", role: "Scout" },
+];
+const SPIRIT_DEMO_PASSWORD = "SpiritDemo2026!";
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -20,6 +27,9 @@ function LoginForm() {
   const [lastName, setLastName] = useState("");
   const [orgName, setOrgName] = useState("");
   const [hockeyRole, setHockeyRole] = useState("scout");
+
+  // Spirit demo mode
+  const isSpirit = searchParams.get("demo") === "spirit";
 
   // Invite detection
   const inviteParam = searchParams.get("invite");
@@ -91,6 +101,114 @@ function LoginForm() {
       setLoading(false);
     }
   };
+
+  // ── Spirit Demo Login ─────────────────────────────────────────
+  if (isSpirit) {
+    return (
+      <div className="min-h-screen flex" style={{ backgroundColor: "#003087" }}>
+        {/* Left panel — Spirit branding */}
+        <div className="hidden lg:flex flex-col items-center justify-center w-1/2 p-12">
+          <img
+            src="/logos/saginaw-spirit.png"
+            alt="Saginaw Spirit"
+            className="w-40 h-40 object-contain mb-8"
+          />
+          <h1 className="font-oswald text-4xl font-bold text-white tracking-wider uppercase text-center">
+            Saginaw Spirit
+          </h1>
+          <p className="font-oswald text-sm tracking-widest uppercase mt-3 text-center" style={{ color: "#C8102E" }}>
+            2024 Memorial Cup Champions
+          </p>
+          <p className="text-white/40 text-xs mt-6 font-oswald tracking-wider uppercase">
+            Powered by <span className="text-teal">Prospect</span><span className="text-orange">X</span> + PXI
+          </p>
+        </div>
+
+        {/* Right panel — Login form */}
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md">
+            {/* Mobile spirit logo */}
+            <div className="lg:hidden text-center mb-6">
+              <img src="/logos/saginaw-spirit.png" alt="Saginaw Spirit" className="w-20 h-20 object-contain mx-auto mb-3" />
+              <h2 className="font-oswald text-xl font-bold text-white uppercase">Saginaw Spirit</h2>
+              <p className="font-oswald text-[10px] tracking-widest uppercase mt-1" style={{ color: "#C8102E" }}>
+                2024 Memorial Cup Champions
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-xl p-8">
+              <h2 className="font-oswald text-xl font-semibold text-navy mb-2">Spirit Staff Login</h2>
+              <p className="text-xs text-muted mb-6">Demo environment — select a role below or enter credentials</p>
+
+              {/* Quick login buttons */}
+              <div className="flex gap-2 mb-6">
+                {SPIRIT_DEMO_ACCOUNTS.map((acct) => (
+                  <button
+                    key={acct.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(acct.email);
+                      setPassword(SPIRIT_DEMO_PASSWORD);
+                    }}
+                    className="flex-1 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider font-semibold transition-colors"
+                    style={{
+                      backgroundColor: email === acct.email ? "#C8102E" : "#003087",
+                      color: "#FFFFFF",
+                    }}
+                  >
+                    {acct.role}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                    placeholder="you@saginawspirit.demo"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-oswald uppercase tracking-wider text-muted mb-1">Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                  />
+                </div>
+
+                {error && (
+                  <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 text-white font-oswald font-semibold uppercase tracking-wider rounded-lg disabled:opacity-50 transition-colors text-sm"
+                  style={{ backgroundColor: "#C8102E" }}
+                >
+                  {loading ? "Please wait..." : "Sign In"}
+                </button>
+              </form>
+
+              <div className="mt-4 text-center">
+                <a href="/login" className="text-xs text-muted hover:text-navy">
+                  ← Back to standard login
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-navy flex items-center justify-center p-4">

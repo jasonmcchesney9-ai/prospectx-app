@@ -19,6 +19,12 @@ export interface User {
   preferred_league: string | null;
   preferred_team_id: string | null;
   covered_teams: string[] | null;
+  // Org branding
+  org_name?: string | null;
+  org_short_name?: string | null;
+  org_logo_url?: string | null;
+  org_primary_color?: string | null;
+  org_secondary_color?: string | null;
 }
 
 export interface OnboardingState {

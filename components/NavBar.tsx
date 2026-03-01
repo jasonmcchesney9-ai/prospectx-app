@@ -313,6 +313,12 @@ export default function NavBar() {
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const isPreviewing = !!roleOverride;
 
+  // Org co-branding
+  const orgPrimary = user?.org_primary_color;
+  const orgLogo = user?.org_logo_url;
+  const orgShortName = user?.org_short_name;
+  const hasOrgBranding = !!orgPrimary && orgPrimary !== "#0D9488"; // Skip default teal
+
   // Inject badge into agent Clients nav item
   if (isAgent && agentClientCount > 0) {
     navConfig.left = navConfig.left.map((item) =>
@@ -331,7 +337,7 @@ export default function NavBar() {
   }
 
   return (
-    <nav className="bg-navy text-white sticky top-0 z-50">
+    <nav className="bg-navy text-white sticky top-0 z-50" style={hasOrgBranding ? { backgroundColor: orgPrimary } : undefined}>
       {/* Admin Preview Banner */}
       {isPreviewing && (
         <div className="bg-orange/90 text-white px-4 py-1 flex items-center justify-center gap-3 text-xs font-oswald uppercase tracking-wider">
@@ -349,12 +355,27 @@ export default function NavBar() {
         <div className="flex items-center h-16">
           {/* ── Logo (far left) ── */}
           <Link href="/" className="flex items-center gap-2 mr-8 shrink-0">
-            <span className="font-oswald text-lg font-bold tracking-widest uppercase">
-              <span className="text-teal">Prospect</span><span className="text-orange">X</span>
-            </span>
-            <span className="hidden lg:inline font-oswald text-xs tracking-wider text-white/60 uppercase">
-              Intelligence
-            </span>
+            {orgLogo ? (
+              <>
+                <img src={orgLogo} alt={orgShortName || "Org"} className="h-8 w-8 object-contain rounded" />
+                <span className="hidden lg:inline font-oswald text-xs tracking-wider text-white/60 uppercase">
+                  {orgShortName || ""}
+                </span>
+                <span className="hidden lg:inline text-white/30 mx-1">|</span>
+                <span className="font-oswald text-xs font-bold tracking-widest uppercase text-white/60">
+                  <span className="text-teal">P</span><span className="text-orange">X</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="font-oswald text-lg font-bold tracking-widest uppercase">
+                  <span className="text-teal">Prospect</span><span className="text-orange">X</span>
+                </span>
+                <span className="hidden lg:inline font-oswald text-xs tracking-wider text-white/60 uppercase">
+                  Intelligence
+                </span>
+              </>
+            )}
           </Link>
 
           {/* ── Center Nav ── */}

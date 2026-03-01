@@ -9187,6 +9187,31 @@ class UserOut(BaseModel):
     preferred_league: Optional[str] = None
     preferred_team_id: Optional[str] = None
     covered_teams: Optional[List[str]] = None
+    # Org branding fields (populated from organizations table)
+    org_name: Optional[str] = None
+    org_short_name: Optional[str] = None
+    org_logo_url: Optional[str] = None
+    org_primary_color: Optional[str] = None
+    org_secondary_color: Optional[str] = None
+
+def _get_org_branding(conn, org_id: str) -> dict:
+    """Fetch org branding fields for UserOut. Returns empty dict if org not found."""
+    if not org_id:
+        return {}
+    row = conn.execute(
+        "SELECT name, short_name, logo_url, primary_color, secondary_color "
+        "FROM organizations WHERE id = ?", (org_id,)
+    ).fetchone()
+    if not row:
+        return {}
+    return {
+        "org_name": row["name"],
+        "org_short_name": row["short_name"],
+        "org_logo_url": row["logo_url"],
+        "org_primary_color": row["primary_color"],
+        "org_secondary_color": row["secondary_color"],
+    }
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -9556,6 +9581,7 @@ async def register(request: Request, req: RegisterRequest):
     conn.commit()
     logger.info("EMAIL VERIFICATION LINK: %s/verify-email?token=%s (user: %s)", FRONTEND_URL, verify_token_raw, req.email)
 
+    org_brand = _get_org_branding(conn, org_id)
     user = UserOut(
         id=user_id, org_id=org_id, email=req.email.lower().strip(),
         first_name=req.first_name, last_name=req.last_name, role="admin",
@@ -9563,6 +9589,7 @@ async def register(request: Request, req: RegisterRequest):
         monthly_reports_used=0, monthly_bench_talks_used=0,
         email_verified=True,
         onboarding_completed=False, onboarding_step=0,
+        **org_brand,
     )
     token = create_token(user_id, org_id, "admin")
     conn.close()
@@ -9576,12 +9603,13 @@ async def register(request: Request, req: RegisterRequest):
 async def login(request: Request, req: LoginRequest):
     conn = get_db()
     row = conn.execute("SELECT * FROM users WHERE email = ?", (req.email.lower().strip(),)).fetchone()
-    conn.close()
 
     if not row:
+        conn.close()
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if not pwd_context.verify(req.password[:72], row["password_hash"]):
+        conn.close()
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     covered = None
@@ -9590,6 +9618,8 @@ async def login(request: Request, req: LoginRequest):
             covered = json.loads(row["covered_teams"])
         except Exception:
             covered = None
+    org_brand = _get_org_branding(conn, row["org_id"])
+    conn.close()
     user = UserOut(
         id=row["id"], org_id=row["org_id"], email=row["email"],
         first_name=row["first_name"], last_name=row["last_name"], role=row["role"],
@@ -9603,6 +9633,7 @@ async def login(request: Request, req: LoginRequest):
         preferred_league=row["preferred_league"],
         preferred_team_id=row["preferred_team_id"],
         covered_teams=covered,
+        **org_brand,
     )
     token = create_token(row["id"], row["org_id"], row["role"])
     logger.info("User logged in: %s", req.email)
@@ -9613,8 +9644,8 @@ async def login(request: Request, req: LoginRequest):
 async def get_me(token_data: dict = Depends(verify_token)):
     conn = get_db()
     row = conn.execute("SELECT * FROM users WHERE id = ?", (token_data["user_id"],)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         raise HTTPException(status_code=401, detail="Your session has expired or your account was not found. Please log in again.")
     covered = None
     if row["covered_teams"]:
@@ -9622,6 +9653,8 @@ async def get_me(token_data: dict = Depends(verify_token)):
             covered = json.loads(row["covered_teams"])
         except Exception:
             covered = None
+    org_brand = _get_org_branding(conn, row["org_id"])
+    conn.close()
     return UserOut(
         id=row["id"], org_id=row["org_id"], email=row["email"],
         first_name=row["first_name"], last_name=row["last_name"], role=row["role"],
@@ -9635,6 +9668,7 @@ async def get_me(token_data: dict = Depends(verify_token)):
         preferred_league=row["preferred_league"],
         preferred_team_id=row["preferred_team_id"],
         covered_teams=covered,
+        **org_brand,
     )
 
 
