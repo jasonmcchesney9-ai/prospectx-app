@@ -1944,6 +1944,80 @@ def init_db():
         conn.commit()
         logger.info("Migration: added import_type column to import_jobs")
 
+    # ── Org Foundation: visibility column on content tables ──
+    # Visibility ladder: private | staff_only | org_wide | shared_with_player | shared_with_family | shared_with_agent
+    for tbl in ["reports", "practice_plans", "game_plans", "series_plans",
+                "scouting_list", "development_plans", "chalk_talks"]:
+        tbl_cols = _get_table_columns(conn, tbl)
+        if "visibility" not in tbl_cols:
+            conn.execute(f"ALTER TABLE {tbl} ADD COLUMN visibility TEXT DEFAULT 'private'")
+            conn.commit()
+            logger.info("Migration: added visibility column to %s", tbl)
+
+    # ── Org Foundation: whiteboards table ────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS whiteboards (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            created_by_user_id TEXT,
+            title TEXT NOT NULL DEFAULT 'Untitled Whiteboard',
+            description TEXT,
+            board_data TEXT DEFAULT '{}',
+            visibility TEXT DEFAULT 'private',
+            status TEXT DEFAULT 'draft',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_whiteboards_org ON whiteboards(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_whiteboards_user ON whiteboards(created_by_user_id)")
+
+    # ── Org Foundation: film_clips table ─────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS film_clips (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            created_by_user_id TEXT,
+            player_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            video_url TEXT,
+            thumbnail_url TEXT,
+            start_time REAL,
+            end_time REAL,
+            tags TEXT DEFAULT '[]',
+            visibility TEXT DEFAULT 'staff_only',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id),
+            FOREIGN KEY (player_id) REFERENCES players(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_film_clips_org ON film_clips(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_film_clips_player ON film_clips(player_id)")
+
+    # ── Org Foundation: saved_views table ────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS saved_views (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            view_type TEXT NOT NULL DEFAULT 'player_filter',
+            filter_config TEXT DEFAULT '{}',
+            is_default INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_saved_views_user ON saved_views(user_id)")
+    conn.commit()
+
     # ── Migrations for existing databases ───────────────────
     # Add image_url column if it doesn't exist
     cols = _get_table_columns(conn, "players")
