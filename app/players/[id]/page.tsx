@@ -946,7 +946,9 @@ export default function PlayerDetailPage() {
                   {player.current_team && (
                     <>
                       <span className="text-white/30">·</span>
-                      <span>{player.current_team}</span>
+                      <Link href={`/teams/${encodeURIComponent(player.current_team)}`} className="text-teal hover:underline">
+                        {player.current_team}
+                      </Link>
                     </>
                   )}
                   {player.current_league && (
