@@ -9378,6 +9378,30 @@ def get_current_org(token_data: dict = Depends(verify_token)) -> str:
     return token_data["org_id"]
 
 
+def _org_guard(token_data: dict) -> str:
+    """Validate org exists and is active. Returns org_id or raises 403.
+
+    Use in routes that modify org data. Read-only routes can skip this
+    for performance (org_id is always in the JWT).
+    League Hub routes are intentionally exempt — they serve public league data.
+    """
+    org_id = token_data.get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=403, detail="No organization context")
+    conn = get_db()
+    try:
+        org = conn.execute(
+            "SELECT id, is_active FROM organizations WHERE id = ?", (org_id,)
+        ).fetchone()
+        if not org:
+            raise HTTPException(status_code=403, detail="Organization not found")
+        if org.get("is_active") == 0:
+            raise HTTPException(status_code=403, detail="Organization is deactivated")
+        return org_id
+    finally:
+        conn.close()
+
+
 # ============================================================
 # AUTH ENDPOINTS
 # ============================================================
@@ -10417,6 +10441,70 @@ async def org_admin_deactivate_user(user_id: str, token_data: dict = Depends(ver
         conn.execute("UPDATE users SET status = 'inactive' WHERE id = ?", (user_id,))
         conn.commit()
         return {"success": True, "user_id": user_id, "status": "inactive"}
+    finally:
+        conn.close()
+
+
+# ── Org Foundation: Org Profile (any authenticated user) ─────
+
+@app.get("/api/org/profile")
+async def get_org_profile(token_data: dict = Depends(verify_token)):
+    """Return the authenticated user's org profile (branding, details).
+
+    Used by the frontend to apply org-specific colors, logo, and context.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        org = conn.execute(
+            """SELECT id, name, short_name, plan, primary_color, secondary_color,
+                      logo_url, city, arena, league, is_active, org_type, created_at
+               FROM organizations WHERE id = ?""",
+            (org_id,),
+        ).fetchone()
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        user_count = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE org_id = ? AND (status = 'active' OR status IS NULL)",
+            (org_id,),
+        ).fetchone()[0]
+
+        return {
+            "org_id": org["id"],
+            "name": org["name"],
+            "short_name": org["short_name"],
+            "plan": org["plan"],
+            "primary_color": org["primary_color"],
+            "secondary_color": org["secondary_color"],
+            "logo_url": org["logo_url"],
+            "city": org["city"],
+            "arena": org["arena"],
+            "league": org["league"],
+            "is_active": org["is_active"],
+            "user_count": user_count,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/org/users")
+async def get_org_users(token_data: dict = Depends(verify_token)):
+    """List all users in the authenticated user's org. Any staff role can view."""
+    org_id = token_data["org_id"]
+    role = token_data.get("role", "")
+    staff_roles = ["gm", "coach", "scout", "analyst", "admin", "superadmin"]
+    if role not in staff_roles:
+        raise HTTPException(status_code=403, detail="Staff access required")
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT id, email, first_name, last_name, role, hockey_role, status, created_at
+               FROM users WHERE org_id = ? ORDER BY created_at""",
+            (org_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 
