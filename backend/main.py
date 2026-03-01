@@ -30131,7 +30131,7 @@ def _pt_start_report(params: dict, org_id: str, user_id: str) -> tuple[dict, dic
         return {
             "report_id": report_id,
             "status": "processing",
-            "message": f"Report '{title}' is now generating. You can view its progress at /reports/{report_id}. Generation typically takes 30-60 seconds.",
+            "message": f"Report '{title}' is now generating. View it at {FRONTEND_URL}/reports/{report_id} — ready in 30-60 seconds.",
         }, {"player_ids": [player_id], "report_ids": [report_id]}
     finally:
         conn.close()
