@@ -272,15 +272,15 @@ export default function LeaderboardPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-border">
+        <div className="flex gap-1 mb-6">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2.5 text-sm font-oswald uppercase tracking-wider transition-colors border-b-2 -mb-px ${
+              className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
                 activeTab === tab
-                  ? "border-teal text-teal font-semibold"
-                  : "border-transparent text-muted hover:text-navy"
+                  ? "bg-navy text-white"
+                  : "bg-navy/5 text-navy hover:bg-navy/10"
               }`}
             >
               {tab}
