@@ -18795,10 +18795,17 @@ Today's date is {datetime.now().date().isoformat()}."""
             return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
 
         except Exception as e:
-            conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
-            conn.commit()
+            try:
+                conn.rollback()  # Clear poisoned PG transaction state
+            except Exception:
+                pass
+            try:
+                conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+                conn.commit()
+            except Exception:
+                pass
             conn.close()
-            raise HTTPException(status_code=500, detail=f"Custom report generation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
 
     # ── PLAYER CUSTOM REPORT ──
     player_row = conn.execute("SELECT * FROM players WHERE id = ? AND org_id = ?", (request.player_id, org_id)).fetchone()
@@ -19081,10 +19088,17 @@ If data is limited for any focus area, note what additional data would strengthe
         return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
 
     except Exception as e:
-        conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
-        conn.commit()
+        try:
+            conn.rollback()  # Clear poisoned PG transaction state
+        except Exception:
+            pass
+        try:
+            conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+            conn.commit()
+        except Exception:
+            pass
         conn.close()
-        raise HTTPException(status_code=500, detail=f"Custom report generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def _generate_team_report(request, org_id: str, user_id: str, conn):
@@ -19352,11 +19366,18 @@ This report was generated in demo mode. Add your Anthropic API key to backend/.e
         return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
 
     except Exception as e:
-        conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
-        conn.commit()
+        try:
+            conn.rollback()  # Clear poisoned PG transaction state
+        except Exception:
+            pass
+        try:
+            conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+            conn.commit()
+        except Exception:
+            pass
         conn.close()
         logger.error("Team report generation failed: %s — %s", report_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/reports/custom-options")
@@ -20130,11 +20151,18 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
         return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
 
     except Exception as e:
-        conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
-        conn.commit()
+        try:
+            conn.rollback()  # Clear poisoned PG transaction state
+        except Exception:
+            pass
+        try:
+            conn.execute("UPDATE reports SET status='failed', error_message=? WHERE id = ?", (str(e), report_id))
+            conn.commit()
+        except Exception:
+            pass
         conn.close()
         logger.error("Report generation failed: %s — %s", report_id, str(e))
-        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================
