@@ -3903,6 +3903,23 @@ def init_db():
 
     conn.commit()
 
+    # ── One-time: mark orphaned 'processing' reports as failed ──────────
+    try:
+        cutoff = (datetime.utcnow() - timedelta(hours=2)).isoformat()
+        result = conn.execute("""
+            UPDATE reports
+            SET status = 'failed',
+                error_message = 'Report timed out — status reset by cleanup migration'
+            WHERE status = 'processing'
+            AND (generated_at < ? OR generated_at IS NULL)
+        """, (cutoff,))
+        conn.commit()
+        if result.rowcount > 0:
+            logger.info("Migration: marked %d orphaned processing reports as failed",
+                        result.rowcount)
+    except Exception as e:
+        logger.warning("Migration: orphaned report cleanup skipped — %s", e)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -9095,7 +9112,28 @@ def recalculate_pxr_scores_cron():
         _log_pxr_run(0, duration, 'error', str(e)[:500])
 
 
-# ── APScheduler: Nightly PXR recalculation (2:00 AM UTC) ────
+def cleanup_stuck_reports():
+    """Mark reports stuck in 'processing' for 2+ hours as failed."""
+    conn = get_db()
+    try:
+        cutoff = (datetime.utcnow() - timedelta(hours=2)).isoformat()
+        result = conn.execute("""
+            UPDATE reports
+            SET status = 'failed',
+                error_message = 'Report timed out — auto-cleanup after 2 hours'
+            WHERE status = 'processing'
+            AND (generated_at < ? OR generated_at IS NULL)
+        """, (cutoff,))
+        conn.commit()
+        if result.rowcount > 0:
+            logger.info("Cleanup: marked %d stuck reports as failed", result.rowcount)
+    except Exception as e:
+        logger.warning("Cleanup: stuck report job failed — %s", e)
+    finally:
+        conn.close()
+
+
+# ── APScheduler: Nightly PXR recalculation (2:00 AM UTC) + hourly report cleanup ────
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BGScheduler
     _pxr_scheduler = _BGScheduler()
@@ -9108,8 +9146,15 @@ try:
         id='pxr_nightly_recalc',
         replace_existing=True,
     )
+    _pxr_scheduler.add_job(
+        cleanup_stuck_reports,
+        'interval',
+        hours=1,
+        id='cleanup_stuck_reports',
+        replace_existing=True,
+    )
     _pxr_scheduler.start()
-    logger.info("APScheduler started — PXR nightly recalc at 02:00 UTC")
+    logger.info("APScheduler started — PXR nightly recalc at 02:00 UTC, report cleanup hourly")
 except ImportError:
     logger.warning("APScheduler not installed — PXR nightly cron disabled")
     _pxr_scheduler = None
