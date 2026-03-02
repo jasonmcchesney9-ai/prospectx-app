@@ -38392,6 +38392,106 @@ async def get_film_upload_status(upload_id: str, token_data: dict = Depends(veri
         conn.close()
 
 
+# ── Mux Webhooks (Phase 2) ───────────────────────────────────
+
+
+@app.post("/film/webhooks/mux")
+async def mux_webhook(request: Request):
+    """Handle Mux webhook events. No JWT auth — uses Mux signature verification.
+
+    Events handled:
+        video.upload.asset_created → store mux_asset_id
+        video.asset.ready          → set status='ready', store playback_id + duration
+        video.asset.errored        → set status='error'
+    """
+    import hmac
+    import hashlib
+
+    raw_body = await request.body()
+
+    # Verify webhook signature if MUX_WEBHOOK_SECRET is configured
+    webhook_secret = os.environ.get("MUX_WEBHOOK_SECRET", "")
+    if webhook_secret:
+        sig_header = request.headers.get("Mux-Signature", "")
+        if not sig_header:
+            raise HTTPException(status_code=401, detail="Missing Mux-Signature header")
+        try:
+            parts = dict(item.split("=", 1) for item in sig_header.split(","))
+            timestamp = parts.get("t", "")
+            received_sig = parts.get("v1", "")
+            signed_payload = f"{timestamp}.{raw_body.decode()}"
+            expected_sig = hmac.new(
+                webhook_secret.encode(),
+                signed_payload.encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(received_sig, expected_sig):
+                raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        except (ValueError, KeyError):
+            raise HTTPException(status_code=401, detail="Malformed Mux-Signature header")
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    event_type = payload.get("type", "")
+    data = payload.get("data", {})
+    now = datetime.now(timezone.utc).isoformat()
+
+    conn = get_db()
+    try:
+        if event_type == "video.upload.asset_created":
+            # Upload completed → Mux created an asset from the upload
+            mux_upload_id = data.get("id")
+            mux_asset_id = data.get("asset_id")
+            if mux_upload_id and mux_asset_id:
+                # Find the video_uploads row by mux upload ID (stored in source_url)
+                conn.execute(
+                    "UPDATE video_uploads SET mux_asset_id = ?, updated_at = ? WHERE source_url = ? AND upload_source = 'mux'",
+                    (mux_asset_id, now, mux_upload_id),
+                )
+                conn.commit()
+                logger.info("Mux webhook: asset_created upload=%s asset=%s", mux_upload_id, mux_asset_id)
+
+        elif event_type == "video.asset.ready":
+            # Asset transcoding complete → ready for playback
+            mux_asset_id = data.get("id")
+            playback_ids = data.get("playback_ids", [])
+            playback_id = playback_ids[0].get("id") if playback_ids else None
+            duration = data.get("duration")
+            if mux_asset_id:
+                conn.execute("""
+                    UPDATE video_uploads
+                    SET status = 'ready', mux_playback_id = ?, duration_seconds = ?, updated_at = ?
+                    WHERE mux_asset_id = ?
+                """, (
+                    playback_id,
+                    int(duration) if duration else None,
+                    now, mux_asset_id,
+                ))
+                conn.commit()
+                logger.info("Mux webhook: asset_ready asset=%s playback=%s", mux_asset_id, playback_id)
+
+        elif event_type == "video.asset.errored":
+            # Asset processing failed
+            mux_asset_id = data.get("id")
+            if mux_asset_id:
+                conn.execute(
+                    "UPDATE video_uploads SET status = 'error', updated_at = ? WHERE mux_asset_id = ?",
+                    (now, mux_asset_id),
+                )
+                conn.commit()
+                logger.info("Mux webhook: asset_errored asset=%s", mux_asset_id)
+
+        else:
+            logger.debug("Mux webhook: unhandled event type %s", event_type)
+
+        return {"status": "ok"}
+    finally:
+        conn.close()
+
+
 # ── Film Sessions ─────────────────────────────────────────────
 
 
