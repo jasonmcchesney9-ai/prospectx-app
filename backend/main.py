@@ -9344,6 +9344,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         if p.get('_goalie_basic_scored'):
             # Basic goalie pipeline — limited metrics available
             _conf_tier = 'limited_metrics'
+            # Cap limited_metrics goalies — prevent basic pipeline from outscoring fully-evaluated skaters
+            p['pxr_final'] = min(p['pxr_final'], 75.0)
         else:
             _pillars_populated = sum(1 for k in ('P1', 'P2', 'P3', 'P4') if ps.get(k) is not None)
             if _gp_s >= 20 and _toi_min_s >= 200 and _pillars_populated >= 4:
