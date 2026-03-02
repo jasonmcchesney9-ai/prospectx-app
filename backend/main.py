@@ -8944,6 +8944,25 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     import time as _time
     start = _time.time()
 
+    # Step 0: Orphan cleanup — remove stale pxr_scores rows for players
+    # no longer present in instat_player_stats (prevents ghost scores)
+    conn.execute("""
+        DELETE FROM pxr_scores
+        WHERE season = ?
+        AND player_id NOT IN (
+            SELECT DISTINCT player_id FROM instat_player_stats WHERE season = ?
+        )
+        AND player_id NOT IN (
+            SELECT DISTINCT player_id FROM instat_goalie_stats WHERE season = ?
+        )
+        AND player_id NOT IN (
+            SELECT DISTINCT gs.player_id FROM goalie_stats gs
+            JOIN players p ON p.id = gs.player_id
+            WHERE gs.stat_type = 'season' AND gs.gp > 0
+            AND UPPER(COALESCE(p.position, '')) IN ('G', 'GOALIE', 'GOALTENDER')
+        )
+    """, (season, season, season))
+
     # Step 1: Fetch InStat data joined with player context
     rows = conn.execute("""
         SELECT
@@ -9142,17 +9161,29 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                 p['g_sv_pct_hd'] = float(gd.get('sv_pct_high_danger') or 0)
                 p['g_xg_per_shot'] = float(gd.get('xg_per_shot') or 0)
 
-    # Step 4: League z-scores + global percentiles for all metrics
+    # Step 4: League z-scores + position-separated percentiles
+    # Compute PERCENT_RANK within position_group (F, D separately) so that
+    # defensemen are ranked against defensemen, not against forwards.
     all_metrics = [
         'goals_60', 'assists_60', 'xg_60', 'shots_60', 'sc_60', 'pp_60',
         'opp_xg_60', 'takeaways_60', 'blocks_60', 'pk_appearances', 'corsi_pct',
         'entry_success_rate', 'bkouts_60', 'pass_pct',
         'hits_60', 'fo_pct', 'battles_pct', 'losses_60',
     ]
+    skaters = [p for p in players_data if p['position_group'] in ('F', 'D')]
+    forwards_only = [p for p in skaters if p['position_group'] == 'F']
+    defense_only = [p for p in skaters if p['position_group'] == 'D']
+
     percentiles = {}  # metric -> { player_id: 0-100 }
     for metric in all_metrics:
-        z = league_zscore(players_data, metric)
-        percentiles[metric] = global_percentile(z)
+        # Z-scores computed within league (across all skaters for normalization)
+        z_all = league_zscore(skaters, metric)
+        # Percentiles computed within position group
+        z_fwd = {pid: z_all[pid] for pid in z_all if pid in {p['player_id'] for p in forwards_only}}
+        z_def = {pid: z_all[pid] for pid in z_all if pid in {p['player_id'] for p in defense_only}}
+        pct_fwd = global_percentile(z_fwd) if z_fwd else {}
+        pct_def = global_percentile(z_def) if z_def else {}
+        percentiles[metric] = {**pct_fwd, **pct_def}
 
     # Step 4b: Goalie-only percentiles (computed among goalies only)
     goalies_only = [p for p in players_data if p['position_group'] == 'G']
@@ -9239,6 +9270,10 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     composite += pval * w
                     weight_sum += w
             composite = composite / weight_sum if weight_sum > 0 else None
+
+        # Null pillar guard: if ALL skater pillars are None, force composite to None
+        if pos_group != 'G' and all(pillar_scores.get(k) is None for k in ('P1', 'P2', 'P3', 'P4')):
+            composite = None
 
         if composite is None:
             null_data += 1
