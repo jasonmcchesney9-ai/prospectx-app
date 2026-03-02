@@ -8910,6 +8910,29 @@ COMPOSITE_WEIGHTS = {
     'G': {'P1': 0.0, 'P2': 0.0, 'P3': 0.0, 'P4': 0.0, 'P5': 1.0},
 }
 
+LEAGUE_STRENGTH = {
+    # Tier S — CHL Majors + USHL (×1.12)
+    "Ontario Hockey League": 1.12,
+    "Western Hockey League": 1.12,
+    "Quebec Major Junior Hockey League": 1.12,
+    "United States Hockey League": 1.12,
+    # Tier 1 — Top Tier II / Top CJHL (×1.06)
+    "North American Hockey League": 1.06,
+    "British Columbia Hockey League": 1.06,
+    "Alberta Junior Hockey League": 1.06,
+    # Tier 2 — Strong Jr A baseline (×1.00)
+    "Ontario Junior Hockey League": 1.00,
+    "Saskatchewan Junior Hockey League": 1.00,
+    "Central Canada Hockey League": 1.00,
+    "Manitoba Junior Hockey League": 1.00,
+    # Tier 3 — Other Jr A / Strong Jr B (×0.94)
+    "Northern Ontario Junior Hockey League": 0.94,
+    "Maritime Hockey League": 0.94,
+    "Greater Ontario Hockey League": 0.94,
+    # Tier 4 — Jr B / Jr C / Tier III US (×0.88)
+    "NA3HL": 0.88,
+}
+
 
 def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     """
@@ -9192,13 +9215,16 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         for rank, p in enumerate(group):
             p['cohort_percentile'] = round((rank / (n - 1)) * 100, 1) if n > 1 else 50.0
 
-    # Age modifier
+    # Age modifier + league strength multiplier
     for p in composited:
         lp = p.get('league_percentile', 50.0)
         cp = p.get('cohort_percentile', 50.0)
         p['age_mod'] = age_modifier_calc(lp, cp)
-        # Final PXR score = composite + age_modifier
-        p['pxr_final'] = round(p['composite'] + p['age_mod'], 1)
+        # League strength multiplier — applied to composite before age modifier
+        multiplier = LEAGUE_STRENGTH.get(p.get('current_league') or '', 1.0)
+        league_adjusted = min(p['composite'] * multiplier, 100.0)
+        # Final PXR score = league-adjusted composite + age_modifier
+        p['pxr_final'] = round(league_adjusted + p['age_mod'], 1)
 
     # Step 8: Upsert pxr_scores (with confidence tier)
     for p in composited:
