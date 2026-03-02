@@ -3947,6 +3947,73 @@ def init_db():
     except Exception as e:
         logger.warning("Migration: orphan team league rename skipped — %s", e)
 
+    # ── Normalize player_stats season strings (two-step) ────────────────
+    try:
+        import re as _re
+        def _normalize_season(s):
+            if not s:
+                return None
+            m = _re.match(r'^(\d{4})-(\d{2,4})', s)
+            if m:
+                y1, y2 = m.group(1), m.group(2)
+                if len(y2) == 4:
+                    y2 = y2[2:]
+                return y1 + '-' + y2
+            m2 = _re.match(r'^(\d{4})\s*-\s*(\d{2})', s)
+            if m2:
+                return m2.group(1) + '-' + m2.group(2)
+            return None
+        all_seasons = conn.execute(
+            "SELECT DISTINCT season FROM player_stats WHERE stat_type = 'season'"
+        ).fetchall()
+        deleted = 0
+        updated = 0
+        for row in all_seasons:
+            s = row[0]
+            if not s:
+                continue
+            normalized = _normalize_season(s)
+            if not normalized or normalized == s:
+                continue
+            # Find all non-standard rows for this season
+            non_std_rows = conn.execute("""
+                SELECT ps.id, ps.player_id,
+                       COALESCE(ps.team_name, '') as tn,
+                       COALESCE(ps.stat_row_type, 'season_total') as srt
+                FROM player_stats ps
+                WHERE ps.season = ? AND ps.stat_type = 'season'
+            """, (s,)).fetchall()
+            for nr in non_std_rows:
+                pid, tn, srt = nr[1], nr[2], nr[3]
+                # Check if a normalized row already exists for this player+team
+                existing = conn.execute("""
+                    SELECT id FROM player_stats
+                    WHERE player_id = ?
+                    AND season = ?
+                    AND stat_type = 'season'
+                    AND COALESCE(team_name, '') = ?
+                    AND COALESCE(stat_row_type, 'season_total') = ?
+                    LIMIT 1
+                """, (pid, normalized, tn, srt)).fetchone()
+                if existing:
+                    # Normalized row exists — delete the non-standard duplicate
+                    conn.execute("DELETE FROM player_stats WHERE id = ?", (nr[0],))
+                    deleted += 1
+                else:
+                    # No normalized row — safe to rename
+                    conn.execute("""
+                        UPDATE player_stats SET season = ?
+                        WHERE id = ?
+                    """, (normalized, nr[0]))
+                    updated += 1
+        conn.commit()
+        logger.info(
+            "Migration: season normalization — %d updated, %d duplicates deleted",
+            updated, deleted
+        )
+    except Exception as e:
+        logger.warning("Migration: season normalization skipped — %s", e)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
