@@ -38492,6 +38492,141 @@ async def mux_webhook(request: Request):
         conn.close()
 
 
+# ── Mux Playback & Upload Completion (Phase 2) ───────────────
+
+
+@app.get("/film/uploads/{upload_id}/playback")
+async def get_film_upload_playback(upload_id: str, token_data: dict = Depends(verify_token)):
+    """Return the Mux playback URL for a ready upload.
+
+    Returns 404 if the upload is not ready yet or has no playback ID.
+    """
+    from mux_client import get_playback_url
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT status, mux_playback_id, mux_asset_id, duration_seconds, title FROM video_uploads WHERE id = ? AND org_id = ?",
+            (upload_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        rec = dict(row) if hasattr(row, "keys") else {
+            "status": row[0], "mux_playback_id": row[1], "mux_asset_id": row[2],
+            "duration_seconds": row[3], "title": row[4],
+        }
+        if rec["status"] != "ready" or not rec["mux_playback_id"]:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Upload not ready for playback (status={rec['status']})",
+            )
+        return {
+            "id": upload_id,
+            "title": rec["title"],
+            "mux_playback_id": rec["mux_playback_id"],
+            "playback_url": get_playback_url(rec["mux_playback_id"]),
+            "duration_seconds": rec["duration_seconds"],
+            "status": "ready",
+        }
+    finally:
+        conn.close()
+
+
+@app.patch("/film/uploads/{upload_id}/complete")
+async def complete_film_upload(upload_id: str, token_data: dict = Depends(verify_token)):
+    """Called by frontend after Mux direct upload finishes.
+
+    Triggers a status check from the Mux API and updates the DB record
+    with asset_id, playback_id, duration, and status.
+    """
+    from mux_client import get_upload as mux_get_upload, get_asset as mux_get_asset
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, source_url, upload_source, status FROM video_uploads WHERE id = ? AND org_id = ?",
+            (upload_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        rec = dict(row) if hasattr(row, "keys") else {
+            "id": row[0], "source_url": row[1], "upload_source": row[2], "status": row[3],
+        }
+
+        if rec["upload_source"] != "mux":
+            raise HTTPException(status_code=400, detail="Not a Mux upload")
+
+        mux_upload_id = rec["source_url"]
+        if not mux_upload_id:
+            raise HTTPException(status_code=400, detail="No Mux upload ID stored")
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Check the upload to get asset_id
+        try:
+            upload_info = mux_get_upload(mux_upload_id)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
+
+        mux_asset_id = upload_info.get("asset_id")
+        if not mux_asset_id:
+            # Upload received but asset not yet created — still processing
+            return {
+                "id": upload_id,
+                "status": "processing",
+                "message": "Upload received by Mux, asset creation pending",
+            }
+
+        # Store asset ID
+        conn.execute(
+            "UPDATE video_uploads SET mux_asset_id = ?, updated_at = ? WHERE id = ?",
+            (mux_asset_id, now, upload_id),
+        )
+
+        # Check asset status
+        try:
+            asset_info = mux_get_asset(mux_asset_id)
+        except Exception as e:
+            conn.commit()
+            return {
+                "id": upload_id,
+                "status": "processing",
+                "mux_asset_id": mux_asset_id,
+                "message": f"Asset created, transcoding in progress: {str(e)}",
+            }
+
+        new_status = "processing"
+        playback_id = asset_info.get("playback_id")
+        duration = asset_info.get("duration")
+
+        if asset_info["status"] == "ready":
+            new_status = "ready"
+            conn.execute("""
+                UPDATE video_uploads
+                SET status = 'ready', mux_playback_id = ?, duration_seconds = ?, updated_at = ?
+                WHERE id = ?
+            """, (playback_id, int(duration) if duration else None, now, upload_id))
+        elif asset_info["status"] == "errored":
+            new_status = "error"
+            conn.execute(
+                "UPDATE video_uploads SET status = 'error', updated_at = ? WHERE id = ?",
+                (now, upload_id),
+            )
+
+        conn.commit()
+        return {
+            "id": upload_id,
+            "status": new_status,
+            "mux_asset_id": mux_asset_id,
+            "mux_playback_id": playback_id,
+            "duration_seconds": int(duration) if duration else None,
+        }
+    finally:
+        conn.close()
+
+
 # ── Film Sessions ─────────────────────────────────────────────
 
 
