@@ -3933,6 +3933,20 @@ def init_db():
     except Exception as e:
         logger.warning("Migration: HT league fix skipped — %s", e)
 
+    # ── Normalize orphan teams: 'Greater Ontario Junior Hockey League' → 'GOHL' ──
+    try:
+        result = conn.execute("""
+            UPDATE teams
+            SET league = 'GOHL'
+            WHERE league = 'Greater Ontario Junior Hockey League'
+        """)
+        conn.commit()
+        if result.rowcount > 0:
+            logger.info("Migration: normalized %d orphan teams league name to GOHL",
+                        result.rowcount)
+    except Exception as e:
+        logger.warning("Migration: orphan team league rename skipped — %s", e)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
