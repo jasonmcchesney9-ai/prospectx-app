@@ -25518,40 +25518,52 @@ async def pxr_leaderboard(
     conn = get_db()
     try:
         top = conn.execute("""
-            SELECT p.first_name || ' ' || p.last_name AS player_name,
-                   p.current_league, p.position,
-                   px.pxr_score, px.league_percentile, px.cohort_percentile,
-                   px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
-                   px.age_modifier, px.data_completeness,
-                   px.confidence_tier, px.gp, px.toi_minutes
-            FROM pxr_scores px
-            JOIN players p ON p.id = px.player_id
-            JOIN (SELECT player_id, MAX(id) AS max_id
-                  FROM pxr_scores WHERE season = ?
-                  GROUP BY player_id) latest ON px.id = latest.max_id
-            WHERE px.pxr_score IS NOT NULL
-              AND px.season = ?
-              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
-            ORDER BY px.pxr_score DESC
+            SELECT player_name, current_league, position,
+                   pxr_score, league_percentile, cohort_percentile,
+                   p1_offense, p2_defense, p3_possession, p4_physical,
+                   age_modifier, data_completeness,
+                   confidence_tier, gp, toi_minutes
+            FROM (
+                SELECT p.first_name || ' ' || p.last_name AS player_name,
+                       p.current_league, p.position,
+                       px.pxr_score, px.league_percentile, px.cohort_percentile,
+                       px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
+                       px.age_modifier, px.data_completeness,
+                       px.confidence_tier, px.gp, px.toi_minutes,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY p.first_name, p.last_name, p.position
+                           ORDER BY px.gp DESC NULLS LAST, px.pxr_score DESC
+                       ) AS rn
+                FROM pxr_scores px
+                JOIN players p ON p.id = px.player_id
+                WHERE px.pxr_score IS NOT NULL
+                  AND px.season = ?
+                  AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ) ranked WHERE rn = 1
+            ORDER BY pxr_score DESC
             LIMIT %s
-        """, (season, season, limit)).fetchall()
+        """, (season, limit)).fetchall()
 
         by_league = conn.execute("""
-            SELECT p.current_league,
+            SELECT current_league,
                    COUNT(*) AS players_scored,
-                   ROUND(AVG(px.pxr_score)::numeric, 1) AS avg_score,
-                   MAX(px.pxr_score) AS top_score
-            FROM pxr_scores px
-            JOIN players p ON p.id = px.player_id
-            JOIN (SELECT player_id, MAX(id) AS max_id
-                  FROM pxr_scores WHERE season = ?
-                  GROUP BY player_id) latest ON px.id = latest.max_id
-            WHERE px.pxr_score IS NOT NULL
-              AND px.season = ?
-              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
-            GROUP BY p.current_league
+                   ROUND(AVG(pxr_score)::numeric, 1) AS avg_score,
+                   MAX(pxr_score) AS top_score
+            FROM (
+                SELECT p.current_league, px.pxr_score,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY p.first_name, p.last_name, p.position
+                           ORDER BY px.gp DESC NULLS LAST, px.pxr_score DESC
+                       ) AS rn
+                FROM pxr_scores px
+                JOIN players p ON p.id = px.player_id
+                WHERE px.pxr_score IS NOT NULL
+                  AND px.season = ?
+                  AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ) ranked WHERE rn = 1
+            GROUP BY current_league
             ORDER BY avg_score DESC
-        """, (season, season)).fetchall()
+        """, (season,)).fetchall()
 
         counts = conn.execute("""
             SELECT
@@ -25585,9 +25597,6 @@ async def pxr_draft_board(
                          "(p.is_deleted = 0 OR p.is_deleted IS NULL)"]
         params: list = [season]
 
-        # Dedup param for the latest-row subquery (must come first)
-        dedup_params: list = [season]
-
         if league:
             where_clauses.append("p.current_league = %s")
             params.append(league)
@@ -25601,24 +25610,32 @@ async def pxr_draft_board(
         where_sql = " AND ".join(where_clauses)
 
         rows = conn.execute(f"""
-            SELECT p.id AS player_id,
-                   p.first_name, p.last_name,
-                   p.current_team, p.current_league, p.position,
-                   p.birth_year,
-                   px.position_group,
-                   px.pxr_score, px.league_percentile, px.cohort_percentile,
-                   px.age_modifier,
-                   px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
-                   px.data_completeness, px.season,
-                   px.confidence_tier, px.gp, px.toi_minutes
-            FROM pxr_scores px
-            JOIN players p ON p.id = px.player_id
-            JOIN (SELECT player_id, MAX(id) AS max_id
-                  FROM pxr_scores WHERE season = %s
-                  GROUP BY player_id) latest ON px.id = latest.max_id
-            WHERE {where_sql}
-            ORDER BY px.pxr_score DESC
-        """, dedup_params + params).fetchall()
+            SELECT player_id, first_name, last_name,
+                   current_team, current_league, position, birth_year,
+                   position_group, pxr_score, league_percentile, cohort_percentile,
+                   age_modifier, p1_offense, p2_defense, p3_possession, p4_physical,
+                   data_completeness, season, confidence_tier, gp, toi_minutes
+            FROM (
+                SELECT p.id AS player_id,
+                       p.first_name, p.last_name,
+                       p.current_team, p.current_league, p.position,
+                       p.birth_year,
+                       px.position_group,
+                       px.pxr_score, px.league_percentile, px.cohort_percentile,
+                       px.age_modifier,
+                       px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
+                       px.data_completeness, px.season,
+                       px.confidence_tier, px.gp, px.toi_minutes,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY p.first_name, p.last_name, p.position
+                           ORDER BY px.gp DESC NULLS LAST, px.pxr_score DESC
+                       ) AS rn
+                FROM pxr_scores px
+                JOIN players p ON p.id = px.player_id
+                WHERE {where_sql}
+            ) ranked WHERE rn = 1
+            ORDER BY pxr_score DESC
+        """, params).fetchall()
 
         # Gather distinct filter options
         filters = conn.execute("""
