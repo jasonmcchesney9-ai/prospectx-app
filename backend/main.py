@@ -4608,6 +4608,18 @@ def seed_new_templates():
         ("Parent Report", "parent_report",
          "Player Development", "Family Guide",
          "Plain-language parent-facing report with 4 fields: how they are playing, what they do well, focus area, and last game summary. No grades, no jargon."),
+        ("Post-Game Film Review", "film_post_game_review",
+         "Film", "Game Review",
+         "AI analysis of tagged post-game film session — sequences, personnel, tactical patterns, adjustments."),
+        ("Opponent Film Prep", "film_opponent_prep",
+         "Film", "Game Prep",
+         "AI opponent preparation report from tagged film clips — tendencies, threats, exploitation opportunities."),
+        ("Player Film Analysis", "film_player_analysis",
+         "Film", "Player Analysis",
+         "AI player analysis from tagged film clips — performance observations, strengths, development areas."),
+        ("Practice Film Review", "film_practice_review",
+         "Film", "Practice Review",
+         "AI analysis of practice film session — drill execution, standouts, system concepts, next session focus."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -39125,6 +39137,262 @@ async def delete_film_comment(comment_id: str, token_data: dict = Depends(verify
         conn.execute("DELETE FROM film_session_comments WHERE id = ?", (comment_id,))
         conn.commit()
         return {"status": "deleted", "id": comment_id}
+    finally:
+        conn.close()
+
+
+# ── Film Session PXI Report Generation ────────────────────────
+
+FILM_REPORT_PROMPTS = {
+    "film_post_game_review": """You are analyzing a post-game film session for a junior hockey coaching staff.
+Generate a structured post-game review with these sections:
+
+GAME_SUMMARY
+Key sequences from tagged clips — what happened, when, and who was involved.
+
+PERSONNEL_OBSERVATIONS
+Player performance observations organized by clip. Reference specific timestamps.
+
+TACTICAL_PATTERNS
+Systems and tendencies identified from the film. Breakout patterns, forecheck structure, defensive coverage.
+
+ADJUSTMENTS
+Specific recommendations for the next game based on what the film shows.
+
+Use COACH lens. Evidence-based only — reference clips by timestamp. Never invent sequences not in the tagged data.
+If fewer than 3 clips are tagged, note limited film coverage and caveat analysis accordingly.""",
+
+    "film_opponent_prep": """You are analyzing opponent film for a junior hockey coaching staff preparing for a game.
+Generate a structured opponent prep report with these sections:
+
+OPPONENT_IDENTITY
+Style and tendencies observed from tagged clips — system preferences, pace, physicality.
+
+KEY_THREATS
+Personnel identified as dangerous in the film. Reference specific clips and timestamps.
+
+TACTICAL_PATTERNS
+Systems observed — forecheck, breakout, power play structure, penalty kill formation.
+
+DEFENSIVE_ADJUSTMENTS
+Specific counters and matchup recommendations based on observed tendencies.
+
+EXPLOITATION_OPPORTUNITIES
+Weaknesses identified — coverage gaps, transition vulnerabilities, special teams breakdowns.
+
+Use COACH + ANALYST lens. Never invent tendencies not supported by tagged events.
+If clips are labeled as opponent footage, treat all tagged players as opponents.""",
+
+    "film_player_analysis": """You are analyzing film clips tagged to a specific player for a junior hockey coaching staff.
+Generate a player film analysis with these sections:
+
+CLIP_BY_CLIP_OBSERVATIONS
+What the film shows for each tagged clip — specific actions, decisions, positioning.
+
+STRENGTHS_ON_FILM
+Demonstrated capabilities backed by specific clip references and timestamps.
+
+DEVELOPMENT_AREAS
+Patterns needing work — with specific clip examples showing the issue.
+
+TEACHING_POINTS
+Specific coachable moments with timestamp references that coaching staff can use in video sessions.
+
+Use SCOUT + SKILL_COACH lens. Reference specific clips by timestamp.
+Never fabricate observations beyond tagged data. Apply standard PXI evidence discipline —
+no speculative ceiling/floor projections without sufficient data.""",
+
+    "film_practice_review": """You are analyzing a practice film session for a junior hockey coaching staff.
+Generate a practice film review with these sections:
+
+DRILL_EXECUTION
+Quality observed in tagged clips — tempo, structure adherence, competitive level.
+
+INDIVIDUAL_STANDOUTS
+Positive and developmental observations for specific players referenced in clips.
+
+SYSTEM_CONCEPTS
+What was demonstrated or practiced — tactical concepts visible in the film.
+
+NEXT_SESSION_FOCUS
+Priorities for the next practice based on what this session's film reveals.
+
+Use COACH + SKILL_COACH lens. Evidence-based only — only reference what appears in tagged clips and events.""",
+}
+
+
+@app.post("/film/sessions/{session_id}/generate-report")
+async def generate_film_report(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Generate a PXI report from a film session's tagged clips and events."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    body = await request.json()
+    report_type = body.get("report_type", "")
+    if report_type not in FILM_REPORT_PROMPTS:
+        raise HTTPException(status_code=400, detail=f"Invalid film report type: {report_type}. Valid: {', '.join(FILM_REPORT_PROMPTS.keys())}")
+
+    # Check report usage limit
+    limit_conn = get_db()
+    try:
+        _check_tier_limit(user_id, "reports", limit_conn)
+    finally:
+        limit_conn.close()
+
+    conn = get_db()
+    try:
+        # 1. Get the session
+        session_row = conn.execute(
+            "SELECT * FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not session_row:
+            raise HTTPException(status_code=404, detail="Film session not found")
+        session = dict(session_row) if hasattr(session_row, "keys") else session_row
+
+        # 2. Get clips for this session
+        clip_rows = conn.execute(
+            "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY start_time_seconds",
+            (session_id, org_id),
+        ).fetchall()
+        clips = [dict(c) if hasattr(c, "keys") else c for c in clip_rows]
+
+        # 3. Get events (via any uploads linked to clips, or session-level events)
+        event_rows = conn.execute(
+            "SELECT * FROM video_events WHERE session_id = ? AND org_id = ? ORDER BY time_seconds",
+            (session_id, org_id),
+        ).fetchall()
+        events = [dict(e) if hasattr(e, "keys") else e for e in event_rows]
+
+        # 4. Build film context string
+        def _format_clips(clips_list):
+            if not clips_list:
+                return "  (no clips tagged)"
+            lines = []
+            for i, c in enumerate(clips_list, 1):
+                tags = c.get("tags") or ""
+                player = c.get("tagged_player_name") or "untagged"
+                lines.append(
+                    f"  Clip {i}: {c.get('title', 'Untitled')} "
+                    f"({c.get('start_time_seconds', 0)}s → {c.get('end_time_seconds', 0)}s) "
+                    f"Type: {c.get('clip_type', 'manual')} | Tags: {tags} | Player: {player}"
+                )
+            return "\n".join(lines)
+
+        def _format_events(events_list):
+            if not events_list:
+                return "  (no events tagged)"
+            lines = []
+            for e in events_list:
+                label = e.get("event_label") or ""
+                player = e.get("player_name") or "untagged"
+                lines.append(
+                    f"  {e.get('time_seconds', 0)}s — {e.get('event_type', 'unknown')}"
+                    f"{': ' + label if label else ''} | Player: {player}"
+                )
+            return "\n".join(lines)
+
+        session_name = session.get("name") or session.get("title") or "Untitled Session"
+        film_context = f"""FILM SESSION CONTEXT:
+Session: {session_name}
+Type: {session.get('session_type', 'general')}
+Date: {session.get('created_at', 'Unknown')}
+Description: {session.get('description') or 'None provided'}
+
+TAGGED CLIPS ({len(clips)} total):
+{_format_clips(clips)}
+
+TAGGED EVENTS ({len(events)} total):
+{_format_events(events)}"""
+
+        # 5. Get template for this report type
+        template = conn.execute(
+            "SELECT * FROM report_templates WHERE report_type = ? AND (org_id = ? OR is_global = 1) LIMIT 1",
+            (report_type, org_id),
+        ).fetchone()
+        template_id = template["id"] if template else None
+        template_name = template["template_name"] if template else report_type.replace("_", " ").title()
+
+        # 6. Create report record
+        report_id = gen_id()
+        title = f"{template_name} — {session_name}"
+        conn.execute("""
+            INSERT INTO reports (id, org_id, player_id, team_name, template_id, report_type, title, status, input_data, created_by, created_at)
+            VALUES (?, ?, NULL, NULL, ?, ?, ?, 'processing', ?, ?, ?)
+        """, (report_id, org_id, template_id, report_type, title, json.dumps({"session_id": session_id, "clips": len(clips), "events": len(events)}), user_id, now_iso()))
+        conn.commit()
+
+        start_time = time.perf_counter()
+
+        # 7. Call Anthropic Claude
+        try:
+            client = get_anthropic_client()
+            if client:
+                llm_model = "claude-sonnet-4-20250514"
+                system_prompt = FILM_REPORT_PROMPTS[report_type]
+                user_prompt = f"Generate a {template_name} based on the following film session data.\n\n{film_context}"
+
+                response = client.messages.create(
+                    model=llm_model,
+                    max_tokens=4000,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                output_text = response.content[0].text
+                tokens_used = (response.usage.input_tokens or 0) + (response.usage.output_tokens or 0)
+                generation_ms = int((time.perf_counter() - start_time) * 1000)
+
+                # Update report as complete
+                conn.execute("""
+                    UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
+                    llm_model=?, llm_tokens=?, generation_time_ms=?
+                    WHERE id = ?
+                """, (title, output_text, now_iso(), llm_model, tokens_used, generation_ms, report_id))
+                conn.commit()
+
+                # 8. Update pxi_status on the session
+                conn.execute("""
+                    UPDATE video_sessions SET pxi_output=?, pxi_status='completed', pxi_model=?
+                    WHERE id = ? AND org_id = ?
+                """, (report_id, llm_model, session_id, org_id))
+                conn.commit()
+
+                logger.info("Film report generated: %s (%s) in %dms — %d clips, %d events",
+                            report_id, report_type, generation_ms, len(clips), len(events))
+
+                return {"report_id": report_id, "status": "complete", "title": title, "generation_time_ms": generation_ms}
+            else:
+                # No API key — mock mode
+                mock_text = f"""GAME_SUMMARY
+This is a demo film report for session "{session_name}". {len(clips)} clips and {len(events)} events were tagged.
+Connect your Anthropic API key in backend/.env to generate full AI-powered film analysis.
+
+PERSONNEL_OBSERVATIONS
+No AI analysis available in demo mode.
+
+TACTICAL_PATTERNS
+No AI analysis available in demo mode.
+
+ADJUSTMENTS
+No AI analysis available in demo mode."""
+                generation_ms = int((time.perf_counter() - start_time) * 1000)
+                conn.execute("""
+                    UPDATE reports SET status='complete', title=?, output_text=?, generated_at=?,
+                    llm_model='mock', llm_tokens=0, generation_time_ms=?
+                    WHERE id = ?
+                """, (title, mock_text, now_iso(), generation_ms, report_id))
+                conn.commit()
+                return {"report_id": report_id, "status": "complete", "title": title, "generation_time_ms": generation_ms}
+
+        except Exception as e:
+            generation_ms = int((time.perf_counter() - start_time) * 1000)
+            conn.execute("""
+                UPDATE reports SET status='error', error_message=?, generation_time_ms=?
+                WHERE id = ?
+            """, (str(e)[:500], generation_ms, report_id))
+            conn.commit()
+            logger.error("Film report generation failed: %s", e)
+            raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)[:200]}")
     finally:
         conn.close()
 
