@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@mux/mux-player-react": "^3.11.5",
     "axios": "^1.7.9",
     "date-fns": "^4.1.0",
     "gifenc": "^1.0.3",
