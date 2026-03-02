@@ -25527,10 +25527,11 @@ async def pxr_leaderboard(
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL
+              AND px.season = ?
               AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             ORDER BY px.pxr_score DESC
             LIMIT %s
-        """, (limit,)).fetchall()
+        """, (season, limit)).fetchall()
 
         by_league = conn.execute("""
             SELECT p.current_league,
@@ -25540,17 +25541,18 @@ async def pxr_leaderboard(
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
             WHERE px.pxr_score IS NOT NULL
+              AND px.season = ?
               AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             GROUP BY p.current_league
             ORDER BY avg_score DESC
-        """).fetchall()
+        """, (season,)).fetchall()
 
         counts = conn.execute("""
             SELECT
-                (SELECT COUNT(*) FROM instat_player_stats) AS instat_count,
-                (SELECT COUNT(*) FROM pxr_scores WHERE pxr_score IS NOT NULL) AS scored_count,
-                (SELECT COUNT(*) FROM pxr_scores) AS total_pxr_rows
-        """).fetchone()
+                (SELECT COUNT(*) FROM instat_player_stats WHERE season = ?) AS instat_count,
+                (SELECT COUNT(*) FROM pxr_scores WHERE pxr_score IS NOT NULL AND season = ?) AS scored_count,
+                (SELECT COUNT(*) FROM pxr_scores WHERE season = ?) AS total_pxr_rows
+        """, (season, season, season)).fetchone()
     finally:
         conn.close()
 
