@@ -3920,6 +3920,19 @@ def init_db():
     except Exception as e:
         logger.warning("Migration: orphaned report cleanup skipped — %s", e)
 
+    # ── Fix cross-league HockeyTech sync artifacts ──────────────────────
+    try:
+        conn.execute("""
+            UPDATE teams
+            SET hockeytech_league = 'gojhl'
+            WHERE name IN ('Leamington Flyers', 'Niagara Falls Canucks')
+            AND hockeytech_league = 'ojhl'
+        """)
+        conn.commit()
+        logger.info("Migration: corrected hockeytech_league for Leamington + Niagara Falls")
+    except Exception as e:
+        logger.warning("Migration: HT league fix skipped — %s", e)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
