@@ -1,0 +1,384 @@
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Upload,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Film,
+  RefreshCw,
+} from "lucide-react";
+import NavBar from "@/components/NavBar";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import VideoUploader from "@/components/film/VideoUploader";
+import api from "@/lib/api";
+import toast from "react-hot-toast";
+
+type Step = "details" | "file" | "uploading";
+type UploadStatus = "idle" | "uploading" | "processing" | "ready" | "error";
+
+const UPLOAD_SOURCES = [
+  { value: "manual", label: "Manual Upload" },
+  { value: "youtube", label: "YouTube" },
+  { value: "vimeo", label: "Vimeo" },
+  { value: "livebarn", label: "LiveBarn" },
+];
+
+export default function FilmUploadPage() {
+  const router = useRouter();
+
+  // Step 1 — Details
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [uploadSource, setUploadSource] = useState("manual");
+
+  // Step 2 — File
+  const [file, setFile] = useState<File | null>(null);
+
+  // Step 3 — Upload & Process
+  const [step, setStep] = useState<Step>("details");
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
+  const [progress, setProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [uploadId, setUploadId] = useState<string | null>(null);
+
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  const pollStatus = useCallback(
+    (id: string) => {
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const res = await api.get(`/film/uploads/${id}/status`);
+          const status = res.data.status;
+          if (status === "ready") {
+            stopPolling();
+            setUploadStatus("ready");
+            toast.success("Video is ready!");
+          } else if (status === "errored" || status === "error") {
+            stopPolling();
+            setUploadStatus("error");
+            setErrorMessage("Mux processing failed. Please try again.");
+            toast.error("Video processing failed");
+          }
+          // else keep polling (waiting, asset_created, preparing)
+        } catch {
+          // Network error — keep polling
+        }
+      }, 5000);
+    },
+    [stopPolling]
+  );
+
+  const handleUpload = useCallback(async () => {
+    if (!file || !title.trim()) return;
+
+    setStep("uploading");
+    setUploadStatus("uploading");
+    setProgress(0);
+    setErrorMessage("");
+
+    try {
+      // 1. Create Mux direct upload URL
+      const createRes = await api.post("/film/uploads/create-url", {
+        title: title.trim(),
+        description: description.trim() || null,
+        upload_source: uploadSource,
+      });
+
+      const { upload_url, upload_id } = createRes.data;
+      setUploadId(upload_id);
+
+      // 2. PUT file directly to Mux
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", upload_url);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Upload network error"));
+        xhr.send(file);
+      });
+
+      // 3. Notify backend upload is complete
+      setUploadStatus("processing");
+      await api.patch(`/film/uploads/${upload_id}/complete`);
+
+      // 4. Start polling for readiness
+      pollStatus(upload_id);
+    } catch (e: unknown) {
+      stopPolling();
+      setUploadStatus("error");
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      setErrorMessage(msg);
+      toast.error(msg);
+    }
+  }, [file, title, description, uploadSource, pollStatus, stopPolling]);
+
+  const handleReset = useCallback(() => {
+    stopPolling();
+    setStep("details");
+    setTitle("");
+    setDescription("");
+    setUploadSource("manual");
+    setFile(null);
+    setUploadStatus("idle");
+    setProgress(0);
+    setErrorMessage("");
+    setUploadId(null);
+  }, [stopPolling]);
+
+  return (
+    <ProtectedRoute>
+      <NavBar />
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <Link
+            href="/film"
+            className="text-muted hover:text-navy transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </Link>
+          <h1 className="text-2xl font-bold text-navy font-oswald uppercase tracking-wider">
+            Upload Video
+          </h1>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 mb-8">
+          {["Details", "Select File", "Upload"].map((label, i) => {
+            const stepKeys: Step[] = ["details", "file", "uploading"];
+            const idx = stepKeys.indexOf(step);
+            const isActive = i === idx;
+            const isCompleted = i < idx;
+            return (
+              <div key={label} className="flex items-center gap-2">
+                {i > 0 && (
+                  <div
+                    className={`w-8 h-px ${
+                      isCompleted || isActive ? "bg-teal" : "bg-border"
+                    }`}
+                  />
+                )}
+                <div
+                  className={`flex items-center gap-1.5 text-[11px] font-oswald uppercase tracking-wider ${
+                    isActive
+                      ? "text-teal"
+                      : isCompleted
+                      ? "text-teal/60"
+                      : "text-muted/50"
+                  }`}
+                >
+                  <span
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      isActive
+                        ? "bg-teal text-white"
+                        : isCompleted
+                        ? "bg-teal/20 text-teal"
+                        : "bg-border text-muted/50"
+                    }`}
+                  >
+                    {isCompleted ? "✓" : i + 1}
+                  </span>
+                  {label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Step 1 — Details */}
+        {step === "details" && (
+          <div className="bg-white rounded-xl border border-border p-6 space-y-5">
+            <div>
+              <label className="block text-xs font-oswald uppercase tracking-wider text-navy mb-1.5">
+                Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g., Game vs Sarnia — Dec 15"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-oswald uppercase tracking-wider text-navy mb-1.5">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional notes about this video..."
+                rows={3}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-oswald uppercase tracking-wider text-navy mb-1.5">
+                Upload Source
+              </label>
+              <select
+                value={uploadSource}
+                onChange={(e) => setUploadSource(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal bg-white"
+              >
+                {UPLOAD_SOURCES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  if (!title.trim()) {
+                    toast.error("Title is required");
+                    return;
+                  }
+                  setStep("file");
+                }}
+                className="bg-teal text-white px-6 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-teal/90 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2 — Select File */}
+        {step === "file" && (
+          <div className="bg-white rounded-xl border border-border p-6 space-y-5">
+            <VideoUploader
+              onFileSelect={setFile}
+              selectedFile={file}
+              onClear={() => setFile(null)}
+            />
+
+            <div className="flex justify-between">
+              <button
+                onClick={() => setStep("details")}
+                className="text-sm text-muted hover:text-navy font-oswald uppercase tracking-wider transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleUpload}
+                disabled={!file}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm transition-colors ${
+                  file
+                    ? "bg-orange text-white hover:bg-orange/90"
+                    : "bg-border text-muted/50 cursor-not-allowed"
+                }`}
+              >
+                <Upload size={14} />
+                Upload
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Upload & Process */}
+        {step === "uploading" && (
+          <div className="bg-white rounded-xl border border-border p-6">
+            {/* Uploading */}
+            {uploadStatus === "uploading" && (
+              <div className="text-center py-6">
+                <Loader2 size={28} className="animate-spin text-teal mx-auto mb-3" />
+                <p className="text-sm font-medium text-navy">Uploading...</p>
+                <div className="w-full bg-border rounded-full h-2 mt-4 max-w-md mx-auto">
+                  <div
+                    className="bg-teal h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted mt-2">{progress}%</p>
+              </div>
+            )}
+
+            {/* Processing */}
+            {uploadStatus === "processing" && (
+              <div className="text-center py-6">
+                <Loader2 size={28} className="animate-spin text-orange mx-auto mb-3" />
+                <p className="text-sm font-medium text-navy">Processing with Mux...</p>
+                <p className="text-[11px] text-muted mt-1">
+                  This usually takes 30-60 seconds.
+                </p>
+              </div>
+            )}
+
+            {/* Ready */}
+            {uploadStatus === "ready" && (
+              <div className="text-center py-6">
+                <CheckCircle size={36} className="text-teal mx-auto mb-3" />
+                <p className="text-sm font-bold text-navy">Ready!</p>
+                <p className="text-[11px] text-muted mt-1">
+                  Your video has been processed and is ready for viewing.
+                </p>
+                <div className="flex items-center justify-center gap-3 mt-6">
+                  <Link
+                    href={`/film/sessions/new?upload=${uploadId}`}
+                    className="flex items-center gap-2 bg-teal text-white px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-teal/90 transition-colors"
+                  >
+                    <Film size={14} />
+                    Create Film Session
+                  </Link>
+                  <button
+                    onClick={handleReset}
+                    className="flex items-center gap-2 bg-navy/5 text-navy px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-navy/10 transition-colors"
+                  >
+                    <RefreshCw size={14} />
+                    Upload Another
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {uploadStatus === "error" && (
+              <div className="text-center py-6">
+                <AlertCircle size={36} className="text-red-500 mx-auto mb-3" />
+                <p className="text-sm font-bold text-navy">Upload Failed</p>
+                <p className="text-[11px] text-red-500 mt-1">{errorMessage}</p>
+                <button
+                  onClick={handleReset}
+                  className="mt-6 flex items-center gap-2 bg-orange text-white px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-orange/90 transition-colors mx-auto"
+                >
+                  <RefreshCw size={14} />
+                  Try Again
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </ProtectedRoute>
+  );
+}
