@@ -25526,12 +25526,15 @@ async def pxr_leaderboard(
                    px.confidence_tier, px.gp, px.toi_minutes
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
+            JOIN (SELECT player_id, MAX(id) AS max_id
+                  FROM pxr_scores WHERE season = ?
+                  GROUP BY player_id) latest ON px.id = latest.max_id
             WHERE px.pxr_score IS NOT NULL
               AND px.season = ?
               AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             ORDER BY px.pxr_score DESC
             LIMIT %s
-        """, (season, limit)).fetchall()
+        """, (season, season, limit)).fetchall()
 
         by_league = conn.execute("""
             SELECT p.current_league,
@@ -25540,17 +25543,20 @@ async def pxr_leaderboard(
                    MAX(px.pxr_score) AS top_score
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
+            JOIN (SELECT player_id, MAX(id) AS max_id
+                  FROM pxr_scores WHERE season = ?
+                  GROUP BY player_id) latest ON px.id = latest.max_id
             WHERE px.pxr_score IS NOT NULL
               AND px.season = ?
               AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             GROUP BY p.current_league
             ORDER BY avg_score DESC
-        """, (season,)).fetchall()
+        """, (season, season)).fetchall()
 
         counts = conn.execute("""
             SELECT
-                (SELECT COUNT(*) FROM instat_player_stats WHERE season = ?) AS instat_count,
-                (SELECT COUNT(*) FROM pxr_scores WHERE pxr_score IS NOT NULL AND season = ?) AS scored_count,
+                (SELECT COUNT(DISTINCT player_id) FROM instat_player_stats WHERE season = ?) AS instat_count,
+                (SELECT COUNT(DISTINCT player_id) FROM pxr_scores WHERE pxr_score IS NOT NULL AND season = ?) AS scored_count,
                 (SELECT COUNT(*) FROM pxr_scores WHERE season = ?) AS total_pxr_rows
         """, (season, season, season)).fetchone()
     finally:
@@ -25579,6 +25585,9 @@ async def pxr_draft_board(
                          "(p.is_deleted = 0 OR p.is_deleted IS NULL)"]
         params: list = [season]
 
+        # Dedup param for the latest-row subquery (must come first)
+        dedup_params: list = [season]
+
         if league:
             where_clauses.append("p.current_league = %s")
             params.append(league)
@@ -25604,9 +25613,12 @@ async def pxr_draft_board(
                    px.confidence_tier, px.gp, px.toi_minutes
             FROM pxr_scores px
             JOIN players p ON p.id = px.player_id
+            JOIN (SELECT player_id, MAX(id) AS max_id
+                  FROM pxr_scores WHERE season = %s
+                  GROUP BY player_id) latest ON px.id = latest.max_id
             WHERE {where_sql}
             ORDER BY px.pxr_score DESC
-        """, params).fetchall()
+        """, dedup_params + params).fetchall()
 
         # Gather distinct filter options
         filters = conn.execute("""
