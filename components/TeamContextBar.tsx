@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Building2, ChevronDown, CheckCircle, Calendar, AlertCircle } from "lucide-react";
 import { assetUrl } from "@/lib/api";
 import { leagueAbbr } from "@/lib/leagues";
@@ -124,7 +125,9 @@ export default function TeamContextBar({
 
           {/* Team Name + League */}
           <div>
-            <h1 className="text-lg sm:text-xl font-oswald font-bold tracking-wide">{activeTeam.name}</h1>
+            <Link href={`/teams/${encodeURIComponent(activeTeam.name)}`} className="text-lg sm:text-xl font-oswald font-bold tracking-wide hover:underline cursor-pointer">
+              {activeTeam.name}
+            </Link>
             <div className="flex items-center gap-2 mt-0.5">
               {activeTeam.league && (
                 <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-[10px] uppercase tracking-wider">
