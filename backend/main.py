@@ -4014,6 +4014,57 @@ def init_db():
     except Exception as e:
         logger.warning("Migration: season normalization skipped — %s", e)
 
+    # ── Normalize goalie_stats season strings (two-step) ────────────────
+    # Use the module-level _normalize_season (line 1125) which handles
+    # league prefixes like "CCHL Preseason 2025". The local version from
+    # the player_stats block above only handles YYYY-YYYY patterns.
+    _norm_season_full = globals()["_normalize_season"]
+    try:
+        all_goalie_seasons = conn.execute(
+            "SELECT DISTINCT season FROM goalie_stats"
+        ).fetchall()
+        g_deleted = 0
+        g_updated = 0
+        for row in all_goalie_seasons:
+            s = row[0]
+            if not s:
+                continue
+            normalized = _norm_season_full(s)
+            if not normalized or normalized == s:
+                continue
+            non_std_rows = conn.execute("""
+                SELECT id, player_id,
+                       COALESCE(data_source, '') as ds
+                FROM goalie_stats
+                WHERE season = ?
+            """, (s,)).fetchall()
+            for nr in non_std_rows:
+                pid, ds = nr[1], nr[2]
+                existing = conn.execute("""
+                    SELECT id FROM goalie_stats
+                    WHERE player_id = ?
+                    AND season = ?
+                    AND COALESCE(data_source, '') = ?
+                    LIMIT 1
+                """, (pid, normalized, ds)).fetchone()
+                if existing:
+                    conn.execute(
+                        "DELETE FROM goalie_stats WHERE id = ?", (nr[0],))
+                    g_deleted += 1
+                else:
+                    conn.execute(
+                        "UPDATE goalie_stats SET season = ? WHERE id = ?",
+                        (normalized, nr[0]))
+                    g_updated += 1
+        conn.commit()
+        logger.info(
+            "Migration: goalie_stats season normalization — "
+            "%d updated, %d duplicates deleted", g_updated, g_deleted
+        )
+    except Exception as e:
+        logger.warning(
+            "Migration: goalie_stats season normalization skipped — %s", e)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
