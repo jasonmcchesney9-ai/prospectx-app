@@ -93,6 +93,7 @@ const PRO_NAV_RIGHT: NavItem[] = [
 // MEDIA nav — isolated broadcaster environment (Table 12 in spec)
 const MEDIA_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/leagues", label: "Leagues", icon: Trophy },
   { href: "/players", label: "Players", icon: Users },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/broadcast", label: "Broadcast Hub", icon: Radio },
@@ -106,6 +107,7 @@ const MEDIA_NAV_RIGHT: NavItem[] = [
 const PLAYER_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-profile", label: "My Profile", icon: UserCheck },
+  { href: "/leagues", label: "Leagues", icon: Trophy },
   { href: "/dev-plan", label: "Dev Plan", icon: BookOpen },
   { href: "/film", label: "Film", icon: Video },
 ];
@@ -118,6 +120,7 @@ const PLAYER_NAV_RIGHT: NavItem[] = [
 const FAMILY_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-player", label: "My Player", icon: Heart },
+  { href: "/leagues", label: "Leagues", icon: Trophy },
   { href: "/dev-plan", label: "Dev Plan", icon: BookOpen },
   { href: "/film", label: "Film", icon: Video },
 ];
@@ -129,6 +132,7 @@ const FAMILY_NAV_RIGHT: NavItem[] = [
 // AGENT nav — agent's isolated environment (Table 15 in spec)
 const AGENT_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/leagues", label: "Leagues", icon: Trophy },
   { href: "/my-clients", label: "My Clients", icon: Briefcase },
   { href: "/reports", label: "Reports", icon: FileText },
 ];
