@@ -3826,6 +3826,159 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_talks_org ON chalk_talks(org_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_talks_team ON chalk_talks(team_id)")
 
+    # ── Film Room Phase 1: ALTER video_sessions (additive columns) ──
+    vs_cols = _get_table_columns(conn, "video_sessions")
+    for col_name, col_def in [
+        ("session_type", "TEXT DEFAULT 'general'"),
+        ("game_id", "TEXT"),
+        ("team_id", "TEXT"),
+        ("player_id", "TEXT"),
+        ("opponent_team_id", "TEXT"),
+        ("pxi_output", "TEXT"),
+        ("pxi_status", "TEXT DEFAULT 'pending'"),
+        ("pxi_model", "TEXT"),
+        ("pxi_tokens", "INTEGER"),
+        ("visibility", "TEXT DEFAULT 'org'"),
+        ("status", "TEXT DEFAULT 'active'"),
+        ("shared_link_token", "TEXT"),
+        ("updated_at", "TEXT"),
+    ]:
+        if col_name not in vs_cols:
+            conn.execute(f"ALTER TABLE video_sessions ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to video_sessions", col_name)
+
+    # ── Film Room Phase 1: ALTER chalk_talks (additive columns) ──
+    ct_cols = _get_table_columns(conn, "chalk_talks")
+    for col_name, col_def in [
+        ("visibility", "TEXT DEFAULT 'org'"),
+        ("video_clip_id", "TEXT"),
+        ("tagged_player_ids", "TEXT DEFAULT '[]'"),
+    ]:
+        if col_name not in ct_cols:
+            conn.execute(f"ALTER TABLE chalk_talks ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to chalk_talks", col_name)
+
+    # ── Film Room Phase 1: video_uploads table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS video_uploads (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            uploaded_by TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            game_id TEXT,
+            team_id TEXT,
+            player_id TEXT,
+            upload_source TEXT DEFAULT 'manual',
+            source_url TEXT,
+            mux_asset_id TEXT,
+            mux_playback_id TEXT,
+            duration_seconds INTEGER,
+            status TEXT DEFAULT 'processing',
+            visibility TEXT DEFAULT 'org',
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (uploaded_by) REFERENCES users(id),
+            FOREIGN KEY (game_id) REFERENCES games(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_uploads_org ON video_uploads(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_uploads_game ON video_uploads(game_id)")
+
+    # ── Film Room Phase 1: video_clips table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS video_clips (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            upload_id TEXT,
+            session_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            start_time_seconds REAL NOT NULL,
+            end_time_seconds REAL NOT NULL,
+            clip_type TEXT DEFAULT 'manual',
+            player_ids TEXT DEFAULT '[]',
+            tags TEXT DEFAULT '[]',
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (upload_id) REFERENCES video_uploads(id),
+            FOREIGN KEY (session_id) REFERENCES video_sessions(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_clips_upload ON video_clips(upload_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_clips_session ON video_clips(session_id)")
+
+    # ── Film Room Phase 1: video_events table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS video_events (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            upload_id TEXT,
+            clip_id TEXT,
+            event_type TEXT NOT NULL,
+            event_label TEXT,
+            time_seconds REAL NOT NULL,
+            period INTEGER,
+            player_id TEXT,
+            team_id TEXT,
+            x_coord REAL,
+            y_coord REAL,
+            notes TEXT,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (upload_id) REFERENCES video_uploads(id),
+            FOREIGN KEY (clip_id) REFERENCES video_clips(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_upload ON video_events(upload_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_clip ON video_events(clip_id)")
+
+    # ── Film Room Phase 1: film_session_comments table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS film_session_comments (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            author_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            clip_id TEXT,
+            timestamp_seconds REAL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (session_id) REFERENCES video_sessions(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (author_id) REFERENCES users(id),
+            FOREIGN KEY (clip_id) REFERENCES video_clips(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_film_comments_session ON film_session_comments(session_id)")
+
+    # ── Film Room Phase 1: chalk_talk_comments table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chalk_talk_comments (
+            id TEXT PRIMARY KEY,
+            chalk_talk_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            author_id TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (chalk_talk_id) REFERENCES chalk_talks(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (author_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_comments_chalk ON chalk_talk_comments(chalk_talk_id)")
+
+    conn.commit()
+
     # ── Table: pxr_scores (ProspectX Rating engine) ──
     c.execute("""
         CREATE TABLE IF NOT EXISTS pxr_scores (
@@ -37948,6 +38101,717 @@ async def update_video_session(session_id: str, request: Request, token_data: di
         conn.execute(f"UPDATE video_sessions SET {', '.join(updates)} WHERE id = ?", params)
         conn.commit()
         return {"status": "updated", "id": session_id}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# FILM ROOM PHASE 1 — CRUD ENDPOINTS
+# All new routes under /film/* prefix. Existing /video/* and
+# /chalk-talks/* routes are untouched.
+# ============================================================
+
+
+# ── Film Uploads ──────────────────────────────────────────────
+
+
+@app.post("/film/uploads", status_code=201)
+async def create_film_upload(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a video upload record (link or placeholder for Mux upload)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    upload_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_uploads
+                (id, org_id, uploaded_by, title, description, game_id, team_id, player_id,
+                 upload_source, source_url, mux_asset_id, mux_playback_id,
+                 duration_seconds, status, visibility, created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            upload_id, org_id, user_id, title, body.get("description"),
+            body.get("game_id"), body.get("team_id"), body.get("player_id"),
+            body.get("upload_source", "manual"), body.get("source_url"),
+            body.get("mux_asset_id"), body.get("mux_playback_id"),
+            body.get("duration_seconds"), body.get("status", "processing"),
+            body.get("visibility", "org"), user_id, now, now,
+        ))
+        conn.commit()
+        return {"id": upload_id, "title": title, "status": body.get("status", "processing"), "created_at": now}
+    finally:
+        conn.close()
+
+
+@app.get("/film/uploads")
+async def list_film_uploads(
+    team_id: Optional[str] = Query(None),
+    game_id: Optional[str] = Query(None),
+    player_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    token_data: dict = Depends(verify_token),
+):
+    """List video uploads for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        where = ["org_id = ?"]
+        params: list = [org_id]
+        if team_id:
+            where.append("team_id = ?"); params.append(team_id)
+        if game_id:
+            where.append("game_id = ?"); params.append(game_id)
+        if player_id:
+            where.append("player_id = ?"); params.append(player_id)
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM video_uploads WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [dict(r) if hasattr(r, "keys") else r for r in rows]
+    finally:
+        conn.close()
+
+
+@app.get("/film/uploads/{upload_id}")
+async def get_film_upload(upload_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single video upload."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM video_uploads WHERE id = ? AND org_id = ?",
+            (upload_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        return dict(row) if hasattr(row, "keys") else row
+    finally:
+        conn.close()
+
+
+@app.patch("/film/uploads/{upload_id}")
+async def update_film_upload(upload_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update upload title, description, status, or visibility."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_uploads WHERE id = ? AND org_id = ?", (upload_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        allowed = {"title", "description", "status", "visibility", "mux_asset_id", "mux_playback_id", "duration_seconds", "source_url"}
+        updates = []
+        params: list = []
+        for key in allowed:
+            if key in body:
+                updates.append(f"{key} = ?"); params.append(body[key])
+        if not updates:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        updates.append("updated_at = ?"); params.append(datetime.now(timezone.utc).isoformat())
+        params.append(upload_id)
+        conn.execute(f"UPDATE video_uploads SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"status": "updated", "id": upload_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/film/uploads/{upload_id}")
+async def delete_film_upload(upload_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a video upload and its associated clips/events."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_uploads WHERE id = ? AND org_id = ?", (upload_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        conn.execute("DELETE FROM video_events WHERE upload_id = ?", (upload_id,))
+        conn.execute("DELETE FROM video_clips WHERE upload_id = ?", (upload_id,))
+        conn.execute("DELETE FROM video_uploads WHERE id = ?", (upload_id,))
+        conn.commit()
+        return {"status": "deleted", "id": upload_id}
+    finally:
+        conn.close()
+
+
+# ── Film Sessions ─────────────────────────────────────────────
+
+
+@app.post("/film/sessions", status_code=201)
+async def create_film_session(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a film session (PXI-powered video intelligence session)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    session_type = body.get("session_type", "general")
+    session_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_sessions
+                (id, org_id, name, description, created_by, created_at,
+                 session_type, game_id, team_id, player_id, opponent_team_id,
+                 pxi_status, visibility, status, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            session_id, org_id, title, body.get("description"), user_id, now,
+            session_type, body.get("game_id"), body.get("team_id"),
+            body.get("player_id"), body.get("opponent_team_id"),
+            "pending", body.get("visibility", "org"), body.get("status", "draft"), now,
+        ))
+        conn.commit()
+        return {
+            "id": session_id, "title": title, "session_type": session_type,
+            "status": "draft", "pxi_status": "pending", "created_at": now,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/film/sessions")
+async def list_film_sessions(
+    session_type: Optional[str] = Query(None),
+    team_id: Optional[str] = Query(None),
+    game_id: Optional[str] = Query(None),
+    player_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    token_data: dict = Depends(verify_token),
+):
+    """List film sessions for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        where = ["org_id = ?"]
+        params: list = [org_id]
+        if session_type:
+            where.append("session_type = ?"); params.append(session_type)
+        if team_id:
+            where.append("team_id = ?"); params.append(team_id)
+        if game_id:
+            where.append("game_id = ?"); params.append(game_id)
+        if player_id:
+            where.append("player_id = ?"); params.append(player_id)
+        if status:
+            where.append("status = ?"); params.append(status)
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM video_sessions WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT ?",
+            params,
+        ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else r
+            # Parse pxi_output JSON if present
+            if isinstance(d, dict) and d.get("pxi_output"):
+                try:
+                    d["pxi_output"] = json.loads(d["pxi_output"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/film/sessions/{session_id}")
+async def get_film_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Get a film session with its clips."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Film session not found")
+        d = dict(row) if hasattr(row, "keys") else row
+        if isinstance(d, dict) and d.get("pxi_output"):
+            try:
+                d["pxi_output"] = json.loads(d["pxi_output"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # Include clips for this session
+        clips = conn.execute(
+            "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY sort_order, created_at",
+            (session_id, org_id),
+        ).fetchall()
+        clip_list = []
+        for c in clips:
+            cd = dict(c) if hasattr(c, "keys") else c
+            if isinstance(cd, dict):
+                for jf in ("player_ids", "tags"):
+                    if cd.get(jf):
+                        try:
+                            cd[jf] = json.loads(cd[jf])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+            clip_list.append(cd)
+        if isinstance(d, dict):
+            d["clips"] = clip_list
+        return d
+    finally:
+        conn.close()
+
+
+@app.patch("/film/sessions/{session_id}")
+async def update_film_session(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update a film session."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_sessions WHERE id = ? AND org_id = ?", (session_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Film session not found")
+        allowed = {"name", "description", "session_type", "game_id", "team_id", "player_id",
+                    "opponent_team_id", "pxi_output", "pxi_status", "pxi_model", "pxi_tokens",
+                    "visibility", "status", "shared_link_token"}
+        updates = []
+        params: list = []
+        for key in allowed:
+            if key in body:
+                val = body[key]
+                if key == "pxi_output" and isinstance(val, (dict, list)):
+                    val = json.dumps(val)
+                updates.append(f"{key} = ?"); params.append(val)
+        if "title" in body:
+            updates.append("name = ?"); params.append(body["title"])
+        if not updates:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        updates.append("updated_at = ?"); params.append(datetime.now(timezone.utc).isoformat())
+        params.append(session_id)
+        conn.execute(f"UPDATE video_sessions SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"status": "updated", "id": session_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/film/sessions/{session_id}")
+async def delete_film_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a film session and associated comments."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_sessions WHERE id = ? AND org_id = ?", (session_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Film session not found")
+        conn.execute("DELETE FROM film_session_comments WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM video_clips WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM video_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+        return {"status": "deleted", "id": session_id}
+    finally:
+        conn.close()
+
+
+# ── Film Clips ────────────────────────────────────────────────
+
+
+@app.post("/film/clips", status_code=201)
+async def create_film_clip(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a video clip (timestamp range on an upload)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    start = body.get("start_time_seconds")
+    end = body.get("end_time_seconds")
+    if start is None or end is None:
+        raise HTTPException(status_code=400, detail="start_time_seconds and end_time_seconds are required")
+    clip_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_clips
+                (id, org_id, upload_id, session_id, title, description,
+                 start_time_seconds, end_time_seconds, clip_type, player_ids, tags,
+                 created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            clip_id, org_id, body.get("upload_id"), body.get("session_id"),
+            title, body.get("description"), start, end,
+            body.get("clip_type", "manual"),
+            json.dumps(body.get("player_ids", [])),
+            json.dumps(body.get("tags", [])),
+            user_id, now, now,
+        ))
+        conn.commit()
+        return {"id": clip_id, "title": title, "start_time_seconds": start, "end_time_seconds": end, "created_at": now}
+    finally:
+        conn.close()
+
+
+@app.get("/film/clips")
+async def list_film_clips(
+    upload_id: Optional[str] = Query(None),
+    session_id: Optional[str] = Query(None),
+    player_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    token_data: dict = Depends(verify_token),
+):
+    """List video clips for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        where = ["org_id = ?"]
+        params: list = [org_id]
+        if upload_id:
+            where.append("upload_id = ?"); params.append(upload_id)
+        if session_id:
+            where.append("session_id = ?"); params.append(session_id)
+        if player_id:
+            where.append("player_ids LIKE ?"); params.append(f"%{player_id}%")
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM video_clips WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT ?",
+            params,
+        ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else r
+            if isinstance(d, dict):
+                for jf in ("player_ids", "tags"):
+                    if d.get(jf):
+                        try:
+                            d[jf] = json.loads(d[jf])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/film/clips/{clip_id}")
+async def get_film_clip(clip_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single clip with its events."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM video_clips WHERE id = ? AND org_id = ?",
+            (clip_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Clip not found")
+        d = dict(row) if hasattr(row, "keys") else row
+        if isinstance(d, dict):
+            for jf in ("player_ids", "tags"):
+                if d.get(jf):
+                    try:
+                        d[jf] = json.loads(d[jf])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        # Include events linked to this clip
+        events = conn.execute(
+            "SELECT * FROM video_events WHERE clip_id = ? AND org_id = ? ORDER BY time_seconds",
+            (clip_id, org_id),
+        ).fetchall()
+        if isinstance(d, dict):
+            d["events"] = [dict(e) if hasattr(e, "keys") else e for e in events]
+        return d
+    finally:
+        conn.close()
+
+
+@app.patch("/film/clips/{clip_id}")
+async def update_film_clip(clip_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update a video clip."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_clips WHERE id = ? AND org_id = ?", (clip_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Clip not found")
+        allowed = {"title", "description", "start_time_seconds", "end_time_seconds", "clip_type", "player_ids", "tags"}
+        updates = []
+        params: list = []
+        for key in allowed:
+            if key in body:
+                val = body[key]
+                if key in ("player_ids", "tags") and isinstance(val, list):
+                    val = json.dumps(val)
+                updates.append(f"{key} = ?"); params.append(val)
+        if not updates:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        updates.append("updated_at = ?"); params.append(datetime.now(timezone.utc).isoformat())
+        params.append(clip_id)
+        conn.execute(f"UPDATE video_clips SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"status": "updated", "id": clip_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/film/clips/{clip_id}")
+async def delete_film_clip(clip_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a video clip and its events."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_clips WHERE id = ? AND org_id = ?", (clip_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Clip not found")
+        conn.execute("DELETE FROM video_events WHERE clip_id = ?", (clip_id,))
+        conn.execute("DELETE FROM video_clips WHERE id = ?", (clip_id,))
+        conn.commit()
+        return {"status": "deleted", "id": clip_id}
+    finally:
+        conn.close()
+
+
+# ── Film Events (Video Tagging) ───────────────────────────────
+
+
+@app.post("/film/events", status_code=201)
+async def create_film_event(request: Request, token_data: dict = Depends(verify_token)):
+    """Tag an event at a timestamp on a video upload or clip."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    event_type = (body.get("event_type") or "").strip()
+    if not event_type:
+        raise HTTPException(status_code=400, detail="event_type is required")
+    time_seconds = body.get("time_seconds")
+    if time_seconds is None:
+        raise HTTPException(status_code=400, detail="time_seconds is required")
+    event_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_events
+                (id, org_id, upload_id, clip_id, event_type, event_label,
+                 time_seconds, period, player_id, team_id, x_coord, y_coord,
+                 notes, created_by, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            event_id, org_id, body.get("upload_id"), body.get("clip_id"),
+            event_type, body.get("event_label"), time_seconds,
+            body.get("period"), body.get("player_id"), body.get("team_id"),
+            body.get("x_coord"), body.get("y_coord"),
+            body.get("notes"), user_id, now,
+        ))
+        conn.commit()
+        return {"id": event_id, "event_type": event_type, "time_seconds": time_seconds, "created_at": now}
+    finally:
+        conn.close()
+
+
+@app.get("/film/events")
+async def list_film_events(
+    upload_id: Optional[str] = Query(None),
+    clip_id: Optional[str] = Query(None),
+    event_type: Optional[str] = Query(None),
+    player_id: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    token_data: dict = Depends(verify_token),
+):
+    """List video events for the org, filterable by upload, clip, type, or player."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        where = ["org_id = ?"]
+        params: list = [org_id]
+        if upload_id:
+            where.append("upload_id = ?"); params.append(upload_id)
+        if clip_id:
+            where.append("clip_id = ?"); params.append(clip_id)
+        if event_type:
+            where.append("event_type = ?"); params.append(event_type)
+        if player_id:
+            where.append("player_id = ?"); params.append(player_id)
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM video_events WHERE {' AND '.join(where)} ORDER BY time_seconds LIMIT ?",
+            params,
+        ).fetchall()
+        return [dict(r) if hasattr(r, "keys") else r for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/film/events/{event_id}")
+async def delete_film_event(event_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a video event."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM video_events WHERE id = ? AND org_id = ?", (event_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Event not found")
+        conn.execute("DELETE FROM video_events WHERE id = ?", (event_id,))
+        conn.commit()
+        return {"status": "deleted", "id": event_id}
+    finally:
+        conn.close()
+
+
+# ── Film Session Comments ─────────────────────────────────────
+
+
+@app.post("/film/sessions/{session_id}/comments", status_code=201)
+async def create_film_session_comment(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Add a comment to a film session."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    content = (body.get("body") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="body is required")
+    comment_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        # Verify session exists in this org
+        sess = conn.execute("SELECT id FROM video_sessions WHERE id = ? AND org_id = ?", (session_id, org_id)).fetchone()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Film session not found")
+        conn.execute("""
+            INSERT INTO film_session_comments
+                (id, session_id, org_id, author_id, body, clip_id, timestamp_seconds, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        """, (
+            comment_id, session_id, org_id, user_id, content,
+            body.get("clip_id"), body.get("timestamp_seconds"), now, now,
+        ))
+        conn.commit()
+        return {"id": comment_id, "session_id": session_id, "body": content, "created_at": now}
+    finally:
+        conn.close()
+
+
+@app.get("/film/sessions/{session_id}/comments")
+async def list_film_session_comments(session_id: str, token_data: dict = Depends(verify_token)):
+    """List comments for a film session."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT fsc.*, u.email as author_email
+            FROM film_session_comments fsc
+            LEFT JOIN users u ON fsc.author_id = u.id
+            WHERE fsc.session_id = ? AND fsc.org_id = ?
+            ORDER BY fsc.created_at
+        """, (session_id, org_id)).fetchall()
+        return [dict(r) if hasattr(r, "keys") else r for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/film/comments/{comment_id}")
+async def delete_film_comment(comment_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a film session comment (author or admin only)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT author_id FROM film_session_comments WHERE id = ? AND org_id = ?",
+            (comment_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        author = row["author_id"] if hasattr(row, "keys") else row[0]
+        if author != user_id:
+            user_row = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+            is_admin = (user_row["is_admin"] if hasattr(user_row, "keys") else user_row[0]) if user_row else False
+            if not is_admin:
+                raise HTTPException(status_code=403, detail="Only author or admin can delete")
+        conn.execute("DELETE FROM film_session_comments WHERE id = ?", (comment_id,))
+        conn.commit()
+        return {"status": "deleted", "id": comment_id}
+    finally:
+        conn.close()
+
+
+# ── Chalk Talk Comments ───────────────────────────────────────
+
+
+@app.post("/chalk-talks/{chalk_id}/comments", status_code=201)
+async def create_chalk_talk_comment(chalk_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Add a comment to a chalk talk board."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    content = (body.get("body") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="body is required")
+    comment_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        ct = conn.execute("SELECT id FROM chalk_talks WHERE id = ? AND org_id = ?", (chalk_id, org_id)).fetchone()
+        if not ct:
+            raise HTTPException(status_code=404, detail="Chalk talk not found")
+        conn.execute("""
+            INSERT INTO chalk_talk_comments
+                (id, chalk_talk_id, org_id, author_id, body, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?)
+        """, (comment_id, chalk_id, org_id, user_id, content, now, now))
+        conn.commit()
+        return {"id": comment_id, "chalk_talk_id": chalk_id, "body": content, "created_at": now}
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talks/{chalk_id}/comments")
+async def list_chalk_talk_comments(chalk_id: str, token_data: dict = Depends(verify_token)):
+    """List comments for a chalk talk board."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT ctc.*, u.email as author_email
+            FROM chalk_talk_comments ctc
+            LEFT JOIN users u ON ctc.author_id = u.id
+            WHERE ctc.chalk_talk_id = ? AND ctc.org_id = ?
+            ORDER BY ctc.created_at
+        """, (chalk_id, org_id)).fetchall()
+        return [dict(r) if hasattr(r, "keys") else r for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/chalk-talk-comments/{comment_id}")
+async def delete_chalk_talk_comment(comment_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a chalk talk comment (author or admin only)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT author_id FROM chalk_talk_comments WHERE id = ? AND org_id = ?",
+            (comment_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        author = row["author_id"] if hasattr(row, "keys") else row[0]
+        if author != user_id:
+            user_row = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+            is_admin = (user_row["is_admin"] if hasattr(user_row, "keys") else user_row[0]) if user_row else False
+            if not is_admin:
+                raise HTTPException(status_code=403, detail="Only author or admin can delete")
+        conn.execute("DELETE FROM chalk_talk_comments WHERE id = ?", (comment_id,))
+        conn.commit()
+        return {"status": "deleted", "id": comment_id}
     finally:
         conn.close()
 
