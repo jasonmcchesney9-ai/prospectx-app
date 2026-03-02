@@ -38344,7 +38344,7 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
                 pass
         # Include clips for this session
         clips = conn.execute(
-            "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY sort_order, created_at",
+            "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY created_at",
             (session_id, org_id),
         ).fetchall()
         clip_list = []
