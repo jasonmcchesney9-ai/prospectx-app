@@ -177,6 +177,112 @@ function formatInline(text: string): string {
     );
 }
 
+function FlagCorrectionInline({ playerId, playerName }: { playerId: string; playerName: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [field, setField] = useState("");
+  const [oldValue, setOldValue] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [note, setNote] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!field || !newValue) return;
+    setSubmitting(true);
+    try {
+      await api.post("/bench-talk/flag-correction", {
+        player_id: playerId,
+        player_name: playerName,
+        field_name: field,
+        old_value: oldValue,
+        new_value: newValue,
+        reason: note,
+      });
+      setSubmitted(true);
+    } catch (e) {
+      console.error("Flag submission failed", e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="mt-3 pt-3 border-t border-slate-200">
+        <p className="text-xs text-teal-600">✓ Flagged for review. Thanks.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-200">
+      {!isOpen ? (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
+        >
+          <span>⚑</span> Flag a data issue
+        </button>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm space-y-2">
+          <div className="font-semibold text-amber-800 text-xs">Flag a data issue</div>
+          <div className="text-xs text-amber-700">
+            Player: <strong>{playerName}</strong>
+          </div>
+          <select
+            value={field}
+            onChange={(e) => setField(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-xs"
+          >
+            <option value="">Select field...</option>
+            <option value="goals">Goals (G)</option>
+            <option value="assists">Assists (A)</option>
+            <option value="points">Points (P)</option>
+            <option value="gp">Games Played (GP)</option>
+            <option value="position">Position</option>
+            <option value="team">Team</option>
+            <option value="birth_year">Birth Year</option>
+            <option value="other">Other</option>
+          </select>
+          <input
+            placeholder="What you saw in the system"
+            value={oldValue}
+            onChange={(e) => setOldValue(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-xs"
+          />
+          <input
+            placeholder="What it should be"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-xs"
+          />
+          <input
+            placeholder="Optional note (source, context)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full border rounded px-2 py-1 text-xs"
+          />
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !field || !newValue}
+              className="px-3 py-1 bg-amber-600 text-white text-xs rounded disabled:opacity-50"
+            >
+              {submitting ? "Submitting..." : "Submit"}
+            </button>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="px-3 py-1 text-xs text-slate-500"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BenchTalkMessageContent({ content }: { content: string }) {
   const lines = content.split("\n");
 
@@ -1110,6 +1216,19 @@ export default function BenchTalkDrawer() {
                       ) : (
                         <BenchTalkMessageContent content={msg.content} />
                       )}
+                      {msg.role === "assistant" && msg.metadata && (() => {
+                        const meta = typeof msg.metadata === "string"
+                          ? JSON.parse(msg.metadata)
+                          : msg.metadata;
+                        const playerId = meta?.player_ids?.[0];
+                        const playerName = meta?.player_name || "";
+                        return playerId ? (
+                          <FlagCorrectionInline
+                            playerId={playerId}
+                            playerName={playerName}
+                          />
+                        ) : null;
+                      })()}
                     </div>
 
                     {/* Feedback buttons */}
