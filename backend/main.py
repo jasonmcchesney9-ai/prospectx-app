@@ -8902,6 +8902,7 @@ PILLAR_METRICS = {
     'P4_F': [('hits_60', 0.35), ('fo_pct', 0.30), ('battles_pct', 0.20), ('losses_60_inv', 0.15)],
     'P4_D': [('hits_60', 0.50), ('battles_pct', 0.28), ('losses_60_inv', 0.22)],
     'P5': [('g_sv_pct', 0.25), ('g_gsax', 0.25), ('g_sc_sv_pct', 0.20), ('g_sv_pct_hd', 0.15), ('g_xg_per_shot_inv', 0.15)],
+    'P5_BASIC': [('g_basic_sv_pct', 0.60), ('g_basic_gaa_inv', 0.40)],
 }
 
 COMPOSITE_WEIGHTS = {
@@ -8984,6 +8985,41 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         gd = dict(gr)
         goalie_lookup[gd['player_id']] = gd
 
+    # Step 1c: Fallback — fetch goalies from goalie_stats when instat_goalie_stats is empty
+    basic_goalie_lookup = {}  # player_id -> basic goalie data
+    if not goalie_lookup:
+        basic_goalie_rows = conn.execute("""
+            SELECT
+                gs.player_id,
+                p.birth_year,
+                p.position,
+                p.current_league,
+                gs.gp,
+                gs.toi_seconds,
+                gs.sv_pct,
+                gs.gaa
+            FROM goalie_stats gs
+            JOIN players p ON p.id = gs.player_id
+            WHERE gs.stat_type = 'season'
+            AND gs.gp IS NOT NULL AND gs.gp > 0
+            AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            AND UPPER(COALESCE(p.position, '')) IN ('G', 'GOALIE', 'GOALTENDER')
+        """).fetchall()
+        for bgr in basic_goalie_rows:
+            bgd = dict(bgr)
+            # Parse sv_pct from TEXT to float (e.g. "0.912" or "91.2" or "91.2%")
+            raw_sv = bgd.get('sv_pct')
+            try:
+                sv_val = float(str(raw_sv).strip().rstrip('%')) if raw_sv else None
+                # Normalize: if value > 1, assume it's a percentage (e.g. 91.2 -> 0.912)
+                if sv_val is not None and sv_val > 1.0:
+                    sv_val = sv_val / 100.0
+                bgd['sv_pct_float'] = sv_val
+            except (ValueError, TypeError):
+                bgd['sv_pct_float'] = None
+            bgd['_goalie_basic'] = True
+            basic_goalie_lookup[bgd['player_id']] = bgd
+
     null_toi = 0
     null_data = 0
     players_data = []
@@ -9046,6 +9082,23 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         existing_pids.add(pid)
         players_data.append(gd)
 
+    # Step 2c: Add basic goalies from goalie_stats (fallback when no InStat goalie data)
+    for pid, bgd in basic_goalie_lookup.items():
+        if pid in existing_pids:
+            continue
+        # Use toi_seconds directly (INTEGER in goalie_stats, not MM:SS)
+        toi_seconds = float(bgd.get('toi_seconds') or 0)
+        gp_val = int(bgd.get('gp') or 0)
+        # Basic goalies: use GP-based TOI gate (10+ GP) instead of TOI seconds
+        # since goalie_stats.toi_seconds is often 0 (not tracked)
+        if gp_val < 10:
+            null_toi += 1
+            continue
+        bgd['toi_seconds'] = max(toi_seconds, gp_val * 60.0 * 30)  # estimate 30 min/game if toi is 0
+        bgd['position_group'] = 'G'
+        existing_pids.add(pid)
+        players_data.append(bgd)
+
     if not players_data:
         conn.commit()
         duration_ms = int((_time.time() - start) * 1000)
@@ -9076,13 +9129,18 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             p['battles_pct'] = float(p.get('battles_pct') or 0)
             p['pk_appearances'] = float(p.get('pk_appearances') or 0)
         else:
-            # Goalie P5 metrics — from goalie_lookup
-            gd = goalie_lookup.get(p['player_id'], {})
-            p['g_sv_pct'] = float(gd.get('sv_pct') or 0)
-            p['g_gsax'] = float(gd.get('gsax') or 0)
-            p['g_sc_sv_pct'] = float(gd.get('sc_sv_pct') or 0)
-            p['g_sv_pct_hd'] = float(gd.get('sv_pct_high_danger') or 0)
-            p['g_xg_per_shot'] = float(gd.get('xg_per_shot') or 0)
+            # Goalie P5 metrics — from goalie_lookup (InStat) or basic fallback
+            if p.get('_goalie_basic'):
+                # Basic goalie: sv_pct and gaa from goalie_stats
+                p['g_basic_sv_pct'] = p.get('sv_pct_float') or 0.0
+                p['g_basic_gaa'] = float(p.get('gaa') or 0.0)
+            else:
+                gd = goalie_lookup.get(p['player_id'], {})
+                p['g_sv_pct'] = float(gd.get('sv_pct') or 0)
+                p['g_gsax'] = float(gd.get('gsax') or 0)
+                p['g_sc_sv_pct'] = float(gd.get('sc_sv_pct') or 0)
+                p['g_sv_pct_hd'] = float(gd.get('sv_pct_high_danger') or 0)
+                p['g_xg_per_shot'] = float(gd.get('xg_per_shot') or 0)
 
     # Step 4: League z-scores + global percentiles for all metrics
     all_metrics = [
@@ -9104,6 +9162,13 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             z = league_zscore(goalies_only, metric)
             percentiles[metric] = global_percentile(z)
 
+    # Step 4c: Basic goalie percentiles (sv_pct, gaa — from goalie_stats fallback)
+    basic_goalies = [p for p in players_data if p.get('_goalie_basic')]
+    if basic_goalies:
+        for metric in ['g_basic_sv_pct', 'g_basic_gaa']:
+            z = league_zscore(basic_goalies, metric)
+            percentiles[metric] = global_percentile(z)
+
     # Step 5: Inverted metrics (lower is better -> invert after percentile)
     for pid in percentiles.get('opp_xg_60', {}):
         percentiles.setdefault('opp_xg_60_inv', {})[pid] = 100 - percentiles['opp_xg_60'].get(pid, 50)
@@ -9113,6 +9178,9 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     # Goalie xg_per_shot: lower is better -> invert
     for pid in percentiles.get('g_xg_per_shot', {}):
         percentiles.setdefault('g_xg_per_shot_inv', {})[pid] = 100 - percentiles['g_xg_per_shot'].get(pid, 50)
+    # Basic goalie gaa: lower is better -> invert
+    for pid in percentiles.get('g_basic_gaa', {}):
+        percentiles.setdefault('g_basic_gaa_inv', {})[pid] = 100 - percentiles['g_basic_gaa'].get(pid, 50)
 
     # Step 6: Pillar scores + data completeness
     scored = 0
@@ -9137,8 +9205,12 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             return weighted_sum / total_weight, available, len(metrics_list)
 
         if pos_group == 'G':
-            # Goalie: compute P5 from instat_goalie_stats metrics
-            p5, p5_avail, p5_total = _compute_pillar('P5')
+            # Goalie: compute P5 from InStat metrics, or P5_BASIC from goalie_stats
+            if p.get('_goalie_basic'):
+                p5, p5_avail, p5_total = _compute_pillar('P5_BASIC')
+                p['_goalie_basic_scored'] = True  # flag for confidence tier
+            else:
+                p5, p5_avail, p5_total = _compute_pillar('P5')
             composite = p5
             pillar_scores = {'P1': None, 'P2': None, 'P3': None, 'P4': None, 'P5': p5}
             data_comp = round((p5_avail / p5_total) * 100, 1) if p5_total > 0 else 0.0
@@ -9232,13 +9304,17 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         _gp_s = int(p.get('gp') or 0)
         _toi_min_s = round(p.get('toi_seconds', 0) / 60.0, 1)
         # Confidence tier calculation
-        _pillars_populated = sum(1 for k in ('P1', 'P2', 'P3', 'P4') if ps.get(k) is not None)
-        if _gp_s >= 20 and _toi_min_s >= 200 and _pillars_populated >= 4:
-            _conf_tier = 'high'
-        elif _gp_s < 10 or _toi_min_s < 100:
-            _conf_tier = 'small_sample'
+        if p.get('_goalie_basic_scored'):
+            # Basic goalie pipeline — limited metrics available
+            _conf_tier = 'limited_metrics'
         else:
-            _conf_tier = 'moderate'
+            _pillars_populated = sum(1 for k in ('P1', 'P2', 'P3', 'P4') if ps.get(k) is not None)
+            if _gp_s >= 20 and _toi_min_s >= 200 and _pillars_populated >= 4:
+                _conf_tier = 'high'
+            elif _gp_s < 10 or _toi_min_s < 100:
+                _conf_tier = 'small_sample'
+            else:
+                _conf_tier = 'moderate'
         conn.execute("""
             INSERT INTO pxr_scores (
                 player_id, season, position_group,
