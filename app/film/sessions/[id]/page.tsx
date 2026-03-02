@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -12,6 +12,8 @@ import {
   Trash2,
   Play,
   Clock,
+  Sparkles,
+  X,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -72,8 +74,16 @@ function formatDate(iso: string): string {
   }
 }
 
+const FILM_REPORT_TYPES = [
+  { value: "film_post_game_review", label: "Post-Game Review" },
+  { value: "film_opponent_prep", label: "Opponent Prep" },
+  { value: "film_player_analysis", label: "Player Analysis" },
+  { value: "film_practice_review", label: "Practice Review" },
+];
+
 export default function FilmSessionViewerPage() {
   const params = useParams();
+  const router = useRouter();
   const sessionId = params.id as string;
 
   const [session, setSession] = useState<SessionData | null>(null);
@@ -81,6 +91,11 @@ export default function FilmSessionViewerPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // PXI report generation
+  const [generating, setGenerating] = useState(false);
+  const [reportType, setReportType] = useState("");
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
 
   // Comment form
   const [commentText, setCommentText] = useState("");
@@ -183,6 +198,31 @@ export default function FilmSessionViewerPage() {
     [sessionId]
   );
 
+  const handleGenerateReport = useCallback(
+    async (type: string) => {
+      if (!type) return;
+      setGenerating(true);
+      try {
+        const res = await api.post(
+          `/film/sessions/${sessionId}/generate-report`,
+          { report_type: type }
+        );
+        toast.success("Report generated!");
+        setShowTypeSelector(false);
+        setReportType("");
+        router.push(`/reports/${res.data.report_id}`);
+      } catch (e: unknown) {
+        const msg =
+          (e as { response?: { data?: { detail?: string } } }).response?.data
+            ?.detail || "Failed to generate report";
+        toast.error(msg);
+      } finally {
+        setGenerating(false);
+      }
+    },
+    [sessionId, router]
+  );
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -223,7 +263,7 @@ export default function FilmSessionViewerPage() {
           >
             <ArrowLeft size={20} />
           </Link>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold text-navy font-oswald uppercase tracking-wider truncate">
               {session.title}
             </h1>
@@ -235,6 +275,52 @@ export default function FilmSessionViewerPage() {
                 {formatDate(session.created_at)}
               </span>
             </div>
+          </div>
+
+          {/* Generate Analysis button */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowTypeSelector(!showTypeSelector)}
+              disabled={generating}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-sm transition-colors ${
+                generating
+                  ? "bg-orange/50 text-white cursor-not-allowed"
+                  : "bg-orange text-white hover:bg-orange/90"
+              }`}
+            >
+              {generating ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Sparkles size={14} />
+              )}
+              {generating ? "Generating..." : "Generate Analysis"}
+            </button>
+
+            {showTypeSelector && !generating && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl border border-border shadow-lg z-20 py-1">
+                {FILM_REPORT_TYPES.map((rt) => (
+                  <button
+                    key={rt.value}
+                    onClick={() => handleGenerateReport(rt.value)}
+                    className="w-full text-left px-4 py-2.5 text-sm text-navy hover:bg-navy/[0.03] transition-colors font-oswald tracking-wider"
+                  >
+                    {rt.label}
+                  </button>
+                ))}
+                <div className="border-t border-border mt-1 pt-1">
+                  <button
+                    onClick={() => {
+                      setShowTypeSelector(false);
+                      setReportType("");
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs text-muted hover:text-navy transition-colors flex items-center gap-1.5"
+                  >
+                    <X size={12} />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
