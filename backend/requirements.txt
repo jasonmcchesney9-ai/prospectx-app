@@ -34,3 +34,5 @@ slowapi==0.1.9
 APScheduler==3.10.4
 # Transactional email
 resend==2.5.1
+# Video infrastructure (Mux)
+mux-python==5.1.2

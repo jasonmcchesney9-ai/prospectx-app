@@ -38240,6 +38240,158 @@ async def delete_film_upload(upload_id: str, token_data: dict = Depends(verify_t
         conn.close()
 
 
+# ── Mux Direct Upload (Phase 2) ──────────────────────────────
+
+
+@app.post("/film/uploads/create-url", status_code=201)
+async def create_mux_upload_url(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a Mux direct upload URL and a video_uploads DB record.
+
+    Frontend uses the returned upload_url to PUT the file directly to Mux.
+    """
+    from mux_client import create_direct_upload as mux_create_upload
+
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+
+    cors_origin = body.get("cors_origin", "*")
+
+    try:
+        mux_result = mux_create_upload(cors_origin=cors_origin)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
+
+    upload_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_uploads
+                (id, org_id, uploaded_by, title, description, game_id, team_id, player_id,
+                 upload_source, source_url, mux_asset_id, mux_playback_id,
+                 duration_seconds, status, visibility, created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            upload_id, org_id, user_id, title, body.get("description"),
+            body.get("game_id"), body.get("team_id"), body.get("player_id"),
+            "mux", None,  # source_url not applicable for direct upload
+            None,  # mux_asset_id — set later via webhook or status poll
+            None,  # mux_playback_id — set when asset is ready
+            None,  # duration_seconds — set when asset is ready
+            "processing",
+            body.get("visibility", "org"), user_id, now, now,
+        ))
+        # Store the Mux upload_id in source_url for later lookup
+        conn.execute(
+            "UPDATE video_uploads SET source_url = ? WHERE id = ?",
+            (mux_result["upload_id"], upload_id),
+        )
+        conn.commit()
+        return {
+            "id": upload_id,
+            "upload_url": mux_result["upload_url"],
+            "mux_upload_id": mux_result["upload_id"],
+            "title": title,
+            "status": "processing",
+            "created_at": now,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/film/uploads/{upload_id}/status")
+async def get_film_upload_status(upload_id: str, token_data: dict = Depends(verify_token)):
+    """Check Mux processing status for an upload and sync to DB.
+
+    Polls Mux API for current status, updates the video_uploads record,
+    and returns the current state.
+    """
+    from mux_client import get_upload as mux_get_upload, get_asset as mux_get_asset
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM video_uploads WHERE id = ? AND org_id = ?",
+            (upload_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        rec = dict(row) if hasattr(row, "keys") else row
+
+        # If already ready or errored, return current state without hitting Mux
+        current_status = rec.get("status") if isinstance(rec, dict) else None
+        if current_status in ("ready", "error"):
+            return {
+                "id": upload_id,
+                "status": current_status,
+                "mux_asset_id": rec.get("mux_asset_id") if isinstance(rec, dict) else None,
+                "mux_playback_id": rec.get("mux_playback_id") if isinstance(rec, dict) else None,
+                "duration_seconds": rec.get("duration_seconds") if isinstance(rec, dict) else None,
+            }
+
+        # source_url stores the Mux upload ID for 'mux' uploads
+        mux_upload_id = rec.get("source_url") if isinstance(rec, dict) else None
+        if not mux_upload_id or (isinstance(rec, dict) and rec.get("upload_source") != "mux"):
+            return {
+                "id": upload_id,
+                "status": current_status,
+                "message": "Not a Mux upload — status not pollable",
+            }
+
+        # Check Mux upload status
+        try:
+            upload_info = mux_get_upload(mux_upload_id)
+        except Exception as e:
+            return {"id": upload_id, "status": "processing", "mux_error": str(e)}
+
+        mux_asset_id = upload_info.get("asset_id")
+        new_status = current_status
+        playback_id = None
+        duration = None
+
+        if mux_asset_id:
+            # Store asset ID
+            conn.execute(
+                "UPDATE video_uploads SET mux_asset_id = ?, updated_at = ? WHERE id = ?",
+                (mux_asset_id, datetime.now(timezone.utc).isoformat(), upload_id),
+            )
+            # Check asset status
+            try:
+                asset_info = mux_get_asset(mux_asset_id)
+                if asset_info["status"] == "ready":
+                    new_status = "ready"
+                    playback_id = asset_info.get("playback_id")
+                    duration = asset_info.get("duration")
+                    conn.execute(
+                        "UPDATE video_uploads SET status = 'ready', mux_playback_id = ?, duration_seconds = ?, updated_at = ? WHERE id = ?",
+                        (playback_id, int(duration) if duration else None, datetime.now(timezone.utc).isoformat(), upload_id),
+                    )
+                elif asset_info["status"] == "errored":
+                    new_status = "error"
+                    conn.execute(
+                        "UPDATE video_uploads SET status = 'error', updated_at = ? WHERE id = ?",
+                        (datetime.now(timezone.utc).isoformat(), upload_id),
+                    )
+            except Exception:
+                pass  # Asset not yet available — still processing
+            conn.commit()
+
+        return {
+            "id": upload_id,
+            "status": new_status,
+            "mux_asset_id": mux_asset_id,
+            "mux_playback_id": playback_id,
+            "duration_seconds": int(duration) if duration else None,
+        }
+    finally:
+        conn.close()
+
+
 # ── Film Sessions ─────────────────────────────────────────────
 
 
