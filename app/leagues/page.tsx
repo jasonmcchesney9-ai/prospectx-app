@@ -145,12 +145,16 @@ export default function LeagueHubPage() {
     }
   };
 
-  const tabs: { key: Tab; label: string; icon: typeof Trophy }[] = [
+  const isLimitedRole = currentUser?.hockey_role === "player" || currentUser?.hockey_role === "parent";
+  const allTabs: { key: Tab; label: string; icon: typeof Trophy }[] = [
     { key: "standings", label: "Standings", icon: Trophy },
     { key: "player-stats", label: "Player Stats", icon: TrendingUp },
     { key: "schedule", label: "Live Schedule", icon: Calendar },
     { key: "teams", label: "Teams", icon: Shield },
   ];
+  const tabs = isLimitedRole
+    ? allTabs.filter((t) => t.key === "standings" || t.key === "schedule")
+    : allTabs;
 
   return (
     <ProtectedRoute>
