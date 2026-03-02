@@ -188,7 +188,7 @@ const COACHING_ITEMS: NavItem[] = [
 
 // Org Hub items (PRO only — spec Table 11)
 const ORG_HUB_ITEMS: NavItem[] = [
-  { href: "/film-room", label: "Film Room", icon: Video },
+  { href: "/film", label: "Film Room", icon: Video },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/whiteboards", label: "Whiteboard", icon: PenTool },
 ];
