@@ -32720,6 +32720,61 @@ async def bench_talk_export(
         raise HTTPException(status_code=400, detail="Format must be xlsx or csv")
 
 
+# ── Bench Talk Flag for Correction ──────────────────────────────────
+
+class BenchTalkFlagPayload(BaseModel):
+    player_id: str
+    player_name: str = ""
+    field_name: str
+    old_value: str = ""
+    new_value: str
+    reason: str = ""
+
+
+@app.post("/bench-talk/flag-correction")
+async def flag_correction_from_bench_talk(
+    payload: BenchTalkFlagPayload,
+    token_data: dict = Depends(verify_token),
+):
+    conn = get_db()
+    try:
+        correction_id = str(uuid.uuid4())
+
+        # Add source column if it doesn't exist (idempotent migration)
+        pc_cols = _get_table_columns(conn, "player_corrections")
+        if "source" not in pc_cols:
+            conn.execute("ALTER TABLE player_corrections ADD COLUMN source TEXT DEFAULT 'manual'")
+            conn.commit()
+
+        conn.execute("""
+            INSERT INTO player_corrections
+            (id, org_id, user_id, player_id, field_name, old_value,
+             new_value, reason, confidence, status, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'medium', 'pending', 'bench_talk')
+        """, (
+            correction_id,
+            token_data.get("org_id", ""),
+            token_data.get("user_id", ""),
+            payload.player_id,
+            payload.field_name,
+            payload.old_value,
+            payload.new_value,
+            payload.reason or f"Flagged from Bench Talk"
+        ))
+        conn.commit()
+
+        return {
+            "success": True,
+            "correction_id": correction_id,
+            "message": "Thanks — flagged for admin review."
+        }
+    except Exception as e:
+        logger.error("flag_correction_from_bench_talk error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to submit correction")
+    finally:
+        conn.close()
+
+
 # ============================================================
 # GAME PLANS
 # ============================================================
