@@ -16976,6 +16976,7 @@ def _upsert_season_stat(conn, player_id: str, season: str, team_name: str | None
     If a matching row exists, UPDATE it in-place; otherwise INSERT a new row.
     Returns the row id (existing or newly created).
     """
+    season = _normalize_season(season) or season
     tn = team_name or ""
     srt = stat_row_type or "season_total"
 
