@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Film } from "lucide-react";
@@ -23,7 +23,7 @@ const SESSION_TYPES = [
   { value: "recruitment", label: "Recruitment" },
 ];
 
-export default function NewFilmSessionPage() {
+function NewFilmSessionForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedUpload = searchParams.get("upload") || "";
@@ -189,5 +189,19 @@ export default function NewFilmSessionPage() {
         </div>
       </main>
     </ProtectedRoute>
+  );
+}
+
+export default function NewFilmSessionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-muted text-sm">Loading...</div>
+        </div>
+      }
+    >
+      <NewFilmSessionForm />
+    </Suspense>
   );
 }
