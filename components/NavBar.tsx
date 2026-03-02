@@ -104,6 +104,9 @@ const MEDIA_NAV_RIGHT: NavItem[] = [
 ];
 
 // PLAYER nav — athlete's isolated environment (Table 13 in spec)
+// TODO: When linked_player_id is added to User type + login response,
+// update Dev Plan hrefs to `/players/${user.linked_player_id}?tab=player`
+// for direct dev plan access.
 const PLAYER_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-profile", label: "My Profile", icon: UserCheck },
