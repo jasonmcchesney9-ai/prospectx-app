@@ -898,7 +898,20 @@ releases quickly off both feet, can beat goalies clean from distance vs relies o
 6. ROLE AND PROJECTION LANGUAGE
 Avoid labeling levels ('NHLer / not an NHLer') without context.
 Anchor projection in role and path: 'projects as a middle-six play-driver if strength
-and pace improve,' 'profiles as a depth energy winger with PK value.'"""
+and pace improve,' 'profiles as a depth energy winger with PK value.'
+
+7. COMPARABLES
+Never compare players across leagues without explicitly stating the competition gap.
+A GOJHL comparable must come from GOJHL or an adjacent tier — never use OHL/WHL/QMJHL
+draft picks as comparables for junior B or tier 2 players. Weight league strength before
+offering any comparable. If no valid same-league comparable exists, say so rather than
+forcing a cross-league comp.
+
+8. PROJECTION GUARDRAIL
+Never produce speculative negative ceiling/floor projections for minor players (under 18)
+without sufficient data (minimum 40 GP current season or 2+ seasons of history). Avoid
+language like 'likely stays in GOJHL' or 'floor is tier 2' when based on a single partial
+season. Anchor all projections in observable data and role — not assumptions about ceiling."""
 
 # ─────────────────────────────────────────────────────────
 # A4) SCOUT_SUMMARY_STRUCTURE — enforced 3-line format for PXI Scout Summary
