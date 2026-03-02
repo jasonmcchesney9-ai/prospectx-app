@@ -4065,6 +4065,43 @@ def init_db():
         logger.warning(
             "Migration: goalie_stats season normalization skipped — %s", e)
 
+    # ── Add unique index on goalie_stats to prevent future duplicates ────
+    try:
+        # Dedup existing rows first — keep the one with the highest gp
+        dup_groups = conn.execute("""
+            SELECT player_id, season, COALESCE(data_source, '') as ds, COUNT(*) as cnt
+            FROM goalie_stats
+            GROUP BY player_id, season, COALESCE(data_source, '')
+            HAVING COUNT(*) > 1
+        """).fetchall()
+        gs_deduped = 0
+        for dg in dup_groups:
+            pid, seas, ds = dg[0], dg[1], dg[2]
+            dupes = conn.execute("""
+                SELECT id, COALESCE(gp, 0) as gp FROM goalie_stats
+                WHERE player_id = ? AND season = ? AND COALESCE(data_source, '') = ?
+                ORDER BY gp DESC, created_at DESC
+            """, (pid, seas, ds)).fetchall()
+            for d in dupes[1:]:
+                conn.execute("DELETE FROM goalie_stats WHERE id = ?", (d[0],))
+                gs_deduped += 1
+        if gs_deduped:
+            conn.commit()
+            logger.info("Migration: deduped %d goalie_stats rows before index creation", gs_deduped)
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_goalie_stats_season_unique
+            ON goalie_stats (
+                player_id,
+                season,
+                COALESCE(data_source, '')
+            )
+        """)
+        conn.commit()
+        logger.info("Migration: created idx_goalie_stats_season_unique")
+    except Exception as e:
+        logger.warning(
+            "Migration: idx_goalie_stats_season_unique skipped — %s", e)
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
