@@ -108,7 +108,7 @@ const PLAYER_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-profile", label: "My Profile", icon: UserCheck },
   { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/dev-plan", label: "Dev Plan", icon: BookOpen },
+  { href: "/players", label: "Dev Plan", icon: BookOpen },
   { href: "/film", label: "Film", icon: Video },
 ];
 const PLAYER_NAV_RIGHT: NavItem[] = [
@@ -121,7 +121,7 @@ const FAMILY_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-player", label: "My Player", icon: Heart },
   { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/dev-plan", label: "Dev Plan", icon: BookOpen },
+  { href: "/players", label: "Dev Plan", icon: BookOpen },
   { href: "/film", label: "Film", icon: Video },
 ];
 const FAMILY_NAV_RIGHT: NavItem[] = [
