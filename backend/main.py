@@ -9016,14 +9016,16 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                 gs.gp,
                 gs.toi_seconds,
                 gs.sv_pct,
-                gs.gaa
+                gs.gaa,
+                gs.season
             FROM goalie_stats gs
             JOIN players p ON p.id = gs.player_id
             WHERE gs.stat_type = 'season'
+            AND gs.season = ?
             AND gs.gp IS NOT NULL AND gs.gp > 0
             AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             AND UPPER(COALESCE(p.position, '')) IN ('G', 'GOALIE', 'GOALTENDER')
-        """).fetchall()
+        """, (season,)).fetchall()
         for bgr in basic_goalie_rows:
             bgd = dict(bgr)
             # Parse sv_pct from TEXT to float (e.g. "0.912" or "91.2" or "91.2%")
@@ -9330,8 +9332,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
         # League strength multiplier — applied to composite before age modifier
         multiplier = LEAGUE_STRENGTH.get(p.get('current_league') or '', 1.0)
         league_adjusted = min(p['composite'] * multiplier, 100.0)
-        # Final PXR score = league-adjusted composite + age_modifier
-        p['pxr_final'] = round(league_adjusted + p['age_mod'], 1)
+        # Final PXR score = league-adjusted composite + age_modifier, capped at 100.0
+        p['pxr_final'] = min(round(league_adjusted + p['age_mod'], 1), 100.0)
 
     # Step 8: Upsert pxr_scores (with confidence tier)
     for p in composited:
