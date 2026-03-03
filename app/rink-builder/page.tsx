@@ -12,7 +12,7 @@ import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import RinkCanvas from "@/components/RinkCanvas";
-import type { RinkCanvasHandle } from "@/components/RinkCanvas";
+import type { RinkCanvasHandle, BackgroundMode } from "@/components/RinkCanvas";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
@@ -158,7 +158,7 @@ function RinkBuilderInner() {
         name: chalkForm.name.trim(),
         description: chalkForm.description.trim() || undefined,
         team_id: chalkForm.team_id || undefined,
-        board_layout: JSON.stringify(diagramData),
+        board_layout: JSON.stringify({ ...diagramData, background: backgroundMode }),
       });
       setChalkSuccess("Board saved to My Boards");
       setShowChalkSave(false);
@@ -188,6 +188,7 @@ function RinkBuilderInner() {
   const [boardTeamFilter, setBoardTeamFilter] = useState("");
   const [canvasKey, setCanvasKey] = useState(0);
   const [loadedBoardData, setLoadedBoardData] = useState<RinkDiagramData | undefined>(undefined);
+  const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>("full_rink");
 
   function fetchMyBoards() {
     setBoardsLoading(true);
@@ -213,6 +214,9 @@ function RinkBuilderInner() {
     if (!board.board_layout) return;
     try {
       const data = typeof board.board_layout === "string" ? JSON.parse(board.board_layout) : board.board_layout;
+      if (data.background && ["full_rink", "half_rink", "blank"].includes(data.background)) {
+        setBackgroundMode(data.background as BackgroundMode);
+      }
       setLoadedBoardData(data);
       setCanvasKey((k) => k + 1);
       setChalkSuccess(`Loaded "${board.name}"`);
@@ -312,7 +316,7 @@ function RinkBuilderInner() {
         intensity: form.intensity,
         age_levels: ["U16_U18", "JUNIOR_COLLEGE_PRO"],
         tags: ["custom-diagram", "rink-builder"],
-        diagram_data: diagramData,
+        diagram_data: { ...diagramData, background: backgroundMode },
       });
 
       // Step 2: Save the SVG diagram image via the canvas endpoint
@@ -396,7 +400,7 @@ function RinkBuilderInner() {
         intensity: form.intensity,
         age_levels: ["U16_U18", "JUNIOR_COLLEGE_PRO"],
         tags: ["custom-diagram", "rink-builder", "progression"],
-        diagram_data: diagramData,
+        diagram_data: { ...diagramData, background: backgroundMode },
       });
 
       if (svgString && drill.id) {
@@ -520,8 +524,8 @@ function RinkBuilderInner() {
           </div>
         )}
 
-        {/* Mode Toggle */}
-        <div className="flex items-center justify-center mb-6">
+        {/* Mode Toggle + Background Selector */}
+        <div className="flex items-center justify-center gap-4 mb-6">
           <div className="inline-flex rounded-full border-2 border-navy/20 p-0.5 bg-navy/[0.03]">
             <button
               onClick={() => setMode("custom_drill")}
@@ -543,6 +547,26 @@ function RinkBuilderInner() {
             >
               Chalk Talk
             </button>
+          </div>
+
+          <div className="inline-flex rounded-[14px] border-[1.5px] border-[#DDE6EF] p-0.5 bg-white shadow-[0_1px_3px_rgba(9,28,48,.06),0_4px_18px_rgba(9,28,48,.08)]">
+            {([
+              { value: "full_rink" as BackgroundMode, label: "Full Rink" },
+              { value: "half_rink" as BackgroundMode, label: "Half Rink" },
+              { value: "blank" as BackgroundMode, label: "Blank Board" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setBackgroundMode(opt.value)}
+                className={`px-4 py-1.5 rounded-[12px] text-xs font-medium transition-all ${
+                  backgroundMode === opt.value
+                    ? "bg-teal text-white"
+                    : "text-navy hover:text-teal"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -581,6 +605,7 @@ function RinkBuilderInner() {
           showToolbar={true}
           editable={true}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
+          backgroundMode={backgroundMode}
         />
 
         {/* ── Chalk Talk Save Button + My Boards toggle (only in chalk_talk mode) ── */}

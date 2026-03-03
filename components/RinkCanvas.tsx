@@ -29,6 +29,8 @@ import {
 
 // ── Props ────────────────────────────────────────────────────
 
+export type BackgroundMode = "full_rink" | "half_rink" | "blank";
+
 interface RinkCanvasProps {
   initialData?: RinkDiagramData;
   onChange?: (data: RinkDiagramData) => void;
@@ -37,6 +39,7 @@ interface RinkCanvasProps {
   editable?: boolean;
   className?: string;
   onToggleHelp?: () => void;
+  backgroundMode?: BackgroundMode;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -165,6 +168,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   editable = true,
   className = "",
   onToggleHelp,
+  backgroundMode = "full_rink",
 }, ref) {
   // ── State ──
   const [rinkType, setRinkType] = useState<RinkType>(initialData?.rinkType || "full");
@@ -942,7 +946,13 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
           <style>{`text { pointer-events: none; user-select: none; }`}</style>
 
           {/* Layer 1: Rink background */}
-          <RinkSvgBackground rinkType={rinkType} width={dims.w} height={dims.h} />
+          {backgroundMode === "blank" ? (
+            <rect x={0} y={0} width={dims.w} height={dims.h} fill="#FFFFFF" />
+          ) : backgroundMode === "half_rink" ? (
+            <RinkSvgBackground rinkType="half" width={dims.w} height={dims.h} />
+          ) : (
+            <RinkSvgBackground rinkType={rinkType} width={dims.w} height={dims.h} />
+          )}
 
           {/* Layer 2: Arrows */}
           <g>
