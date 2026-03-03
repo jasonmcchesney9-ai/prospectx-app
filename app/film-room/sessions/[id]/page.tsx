@@ -16,6 +16,10 @@ import {
   Clock,
   Plus,
   Tag,
+  Sparkles,
+  Copy,
+  RefreshCw,
+  X,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -65,6 +69,13 @@ const STATUS_COLORS: Record<string, string> = {
   archived: "bg-blue-100 text-blue-700 border-blue-200",
 };
 
+const FILM_REPORT_TYPES = [
+  { value: "film_post_game_review", label: "Post-Game Review" },
+  { value: "film_opponent_prep", label: "Opponent Prep" },
+  { value: "film_player_analysis", label: "Player Analysis" },
+  { value: "film_practice_review", label: "Practice Review" },
+];
+
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString("en-US", {
@@ -112,6 +123,11 @@ export default function FilmRoomSessionDetailPage() {
   const [clipEnd, setClipEnd] = useState<number | null>(null);
   const [clipNote, setClipNote] = useState("");
   const [savingClip, setSavingClip] = useState(false);
+
+  /* PXI analysis state */
+  const [generating, setGenerating] = useState(false);
+  const [analysisText, setAnalysisText] = useState("");
+  const [showTypeSelector, setShowTypeSelector] = useState(false);
 
   /* Load session */
   useEffect(() => {
@@ -297,6 +313,35 @@ export default function FilmRoomSessionDetailPage() {
       muxPlayerRef.current.currentTime = seconds;
       muxPlayerRef.current.play?.().catch(() => {});
     }
+  };
+
+  /* Generate PXI film analysis */
+  const handleGenerateAnalysis = async (reportType: string) => {
+    setGenerating(true);
+    setShowTypeSelector(false);
+    try {
+      const res = await api.post(`/film/sessions/${sessionId}/generate-report`, {
+        report_type: reportType,
+      });
+      const reportId = res.data?.report_id;
+      if (reportId) {
+        // Fetch the generated report text
+        const reportRes = await api.get(`/reports/${reportId}`);
+        const content = reportRes.data?.content || reportRes.data?.output || "";
+        setAnalysisText(typeof content === "string" ? content : JSON.stringify(content, null, 2));
+      }
+    } catch {
+      setAnalysisText("Failed to generate analysis. Make sure you have clips tagged first.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  /* Copy analysis to session notes */
+  const handleCopyToNotes = () => {
+    if (!analysisText) return;
+    const combined = notes ? `${notes}\n\n--- PXI Analysis ---\n${analysisText}` : analysisText;
+    setNotes(combined);
   };
 
   const hasVideo = session?.mux_playback_id;
@@ -560,6 +605,115 @@ export default function FilmRoomSessionDetailPage() {
                   {notesSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                   Save Notes
                 </button>
+              </div>
+            </div>
+
+            {/* PXI Film Analysis panel */}
+            <div className="mt-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-navy px-5 py-3 flex items-center justify-between">
+                <h3 className="text-xs font-oswald uppercase tracking-wider text-white flex items-center gap-2">
+                  <Sparkles size={14} className="text-orange-400" />
+                  PXI Film Analysis
+                </h3>
+              </div>
+              <div className="p-5">
+                {analysisText ? (
+                  <div>
+                    <div className="bg-navy/[0.02] border border-gray-100 rounded-lg p-4 max-h-[400px] overflow-y-auto mb-3">
+                      <pre className="text-sm text-navy whitespace-pre-wrap font-sans leading-relaxed">
+                        {analysisText}
+                      </pre>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowTypeSelector(!showTypeSelector)}
+                          disabled={generating}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-oswald uppercase tracking-wider text-muted border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                          {generating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                          Regenerate
+                        </button>
+                        {showTypeSelector && !generating && (
+                          <div className="absolute left-0 bottom-full mb-1 w-48 bg-white rounded-xl border border-gray-200 shadow-lg z-20 py-1">
+                            {FILM_REPORT_TYPES.map((rt) => (
+                              <button
+                                key={rt.value}
+                                onClick={() => handleGenerateAnalysis(rt.value)}
+                                className="w-full text-left px-4 py-2 text-sm text-navy hover:bg-navy/[0.03] transition-colors font-oswald tracking-wider"
+                              >
+                                {rt.label}
+                              </button>
+                            ))}
+                            <div className="border-t border-gray-100 mt-1 pt-1">
+                              <button
+                                onClick={() => setShowTypeSelector(false)}
+                                className="w-full text-left px-4 py-1.5 text-xs text-muted hover:text-navy transition-colors flex items-center gap-1.5"
+                              >
+                                <X size={10} />
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleCopyToNotes}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-oswald uppercase tracking-wider text-muted border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <Copy size={12} />
+                        Copy to Notes
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <Sparkles size={24} className="mx-auto text-muted/20 mb-2" />
+                    <p className="text-xs text-muted mb-3">
+                      Generate AI analysis from tagged clips and session data
+                    </p>
+                    <div className="relative inline-block">
+                      <button
+                        onClick={() => setShowTypeSelector(!showTypeSelector)}
+                        disabled={generating}
+                        className={`flex items-center gap-2 px-5 py-2.5 text-sm font-oswald uppercase tracking-wider rounded-lg transition-colors ${
+                          generating
+                            ? "bg-orange-400/50 text-white cursor-not-allowed"
+                            : "bg-orange-500 text-white hover:bg-orange-500/90"
+                        }`}
+                      >
+                        {generating ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={14} />
+                        )}
+                        {generating ? "Generating..." : "Generate Analysis"}
+                      </button>
+                      {showTypeSelector && !generating && (
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 w-48 bg-white rounded-xl border border-gray-200 shadow-lg z-20 py-1">
+                          {FILM_REPORT_TYPES.map((rt) => (
+                            <button
+                              key={rt.value}
+                              onClick={() => handleGenerateAnalysis(rt.value)}
+                              className="w-full text-left px-4 py-2 text-sm text-navy hover:bg-navy/[0.03] transition-colors font-oswald tracking-wider"
+                            >
+                              {rt.label}
+                            </button>
+                          ))}
+                          <div className="border-t border-gray-100 mt-1 pt-1">
+                            <button
+                              onClick={() => setShowTypeSelector(false)}
+                              className="w-full text-left px-4 py-1.5 text-xs text-muted hover:text-navy transition-colors flex items-center gap-1.5"
+                            >
+                              <X size={10} />
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
