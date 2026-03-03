@@ -15,6 +15,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import MuxPlayer from "@mux/mux-player-react";
 
 /* ── Types ─────────────────────────────────────────────────── */
 interface SessionData {
@@ -273,14 +274,11 @@ export default function FilmRoomSessionDetailPage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {hasVideo ? (
                 /* Mux Player */
-                <div style={{ aspectRatio: "16/9", background: "#000" }}>
-                  <iframe
-                    src={`https://stream.mux.com/${session.mux_playback_id}.m3u8`}
-                    style={{ width: "100%", height: "100%", border: "none" }}
-                    title="Video player"
-                    allowFullScreen
-                  />
-                </div>
+                <MuxPlayer
+                  playbackId={session.mux_playback_id!}
+                  streamType="on-demand"
+                  style={{ width: "100%", aspectRatio: "16/9" }}
+                />
               ) : (
                 /* Placeholder */
                 <div
