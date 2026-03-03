@@ -313,22 +313,22 @@ function WarRoom() {
       {/* ═══════════════════════════════════════════════════════
           1. SESSION HEADER — white bar
           ═══════════════════════════════════════════════════════ */}
-      <div className="bg-white px-5 py-4 flex items-center justify-between mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
+      <div className="px-5 py-4 flex items-center justify-between mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942" }}>
         <div className="flex items-center gap-3">
-          <Link href="/chalk-talk/sessions" className="hover:opacity-70 transition-opacity" style={{ color: "#8BA4BB" }}>
+          <Link href="/chalk-talk/sessions" className="hover:opacity-70 transition-opacity" style={{ color: "rgba(255,255,255,0.6)" }}>
             <ArrowLeft size={20} />
           </Link>
           <span
             className="px-2.5 py-1 rounded-md text-white font-bold uppercase"
-            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#EA580C" }}
+            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
           >
             {sessionType}
           </span>
           <div>
-            <h1 className="text-lg font-bold" style={{ color: "#0F2942" }}>
+            <h1 className="text-lg font-bold text-white">
               {teamName || "Untitled"}{opponentName ? ` vs ${opponentName}` : ""}
             </h1>
-            {displayDate && <p className="text-xs" style={{ color: "#8BA4BB" }}>{displayDate}</p>}
+            {displayDate && <p className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>{displayDate}</p>}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -343,7 +343,7 @@ function WarRoom() {
           <Link
             href={`/chalk-talk/sessions/${sessionId}/edit`}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors"
-            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0F2942", border: "1.5px solid #DDE6EF" }}
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", border: "1.5px solid rgba(255,255,255,0.2)" }}
           >
             <PenTool size={12} />
             Edit Session
@@ -362,7 +362,7 @@ function WarRoom() {
             onClick={handleDelete}
             disabled={deleting}
             className="p-2 rounded-lg transition-colors disabled:opacity-30"
-            style={{ color: "#8BA4BB" }}
+            style={{ color: "rgba(255,255,255,0.5)" }}
             title="Delete session"
           >
             <Trash2 size={16} />
@@ -402,23 +402,23 @@ function WarRoom() {
       {/* ═══════════════════════════════════════════════════════
           3. CANVAS SECTION — collapsible
           ═══════════════════════════════════════════════════════ */}
-      <div className="bg-white mb-4 overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
+      <div className="mb-4 overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
         {/* Canvas toolbar bar */}
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: canvasExpanded ? "1px solid #DDE6EF" : "none" }}>
+        <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942", borderBottom: canvasExpanded ? "1px solid #DDE6EF" : "none" }}>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
             <span
-              className="font-bold uppercase"
-              style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}
+              className="font-bold uppercase text-white"
+              style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
             >
               BOARD
             </span>
-            {boardName && <span className="text-xs" style={{ color: "#8BA4BB" }}>— {boardName}</span>}
+            {boardName && <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>— {boardName}</span>}
           </div>
           <button
             onClick={() => setCanvasExpanded(!canvasExpanded)}
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-80"
-            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1px solid #DDE6EF" }}
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.2)" }}
           >
             {canvasExpanded ? <><EyeOff size={12} /> Collapse</> : <><Eye size={12} /> Expand Canvas</>}
           </button>
@@ -476,7 +476,7 @@ function WarRoom() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* ── TOP LEFT: Opponent Intelligence ─────────────── */}
-        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #EA580C" }}>
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #EA580C", borderBottom: "2px solid #EA580C" }}>
           {/* Dark navy header */}
           <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
             <div className="flex items-center gap-2">
@@ -524,21 +524,21 @@ function WarRoom() {
         </div>
 
         {/* ── TOP RIGHT: Our System ───────────────────────── */}
-        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
-          {/* White header */}
-          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid #DDE6EF" }}>
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488", borderBottom: "2px solid #0D9488" }}>
+          {/* Navy header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
               <span
-                className="font-bold uppercase"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}
+                className="font-bold uppercase text-white"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
               >
                 OUR SYSTEM
               </span>
             </div>
             <button
               className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
-              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.08)" }}
+              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.15)" }}
               title="PXI Recommend — coming soon"
             >
               <Sparkles size={10} /> PXI RECOMMEND
@@ -547,9 +547,9 @@ function WarRoom() {
           {/* Body: 3 system cards */}
           <div className="bg-white px-5 py-4">
             <div className="grid grid-cols-3 gap-3 mb-4">
-              <SystemCard icon={<Target size={14} style={{ color: "#0D9488" }} />} label="Forecheck" value={forecheck} />
-              <SystemCard icon={<ArrowLeft size={14} className="rotate-180" style={{ color: "#0D9488" }} />} label="Breakout" value={breakout} />
-              <SystemCard icon={<ShieldCheck size={14} style={{ color: "#0D9488" }} />} label="Defensive" value={defensiveSystem} />
+              <SystemCard icon={<Target size={14} style={{ color: "#0D9488" }} />} label="Forecheck" value={forecheck} accentColor="#0D9488" />
+              <SystemCard icon={<ArrowLeft size={14} className="rotate-180" style={{ color: "#EA580C" }} />} label="Breakout" value={breakout} accentColor="#EA580C" />
+              <SystemCard icon={<ShieldCheck size={14} style={{ color: "#0D9488" }} />} label="Defensive" value={defensiveSystem} accentColor="#0D9488" />
             </div>
             {ourStrategy ? (
               <div>
@@ -565,21 +565,21 @@ function WarRoom() {
         </div>
 
         {/* ── BOTTOM LEFT: Keys to the Game ───────────────── */}
-        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
-          {/* White header */}
-          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid #DDE6EF" }}>
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #EA580C", borderBottom: "2px solid #EA580C" }}>
+          {/* Navy header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
               <span
-                className="font-bold uppercase"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}
+                className="font-bold uppercase text-white"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
               >
                 KEYS TO THE GAME
               </span>
             </div>
             <button
               className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
-              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.08)" }}
+              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.15)" }}
               title="PXI Generate — coming soon"
             >
               <Sparkles size={10} /> PXI GENERATE
@@ -611,11 +611,11 @@ function WarRoom() {
         </div>
 
         {/* ── BOTTOM RIGHT: Talking Points ────────────────── */}
-        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #EA580C" }}>
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488", borderBottom: "2px solid #0D9488" }}>
           {/* Dark navy header */}
           <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
               <span
                 className="font-bold uppercase text-white"
                 style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
@@ -699,7 +699,7 @@ function WarRoom() {
         </div>
 
         {/* ── Film Clips Section ──────────────────────────────── */}
-        <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1.5px solid #DDE6EF", background: "#FFFFFF" }}>
+        <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1.5px solid #DDE6EF", borderLeft: "3px solid #EA580C", background: "#FFFFFF" }}>
           <div className="px-5 py-3 flex items-center justify-between" style={{ background: "#0F2942" }}>
             <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#FFFFFF" }}>
               <Film size={14} style={{ color: "#F97316" }} />
@@ -859,9 +859,9 @@ function SystemPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SystemCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function SystemCard({ icon, label, value, accentColor = "#0D9488" }: { icon: React.ReactNode; label: string; value: string; accentColor?: string }) {
   return (
-    <div className="rounded-lg p-3" style={{ border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
+    <div className="rounded-lg p-3" style={{ border: "1.5px solid #DDE6EF", borderLeft: `3px solid ${accentColor}` }}>
       <div className="flex items-center gap-1.5 mb-1.5">
         {icon}
         <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}>
