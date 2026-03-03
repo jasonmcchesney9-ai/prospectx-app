@@ -157,7 +157,7 @@ const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
 // Scouting dropdown items (PRO only)
 const SCOUTING_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
-  { href: "/game-plans", label: "Chalk Talk", icon: Swords },
+  { href: "/chalk-talk/sessions", label: "Chalk Talk", icon: Swords },
   { href: "/watchlist", label: "Watchlist", icon: Eye },
   { href: "/top-prospects", label: "Top Prospects", icon: Star },
 ];
@@ -183,7 +183,7 @@ const COACHING_ITEMS: NavItem[] = [
   { href: "/skill-development-lab", label: "Skills Library", icon: Dumbbell },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
-  { href: "/game-plans", label: "Chalk Talk", icon: Swords },
+  { href: "/chalk-talk/sessions", label: "Chalk Talk", icon: Swords },
   { href: "/series", label: "Series Plans", icon: Trophy },
   { href: "/game-plans/new", label: "Game Plans", icon: ClipboardCheck },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
