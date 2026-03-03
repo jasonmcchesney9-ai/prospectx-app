@@ -26,6 +26,7 @@ const SESSION_TYPE_OPTIONS = [
   { value: "Post-Game", label: "Post-Game", desc: "Review what happened, what worked" },
   { value: "Practice", label: "Practice", desc: "Practice planning, drill focus, system work" },
   { value: "Season Notes", label: "Season Notes", desc: "Big-picture strategy, mid-season adjustments" },
+  { value: "free_board", label: "Free Board", desc: "Open canvas — no tactical structure" },
 ];
 
 /* ── Tactical system dropdowns ─────────────────────────────── */
@@ -52,7 +53,7 @@ const DEFENSIVE_OPTIONS = [
 ];
 
 /* ── Steps ─────────────────────────────────────────────────── */
-const STEPS = [
+const STEPS_FULL = [
   "Session Type",
   "Game Details",
   "Tactical Systems",
@@ -61,6 +62,11 @@ const STEPS = [
   "Special Teams",
   "Keys to the Game",
   "Talking Points",
+  "Review & Create",
+];
+const STEPS_FREE_BOARD = [
+  "Session Type",
+  "Team",
   "Review & Create",
 ];
 
@@ -114,8 +120,17 @@ function SessionForm() {
   const [postgameWin, setPostgameWin] = useState("");
   const [postgameLoss, setPostgameLoss] = useState("");
 
-  /* Derived: does this type need opponent? */
+  /* Derived */
   const needsOpponent = sessionType === "Pre-Game" || sessionType === "Post-Game";
+  const isFreeBoard = sessionType === "free_board";
+  const STEPS = isFreeBoard ? STEPS_FREE_BOARD : STEPS_FULL;
+
+  /* Clamp step when switching to Free Board from a later step */
+  useEffect(() => {
+    if (isFreeBoard && step >= STEPS_FREE_BOARD.length) {
+      setStep(0);
+    }
+  }, [isFreeBoard, step]);
 
   /* Resolve final tactical values (handle "Custom" + custom text) */
   const resolveValue = (selected: string, custom: string) =>
@@ -123,7 +138,11 @@ function SessionForm() {
 
   const canProceed = () => {
     if (step === 0) return !!sessionType;
-    if (step === 1) return !!teamId;
+    if (isFreeBoard) {
+      if (step === 1) return !!teamId;
+    } else {
+      if (step === 1) return !!teamId;
+    }
     return true;
   };
 
@@ -151,8 +170,12 @@ function SessionForm() {
         postgame_win_message: postgameWin || null,
         postgame_loss_message: postgameLoss || null,
       });
-      // Navigate to rink builder with the session's chalk_talk board
-      router.push(`/rink-builder?mode=chalk_talk&session_id=${data.id}`);
+      // Free Board → war room page; others → rink builder
+      if (isFreeBoard) {
+        router.push(`/chalk-talk/sessions/${data.id}`);
+      } else {
+        router.push(`/rink-builder?mode=chalk_talk&session_id=${data.id}`);
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
       setError(typeof msg === "string" ? msg : "Failed to create session");
@@ -295,7 +318,7 @@ function SessionForm() {
       )}
 
       {/* Step 2: Tactical Systems */}
-      {step === 2 && (
+      {!isFreeBoard && step === 2 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
             Tactical Systems
@@ -378,7 +401,7 @@ function SessionForm() {
       )}
 
       {/* Step 3: Opponent Analysis */}
-      {step === 3 && (
+      {!isFreeBoard && step === 3 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
             Opponent Analysis
@@ -394,7 +417,7 @@ function SessionForm() {
       )}
 
       {/* Step 4: Our Strategy */}
-      {step === 4 && (
+      {!isFreeBoard && step === 4 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
             Our Strategy
@@ -410,7 +433,7 @@ function SessionForm() {
       )}
 
       {/* Step 5: Special Teams */}
-      {step === 5 && (
+      {!isFreeBoard && step === 5 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
             Special Teams Plan
@@ -426,7 +449,7 @@ function SessionForm() {
       )}
 
       {/* Step 6: Keys to the Game */}
-      {step === 6 && (
+      {!isFreeBoard && step === 6 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
             Keys to the Game
@@ -442,7 +465,7 @@ function SessionForm() {
       )}
 
       {/* Step 7: Talking Points */}
-      {step === 7 && (
+      {!isFreeBoard && step === 7 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
             <MessageSquare size={14} className="text-teal" />
@@ -489,8 +512,8 @@ function SessionForm() {
         </div>
       )}
 
-      {/* Step 8: Review & Create */}
-      {step === 8 && (
+      {/* Review & Create (last step) */}
+      {step === STEPS.length - 1 && (
         <div className="bg-white rounded-xl border border-teal/20 p-5">
           <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
             Review & Create
@@ -548,7 +571,9 @@ function SessionForm() {
             )}
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-muted">
-            A whiteboard will be auto-created and linked to this session.
+            {isFreeBoard
+              ? "An open canvas session will be created — no tactical structure."
+              : "A whiteboard will be auto-created and linked to this session."}
           </div>
         </div>
       )}
@@ -587,7 +612,7 @@ function SessionForm() {
             ) : (
               <>
                 <PenTool size={14} />
-                Create & Open Whiteboard
+                {isFreeBoard ? "Create Free Board" : "Create & Open Whiteboard"}
               </>
             )}
           </button>
