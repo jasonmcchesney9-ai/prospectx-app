@@ -5,7 +5,8 @@
 // Interactive diagram creation — save as drill or export
 // ============================================================
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
@@ -37,6 +38,15 @@ const INTENSITY_OPTIONS = [
 ];
 
 export default function RinkBuilderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <RinkBuilderInner />
+    </Suspense>
+  );
+}
+
+function RinkBuilderInner() {
+  const searchParams = useSearchParams();
   const currentUser = getUser();
   const { setActivePxiContext } = useBenchTalk();
 
@@ -74,6 +84,12 @@ export default function RinkBuilderPage() {
   const [helpSection, setHelpSection] = useState<number | null>(null);
   const [showSaveAs, setShowSaveAs] = useState(false);
   const [saveAsName, setSaveAsName] = useState("");
+
+  // ── Mode toggle (Custom Drill vs Chalk Talk) ──
+  const modeParam = searchParams.get("mode");
+  const [mode, setMode] = useState<"custom_drill" | "chalk_talk">(
+    modeParam === "chalk_talk" ? "chalk_talk" : "custom_drill"
+  );
 
   // Canvas ref for getting SVG + diagram data at save time
   const canvasRef = useRef<RinkCanvasHandle>(null);
@@ -304,6 +320,32 @@ export default function RinkBuilderPage() {
             <Zap size={14} />
             Generate Practice Plan
           </Link>
+        </div>
+
+        {/* Mode Toggle */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="inline-flex rounded-full border-2 border-navy/20 p-0.5 bg-navy/[0.03]">
+            <button
+              onClick={() => setMode("custom_drill")}
+              className={`px-5 py-2 rounded-full text-xs font-oswald uppercase tracking-wider font-bold transition-all ${
+                mode === "custom_drill"
+                  ? "bg-navy text-white border-2 border-teal shadow-sm"
+                  : "text-navy hover:bg-navy/[0.05] border-2 border-transparent"
+              }`}
+            >
+              Custom Drill
+            </button>
+            <button
+              onClick={() => setMode("chalk_talk")}
+              className={`px-5 py-2 rounded-full text-xs font-oswald uppercase tracking-wider font-bold transition-all ${
+                mode === "chalk_talk"
+                  ? "bg-navy text-white border-2 border-teal shadow-sm"
+                  : "text-navy hover:bg-navy/[0.05] border-2 border-transparent"
+              }`}
+            >
+              Chalk Talk
+            </button>
+          </div>
         </div>
 
         {/* Success Banner */}
