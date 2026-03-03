@@ -2376,6 +2376,39 @@ export interface GamePlanCreate {
 }
 
 // ============================================================
+// Chalk Talk Sessions
+// ============================================================
+
+export interface ChalkTalkSession {
+  id: string;
+  org_id: string;
+  created_by: string;
+  chalk_talk_id: string;
+  session_type: string;
+  team_id: string;
+  opponent_team_id: string | null;
+  game_id: string | null;
+  game_date: string | null;
+  forecheck: string | null;
+  breakout: string | null;
+  defensive_system: string | null;
+  opponent_analysis: string | null;
+  our_strategy: string | null;
+  special_teams_plan: string | null;
+  keys_to_game: string | null;
+  pregame_speech: string | null;
+  postgame_win_message: string | null;
+  postgame_loss_message: string | null;
+  visibility: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  // Joined from chalk_talks
+  board_name?: string;
+  board_layout?: unknown;
+}
+
+// ============================================================
 // Series Plans
 // ============================================================
 
