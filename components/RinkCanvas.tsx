@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import RinkSvgBackground from "./RinkSvgBackground";
-import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement } from "./RinkElements";
+import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement, ZoneElement, StraightLineElement } from "./RinkElements";
 import RinkToolbar from "./RinkToolbar";
 import {
   RINK_COLORS,
@@ -25,6 +25,8 @@ import {
   type RinkNet,
   type RinkFreehandLine,
   type RinkText,
+  type RinkZone,
+  type RinkStraightLine,
   type ArrowVariant,
 } from "@/types/rink";
 
@@ -85,6 +87,27 @@ function hitTest(
     const cx = el.x + approxW / 2;
     const cy = el.y - approxH / 2;
     return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+  }
+  if (el.type === "zone") {
+    // Check if point is within the zone rectangle
+    if (px >= el.x && px <= el.x + el.width && py >= el.y && py <= el.y + el.height) {
+      return 0;
+    }
+    const cx = el.x + el.width / 2;
+    const cy = el.y + el.height / 2;
+    return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+  }
+  if (el.type === "straight_line") {
+    const { x1, y1, x2, y2 } = el;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const closestX = x1 + t * dx;
+    const closestY = y1 + t * dy;
+    return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
   }
   if (el.type === "freehand") {
     let minDist = Infinity;
@@ -202,6 +225,10 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [textFontSize, setTextFontSize] = useState(20);
   const textInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Zone + Straight Line tool state ──
+  const [zoneDrag, setZoneDrag] = useState<{ startX: number; startY: number } | null>(null);
+  const [lineDrag, setLineDrag] = useState<{ startX: number; startY: number; shiftKey: boolean } | null>(null);
+
   const svgRef = useRef<SVGSVGElement>(null);
   const dims = RINK_DIMENSIONS[rinkType];
 
@@ -306,6 +333,12 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         if (el.type === "text") {
           return { ...el, x: el.x + dx, y: el.y + dy };
         }
+        if (el.type === "zone") {
+          return { ...el, x: el.x + dx, y: el.y + dy };
+        }
+        if (el.type === "straight_line") {
+          return { ...el, x1: el.x1 + dx, y1: el.y1 + dy, x2: el.x2 + dx, y2: el.y2 + dy };
+        }
         return el;
       })
     );
@@ -374,12 +407,13 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         e: "eraser",
         f: "freehand",
         t: "text",
+        z: "zone",
         s: "arrow_solid",
         w: "arrow_skate_puck",
         b: "arrow_backward",
         p: "arrow_pass",
         h: "arrow_shot",
-        l: "arrow_lateral",
+        l: "straight_line",
         o: "pylon",
         n: "net",
       };
@@ -477,6 +511,20 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         return;
       }
 
+      // ── Zone: start drag ──
+      if (toolMode === "zone") {
+        setZoneDrag({ startX: pt.x, startY: pt.y });
+        setMousePos(pt);
+        return;
+      }
+
+      // ── Straight Line: start drag ──
+      if (toolMode === "straight_line") {
+        setLineDrag({ startX: pt.x, startY: pt.y, shiftKey: e.shiftKey });
+        setMousePos(pt);
+        return;
+      }
+
       // ── Text: place input ──
       if (toolMode === "text") {
         setTextInput({ x: pt.x, y: pt.y, value: "" });
@@ -549,6 +597,14 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         setMousePos(pt);
       }
 
+      // Zone / Straight Line preview
+      if (zoneDrag || lineDrag) {
+        if (lineDrag) {
+          setLineDrag({ ...lineDrag, shiftKey: e.shiftKey });
+        }
+        setMousePos(pt);
+      }
+
       // Dragging
       if (dragState && toolMode === "select") {
         const dx = pt.x - dragState.startX;
@@ -572,15 +628,75 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             if (el.type === "text") {
               return { ...el, x: (snap as RinkText).x + dx, y: (snap as RinkText).y + dy };
             }
+            if (el.type === "zone") {
+              return { ...el, x: (snap as RinkZone).x + dx, y: (snap as RinkZone).y + dy };
+            }
+            if (el.type === "straight_line") {
+              const s = snap as RinkStraightLine;
+              return { ...el, x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy };
+            }
             return el;
           })
         );
       }
     },
-    [arrowStart, dragState, toolMode, isDrawingFreehand]
+    [arrowStart, dragState, toolMode, isDrawingFreehand, zoneDrag, lineDrag]
   );
 
   const handleSvgMouseUp = useCallback(() => {
+    // Finalize zone highlight
+    if (zoneDrag && mousePos) {
+      const x = Math.min(zoneDrag.startX, mousePos.x);
+      const y = Math.min(zoneDrag.startY, mousePos.y);
+      const w = Math.abs(mousePos.x - zoneDrag.startX);
+      const h = Math.abs(mousePos.y - zoneDrag.startY);
+      if (w > 5 && h > 5) {
+        pushHistory();
+        const zone: RinkZone = {
+          id: uid(), type: "zone", x, y, width: w, height: h,
+          color: RINK_COLORS.TEAL, opacity: 0.3,
+        };
+        const next = [...elements, zone];
+        setElements(next);
+        notifyChange(next, rinkType);
+      }
+      setZoneDrag(null);
+      setMousePos(null);
+      return;
+    }
+
+    // Finalize straight line
+    if (lineDrag && mousePos) {
+      let endX = mousePos.x, endY = mousePos.y;
+      // Shift-constrain to 0/45/90 degree angles
+      if (lineDrag.shiftKey) {
+        const dx = endX - lineDrag.startX;
+        const dy = endY - lineDrag.startY;
+        const angle = Math.atan2(dy, dx);
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+        endX = lineDrag.startX + Math.cos(snapAngle) * len;
+        endY = lineDrag.startY + Math.sin(snapAngle) * len;
+      }
+      const dx = endX - lineDrag.startX;
+      const dy = endY - lineDrag.startY;
+      if (Math.sqrt(dx * dx + dy * dy) > 5) {
+        pushHistory();
+        const line: RinkStraightLine = {
+          id: uid(), type: "straight_line",
+          x1: lineDrag.startX, y1: lineDrag.startY,
+          x2: Math.round(endX), y2: Math.round(endY),
+          color: RINK_COLORS.NAVY, strokeWidth: 2,
+        };
+        const next = [...elements, line];
+        setElements(next);
+        notifyChange(next, rinkType);
+      }
+      setLineDrag(null);
+      setMousePos(null);
+      return;
+    }
+
     // Finalize freehand line
     if (isDrawingFreehand && freehandPoints.length >= 2) {
       pushHistory();
@@ -621,7 +737,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       notifyChange(elements, rinkType);
       setDragState(null);
     }
-  }, [dragState, elements, rinkType, notifyChange, isDrawingFreehand, freehandPoints, pushHistory]);
+  }, [dragState, elements, rinkType, notifyChange, isDrawingFreehand, freehandPoints, pushHistory, zoneDrag, lineDrag, mousePos]);
 
   // ── Element mouse down (prevents SVG handler from also firing) ──
   const handleElementMouseDown = useCallback(
@@ -962,6 +1078,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const nets = elements.filter((el): el is RinkNet => el.type === "net");
   const freehandLines = elements.filter((el): el is RinkFreehandLine => el.type === "freehand");
   const textElements = elements.filter((el): el is RinkText => el.type === "text");
+  const zoneElements = elements.filter((el): el is RinkZone => el.type === "zone");
+  const straightLineElements = elements.filter((el): el is RinkStraightLine => el.type === "straight_line");
 
   // Cursor style based on tool
   const cursorMap: Record<ToolMode, string> = {
@@ -984,6 +1102,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     freehand: "crosshair",
     eraser: "pointer",
     text: "text",
+    zone: "crosshair",
+    straight_line: "crosshair",
   };
 
   return (
@@ -1035,6 +1155,18 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
           ) : (
             <RinkSvgBackground rinkType={rinkType} width={dims.w} height={dims.h} />
           )}
+
+          {/* Layer 1.5: Zone Highlights (behind all other elements) */}
+          <g>
+            {zoneElements.map((zone) => (
+              <ZoneElement
+                key={zone.id}
+                zone={zone}
+                selected={zone.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(zone, e)}
+              />
+            ))}
+          </g>
 
           {/* Layer 2: Arrows */}
           <g>
@@ -1108,6 +1240,18 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             ))}
           </g>
 
+          {/* Layer 7.5: Straight Lines */}
+          <g>
+            {straightLineElements.map((line) => (
+              <StraightLineElement
+                key={line.id}
+                line={line}
+                selected={line.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(line, e)}
+              />
+            ))}
+          </g>
+
           {/* Layer 8: Text Elements */}
           <g>
             {textElements.map((textEl) => (
@@ -1161,6 +1305,52 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
               style={{ pointerEvents: "none" }}
             />
           )}
+
+          {/* Zone drag preview */}
+          {zoneDrag && mousePos && (() => {
+            const x = Math.min(zoneDrag.startX, mousePos.x);
+            const y = Math.min(zoneDrag.startY, mousePos.y);
+            const w = Math.abs(mousePos.x - zoneDrag.startX);
+            const h = Math.abs(mousePos.y - zoneDrag.startY);
+            return (
+              <rect
+                x={x} y={y} width={w} height={h}
+                fill={RINK_COLORS.TEAL}
+                opacity={0.15}
+                rx={2}
+                stroke={RINK_COLORS.TEAL}
+                strokeWidth={1}
+                strokeDasharray="4,3"
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          })()}
+
+          {/* Straight line drag preview */}
+          {lineDrag && mousePos && (() => {
+            let endX = mousePos.x, endY = mousePos.y;
+            if (lineDrag.shiftKey) {
+              const dx = endX - lineDrag.startX;
+              const dy = endY - lineDrag.startY;
+              const angle = Math.atan2(dy, dx);
+              const len = Math.sqrt(dx * dx + dy * dy);
+              const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+              endX = lineDrag.startX + Math.cos(snapAngle) * len;
+              endY = lineDrag.startY + Math.sin(snapAngle) * len;
+            }
+            return (
+              <line
+                x1={lineDrag.startX} y1={lineDrag.startY}
+                x2={endX} y2={endY}
+                stroke={RINK_COLORS.NAVY}
+                strokeWidth={2}
+                strokeDasharray="4,4"
+                opacity={0.5}
+                strokeLinecap="round"
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          })()}
         </svg>
 
         {/* Text input overlay */}

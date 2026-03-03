@@ -4,7 +4,7 @@
 // Visual style ported from backend/rink_diagrams.py
 // ============================================================
 
-import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText } from "@/types/rink";
+import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText, type RinkZone, type RinkStraightLine } from "@/types/rink";
 
 // ── Marker Element ───────────────────────────────────────────
 
@@ -388,6 +388,75 @@ export function TextElement({ text, selected, onMouseDown, onDoubleClick }: Text
       >
         {text.content}
       </text>
+    </g>
+  );
+}
+
+// ── Zone Highlight Element ──────────────────────────────────
+
+interface ZoneElementProps {
+  zone: RinkZone;
+  selected: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+}
+
+export function ZoneElement({ zone, selected, onMouseDown }: ZoneElementProps) {
+  return (
+    <g onMouseDown={onMouseDown} style={{ cursor: "pointer" }}>
+      {/* Selection border */}
+      {selected && (
+        <rect
+          x={zone.x - 2}
+          y={zone.y - 2}
+          width={zone.width + 4}
+          height={zone.height + 4}
+          rx={2}
+          fill="none"
+          stroke={RINK_COLORS.ORANGE}
+          strokeWidth={2}
+          strokeDasharray="4,3"
+        />
+      )}
+      {/* Filled zone — no border */}
+      <rect
+        x={zone.x}
+        y={zone.y}
+        width={zone.width}
+        height={zone.height}
+        fill={zone.color}
+        opacity={zone.opacity}
+        rx={2}
+      />
+    </g>
+  );
+}
+
+// ── Straight Line Element ───────────────────────────────────
+
+interface StraightLineElementProps {
+  line: RinkStraightLine;
+  selected: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+}
+
+export function StraightLineElement({ line, selected, onMouseDown }: StraightLineElementProps) {
+  const color = selected ? RINK_COLORS.ORANGE : line.color;
+  return (
+    <g onMouseDown={onMouseDown} style={{ cursor: "pointer" }}>
+      {/* Wider invisible hit area */}
+      <line
+        x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
+        stroke="transparent"
+        strokeWidth={12}
+      />
+      {/* Visible line — no arrowhead */}
+      <line
+        x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
+        stroke={color}
+        strokeWidth={selected ? line.strokeWidth + 1 : line.strokeWidth}
+        strokeLinecap="round"
+        opacity={0.7}
+      />
     </g>
   );
 }

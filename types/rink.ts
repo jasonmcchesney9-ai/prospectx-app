@@ -37,7 +37,9 @@ export type ToolMode =
   | "net"
   | "freehand"
   | "eraser"
-  | "text";
+  | "text"
+  | "zone"
+  | "straight_line";
 
 // ── Element Types ────────────────────────────────────────────
 
@@ -102,7 +104,29 @@ export interface RinkText {
   color: string;
 }
 
-export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText;
+export interface RinkZone {
+  id: string;
+  type: "zone";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  opacity: number;
+}
+
+export interface RinkStraightLine {
+  id: string;
+  type: "straight_line";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+  strokeWidth: number;
+}
+
+export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText | RinkZone | RinkStraightLine;
 
 // ── Diagram Data (serializable to JSON) ──────────────────────
 

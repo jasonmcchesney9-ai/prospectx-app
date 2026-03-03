@@ -3,7 +3,7 @@
 // Tool selection, rink type, actions (undo, clear, export)
 // ============================================================
 
-import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2, Type } from "lucide-react";
+import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2, Type, Minus, Square } from "lucide-react";
 import { RINK_COLORS, MARKER_COLORS, RINK_LABELS, type RinkType, type ToolMode, type RinkElement } from "@/types/rink";
 
 interface RinkToolbarProps {
@@ -321,6 +321,12 @@ export default function RinkToolbar({
       </ToolBtn>
       <ToolBtn active={toolMode === "net"} onClick={() => onToolModeChange("net")} label="Net" title="Place Net">
         <NetPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "zone"} onClick={() => onToolModeChange("zone")} label="Zone" title="Zone Highlight (Z) — click + drag">
+        <Square size={14} />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "straight_line"} onClick={() => onToolModeChange("straight_line")} label="Line" title="Straight Line (L) — hold Shift for 0/45/90°">
+        <Minus size={14} />
       </ToolBtn>
 
       <div className="w-px h-7 bg-border mx-1" />
