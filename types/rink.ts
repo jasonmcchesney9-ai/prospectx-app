@@ -36,7 +36,8 @@ export type ToolMode =
   | "pylon"
   | "net"
   | "freehand"
-  | "eraser";
+  | "eraser"
+  | "text";
 
 // ── Element Types ────────────────────────────────────────────
 
@@ -91,7 +92,17 @@ export interface RinkFreehandLine {
   arrowEnd: boolean;
 }
 
-export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine;
+export interface RinkText {
+  id: string;
+  type: "text";
+  x: number;
+  y: number;
+  content: string;
+  fontSize: number;
+  color: string;
+}
+
+export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText;
 
 // ── Diagram Data (serializable to JSON) ──────────────────────
 

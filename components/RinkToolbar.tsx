@@ -3,7 +3,7 @@
 // Tool selection, rink type, actions (undo, clear, export)
 // ============================================================
 
-import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2 } from "lucide-react";
+import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2, Type } from "lucide-react";
 import { RINK_COLORS, MARKER_COLORS, RINK_LABELS, type RinkType, type ToolMode, type RinkElement } from "@/types/rink";
 
 interface RinkToolbarProps {
@@ -300,6 +300,9 @@ export default function RinkToolbar({
       <div className="w-px h-7 bg-border mx-1" />
 
       {/* ── Passing & Shooting ── */}
+      <ToolBtn active={toolMode === "text"} onClick={() => onToolModeChange("text")} label="Text" title="Text Tool (T) — click to place text">
+        <Type size={14} />
+      </ToolBtn>
       <ToolBtn active={toolMode === "arrow_pass"} onClick={() => onToolModeChange("arrow_pass")} label="Pass" title="Pass (blue arrow)">
         <ArrowPreview dashed={true} color={RINK_COLORS.PASS_BLUE} />
       </ToolBtn>

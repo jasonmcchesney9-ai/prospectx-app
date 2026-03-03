@@ -4,7 +4,7 @@
 // Visual style ported from backend/rink_diagrams.py
 // ============================================================
 
-import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine } from "@/types/rink";
+import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText } from "@/types/rink";
 
 // ── Marker Element ───────────────────────────────────────────
 
@@ -333,6 +333,61 @@ export function FreehandLineElement({ line, selected, onMouseDown }: FreehandLin
         opacity={0.7}
         markerEnd={line.arrowEnd ? `url(#${markerId})` : undefined}
       />
+    </g>
+  );
+}
+
+// ── Text Element ────────────────────────────────────────────
+
+interface TextElementProps {
+  text: RinkText;
+  selected: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onDoubleClick: (e: React.MouseEvent) => void;
+}
+
+export function TextElement({ text, selected, onMouseDown, onDoubleClick }: TextElementProps) {
+  const pad = 4;
+  // Approximate text width for selection box
+  const approxW = text.content.length * text.fontSize * 0.55 + pad * 2;
+  const approxH = text.fontSize + pad * 2;
+
+  return (
+    <g onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} style={{ cursor: "pointer" }}>
+      {/* Selection box */}
+      {selected && (
+        <rect
+          x={text.x - pad}
+          y={text.y - text.fontSize + pad / 2}
+          width={approxW}
+          height={approxH}
+          rx={3}
+          fill="none"
+          stroke={RINK_COLORS.ORANGE}
+          strokeWidth={2}
+          strokeDasharray="4,3"
+        />
+      )}
+      {/* Invisible wider hit area */}
+      <rect
+        x={text.x - pad}
+        y={text.y - text.fontSize + pad / 2}
+        width={Math.max(approxW, 20)}
+        height={Math.max(approxH, 16)}
+        fill="transparent"
+      />
+      {/* Visible text */}
+      <text
+        x={text.x}
+        y={text.y}
+        fontFamily="'DM Sans', sans-serif"
+        fontSize={text.fontSize}
+        fontWeight="500"
+        fill={text.color}
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        {text.content}
+      </text>
     </g>
   );
 }

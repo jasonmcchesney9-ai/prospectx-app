@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import RinkSvgBackground from "./RinkSvgBackground";
-import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement } from "./RinkElements";
+import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement } from "./RinkElements";
 import RinkToolbar from "./RinkToolbar";
 import {
   RINK_COLORS,
@@ -24,6 +24,7 @@ import {
   type RinkPylon,
   type RinkNet,
   type RinkFreehandLine,
+  type RinkText,
   type ArrowVariant,
 } from "@/types/rink";
 
@@ -72,6 +73,18 @@ function hitTest(
     const dx = px - el.x;
     const dy = py - el.y;
     return Math.sqrt(dx * dx + dy * dy);
+  }
+  if (el.type === "text") {
+    const approxW = el.content.length * el.fontSize * 0.55;
+    const approxH = el.fontSize;
+    // Check if point is within the text bounding box
+    if (px >= el.x - 4 && px <= el.x + approxW + 4 && py >= el.y - approxH && py <= el.y + 4) {
+      return 0; // Inside bounding box
+    }
+    // Distance to center of text box
+    const cx = el.x + approxW / 2;
+    const cy = el.y - approxH / 2;
+    return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
   }
   if (el.type === "freehand") {
     let minDist = Infinity;
@@ -184,6 +197,11 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
   const [exportingGif, setExportingGif] = useState(false);
 
+  // ── Text tool state ──
+  const [textInput, setTextInput] = useState<{ x: number; y: number; editId?: string; value: string } | null>(null);
+  const [textFontSize, setTextFontSize] = useState(20);
+  const textInputRef = useRef<HTMLInputElement>(null);
+
   const svgRef = useRef<SVGSVGElement>(null);
   const dims = RINK_DIMENSIONS[rinkType];
 
@@ -285,6 +303,9 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         if (el.type === "freehand") {
           return { ...el, points: el.points.map((p: { x: number; y: number }) => ({ x: p.x + dx, y: p.y + dy })) };
         }
+        if (el.type === "text") {
+          return { ...el, x: el.x + dx, y: el.y + dy };
+        }
         return el;
       })
     );
@@ -311,6 +332,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         setSelectedId(null);
         setIsDrawingFreehand(false);
         setFreehandPoints([]);
+        setTextInput(null);
         return;
       }
 
@@ -351,6 +373,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         v: "select",
         e: "eraser",
         f: "freehand",
+        t: "text",
         s: "arrow_solid",
         w: "arrow_skate_puck",
         b: "arrow_backward",
@@ -454,6 +477,13 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         return;
       }
 
+      // ── Text: place input ──
+      if (toolMode === "text") {
+        setTextInput({ x: pt.x, y: pt.y, value: "" });
+        setTimeout(() => textInputRef.current?.focus(), 50);
+        return;
+      }
+
       // ── Place Net ──
       if (toolMode === "net") {
         pushHistory();
@@ -539,6 +569,9 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
               const s = snap as RinkFreehandLine;
               return { ...el, points: s.points.map(p => ({ x: p.x + dx, y: p.y + dy })) };
             }
+            if (el.type === "text") {
+              return { ...el, x: (snap as RinkText).x + dx, y: (snap as RinkText).y + dy };
+            }
             return el;
           })
         );
@@ -615,6 +648,53 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       handleSvgMouseDown(e as unknown as React.MouseEvent<SVGSVGElement>);
     },
     [editable, toolMode, elements, pushHistory, rinkType, notifyChange, handleSvgMouseDown]
+  );
+
+  // ── Text tool: commit input ──
+  const commitTextInput = useCallback(() => {
+    if (!textInput) return;
+    const val = textInput.value.trim();
+    if (!val) {
+      setTextInput(null);
+      return;
+    }
+    pushHistory();
+    if (textInput.editId) {
+      // Editing existing text
+      const next = elements.map((el) =>
+        el.id === textInput.editId ? { ...el, content: val, fontSize: textFontSize } : el
+      );
+      setElements(next);
+      notifyChange(next, rinkType);
+    } else {
+      // New text element
+      const textEl: RinkText = {
+        id: uid(),
+        type: "text",
+        x: textInput.x,
+        y: textInput.y,
+        content: val,
+        fontSize: textFontSize,
+        color: RINK_COLORS.TEAL,
+      };
+      const next = [...elements, textEl];
+      setElements(next);
+      notifyChange(next, rinkType);
+    }
+    setTextInput(null);
+  }, [textInput, textFontSize, elements, pushHistory, rinkType, notifyChange]);
+
+  // ── Text tool: handle double-click on text element to edit ──
+  const handleTextDoubleClick = useCallback(
+    (el: RinkText, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!editable) return;
+      setTextFontSize(el.fontSize);
+      setTextInput({ x: el.x, y: el.y, editId: el.id, value: el.content });
+      setSelectedId(el.id);
+      setTimeout(() => textInputRef.current?.focus(), 50);
+    },
+    [editable]
   );
 
   // ── Export SVG ─────────────────────────────────────────────
@@ -881,6 +961,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const pylons = elements.filter((el): el is RinkPylon => el.type === "pylon");
   const nets = elements.filter((el): el is RinkNet => el.type === "net");
   const freehandLines = elements.filter((el): el is RinkFreehandLine => el.type === "freehand");
+  const textElements = elements.filter((el): el is RinkText => el.type === "text");
 
   // Cursor style based on tool
   const cursorMap: Record<ToolMode, string> = {
@@ -902,6 +983,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     net: "crosshair",
     freehand: "crosshair",
     eraser: "pointer",
+    text: "text",
   };
 
   return (
@@ -931,7 +1013,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       )}
 
       {/* SVG Canvas */}
-      <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+      <div className="relative bg-white rounded-xl border border-teal/20 overflow-hidden">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${dims.w} ${dims.h}`}
@@ -1026,6 +1108,19 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             ))}
           </g>
 
+          {/* Layer 8: Text Elements */}
+          <g>
+            {textElements.map((textEl) => (
+              <TextElement
+                key={textEl.id}
+                text={textEl}
+                selected={textEl.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(textEl, e)}
+                onDoubleClick={(e) => handleTextDoubleClick(textEl, e)}
+              />
+            ))}
+          </g>
+
           {/* Arrow preview (drawing in progress) */}
           {arrowStart && mousePos && (() => {
             const previewColorMap: Record<string, string> = {
@@ -1067,7 +1162,67 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             />
           )}
         </svg>
+
+        {/* Text input overlay */}
+        {textInput && svgRef.current && (() => {
+          const rect = svgRef.current.getBoundingClientRect();
+          const vb = svgRef.current.viewBox.baseVal;
+          const scaleX = rect.width / vb.width;
+          const scaleY = rect.height / vb.height;
+          const left = textInput.x * scaleX;
+          const top = textInput.y * scaleY - textFontSize * scaleY;
+          return (
+            <div
+              className="absolute"
+              style={{
+                left: `${left}px`,
+                top: `${top}px`,
+                zIndex: 10,
+              }}
+            >
+              <input
+                ref={textInputRef}
+                type="text"
+                value={textInput.value}
+                onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitTextInput(); }
+                  if (e.key === "Escape") { e.preventDefault(); setTextInput(null); }
+                  e.stopPropagation();
+                }}
+                onBlur={commitTextInput}
+                placeholder="Type text..."
+                className="px-1 py-0.5 border border-teal rounded text-navy bg-white/95 outline-none"
+                style={{ fontSize: `${textFontSize * scaleY}px`, minWidth: "80px" }}
+              />
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Font size selector (visible when text tool is active) */}
+      {toolMode === "text" && !textInput && (
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <span className="text-[10px] text-muted font-oswald uppercase tracking-wider">Size:</span>
+          {([
+            { value: 14, label: "Small" },
+            { value: 20, label: "Medium" },
+            { value: 28, label: "Large" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setTextFontSize(opt.value)}
+              className={`px-3 py-1 rounded-lg text-[10px] font-oswald uppercase tracking-wider transition-all ${
+                textFontSize === opt.value
+                  ? "bg-teal text-white"
+                  : "bg-navy/[0.04] text-navy/60 hover:bg-navy/[0.08]"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Drawing hints */}
       {isDrawingFreehand && (
