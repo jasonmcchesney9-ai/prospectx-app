@@ -20120,6 +20120,29 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
         raise HTTPException(status_code=400, detail="Either player_id or team_name is required")
 
     is_team_report = request.report_type in TEAM_REPORT_TYPES and request.team_name and not request.player_id
+
+    # ── Stuck report cleanup guard (10-minute cutoff, org-scoped) ──
+    cleanup_conn = get_db()
+    try:
+        cutoff = (datetime.utcnow() - timedelta(minutes=10)).isoformat()
+        stuck = cleanup_conn.execute("""
+            UPDATE reports SET status = 'failed',
+            error_message = 'Generation timeout — please retry'
+            WHERE status = 'processing'
+            AND created_at < ?
+            AND org_id = ?
+        """, (cutoff, org_id))
+        cleanup_conn.commit()
+        if stuck.rowcount > 0:
+            logger.info("Cleared %d stuck reports (>10min) for org %s", stuck.rowcount, org_id)
+    except Exception:
+        try:
+            cleanup_conn.rollback()
+        except Exception:
+            pass
+    finally:
+        cleanup_conn.close()
+
     conn = get_db()
 
     # ── CUSTOM REPORT FLOW ────────────────────────────────
@@ -39462,12 +39485,19 @@ No AI analysis available in demo mode."""
                 return {"report_id": report_id, "status": "complete", "title": title, "generation_time_ms": generation_ms}
 
         except Exception as e:
+            try:
+                conn.rollback()  # Clear poisoned PG transaction state
+            except Exception:
+                pass
             generation_ms = int((time.perf_counter() - start_time) * 1000)
-            conn.execute("""
-                UPDATE reports SET status='error', error_message=?, generation_time_ms=?
-                WHERE id = ?
-            """, (str(e)[:500], generation_ms, report_id))
-            conn.commit()
+            try:
+                conn.execute("""
+                    UPDATE reports SET status='failed', error_message=?, generation_time_ms=?
+                    WHERE id = ?
+                """, (str(e)[:500], generation_ms, report_id))
+                conn.commit()
+            except Exception:
+                pass
             logger.error("Film report generation failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)[:200]}")
     finally:
