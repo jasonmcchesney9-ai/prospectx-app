@@ -20770,6 +20770,21 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                 "role_adjustment": 4000,
                 "bench_card": 2000,
                 "parent_report": 1000,
+                # Addendum 10 — Chalk Talk session intelligence
+                "chalk_talk_opponent": 3000,
+                "chalk_talk_strategy": 3000,
+                "chalk_talk_special_teams": 2500,
+                "chalk_talk_keys": 1500,
+                "chalk_talk_talking_points": 2000,
+                # Addendum 11 — Game Day Speech + Phase 2
+                "pregame_room_speech": 2000,
+                "postgame_room_speech": 2000,
+                "postgame_team_message": 1500,
+                "player_scout_hook": 3000,
+                "player_checkin_note": 2000,
+                "org_health_snapshot": 4000,
+                "practice_impact_summary": 3000,
+                "recruit_fit_report": 2500,
             }
             max_tokens = _type_tokens.get(request.report_type, 10000 if drill_list else 8000)
             message = client.messages.create(
@@ -31171,6 +31186,21 @@ When a player has transfers or team splits:
             "practice_plan": 4000,
             "role_adjustment": 4000,
             "bench_card": 2000,
+            # Addendum 10 — Chalk Talk session intelligence
+            "chalk_talk_opponent": 3000,
+            "chalk_talk_strategy": 3000,
+            "chalk_talk_special_teams": 2500,
+            "chalk_talk_keys": 1500,
+            "chalk_talk_talking_points": 2000,
+            # Addendum 11 — Game Day Speech + Phase 2
+            "pregame_room_speech": 2000,
+            "postgame_room_speech": 2000,
+            "postgame_team_message": 1500,
+            "player_scout_hook": 3000,
+            "player_checkin_note": 2000,
+            "org_health_snapshot": 4000,
+            "practice_impact_summary": 3000,
+            "recruit_fit_report": 2500,
         }
         _bg_max_tokens = _bg_type_tokens.get(report_type, 8000)
         response = client.messages.create(
