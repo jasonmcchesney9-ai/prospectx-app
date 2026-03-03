@@ -4097,6 +4097,22 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_type ON chalk_talk_sessions(session_type)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_chalk ON chalk_talk_sessions(chalk_talk_id)")
 
+    # ── Table: chalk_talk_session_clips (junction: chalk talk sessions ↔ film clips) ──
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS chalk_talk_session_clips (
+            id TEXT PRIMARY KEY,
+            chalk_talk_session_id TEXT NOT NULL,
+            video_clip_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            added_by TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (chalk_talk_session_id) REFERENCES chalk_talk_sessions(id) ON DELETE CASCADE,
+            FOREIGN KEY (video_clip_id) REFERENCES video_clips(id) ON DELETE CASCADE,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            UNIQUE (chalk_talk_session_id, video_clip_id)
+        )
+    """)
+
     conn.commit()
 
     # ── Table: pxr_scores (ProspectX Rating engine) ──
@@ -38357,6 +38373,81 @@ async def delete_chalk_talk_session(session_id: str, token_data: dict = Depends(
         conn.execute("DELETE FROM chalk_talk_sessions WHERE id = ? AND org_id = ?", (session_id, org_id))
         conn.commit()
         return {"deleted": True, "id": session_id}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# CHALK TALK SESSION ↔ FILM CLIPS API
+# ============================================================
+
+@app.post("/chalk-talk-sessions/{session_id}/clips")
+async def link_clip_to_chalk_talk_session(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Link a video clip to a chalk talk session."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    clip_id = body.get("clip_id")
+    if not clip_id:
+        raise HTTPException(status_code=400, detail="clip_id is required")
+    conn = get_db()
+    try:
+        # Verify session exists
+        sess = conn.execute("SELECT id FROM chalk_talk_sessions WHERE id = ? AND org_id = ?", (session_id, org_id)).fetchone()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Chalk talk session not found")
+        # Verify clip exists
+        clip = conn.execute("SELECT id FROM video_clips WHERE id = ? AND org_id = ?", (clip_id, org_id)).fetchone()
+        if not clip:
+            raise HTTPException(status_code=404, detail="Video clip not found")
+        link_id = str(uuid.uuid4())
+        conn.execute("""
+            INSERT INTO chalk_talk_session_clips (id, chalk_talk_session_id, video_clip_id, org_id, added_by)
+            VALUES (?, ?, ?, ?, ?)
+        """, (link_id, session_id, clip_id, org_id, user_id))
+        conn.commit()
+        return {"id": link_id, "chalk_talk_session_id": session_id, "video_clip_id": clip_id}
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(status_code=409, detail="Clip already linked to this session")
+        raise
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk-sessions/{session_id}/clips")
+async def list_chalk_talk_session_clips(session_id: str, token_data: dict = Depends(verify_token)):
+    """List video clips linked to a chalk talk session."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT vc.id, vc.title, vc.description, vc.start_time_seconds, vc.end_time_seconds,
+                   vc.session_id, vc.clip_type, vc.created_at, ctsc.id AS link_id
+            FROM chalk_talk_session_clips ctsc
+            JOIN video_clips vc ON ctsc.video_clip_id = vc.id
+            WHERE ctsc.chalk_talk_session_id = ? AND ctsc.org_id = ?
+            ORDER BY vc.start_time_seconds
+        """, (session_id, org_id)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/chalk-talk-sessions/{session_id}/clips/{clip_id}")
+async def unlink_clip_from_chalk_talk_session(session_id: str, clip_id: str, token_data: dict = Depends(verify_token)):
+    """Unlink a video clip from a chalk talk session."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        result = conn.execute("""
+            DELETE FROM chalk_talk_session_clips
+            WHERE chalk_talk_session_id = ? AND video_clip_id = ? AND org_id = ?
+        """, (session_id, clip_id, org_id))
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Clip link not found")
+        conn.commit()
+        return {"unlinked": True, "session_id": session_id, "clip_id": clip_id}
     finally:
         conn.close()
 

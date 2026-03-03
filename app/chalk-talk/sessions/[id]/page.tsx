@@ -23,6 +23,14 @@ import {
   Trophy,
   AlertTriangle,
   MessageSquare,
+  Scissors,
+  Play,
+  Clock,
+  Plus,
+  X,
+  Film,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -107,6 +115,12 @@ function WarRoom() {
   const [canvasKey, setCanvasKey] = useState(0);
   const [boardSaving, setBoardSaving] = useState(false);
   const canvasRef = useRef<RinkCanvasHandle | null>(null);
+
+  /* ── Linked Film Clips state ─────────────────────────── */
+  const [linkedClips, setLinkedClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; link_id?: string }[]>([]);
+  const [showClipModal, setShowClipModal] = useState(false);
+  const [availableClips, setAvailableClips] = useState<{ id: string; title: string; start_time_seconds: number; end_time_seconds: number; session_id?: string }[]>([]);
+  const [clipSearchLoading, setClipSearchLoading] = useState(false);
 
   /* ── Derived ───────────────────────────────────────────── */
   const teamName = teams.find((t) => t.id === teamId)?.name || "";
@@ -212,6 +226,49 @@ function WarRoom() {
       setBoardSaving(false);
     }
   }, [chalkTalkId, bgMode, teamName, teamId, sessionId]);
+
+  /* ── Linked Film Clips functions ─────────────────────── */
+  const loadLinkedClips = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/chalk-talk-sessions/${sessionId}/clips`);
+      setLinkedClips(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
+  }, [sessionId]);
+
+  useEffect(() => { loadLinkedClips(); }, [loadLinkedClips]);
+
+  const openClipModal = async () => {
+    setShowClipModal(true);
+    setClipSearchLoading(true);
+    try {
+      const { data } = await api.get("/film/clips", { params: { limit: 100 } });
+      const all = Array.isArray(data) ? data : [];
+      const linkedIds = new Set(linkedClips.map((c) => c.id));
+      setAvailableClips(all.filter((c: { id: string }) => !linkedIds.has(c.id)));
+    } catch { /* ignore */ }
+    finally { setClipSearchLoading(false); }
+  };
+
+  const handleLinkClip = async (clipId: string) => {
+    try {
+      await api.post(`/chalk-talk-sessions/${sessionId}/clips`, { clip_id: clipId });
+      setAvailableClips((prev) => prev.filter((c) => c.id !== clipId));
+      loadLinkedClips();
+    } catch { /* ignore */ }
+  };
+
+  const handleUnlinkClip = async (clipId: string) => {
+    try {
+      await api.delete(`/chalk-talk-sessions/${sessionId}/clips/${clipId}`);
+      setLinkedClips((prev) => prev.filter((c) => c.id !== clipId));
+    } catch { /* ignore */ }
+  };
+
+  const fmtTime = (s: number): string => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
 
   /* ── Parse keys to game into structured list ───────────── */
   const keysList = keysToGame
@@ -640,6 +697,144 @@ function WarRoom() {
             </div>
           </div>
         </div>
+
+        {/* ── Film Clips Section ──────────────────────────────── */}
+        <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1.5px solid #DDE6EF", background: "#FFFFFF" }}>
+          <div className="px-5 py-3 flex items-center justify-between" style={{ background: "#0F2942" }}>
+            <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#FFFFFF" }}>
+              <Film size={14} style={{ color: "#F97316" }} />
+              Film Clips
+              {linkedClips.length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: "rgba(13,148,136,0.15)", color: "#0D9488" }}>
+                  {linkedClips.length}
+                </span>
+              )}
+            </h3>
+            <button
+              onClick={openClipModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(255,255,255,0.1)", color: "#FFFFFF" }}
+            >
+              <Plus size={12} />
+              Link Clip
+            </button>
+          </div>
+          <div className="p-5">
+            {linkedClips.length === 0 ? (
+              <div className="text-center py-6">
+                <Scissors size={24} className="mx-auto mb-2" style={{ color: "#DDE6EF" }} />
+                <p className="text-xs" style={{ color: "#8BA4BB" }}>No film clips linked to this session yet.</p>
+                <p className="text-[10px] mt-1" style={{ color: "#B8C9DA" }}>
+                  Link clips from the Film Room to reference during game prep.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {linkedClips.map((clip) => (
+                  <div
+                    key={clip.id}
+                    className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg transition-all"
+                    style={{ border: "1px solid #E8EFF5" }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{clip.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: "#0D9488" }}>
+                            <Clock size={10} />
+                            {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
+                          </span>
+                          {clip.description && (
+                            <span className="text-[10px] truncate" style={{ color: "#8BA4BB" }}>{clip.description}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {clip.session_id && (
+                        <Link
+                          href={`/film-room/sessions/${clip.session_id}?seek=${clip.start_time_seconds}`}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.08)", color: "#0D9488" }}
+                        >
+                          <Play size={10} />
+                          Watch
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => handleUnlinkClip(clip.id)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors hover:bg-red-50"
+                        style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}
+                        title="Unlink clip"
+                      >
+                        <Unlink size={10} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Link Clip Modal ──────────────────────────────────── */}
+        {showClipModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,41,66,0.5)" }}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4" style={{ border: "1.5px solid #DDE6EF" }}>
+              <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid #DDE6EF" }}>
+                <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}>
+                  <Link2 size={14} style={{ color: "#0D9488" }} />
+                  Link Film Clip
+                </h3>
+                <button onClick={() => setShowClipModal(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                  <X size={16} style={{ color: "#8BA4BB" }} />
+                </button>
+              </div>
+              <div className="p-5 max-h-[400px] overflow-y-auto">
+                {clipSearchLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 size={20} className="animate-spin" style={{ color: "#0D9488" }} />
+                    <span className="ml-2 text-xs" style={{ color: "#8BA4BB" }}>Loading clips...</span>
+                  </div>
+                ) : availableClips.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Scissors size={24} className="mx-auto mb-2" style={{ color: "#DDE6EF" }} />
+                    <p className="text-xs" style={{ color: "#8BA4BB" }}>No available clips to link.</p>
+                    <p className="text-[10px] mt-1" style={{ color: "#B8C9DA" }}>
+                      Create clips in the Film Room first.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {availableClips.map((clip) => (
+                      <div
+                        key={clip.id}
+                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg transition-all hover:bg-teal/[0.02]"
+                        style={{ border: "1px solid #E8EFF5" }}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{clip.title}</p>
+                          <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: "#0D9488" }}>
+                            <Clock size={10} />
+                            {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleLinkClip(clip.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
+                        >
+                          <Plus size={10} />
+                          Link
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
