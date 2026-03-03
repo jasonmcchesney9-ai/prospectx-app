@@ -1531,6 +1531,7 @@ export interface BenchTalkMessage {
   content: string;
   metadata: string | null;
   tokens_used: number;
+  flag?: string | null;
   created_at: string;
 }
 

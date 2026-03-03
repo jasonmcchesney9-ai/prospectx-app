@@ -27,6 +27,8 @@ import {
   History,
   Layers,
   ChevronDown,
+  Pencil,
+  Flag,
 } from "lucide-react";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import { getUser } from "@/lib/auth";
@@ -540,6 +542,25 @@ export default function BenchTalkDrawer() {
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<BenchTalkSuggestion[]>([]);
   const [feedbackGiven, setFeedbackGiven] = useState<Record<string, string>>({});
+  const [flagEditorOpen, setFlagEditorOpen] = useState<string | null>(null);
+
+  const FLAG_OPTIONS = ["important", "action_item", "review", "follow_up", "incorrect"];
+
+  async function handleFlagUpdate(messageId: string, flag: string) {
+    // Optimistic update
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, flag } : m))
+    );
+    setFlagEditorOpen(null);
+    try {
+      await api.patch(`/bench-talk/${messageId}/flag`, { flag });
+    } catch {
+      // Revert on failure
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, flag: undefined } : m))
+      );
+    }
+  }
 
   // Upgrade modal state
   const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
@@ -1264,6 +1285,42 @@ export default function BenchTalkDrawer() {
                               {msg.tokens_used.toLocaleString()} tokens
                             </span>
                           )}
+                          {/* Flag badge + edit */}
+                          <div className="relative ml-1">
+                            {msg.flag ? (
+                              <button
+                                onClick={() => setFlagEditorOpen(flagEditorOpen === msg.id ? null : msg.id)}
+                                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 transition-colors"
+                              >
+                                <Flag size={9} />
+                                <span className="text-[8px] font-semibold uppercase">{msg.flag.replace(/_/g, " ")}</span>
+                                <Pencil size={8} className="text-amber-400 ml-0.5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setFlagEditorOpen(flagEditorOpen === msg.id ? null : msg.id)}
+                                className="p-0.5 rounded transition-colors text-muted/30 hover:text-amber-500"
+                                title="Add flag"
+                              >
+                                <Flag size={11} />
+                              </button>
+                            )}
+                            {flagEditorOpen === msg.id && (
+                              <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[120px]">
+                                {FLAG_OPTIONS.map((f) => (
+                                  <button
+                                    key={f}
+                                    onClick={() => handleFlagUpdate(msg.id, f)}
+                                    className={`w-full text-left px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider hover:bg-amber-50 transition-colors ${
+                                      msg.flag === f ? "text-amber-700 bg-amber-50" : "text-gray-600"
+                                    }`}
+                                  >
+                                    {f.replace(/_/g, " ")}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                   </div>
