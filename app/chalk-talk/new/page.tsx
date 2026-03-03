@@ -14,10 +14,13 @@ import {
   Target,
   ShieldCheck,
   PenTool,
+  Search,
+  Loader2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import type { ChalkTalkSession } from "@/types/api";
 
 /* ── Session type definitions ──────────────────────────────── */
@@ -73,6 +76,8 @@ const STEPS_FREE_BOARD = [
 interface SimpleTeam {
   id: string;
   name: string;
+  league?: string | null;
+  org_id?: string;
 }
 
 export default function NewChalkTalkSessionPage() {
@@ -94,15 +99,23 @@ function SessionForm() {
 
   /* Teams */
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
+  const user = getUser();
+  const userOrgId = user?.org_id || "";
   useEffect(() => {
     api.get<SimpleTeam[]>("/teams").then(({ data }) => setTeams(data)).catch(() => {});
   }, []);
+
+  /* Split teams: org's own vs all */
+  const orgTeams = teams.filter((t) => t.org_id === userOrgId);
+  const allTeams = teams;
 
   /* Form state */
   const [sessionType, setSessionType] = useState("Pre-Game");
   const [teamId, setTeamId] = useState("");
   const [opponentTeamId, setOpponentTeamId] = useState("");
   const [gameDate, setGameDate] = useState("");
+  const [opponentSearch, setOpponentSearch] = useState("");
+  const [gameDateLoading, setGameDateLoading] = useState(false);
 
   const [forecheck, setForecheck] = useState("");
   const [forecheckCustom, setForecheckCustom] = useState("");
@@ -131,6 +144,40 @@ function SessionForm() {
       setStep(0);
     }
   }, [isFreeBoard, step]);
+
+  /* Auto-fill game date when team + opponent selected */
+  useEffect(() => {
+    if (!teamId || !opponentTeamId || !needsOpponent) return;
+    const opponentName = allTeams.find((t) => t.id === opponentTeamId)?.name;
+    if (!opponentName) return;
+    setGameDateLoading(true);
+    const today = new Date().toISOString().slice(0, 10);
+    api.get("/api/calendar/events", {
+      params: { team_id: teamId, from: today, type: "GAME" },
+    })
+      .then(({ data }) => {
+        const events = Array.isArray(data) ? data : [];
+        const match = events.find(
+          (ev: { opponent_name?: string }) =>
+            ev.opponent_name && ev.opponent_name.toLowerCase().includes(opponentName.toLowerCase())
+        );
+        if (match?.start_time && !gameDate) {
+          setGameDate(match.start_time.slice(0, 10));
+        }
+      })
+      .catch(() => { /* no schedule data — that's fine */ })
+      .finally(() => setGameDateLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, opponentTeamId, needsOpponent]);
+
+  /* Filter opponents for search */
+  const filteredOpponents = allTeams
+    .filter((t) => t.id !== teamId)
+    .filter((t) =>
+      !opponentSearch ||
+      t.name.toLowerCase().includes(opponentSearch.toLowerCase()) ||
+      (t.league && t.league.toLowerCase().includes(opponentSearch.toLowerCase()))
+    );
 
   /* Resolve final tactical values (handle "Custom" + custom text) */
   const resolveValue = (selected: string, custom: string) =>
@@ -286,8 +333,10 @@ function SessionForm() {
               <div className="relative">
                 <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className={selectClass}>
                   <option value="">Select your team...</option>
-                  {teams.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                  {(orgTeams.length > 0 ? orgTeams : allTeams).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.league ? ` (${t.league})` : ""}
+                    </option>
                   ))}
                 </select>
                 <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
@@ -296,11 +345,31 @@ function SessionForm() {
             {needsOpponent && (
               <div>
                 <label className="block text-xs font-semibold text-navy mb-1">Opponent</label>
+                {/* Search input for opponent filtering */}
+                <div className="relative mb-2">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                  <input
+                    type="text"
+                    value={opponentSearch}
+                    onChange={(e) => setOpponentSearch(e.target.value)}
+                    placeholder="Search teams..."
+                    className={`${inputClass} pl-9`}
+                  />
+                </div>
                 <div className="relative">
-                  <select value={opponentTeamId} onChange={(e) => setOpponentTeamId(e.target.value)} className={selectClass}>
+                  <select
+                    value={opponentTeamId}
+                    onChange={(e) => {
+                      setOpponentTeamId(e.target.value);
+                      setOpponentSearch("");
+                    }}
+                    className={selectClass}
+                  >
                     <option value="">Select opponent...</option>
-                    {teams.filter((t) => t.id !== teamId).map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                    {filteredOpponents.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}{t.league ? ` — ${t.league}` : ""}
+                      </option>
                     ))}
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
@@ -309,8 +378,18 @@ function SessionForm() {
             )}
             {needsOpponent && (
               <div>
-                <label className="block text-xs font-semibold text-navy mb-1">Game Date</label>
+                <label className="block text-xs font-semibold text-navy mb-1">
+                  Game Date
+                  {gameDateLoading && (
+                    <Loader2 size={12} className="inline ml-2 animate-spin text-teal" />
+                  )}
+                </label>
                 <input type="date" value={gameDate} onChange={(e) => setGameDate(e.target.value)} className={inputClass} />
+                {gameDate && gameDateLoading === false && opponentTeamId && (
+                  <p className="text-[10px] text-teal mt-1">
+                    Auto-filled from schedule
+                  </p>
+                )}
               </div>
             )}
           </div>
