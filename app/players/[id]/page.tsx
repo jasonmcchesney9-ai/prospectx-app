@@ -48,6 +48,8 @@ import {
   MoreVertical,
   Search,
   ListPlus,
+  Clock,
+  Scissors,
 } from "lucide-react";
 import {
   RadarChart,
@@ -327,6 +329,22 @@ export default function PlayerDetailPage() {
 
   // Training Volume (drill logs)
   const [drillLogData, setDrillLogData] = useState<PlayerDrillLogsResponse | null>(null);
+
+  // Film Room clips for this player
+  const [filmClips, setFilmClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; created_at: string }[]>([]);
+  const [filmClipsLoading, setFilmClipsLoading] = useState(false);
+
+  const loadFilmClips = useCallback(async () => {
+    setFilmClipsLoading(true);
+    try {
+      const { data } = await api.get("/film/clips", { params: { player_id: playerId, limit: 50 } });
+      setFilmClips(Array.isArray(data) ? data : []);
+    } catch {
+      /* non-critical */
+    } finally {
+      setFilmClipsLoading(false);
+    }
+  }, [playerId]);
 
   const loadNotes = useCallback(async () => {
     try {
@@ -835,6 +853,13 @@ export default function PlayerDetailPage() {
         .finally(() => setLoadingGameLog(false));
     }
   }, [statsSubView, playerId, progression, gameLog, loadingProgression, loadingGameLog]);
+
+  // Load film clips when Video tab is active
+  useEffect(() => {
+    if (activeTab === "video" && filmClips.length === 0 && !filmClipsLoading) {
+      loadFilmClips();
+    }
+  }, [activeTab, filmClips.length, filmClipsLoading, loadFilmClips]);
 
   // Handle game log pagination
   const handleGameLogPageChange = (newOffset: number) => {
@@ -1896,7 +1921,7 @@ export default function PlayerDetailPage() {
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
             { key: "player" as Tab, label: "Player", count: devPlanV2History.length || devPlanVersions.length || null },
-            { key: "video" as Tab, label: "Video", count: null },
+            { key: "video" as Tab, label: "Video", count: filmClips.length || null },
           ]).map(({ key, label, count }) => (
             <button
               key={key}
@@ -3641,6 +3666,69 @@ export default function PlayerDetailPage() {
                   <p className="text-xs text-muted/60 mt-1">
                     Upload a tagged game file in Game Sheets to get started.
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* Film Room Clips */}
+            <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
+                <Scissors size={14} className="text-teal" /> Film Room Clips
+              </h3>
+              <p className="text-xs text-muted mb-4">
+                Clips tagged to this player in Film Room sessions.
+              </p>
+
+              {filmClipsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 size={18} className="animate-spin text-teal" />
+                  <span className="ml-2 text-xs text-muted">Loading clips...</span>
+                </div>
+              ) : filmClips.length === 0 ? (
+                <div className="text-center py-6">
+                  <Scissors size={28} className="mx-auto text-muted/20 mb-2" />
+                  <p className="text-sm text-muted">No Film Room clips for this player yet.</p>
+                  <p className="text-xs text-muted/60 mt-1">
+                    Tag clips to this player in the Film Room to see them here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filmClips.map((clip) => {
+                    const fmtTime = (s: number) => {
+                      const m = Math.floor(s / 60);
+                      const sec = Math.floor(s % 60);
+                      return `${m}:${sec.toString().padStart(2, "0")}`;
+                    };
+                    return (
+                      <div
+                        key={clip.id}
+                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-navy truncate">{clip.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
+                              <Clock size={10} />
+                              {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
+                            </span>
+                            {clip.description && (
+                              <span className="text-[10px] text-muted truncate">{clip.description}</span>
+                            )}
+                          </div>
+                        </div>
+                        {clip.session_id && (
+                          <Link
+                            href={`/film-room/sessions/${clip.session_id}?seek=${clip.start_time_seconds}`}
+                            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider rounded-lg hover:bg-teal hover:text-white transition-colors"
+                          >
+                            <Play size={10} />
+                            Watch
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
