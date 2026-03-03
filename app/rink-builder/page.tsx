@@ -91,6 +91,62 @@ function RinkBuilderInner() {
     modeParam === "chalk_talk" ? "chalk_talk" : "custom_drill"
   );
 
+  // ── Chalk Talk save state ──
+  const [showChalkSave, setShowChalkSave] = useState(false);
+  const [chalkForm, setChalkForm] = useState({ name: "", description: "", team_id: "" });
+  const [chalkSaving, setChalkSaving] = useState(false);
+  const [chalkError, setChalkError] = useState("");
+  const [chalkSuccess, setChalkSuccess] = useState<string | null>(null);
+  const [orgTeams, setOrgTeams] = useState<{ id: string; name: string }[]>([]);
+
+  // Fetch org teams for Chalk Talk team dropdown
+  useEffect(() => {
+    api.get("/teams").then((res) => {
+      const teams = (res.data?.teams || res.data || []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }));
+      setOrgTeams(teams);
+    }).catch(() => {});
+  }, []);
+
+  function openChalkSave() {
+    const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    setChalkForm({ name: `Board — ${today}`, description: "", team_id: "" });
+    setChalkError("");
+    setChalkSuccess(null);
+    setShowChalkSave(true);
+  }
+
+  async function handleSaveChalkTalk() {
+    if (!chalkForm.name.trim()) {
+      setChalkError("Board name is required.");
+      return;
+    }
+    if (!canvasRef.current) {
+      setChalkError("Canvas not ready — try again.");
+      return;
+    }
+    const diagramData = canvasRef.current.getDiagramData();
+
+    setChalkSaving(true);
+    setChalkError("");
+
+    try {
+      await api.post("/chalk-talks", {
+        name: chalkForm.name.trim(),
+        description: chalkForm.description.trim() || undefined,
+        team_id: chalkForm.team_id || undefined,
+        board_layout: JSON.stringify(diagramData),
+      });
+      setChalkSuccess("Board saved to My Boards");
+      setShowChalkSave(false);
+      setTimeout(() => setChalkSuccess(null), 10000);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to save board.";
+      setChalkError(msg);
+    } finally {
+      setChalkSaving(false);
+    }
+  }
+
   // Canvas ref for getting SVG + diagram data at save time
   const canvasRef = useRef<RinkCanvasHandle>(null);
 
@@ -348,7 +404,7 @@ function RinkBuilderInner() {
           </div>
         </div>
 
-        {/* Success Banner */}
+        {/* Success Banner (Drill) */}
         {saveSuccess && (
           <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-green-700 text-sm">
@@ -366,6 +422,14 @@ function RinkBuilderInner() {
           </div>
         )}
 
+        {/* Success Banner (Chalk Talk) */}
+        {chalkSuccess && (
+          <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2 text-green-700 text-sm">
+            <CheckCircle2 size={16} />
+            <span>{chalkSuccess}</span>
+          </div>
+        )}
+
         {/* Canvas */}
         <RinkCanvas
           ref={canvasRef}
@@ -375,7 +439,22 @@ function RinkBuilderInner() {
           onToggleHelp={() => setShowHelp((prev) => !prev)}
         />
 
-        {/* ── Drill Details Section ─────────────────────────────── */}
+        {/* ── Chalk Talk Save Button (only in chalk_talk mode) ── */}
+        {mode === "chalk_talk" && (
+          <div className="mt-6 flex items-center justify-center">
+            <button
+              onClick={openChalkSave}
+              disabled={chalkSaving}
+              className="flex items-center gap-2 px-6 py-3 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save size={14} />
+              {chalkSaving ? "Saving..." : "Save Board"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Drill Details Section (only in custom_drill mode) ── */}
+        {mode === "custom_drill" && (
         <div className="mt-6 bg-white rounded-xl border border-teal/20 overflow-hidden">
           <div className="bg-navy/[0.03] px-5 py-3 border-b border-teal/20">
             <h3 className="text-xs font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
@@ -532,6 +611,7 @@ function RinkBuilderInner() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Help text */}
         <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -668,6 +748,85 @@ function RinkBuilderInner() {
                   >
                     <Save size={14} />
                     {saving ? "Saving..." : "Save Copy"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Chalk Talk Save Board Modal ──────────────────────────── */}
+        {showChalkSave && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setShowChalkSave(false)}>
+            <div className="absolute inset-0 bg-black/30" />
+            <div
+              className="relative bg-white rounded-xl border border-border shadow-xl w-full max-w-md mx-4 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy font-bold flex items-center gap-2">
+                  <Save size={14} className="text-teal" />
+                  Save Board
+                </h3>
+                <button onClick={() => setShowChalkSave(false)} className="p-1 rounded-lg text-muted hover:bg-gray-100 hover:text-navy transition-colors">
+                  <XIcon size={14} />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">Board Name *</label>
+                  <input
+                    type="text"
+                    value={chalkForm.name}
+                    onChange={(e) => setChalkForm({ ...chalkForm, name: e.target.value })}
+                    placeholder="e.g. Forecheck Setup vs Maroons"
+                    className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">Description</label>
+                  <textarea
+                    value={chalkForm.description}
+                    onChange={(e) => setChalkForm({ ...chalkForm, description: e.target.value })}
+                    placeholder="Optional notes about this board..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm bg-white placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-oswald uppercase tracking-wider text-muted mb-1.5">Team</label>
+                  <select
+                    value={chalkForm.team_id}
+                    onChange={(e) => setChalkForm({ ...chalkForm, team_id: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                  >
+                    <option value="">No team selected</option>
+                    {orgTeams.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {chalkError && (
+                  <div className="flex items-center gap-2 text-red-600 text-xs bg-red-50 rounded-lg px-3 py-2">
+                    <AlertCircle size={14} />
+                    {chalkError}
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowChalkSave(false)}
+                    className="px-4 py-2 text-sm font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveChalkTalk}
+                    disabled={chalkSaving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save size={14} />
+                    {chalkSaving ? "Saving..." : "Save Board"}
                   </button>
                 </div>
               </div>
