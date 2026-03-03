@@ -38886,6 +38886,7 @@ async def create_mux_upload_url(request: Request, token_data: dict = Depends(ver
     try:
         mux_result = mux_create_upload(cors_origin=cors_origin)
     except Exception as e:
+        logger.error("Mux create_direct_upload error: %s", e, exc_info=True)
         raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
 
     upload_id = str(uuid.uuid4())

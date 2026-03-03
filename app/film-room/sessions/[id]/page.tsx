@@ -216,8 +216,11 @@ export default function FilmRoomSessionDetailPage() {
             setUploadProgress(Math.round((e.loaded / e.total) * 100));
           }
         };
-        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Upload failed")));
-        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: HTTP ${xhr.status} ${xhr.statusText}`)));
+        xhr.onerror = () => {
+          console.error("[Film Upload] XHR network error — status:", xhr.status, "response:", xhr.responseText);
+          reject(new Error("Upload network error"));
+        };
         xhr.send(file);
       });
 
@@ -256,8 +259,13 @@ export default function FilmRoomSessionDetailPage() {
           // Keep polling on network errors
         }
       }, 5000);
-    } catch {
-      setUploadError("Upload failed. Please try again.");
+    } catch (err: unknown) {
+      const axErr = err as { response?: { status?: number; data?: unknown }; message?: string };
+      console.error("[Film Upload] Error:", axErr?.response?.status, axErr?.response?.data, axErr?.message);
+      const detail = typeof axErr?.response?.data === "object" && axErr?.response?.data !== null
+        ? (axErr.response.data as { detail?: string })?.detail || JSON.stringify(axErr.response.data)
+        : axErr?.message || "Upload failed";
+      setUploadError(`Upload failed: ${detail}`);
       setUploading(false);
     }
   };
@@ -319,8 +327,13 @@ export default function FilmRoomSessionDetailPage() {
           // Keep polling on network errors
         }
       }, 5000);
-    } catch {
-      setUploadError("Failed to ingest video URL. Check the link and try again.");
+    } catch (err: unknown) {
+      const axErr = err as { response?: { status?: number; data?: unknown }; message?: string };
+      console.error("[Film URL Ingest] Error:", axErr?.response?.status, axErr?.response?.data, axErr?.message);
+      const detail = typeof axErr?.response?.data === "object" && axErr?.response?.data !== null
+        ? (axErr.response.data as { detail?: string })?.detail || JSON.stringify(axErr.response.data)
+        : axErr?.message || "Failed to ingest video URL";
+      setUploadError(`URL ingest failed: ${detail}`);
       setUrlSubmitting(false);
     }
   };
