@@ -3848,6 +3848,11 @@ def init_db():
             conn.commit()
             logger.info("Migration: added %s column to video_sessions", col_name)
 
+    # ── Film Room gap-fill: video_sessions indexes ──
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_game ON video_sessions(game_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_type ON video_sessions(session_type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_player ON video_sessions(player_id)")
+
     # ── Film Room Phase 1: ALTER chalk_talks (additive columns) ──
     ct_cols = _get_table_columns(conn, "chalk_talks")
     for col_name, col_def in [
@@ -3888,6 +3893,20 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_uploads_org ON video_uploads(org_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_uploads_game ON video_uploads(game_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_uploads_team ON video_uploads(team_id)")
+
+    # ── Film Room gap-fill: ALTER video_uploads (spec columns) ──
+    vu_cols = _get_table_columns(conn, "video_uploads")
+    for col_name, col_def in [
+        ("file_size_mb", "REAL"),
+        ("original_filename", "TEXT"),
+        ("thumbnail_url", "TEXT"),
+        ("external_provider", "TEXT"),
+    ]:
+        if col_name not in vu_cols:
+            conn.execute(f"ALTER TABLE video_uploads ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to video_uploads", col_name)
 
     # ── Film Room Phase 1: video_clips table ──
     conn.execute("""
@@ -3914,6 +3933,21 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_clips_upload ON video_clips(upload_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_clips_session ON video_clips(session_id)")
 
+    # ── Film Room gap-fill: ALTER video_clips (spec columns) ──
+    vc_cols = _get_table_columns(conn, "video_clips")
+    for col_name, col_def in [
+        ("category", "TEXT"),
+        ("ice_zone", "TEXT"),
+        ("annotation_data", "TEXT DEFAULT '{}'"),
+        ("section_key", "TEXT"),
+        ("sort_order", "INTEGER DEFAULT 0"),
+        ("visibility", "TEXT DEFAULT 'private'"),
+    ]:
+        if col_name not in vc_cols:
+            conn.execute(f"ALTER TABLE video_clips ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to video_clips", col_name)
+
     # ── Film Room Phase 1: video_events table ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS video_events (
@@ -3939,6 +3973,28 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_upload ON video_events(upload_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_clip ON video_events(clip_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_type ON video_events(event_type)")
+
+    # ── Film Room gap-fill: ALTER video_events (spec columns) ──
+    ve_cols = _get_table_columns(conn, "video_events")
+    for col_name, col_def in [
+        ("session_id", "TEXT"),
+        ("game_id", "TEXT"),
+        ("game_time", "TEXT"),
+        ("player_ids", "TEXT DEFAULT '[]'"),
+        ("ice_zone", "TEXT"),
+        ("outcome", "TEXT"),
+        ("source", "TEXT DEFAULT 'manual_tag'"),
+        ("metadata", "TEXT DEFAULT '{}'"),
+    ]:
+        if col_name not in ve_cols:
+            conn.execute(f"ALTER TABLE video_events ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to video_events", col_name)
+
+    # Add indexes for new columns (safe IF NOT EXISTS)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_game ON video_events(game_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_events_source ON video_events(source)")
 
     # ── Film Room Phase 1: film_session_comments table ──
     conn.execute("""
@@ -3960,6 +4016,17 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_film_comments_session ON film_session_comments(session_id)")
 
+    # ── Film Room gap-fill: ALTER film_session_comments (spec columns) ──
+    fsc_cols = _get_table_columns(conn, "film_session_comments")
+    for col_name, col_def in [
+        ("parent_comment_id", "TEXT"),
+        ("player_id", "TEXT"),
+    ]:
+        if col_name not in fsc_cols:
+            conn.execute(f"ALTER TABLE film_session_comments ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to film_session_comments", col_name)
+
     # ── Film Room Phase 1: chalk_talk_comments table ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS chalk_talk_comments (
@@ -3976,6 +4043,16 @@ def init_db():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chalk_comments_chalk ON chalk_talk_comments(chalk_talk_id)")
+
+    # ── Film Room gap-fill: ALTER chalk_talk_comments (spec columns) ──
+    ctc_cols = _get_table_columns(conn, "chalk_talk_comments")
+    for col_name, col_def in [
+        ("parent_comment_id", "TEXT"),
+    ]:
+        if col_name not in ctc_cols:
+            conn.execute(f"ALTER TABLE chalk_talk_comments ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to chalk_talk_comments", col_name)
 
     conn.commit()
 
