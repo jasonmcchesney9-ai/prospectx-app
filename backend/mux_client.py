@@ -80,6 +80,53 @@ def create_direct_upload(cors_origin: str = "*") -> dict:
 
 
 # ---------------------------------------------------------------------------
+# URL-based ingest (create asset from public URL)
+# ---------------------------------------------------------------------------
+
+
+def create_asset_from_url(url: str, passthrough: str = "") -> dict:
+    """Create a Mux asset by ingesting a public video URL.
+
+    Works with direct video file URLs and YouTube/Vimeo URLs that Mux
+    can resolve.
+
+    Returns:
+        {
+            "asset_id": str,
+            "status": str,           – "preparing" | "ready" | "errored"
+            "playback_id": str|None,
+        }
+    """
+    client = _get_client()
+    assets_api = mux_python.AssetsApi(client)
+
+    create_request = mux_python.CreateAssetRequest(
+        inputs=[
+            mux_python.InputSettings(url=url),
+        ],
+        playback_policy=[mux_python.PlaybackPolicy.PUBLIC],
+        passthrough=passthrough or None,
+    )
+
+    try:
+        response = assets_api.create_asset(create_request)
+        asset = response.data
+
+        playback_id = None
+        if asset.playback_ids and len(asset.playback_ids) > 0:
+            playback_id = asset.playback_ids[0].id
+
+        return {
+            "asset_id": asset.id,
+            "status": asset.status,
+            "playback_id": playback_id,
+        }
+    except ApiException as e:
+        logger.error("Mux create_asset_from_url(%s) failed: %s", url, e)
+        raise
+
+
+# ---------------------------------------------------------------------------
 # Asset operations
 # ---------------------------------------------------------------------------
 

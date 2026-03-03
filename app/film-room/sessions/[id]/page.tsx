@@ -20,6 +20,7 @@ import {
   Copy,
   RefreshCw,
   X,
+  Link2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -109,6 +110,11 @@ export default function FilmRoomSessionDetailPage() {
   const [uploadError, setUploadError] = useState("");
   const [polling, setPolling] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* Upload mode tab */
+  const [uploadTab, setUploadTab] = useState<"file" | "url">("file");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [urlSubmitting, setUrlSubmitting] = useState(false);
 
   /* Mux player ref for current time */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -253,6 +259,69 @@ export default function FilmRoomSessionDetailPage() {
     } catch {
       setUploadError("Upload failed. Please try again.");
       setUploading(false);
+    }
+  };
+
+  /* URL ingest: send URL to backend, Mux fetches it server-side */
+  const handleUrlIngest = async () => {
+    const trimmed = videoUrl.trim();
+    if (!trimmed) return;
+    setUrlSubmitting(true);
+    setUploadError("");
+
+    try {
+      const { data } = await api.post("/film/uploads/from-url", {
+        url: trimmed,
+        title: trimmed.split("/").pop()?.split("?")[0] || "Video from URL",
+        session_id: sessionId,
+      });
+      const uploadId = data.id;
+
+      // If Mux returned a playback ID immediately (rare but possible)
+      if (data.mux_playback_id) {
+        const refreshed = await api.get(`/film/sessions/${sessionId}`);
+        setSession(refreshed.data);
+        setVideoUrl("");
+        setUrlSubmitting(false);
+        return;
+      }
+
+      // Poll for readiness
+      setPolling(true);
+      let attempts = 0;
+      const maxAttempts = 120; // 10 min max (URL ingest can take longer)
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const statusRes = await api.get(`/film/uploads/${uploadId}/status`);
+          const status = statusRes.data?.status;
+          const playbackId = statusRes.data?.mux_playback_id;
+
+          if (status === "ready" && playbackId) {
+            clearInterval(pollInterval);
+            setPolling(false);
+            setUrlSubmitting(false);
+            setVideoUrl("");
+            const refreshed = await api.get(`/film/sessions/${sessionId}`);
+            setSession(refreshed.data);
+          } else if (status === "errored" || status === "error") {
+            clearInterval(pollInterval);
+            setPolling(false);
+            setUrlSubmitting(false);
+            setUploadError("Mux failed to process this URL. Try a different link.");
+          } else if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setPolling(false);
+            setUrlSubmitting(false);
+            setUploadError("Processing timed out. Check back later.");
+          }
+        } catch {
+          // Keep polling on network errors
+        }
+      }, 5000);
+    } catch {
+      setUploadError("Failed to ingest video URL. Check the link and try again.");
+      setUrlSubmitting(false);
     }
   };
 
@@ -435,35 +504,77 @@ export default function FilmRoomSessionDetailPage() {
                   }}
                 />
               ) : (
-                /* Placeholder */
+                /* Placeholder — tabbed upload */
                 <div
                   className="flex flex-col items-center justify-center"
                   style={{ aspectRatio: "16/9", background: "#E5E7EB" }}
                 >
                   <Video size={40} className="text-muted/30 mb-3" />
-                  <p className="text-sm text-muted font-semibold mb-3">No video uploaded yet</p>
+                  <p className="text-sm text-muted font-semibold mb-4">No video uploaded yet</p>
 
-                  {uploading ? (
+                  {/* Upload tabs */}
+                  {!uploading && !urlSubmitting && (
+                    <div className="flex items-center gap-1 mb-4 bg-gray-200 rounded-lg p-1">
+                      <button
+                        onClick={() => setUploadTab("file")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-oswald uppercase tracking-wider transition-colors ${
+                          uploadTab === "file"
+                            ? "bg-white text-navy shadow-sm"
+                            : "text-muted hover:text-navy"
+                        }`}
+                      >
+                        <Upload size={11} />
+                        Upload File
+                      </button>
+                      <button
+                        onClick={() => setUploadTab("url")}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-oswald uppercase tracking-wider transition-colors ${
+                          uploadTab === "url"
+                            ? "bg-white text-navy shadow-sm"
+                            : "text-muted hover:text-navy"
+                        }`}
+                      >
+                        <Link2 size={11} />
+                        Video URL
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Processing indicator (shared between file and URL) */}
+                  {(uploading || urlSubmitting) ? (
                     <div className="w-64">
                       <div className="flex items-center justify-between text-xs text-muted mb-1">
-                        <span>{polling ? "Processing..." : "Uploading..."}</span>
-                        <span>{uploadProgress}%</span>
+                        <span>
+                          {polling
+                            ? "Processing..."
+                            : uploading
+                            ? "Uploading..."
+                            : "Ingesting URL..."}
+                        </span>
+                        {uploading && <span>{uploadProgress}%</span>}
                       </div>
                       <div className="w-full bg-gray-300 rounded-full h-2">
                         <div
                           className="bg-teal rounded-full h-2 transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
+                          style={{
+                            width: uploading
+                              ? `${uploadProgress}%`
+                              : polling
+                              ? "100%"
+                              : "50%",
+                          }}
                         />
                       </div>
                     </div>
-                  ) : (
+                  ) : uploadTab === "file" ? (
+                    /* Upload File tab */
                     <>
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         className="flex items-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
                       >
                         <Upload size={14} />
-                        Upload Video
+                        Choose File
                       </button>
                       <input
                         ref={fileInputRef}
@@ -476,6 +587,28 @@ export default function FilmRoomSessionDetailPage() {
                         }}
                       />
                     </>
+                  ) : (
+                    /* Video URL tab */
+                    <div className="w-80 space-y-2">
+                      <input
+                        type="url"
+                        value={videoUrl}
+                        onChange={(e) => setVideoUrl(e.target.value)}
+                        placeholder="https://youtube.com/watch?v=... or direct link"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-navy bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                      />
+                      <button
+                        onClick={handleUrlIngest}
+                        disabled={!videoUrl.trim()}
+                        className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50"
+                      >
+                        <Link2 size={14} />
+                        Ingest Video
+                      </button>
+                      <p className="text-[10px] text-muted/60 text-center">
+                        YouTube, Vimeo, or direct .mp4 / .mov link
+                      </p>
+                    </div>
                   )}
 
                   {uploadError && (
