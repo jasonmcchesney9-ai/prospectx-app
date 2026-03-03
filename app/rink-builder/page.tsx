@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle } from "lucide-react";
+import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle, Search, Trash2, FolderOpen, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -146,6 +146,91 @@ function RinkBuilderInner() {
       setChalkSaving(false);
     }
   }
+
+  // ── My Boards panel state ──
+  interface ChalkBoard {
+    id: string;
+    name: string;
+    description?: string;
+    team_id?: string;
+    board_layout?: string;
+    created_at?: string;
+    updated_at?: string;
+  }
+  const [showMyBoards, setShowMyBoards] = useState(false);
+  const [myBoards, setMyBoards] = useState<ChalkBoard[]>([]);
+  const [boardsLoading, setBoardsLoading] = useState(false);
+  const [boardSearch, setBoardSearch] = useState("");
+  const [boardTeamFilter, setBoardTeamFilter] = useState("");
+  const [canvasKey, setCanvasKey] = useState(0);
+  const [loadedBoardData, setLoadedBoardData] = useState<RinkDiagramData | undefined>(undefined);
+
+  function fetchMyBoards() {
+    setBoardsLoading(true);
+    api.get("/chalk-talks").then((res) => {
+      const boards = res.data?.chalk_talks || res.data || [];
+      setMyBoards(boards);
+    }).catch(() => {}).finally(() => setBoardsLoading(false));
+  }
+
+  // Fetch boards when panel opens
+  useEffect(() => {
+    if (showMyBoards) fetchMyBoards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showMyBoards]);
+
+  // Refresh boards after saving
+  useEffect(() => {
+    if (chalkSuccess && showMyBoards) fetchMyBoards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chalkSuccess]);
+
+  function handleLoadBoard(board: ChalkBoard) {
+    if (!board.board_layout) return;
+    try {
+      const data = typeof board.board_layout === "string" ? JSON.parse(board.board_layout) : board.board_layout;
+      setLoadedBoardData(data);
+      setCanvasKey((k) => k + 1);
+      setChalkSuccess(`Loaded "${board.name}"`);
+      setTimeout(() => setChalkSuccess(null), 5000);
+    } catch {
+      setChalkError("Failed to parse board data.");
+    }
+  }
+
+  async function handleDuplicateBoard(board: ChalkBoard) {
+    try {
+      await api.post("/chalk-talks", {
+        name: `${board.name} (Copy)`,
+        description: board.description || undefined,
+        team_id: board.team_id || undefined,
+        board_layout: board.board_layout || undefined,
+      });
+      fetchMyBoards();
+      setChalkSuccess(`Duplicated "${board.name}"`);
+      setTimeout(() => setChalkSuccess(null), 5000);
+    } catch {
+      setChalkError("Failed to duplicate board.");
+    }
+  }
+
+  async function handleDeleteBoard(board: ChalkBoard) {
+    if (!confirm(`Delete "${board.name}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/chalk-talks/${board.id}`);
+      setMyBoards((prev) => prev.filter((b) => b.id !== board.id));
+      setChalkSuccess(`Deleted "${board.name}"`);
+      setTimeout(() => setChalkSuccess(null), 5000);
+    } catch {
+      setChalkError("Failed to delete board.");
+    }
+  }
+
+  const filteredBoards = myBoards.filter((b) => {
+    const matchesSearch = !boardSearch || b.name.toLowerCase().includes(boardSearch.toLowerCase());
+    const matchesTeam = !boardTeamFilter || b.team_id === boardTeamFilter;
+    return matchesSearch && matchesTeam;
+  });
 
   // Canvas ref for getting SVG + diagram data at save time
   const canvasRef = useRef<RinkCanvasHandle>(null);
@@ -432,16 +517,29 @@ function RinkBuilderInner() {
 
         {/* Canvas */}
         <RinkCanvas
+          key={canvasKey}
           ref={canvasRef}
+          initialData={loadedBoardData}
           onChange={handleDiagramChange}
           showToolbar={true}
           editable={true}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
         />
 
-        {/* ── Chalk Talk Save Button (only in chalk_talk mode) ── */}
+        {/* ── Chalk Talk Save Button + My Boards toggle (only in chalk_talk mode) ── */}
         {mode === "chalk_talk" && (
-          <div className="mt-6 flex items-center justify-center">
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              onClick={() => setShowMyBoards((prev) => !prev)}
+              className={`flex items-center gap-2 px-4 py-3 border text-sm font-oswald uppercase tracking-wider rounded-lg transition-colors ${
+                showMyBoards
+                  ? "border-teal bg-teal/5 text-teal"
+                  : "border-teal/30 text-teal hover:bg-teal/5"
+              }`}
+            >
+              {showMyBoards ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+              My Boards
+            </button>
             <button
               onClick={openChalkSave}
               disabled={chalkSaving}
@@ -450,6 +548,94 @@ function RinkBuilderInner() {
               <Save size={14} />
               {chalkSaving ? "Saving..." : "Save Board"}
             </button>
+          </div>
+        )}
+
+        {/* ── My Boards Panel (collapsible, chalk_talk mode only) ── */}
+        {mode === "chalk_talk" && showMyBoards && (
+          <div className="mt-4 bg-white rounded-xl border border-teal/20 overflow-hidden">
+            <div className="bg-navy/[0.03] px-4 py-3 border-b border-teal/20 flex items-center justify-between">
+              <h3 className="text-xs font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
+                <FolderOpen size={14} className="text-teal" />
+                My Boards
+                <span className="text-muted font-normal">({filteredBoards.length})</span>
+              </h3>
+              <button
+                onClick={() => setShowMyBoards(false)}
+                className="p-1 rounded-lg text-muted hover:bg-gray-100 hover:text-navy transition-colors"
+              >
+                <XIcon size={14} />
+              </button>
+            </div>
+
+            {/* Search + Team filter */}
+            <div className="px-4 py-3 border-b border-teal/10 flex gap-2">
+              <div className="relative flex-1">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  type="text"
+                  value={boardSearch}
+                  onChange={(e) => setBoardSearch(e.target.value)}
+                  placeholder="Search boards..."
+                  className="w-full pl-7 pr-3 py-2 border border-teal/20 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+                />
+              </div>
+              <select
+                value={boardTeamFilter}
+                onChange={(e) => setBoardTeamFilter(e.target.value)}
+                className="px-2 py-2 border border-teal/20 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
+              >
+                <option value="">All Teams</option>
+                {orgTeams.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Board list */}
+            <div className="max-h-64 overflow-y-auto divide-y divide-teal/10">
+              {boardsLoading ? (
+                <div className="px-4 py-6 text-center text-xs text-muted">Loading boards...</div>
+              ) : filteredBoards.length === 0 ? (
+                <div className="px-4 py-6 text-center text-xs text-muted">
+                  {myBoards.length === 0 ? "No boards saved yet. Draw something and save it!" : "No boards match your search."}
+                </div>
+              ) : (
+                filteredBoards.map((board) => {
+                  const teamName = orgTeams.find((t) => t.id === board.team_id)?.name;
+                  return (
+                    <div key={board.id} className="px-4 py-2.5 flex items-center justify-between hover:bg-navy/[0.02] transition-colors group">
+                      <button
+                        onClick={() => handleLoadBoard(board)}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <p className="text-xs font-semibold text-navy truncate">{board.name}</p>
+                        <p className="text-[10px] text-muted truncate">
+                          {teamName && <span className="text-teal">{teamName} · </span>}
+                          {board.updated_at ? new Date(board.updated_at).toLocaleDateString() : board.created_at ? new Date(board.created_at).toLocaleDateString() : ""}
+                        </p>
+                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                        <button
+                          onClick={() => handleDuplicateBoard(board)}
+                          title="Duplicate"
+                          className="p-1.5 rounded-lg text-muted hover:bg-teal/10 hover:text-teal transition-colors"
+                        >
+                          <Copy size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBoard(board)}
+                          title="Delete"
+                          className="p-1.5 rounded-lg text-muted hover:bg-red-50 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
 
