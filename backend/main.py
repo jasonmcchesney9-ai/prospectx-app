@@ -38117,6 +38117,142 @@ def _auto_session_name(session_type: str, team_name: str, opponent_name: str = N
     return " ".join(parts)
 
 
+@app.post("/chalk-talk/pre-populate")
+async def chalk_talk_pre_populate(request: Request, token_data: dict = Depends(verify_token)):
+    """PXI-powered pre-population for a game plan session.
+
+    Given team + opponent, returns opponent analysis, suggested systems,
+    keys to the game, and a drafted pre-game speech.
+    """
+    org_id = token_data["org_id"]
+    body = await request.json()
+    team_id = body.get("team_id")
+    opponent_id = body.get("opponent_id")
+    session_type = body.get("session_type", "Pre-Game")
+    game_date = body.get("game_date")
+
+    if not team_id or not opponent_id:
+        raise HTTPException(status_code=400, detail="team_id and opponent_id are required")
+
+    conn = get_db()
+    try:
+        # ── Gather context data ──
+        # Team name
+        team_row = conn.execute("SELECT name, identity FROM teams WHERE id = ?", (team_id,)).fetchone()
+        team_name = (team_row["name"] if team_row and hasattr(team_row, "keys") else (team_row[0] if team_row else "Our Team")) if team_row else "Our Team"
+        team_identity = ""
+        if team_row:
+            raw_identity = team_row["identity"] if hasattr(team_row, "keys") else team_row[1]
+            if raw_identity and raw_identity != "{}":
+                team_identity = raw_identity if isinstance(raw_identity, str) else json.dumps(raw_identity)
+
+        # Opponent name
+        opp_row = conn.execute("SELECT name, identity FROM teams WHERE id = ?", (opponent_id,)).fetchone()
+        opponent_name = (opp_row["name"] if opp_row and hasattr(opp_row, "keys") else (opp_row[0] if opp_row else "Opponent")) if opp_row else "Opponent"
+
+        # Opponent top scorers (top 5 by points this season)
+        opp_stats_rows = conn.execute("""
+            SELECT p.first_name, p.last_name, ps.position, ps.gp, ps.g, ps.a, ps.p
+            FROM player_stats ps
+            JOIN players p ON p.id = ps.player_id
+            WHERE ps.team_name = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY CAST(ps.p AS INTEGER) DESC
+            LIMIT 5
+        """, (opponent_name,)).fetchall()
+        opp_scorers = []
+        for r in opp_stats_rows:
+            if hasattr(r, "keys"):
+                opp_scorers.append(f"{r['first_name']} {r['last_name']} ({r['position'] or 'F'}): {r['gp']}GP, {r['g']}G, {r['a']}A, {r['p']}P")
+            else:
+                opp_scorers.append(f"{r[0]} {r[1]} ({r[2] or 'F'}): {r[3]}GP, {r[4]}G, {r[5]}A, {r[6]}P")
+
+        # Build prompt context
+        context_parts = [
+            f"OUR TEAM: {team_name}",
+            f"OPPONENT: {opponent_name}",
+            f"SESSION TYPE: {session_type}",
+        ]
+        if game_date:
+            context_parts.append(f"GAME DATE: {game_date}")
+        if team_identity:
+            context_parts.append(f"\nOUR TEAM IDENTITY:\n{team_identity[:1500]}")
+        if opp_scorers:
+            context_parts.append(f"\nOPPONENT TOP SCORERS:\n" + "\n".join(opp_scorers))
+
+        context = "\n".join(context_parts)
+    finally:
+        conn.close()
+
+    # ── Call Claude for pre-population ──
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        # Return empty pre-population if no API key (mock mode)
+        return {
+            "opponent_analysis": "",
+            "suggested_forecheck": "",
+            "suggested_breakout": "",
+            "suggested_defence": "",
+            "keys_to_game": [],
+            "pregame_speech": "",
+        }
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        system_prompt = """You are PXI — the ProspectX Intelligence engine for hockey coaching.
+You are helping a coach prepare a game plan. Based on the team and opponent data provided,
+generate a pre-game intelligence briefing. Be concise, specific, and actionable.
+
+Return valid JSON with these exact keys:
+{
+  "opponent_analysis": "2-3 sentences about opponent tendencies, strengths, weaknesses",
+  "suggested_forecheck": "One forecheck system name (e.g. '1-2-2 Aggressive') with brief rationale",
+  "suggested_breakout": "One breakout system name (e.g. 'Quick Up') with brief rationale",
+  "suggested_defence": "One defensive system name (e.g. 'Zone Coverage') with brief rationale",
+  "keys_to_game": ["Key 1 - brief detail", "Key 2 - brief detail", "Key 3 - brief detail", "Key 4 - brief detail", "Key 5 - brief detail"],
+  "pregame_speech": "A 3-4 sentence motivational pre-game message for the team"
+}
+
+If opponent data is limited, make intelligent inferences based on hockey knowledge.
+Always return valid JSON only — no markdown, no code fences."""
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1200,
+            system=system_prompt,
+            messages=[{"role": "user", "content": f"Generate a pre-game intelligence briefing:\n\n{context}"}],
+        )
+
+        raw_text = response.content[0].text.strip()
+        if raw_text.startswith("```"):
+            raw_text = re.sub(r"^```(?:json)?\s*\n?", "", raw_text)
+            raw_text = re.sub(r"\n?```\s*$", "", raw_text)
+
+        result = json.loads(raw_text)
+        return {
+            "opponent_analysis": result.get("opponent_analysis", ""),
+            "suggested_forecheck": result.get("suggested_forecheck", ""),
+            "suggested_breakout": result.get("suggested_breakout", ""),
+            "suggested_defence": result.get("suggested_defence", ""),
+            "keys_to_game": result.get("keys_to_game", []),
+            "pregame_speech": result.get("pregame_speech", ""),
+        }
+    except json.JSONDecodeError:
+        logger.error("Chalk talk pre-populate: JSON parse error from LLM response")
+        return {
+            "opponent_analysis": "",
+            "suggested_forecheck": "",
+            "suggested_breakout": "",
+            "suggested_defence": "",
+            "keys_to_game": [],
+            "pregame_speech": "",
+        }
+    except Exception as e:
+        logger.error("Chalk talk pre-populate error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail=f"PXI analysis failed: {str(e)}")
+
+
 @app.post("/chalk-talk-sessions", status_code=201)
 async def create_chalk_talk_session(request: Request, token_data: dict = Depends(verify_token)):
     """Create a new chalk talk session.

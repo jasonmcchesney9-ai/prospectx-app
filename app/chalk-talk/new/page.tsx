@@ -16,6 +16,7 @@ import {
   PenTool,
   Search,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -117,6 +118,17 @@ function SessionForm() {
   const [opponentSearch, setOpponentSearch] = useState("");
   const [gameDateLoading, setGameDateLoading] = useState(false);
 
+  /* PXI pre-populate state */
+  const [pxiLoading, setPxiLoading] = useState(false);
+  const [pxiData, setPxiData] = useState<{
+    opponent_analysis?: string;
+    suggested_forecheck?: string;
+    suggested_breakout?: string;
+    suggested_defence?: string;
+    keys_to_game?: string[];
+    pregame_speech?: string;
+  } | null>(null);
+
   const [forecheck, setForecheck] = useState("");
   const [forecheckCustom, setForecheckCustom] = useState("");
   const [breakout, setBreakout] = useState("");
@@ -170,6 +182,34 @@ function SessionForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, opponentTeamId, needsOpponent]);
 
+  /* PXI pre-populate when team + opponent selected */
+  useEffect(() => {
+    if (!teamId || !opponentTeamId || !needsOpponent) return;
+    setPxiLoading(true);
+    setPxiData(null);
+    api.post("/chalk-talk/pre-populate", {
+      team_id: teamId,
+      opponent_id: opponentTeamId,
+      session_type: sessionType,
+      game_date: gameDate || undefined,
+    })
+      .then(({ data }) => {
+        setPxiData(data);
+        // Auto-fill form fields with PXI suggestions if currently empty
+        if (data.opponent_analysis && !opponentAnalysis) setOpponentAnalysis(data.opponent_analysis);
+        if (data.suggested_forecheck && !forecheck) setForecheck(data.suggested_forecheck);
+        if (data.suggested_breakout && !breakout) setBreakout(data.suggested_breakout);
+        if (data.suggested_defence && !defensiveSystem) setDefensiveSystem(data.suggested_defence);
+        if (data.keys_to_game?.length && !keysToGame) {
+          setKeysToGame(data.keys_to_game.map((k: string, i: number) => `${i + 1}. ${k}`).join("\n"));
+        }
+        if (data.pregame_speech && !pregameSpeech) setPregameSpeech(data.pregame_speech);
+      })
+      .catch(() => { /* PXI not available — not critical */ })
+      .finally(() => setPxiLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, opponentTeamId]);
+
   /* Filter opponents for search */
   const filteredOpponents = allTeams
     .filter((t) => t.id !== teamId)
@@ -217,9 +257,11 @@ function SessionForm() {
         postgame_win_message: postgameWin || null,
         postgame_loss_message: postgameLoss || null,
       });
-      // Free Board → war room page; others → rink builder
+      // Free Board → war room; PXI pre-populated → war room; others → rink builder
       if (isFreeBoard) {
         router.push(`/chalk-talk/sessions/${data.id}`);
+      } else if (pxiData) {
+        router.push(`/chalk-talk/sessions/${data.id}?pxi=1`);
       } else {
         router.push(`/rink-builder?mode=chalk_talk&session_id=${data.id}`);
       }
@@ -374,6 +416,24 @@ function SessionForm() {
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                 </div>
+                {/* PXI Analysis Indicator */}
+                {pxiLoading && (
+                  <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg" style={{ background: "rgba(13,148,136,0.06)" }}>
+                    <Loader2 size={14} className="animate-spin text-teal" />
+                    <span className="text-xs text-teal font-medium">
+                      <Sparkles size={10} className="inline mr-1" />
+                      PXI is analysing the matchup...
+                    </span>
+                  </div>
+                )}
+                {pxiData && !pxiLoading && (
+                  <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg" style={{ background: "rgba(13,148,136,0.06)" }}>
+                    <Sparkles size={12} className="text-teal" />
+                    <span className="text-[10px] text-teal font-medium">
+                      PXI pre-loaded matchup intelligence — review in later steps
+                    </span>
+                  </div>
+                )}
               </div>
             )}
             {needsOpponent && (

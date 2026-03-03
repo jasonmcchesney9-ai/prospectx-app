@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -31,6 +31,7 @@ import {
   Film,
   Link2,
   Unlink,
+  Zap,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -70,7 +71,9 @@ export default function SessionDetailPage() {
 function WarRoom() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const sessionId = params.id as string;
+  const pxiPreLoaded = searchParams.get("pxi") === "1";
 
   /* ── Loading / error state ─────────────────────────────── */
   const [loading, setLoading] = useState(true);
@@ -498,6 +501,12 @@ function WarRoom() {
           </div>
           {/* Body */}
           <div className="bg-white px-5 py-4">
+            {pxiPreLoaded && opponentAnalysis && (
+              <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-md" style={{ background: "rgba(13,148,136,0.06)" }}>
+                <Zap size={10} className="text-teal" />
+                <span className="text-[10px] font-medium text-teal">PXI Pre-loaded · Edit to customize</span>
+              </div>
+            )}
             {opponentAnalysis ? (
               <div className="space-y-3">
                 <p className="text-sm leading-relaxed" style={{ color: "#0F2942" }}>{opponentAnalysis}</p>
@@ -587,6 +596,12 @@ function WarRoom() {
           </div>
           {/* Body */}
           <div className="bg-white px-5 py-4">
+            {pxiPreLoaded && keysList.length > 0 && (
+              <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-md" style={{ background: "rgba(13,148,136,0.06)" }}>
+                <Zap size={10} className="text-teal" />
+                <span className="text-[10px] font-medium text-teal">PXI Pre-loaded · Edit to customize</span>
+              </div>
+            )}
             {keysList.length > 0 ? (
               <div className="space-y-3">
                 {keysList.map((k, i) => (
@@ -633,6 +648,12 @@ function WarRoom() {
           </div>
           {/* Body */}
           <div className="bg-white px-5 py-4 space-y-4">
+            {pxiPreLoaded && pregameSpeech && (
+              <div className="flex items-center gap-1.5 mb-1 px-2.5 py-1.5 rounded-md" style={{ background: "rgba(13,148,136,0.06)" }}>
+                <Zap size={10} className="text-teal" />
+                <span className="text-[10px] font-medium text-teal">PXI Pre-loaded · Edit to customize</span>
+              </div>
+            )}
             {/* Pre-Game Speech */}
             <div>
               {pregameSpeech ? (
