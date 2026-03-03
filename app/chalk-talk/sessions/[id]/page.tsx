@@ -1,115 +1,84 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Swords,
   ArrowLeft,
   Save,
   ChevronDown,
-  ChevronRight,
-  MessageSquare,
-  Trophy,
-  Target,
-  ShieldCheck,
+  ChevronUp,
   PenTool,
   Trash2,
   Loader2,
+  Maximize2,
+  Eye,
+  EyeOff,
+  Sparkles,
+  Mic,
+  Target,
+  ShieldCheck,
+  Trophy,
+  AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import type { ChalkTalkSession } from "@/types/api";
+import type { RinkDiagramData } from "@/types/rink";
+import type { BackgroundMode, RinkCanvasHandle } from "@/components/RinkCanvas";
 
-/* ── Session type definitions ──────────────────────────────── */
-const SESSION_TYPE_OPTIONS = [
-  { value: "Pre-Game", label: "Pre-Game", desc: "Game prep, opponent scouting, strategy" },
-  { value: "Post-Game", label: "Post-Game", desc: "Review what happened, what worked" },
-  { value: "Practice", label: "Practice", desc: "Practice planning, drill focus, system work" },
-  { value: "Season Notes", label: "Season Notes", desc: "Big-picture strategy, mid-season adjustments" },
-];
+/* ── Lazy-load RinkCanvas (SSR-safe) ─────────────────────── */
+const RinkCanvas = dynamic(() => import("@/components/RinkCanvas"), { ssr: false });
 
-/* ── Tactical system dropdowns ─────────────────────────────── */
-const FORECHECK_OPTIONS = [
-  "1-2-2 Aggressive",
-  "2-1-2 Neutral Zone",
-  "1-3-1 Conservative",
-  "2-3 Passive",
-  "Custom",
-];
-const BREAKOUT_OPTIONS = [
-  "Quick Up",
-  "Reverse",
-  "Stretch Pass",
-  "Rim Play",
-  "Custom",
-];
-const DEFENSIVE_OPTIONS = [
-  "Man-on-Man",
-  "Zone Coverage",
-  "Hybrid",
-  "Collapsing",
-  "Custom",
-];
-
-/* ── Steps ─────────────────────────────────────────────────── */
-const STEPS = [
-  "Session Type",
-  "Game Details",
-  "Tactical Systems",
-  "Opponent Analysis",
-  "Our Strategy",
-  "Special Teams",
-  "Keys to the Game",
-  "Talking Points",
-  "Review & Save",
-];
-
-const STATUS_ORDER = ["draft", "active", "completed"] as const;
+/* ── Constants ────────────────────────────────────────────── */
 const STATUS_LABELS: Record<string, string> = { draft: "Draft", active: "Active", completed: "Completed" };
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-200",
   active: "bg-green-100 text-green-700 border-green-200",
   completed: "bg-blue-100 text-blue-700 border-blue-200",
 };
+const STATUS_ORDER = ["draft", "active", "completed"] as const;
 
-interface SimpleTeam {
-  id: string;
-  name: string;
-}
+interface SimpleTeam { id: string; name: string; }
 
+/* ================================================================
+   WAR ROOM — Session Detail Page
+   ================================================================ */
 export default function SessionDetailPage() {
   return (
     <ProtectedRoute>
       <NavBar />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <SessionDetail />
+      <main className="min-h-screen" style={{ background: "#F0F4F8" }}>
+        <WarRoom />
       </main>
     </ProtectedRoute>
   );
 }
 
-function SessionDetail() {
+function WarRoom() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.id as string;
 
+  /* ── Loading / error state ─────────────────────────────── */
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  /* Teams */
+  /* ── Teams ─────────────────────────────────────────────── */
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
   useEffect(() => {
     api.get<SimpleTeam[]>("/teams").then(({ data }) => setTeams(data)).catch(() => {});
   }, []);
 
-  /* Form state */
+  /* ── Session data ──────────────────────────────────────── */
   const [sessionType, setSessionType] = useState("Pre-Game");
   const [status, setStatus] = useState("draft");
   const [teamId, setTeamId] = useState("");
@@ -119,11 +88,8 @@ function SessionDetail() {
   const [boardName, setBoardName] = useState("");
 
   const [forecheck, setForecheck] = useState("");
-  const [forecheckCustom, setForecheckCustom] = useState("");
   const [breakout, setBreakout] = useState("");
-  const [breakoutCustom, setBreakoutCustom] = useState("");
   const [defensiveSystem, setDefensiveSystem] = useState("");
-  const [defensiveCustom, setDefensiveCustom] = useState("");
 
   const [opponentAnalysis, setOpponentAnalysis] = useState("");
   const [ourStrategy, setOurStrategy] = useState("");
@@ -134,20 +100,20 @@ function SessionDetail() {
   const [postgameWin, setPostgameWin] = useState("");
   const [postgameLoss, setPostgameLoss] = useState("");
 
-  /* Derived */
-  const needsOpponent = sessionType === "Pre-Game" || sessionType === "Post-Game";
+  /* ── Canvas state ──────────────────────────────────────── */
+  const [canvasExpanded, setCanvasExpanded] = useState(true);
+  const [boardData, setBoardData] = useState<RinkDiagramData | null>(null);
+  const [bgMode, setBgMode] = useState<BackgroundMode>("full_rink");
+  const [canvasKey, setCanvasKey] = useState(0);
+  const [boardSaving, setBoardSaving] = useState(false);
+  const canvasRef = useRef<RinkCanvasHandle | null>(null);
 
-  /* Detect if a value is a known dropdown option or custom */
-  function initDropdown(
-    val: string | null,
-    knownOptions: string[]
-  ): { selected: string; custom: string } {
-    if (!val) return { selected: "", custom: "" };
-    if (knownOptions.includes(val)) return { selected: val, custom: "" };
-    return { selected: "Custom", custom: val };
-  }
+  /* ── Derived ───────────────────────────────────────────── */
+  const teamName = teams.find((t) => t.id === teamId)?.name || "";
+  const opponentName = teams.find((t) => t.id === opponentTeamId)?.name || "";
+  const displayDate = gameDate ? new Date(gameDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "";
 
-  /* Fetch session on mount */
+  /* ── Fetch session on mount ────────────────────────────── */
   useEffect(() => {
     async function load() {
       try {
@@ -159,25 +125,32 @@ function SessionDetail() {
         setGameDate(data.game_date || "");
         setChalkTalkId(data.chalk_talk_id || "");
         setBoardName(data.board_name || "");
-
-        const fc = initDropdown(data.forecheck, FORECHECK_OPTIONS.filter((o) => o !== "Custom"));
-        setForecheck(fc.selected);
-        setForecheckCustom(fc.custom);
-        const bo = initDropdown(data.breakout, BREAKOUT_OPTIONS.filter((o) => o !== "Custom"));
-        setBreakout(bo.selected);
-        setBreakoutCustom(bo.custom);
-        const ds = initDropdown(data.defensive_system, DEFENSIVE_OPTIONS.filter((o) => o !== "Custom"));
-        setDefensiveSystem(ds.selected);
-        setDefensiveCustom(ds.custom);
-
+        setForecheck(data.forecheck || "");
+        setBreakout(data.breakout || "");
+        setDefensiveSystem(data.defensive_system || "");
         setOpponentAnalysis(data.opponent_analysis || "");
         setOurStrategy(data.our_strategy || "");
         setSpecialTeamsPlan(data.special_teams_plan || "");
         setKeysToGame(data.keys_to_game || "");
-
         setPregameSpeech(data.pregame_speech || "");
         setPostgameWin(data.postgame_win_message || "");
         setPostgameLoss(data.postgame_loss_message || "");
+
+        /* Load board if linked */
+        if (data.chalk_talk_id) {
+          try {
+            const boardRes = await api.get(`/chalk-talks/${data.chalk_talk_id}`);
+            const layout = boardRes.data?.board_layout;
+            if (layout) {
+              const parsed = typeof layout === "string" ? JSON.parse(layout) : layout;
+              if (parsed.background && ["full_rink", "half_rink", "blank"].includes(parsed.background)) {
+                setBgMode(parsed.background as BackgroundMode);
+              }
+              setBoardData(parsed);
+              setCanvasKey((k) => k + 1);
+            }
+          } catch { /* board load failed — show blank canvas */ }
+        }
       } catch {
         setNotFound(true);
       } finally {
@@ -187,44 +160,7 @@ function SessionDetail() {
     load();
   }, [sessionId]);
 
-  /* Resolve final tactical values */
-  const resolveValue = (selected: string, custom: string) =>
-    selected === "Custom" ? custom || "Custom" : selected;
-
-  /* Save */
-  const handleSave = async () => {
-    setSaving(true);
-    setError("");
-    setSaveSuccess(false);
-    try {
-      await api.patch(`/chalk-talk-sessions/${sessionId}`, {
-        session_type: sessionType,
-        team_id: teamId,
-        opponent_team_id: opponentTeamId || null,
-        game_date: gameDate || null,
-        forecheck: resolveValue(forecheck, forecheckCustom) || null,
-        breakout: resolveValue(breakout, breakoutCustom) || null,
-        defensive_system: resolveValue(defensiveSystem, defensiveCustom) || null,
-        opponent_analysis: opponentAnalysis || null,
-        our_strategy: ourStrategy || null,
-        special_teams_plan: specialTeamsPlan || null,
-        keys_to_game: keysToGame || null,
-        pregame_speech: pregameSpeech || null,
-        postgame_win_message: postgameWin || null,
-        postgame_loss_message: postgameLoss || null,
-        status,
-      });
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 5000);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-      setError(typeof msg === "string" ? msg : "Failed to save session");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /* Status toggle */
+  /* ── Status toggle ─────────────────────────────────────── */
   const cycleStatus = async () => {
     const idx = STATUS_ORDER.indexOf(status as typeof STATUS_ORDER[number]);
     const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
@@ -232,11 +168,11 @@ function SessionDetail() {
     try {
       await api.patch(`/chalk-talk-sessions/${sessionId}`, { status: next });
     } catch {
-      setStatus(status); // revert on failure
+      setStatus(status);
     }
   };
 
-  /* Delete */
+  /* ── Delete ────────────────────────────────────────────── */
   const handleDelete = async () => {
     if (!confirm("Delete this session? The linked whiteboard will be preserved.")) return;
     setDeleting(true);
@@ -249,19 +185,56 @@ function SessionDetail() {
     }
   };
 
-  const inputClass =
-    "w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30";
-  const textareaClass = `${inputClass} resize-none`;
-  const selectClass = `${inputClass} appearance-none bg-white`;
+  /* ── Save board ────────────────────────────────────────── */
+  const handleSaveBoard = useCallback(async (data: RinkDiagramData, svgString: string) => {
+    setBoardSaving(true);
+    try {
+      const layoutPayload = JSON.stringify({ ...data, background: bgMode });
+      if (chalkTalkId) {
+        await api.patch(`/chalk-talks/${chalkTalkId}`, { board_layout: layoutPayload });
+      } else {
+        const res = await api.post("/chalk-talks", {
+          name: `${teamName || "Session"} Board`,
+          board_layout: layoutPayload,
+          team_id: teamId || undefined,
+        });
+        const newId = res.data?.id;
+        if (newId) {
+          setChalkTalkId(newId);
+          await api.patch(`/chalk-talk-sessions/${sessionId}`, { chalk_talk_id: newId });
+        }
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch {
+      setError("Failed to save board");
+    } finally {
+      setBoardSaving(false);
+    }
+  }, [chalkTalkId, bgMode, teamName, teamId, sessionId]);
 
-  /* Team name helpers */
-  const teamName = teams.find((t) => t.id === teamId)?.name || "";
-  const opponentName = teams.find((t) => t.id === opponentTeamId)?.name || "";
+  /* ── Parse keys to game into structured list ───────────── */
+  const keysList = keysToGame
+    ? keysToGame.split("\n").filter((l) => l.trim()).map((line) => {
+        const cleaned = line.replace(/^\d+[\.\)]\s*/, "").trim();
+        const dashIdx = cleaned.indexOf(" - ");
+        if (dashIdx > 0) {
+          return { title: cleaned.substring(0, dashIdx).trim(), note: cleaned.substring(dashIdx + 3).trim() };
+        }
+        return { title: cleaned, note: "" };
+      })
+    : [];
 
+  /* ── Parse opponent analysis into threats ───────────────── */
+  const threatLines = opponentAnalysis
+    ? opponentAnalysis.split("\n").filter((l) => l.trim())
+    : [];
+
+  /* ── Loading / not found ───────────────────────────────── */
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={28} className="animate-spin text-teal" />
+        <Loader2 size={28} className="animate-spin" style={{ color: "#0D9488" }} />
       </div>
     );
   }
@@ -269,8 +242,8 @@ function SessionDetail() {
   if (notFound) {
     return (
       <div className="text-center py-20">
-        <h2 className="text-xl font-oswald font-bold text-navy mb-2">Session Not Found</h2>
-        <Link href="/chalk-talk/sessions" className="text-sm text-teal hover:underline">
+        <h2 className="text-xl font-bold mb-2" style={{ color: "#0F2942", fontFamily: "Oswald, sans-serif" }}>Session Not Found</h2>
+        <Link href="/chalk-talk/sessions" className="text-sm hover:underline" style={{ color: "#0D9488" }}>
           ← Back to Sessions
         </Link>
       </div>
@@ -278,37 +251,61 @@ function SessionDetail() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+      {/* ═══════════════════════════════════════════════════════
+          1. SESSION HEADER — white bar
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-white px-5 py-4 flex items-center justify-between mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
         <div className="flex items-center gap-3">
-          <Link href="/chalk-talk/sessions" className="text-muted hover:text-navy transition-colors">
+          <Link href="/chalk-talk/sessions" className="hover:opacity-70 transition-opacity" style={{ color: "#8BA4BB" }}>
             <ArrowLeft size={20} />
           </Link>
+          <span
+            className="px-2.5 py-1 rounded-md text-white font-bold uppercase"
+            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#EA580C" }}
+          >
+            {sessionType}
+          </span>
           <div>
-            <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
-              <Swords size={24} className="text-teal" />
-              Edit Session
+            <h1 className="text-lg font-bold" style={{ color: "#0F2942" }}>
+              {teamName || "Untitled"}{opponentName ? ` vs ${opponentName}` : ""}
             </h1>
-            <p className="text-muted text-sm mt-0.5">
-              {sessionType} · {teamName || "No team"}{opponentName ? ` vs ${opponentName}` : ""}
-            </p>
+            {displayDate && <p className="text-xs" style={{ color: "#8BA4BB" }}>{displayDate}</p>}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Status toggle */}
           <button
             onClick={cycleStatus}
-            className={`px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider border transition-colors ${STATUS_COLORS[status] || STATUS_COLORS.draft}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase border transition-colors ${STATUS_COLORS[status] || STATUS_COLORS.draft}`}
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}
             title="Click to cycle status"
           >
             {STATUS_LABELS[status] || status}
           </button>
-          {/* Delete */}
+          <Link
+            href={`/chalk-talk/sessions/${sessionId}/edit`}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors"
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0F2942", border: "1.5px solid #DDE6EF" }}
+          >
+            <PenTool size={12} />
+            Edit Session
+          </Link>
+          <a
+            href={`/rink-builder?mode=chalk_talk&session_id=${sessionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold uppercase transition-colors hover:opacity-90"
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
+          >
+            <Maximize2 size={12} />
+            Open Whiteboard
+          </a>
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="p-2 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30"
+            className="p-2 rounded-lg transition-colors disabled:opacity-30"
+            style={{ color: "#8BA4BB" }}
             title="Delete session"
           >
             <Trash2 size={16} />
@@ -316,351 +313,369 @@ function SessionDetail() {
         </div>
       </div>
 
-      {/* Board preview */}
-      {chalkTalkId && (
-        <div className="mb-6 bg-white rounded-xl border border-teal/20 px-5 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-0.5">Linked Whiteboard</p>
-            <p className="text-sm font-semibold text-navy">{boardName || "Untitled Board"}</p>
-          </div>
-          <Link
-            href={`/rink-builder?mode=chalk_talk&session_id=${sessionId}`}
-            className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-          >
-            <PenTool size={14} />
-            Open Whiteboard
-          </Link>
-        </div>
-      )}
-
-      {/* Step Progress */}
-      <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1">
-        {STEPS.map((s, i) => (
-          <button
-            key={s}
-            onClick={() => setStep(i)}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-oswald uppercase tracking-wider whitespace-nowrap transition-colors ${
-              i === step
-                ? "bg-teal/10 text-teal font-semibold"
-                : "text-muted/60 hover:text-teal cursor-pointer"
-            }`}
-          >
-            <span
-              className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
-                i === step ? "bg-teal text-white" : "bg-gray-100 text-muted/40"
-              }`}
-            >
-              {i + 1}
-            </span>
-            <span className="hidden sm:inline">{s}</span>
-          </button>
-        ))}
-      </div>
-
+      {/* Alerts */}
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm" style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C" }}>
           {error}
         </div>
       )}
       {saveSuccess && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-green-700 text-sm">
-          Session saved successfully.
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#15803D" }}>
+          Saved successfully.
         </div>
       )}
 
-      {/* Step 0: Session Type */}
-      {step === 0 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">
-            What type of session is this?
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {SESSION_TYPE_OPTIONS.map((st) => (
-              <button
-                key={st.value}
-                onClick={() => setSessionType(st.value)}
-                className={`text-left border rounded-xl p-4 transition-all ${
-                  sessionType === st.value
-                    ? "border-teal bg-teal/5 ring-2 ring-teal/20"
-                    : "border-gray-200 hover:border-teal/30"
-                }`}
-              >
-                <div className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider">
-                  {st.label}
-                </div>
-                <div className="text-xs text-muted mt-1">{st.desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Step 1: Game Details */}
-      {step === 1 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Game Details</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-navy mb-1">Your Team *</label>
-              <div className="relative">
-                <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className={selectClass}>
-                  <option value="">Select your team...</option>
-                  {teams.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-              </div>
-            </div>
-            {needsOpponent && (
-              <div>
-                <label className="block text-xs font-semibold text-navy mb-1">Opponent</label>
-                <div className="relative">
-                  <select value={opponentTeamId} onChange={(e) => setOpponentTeamId(e.target.value)} className={selectClass}>
-                    <option value="">Select opponent...</option>
-                    {teams.filter((t) => t.id !== teamId).map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                </div>
-              </div>
-            )}
-            {needsOpponent && (
-              <div>
-                <label className="block text-xs font-semibold text-navy mb-1">Game Date</label>
-                <input type="date" value={gameDate} onChange={(e) => setGameDate(e.target.value)} className={inputClass} />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Step 2: Tactical Systems */}
-      {step === 2 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Tactical Systems</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                <Target size={12} className="text-teal" /> Forecheck
-              </label>
-              <div className="relative">
-                <select value={forecheck} onChange={(e) => setForecheck(e.target.value)} className={selectClass}>
-                  <option value="">Select forecheck...</option>
-                  {FORECHECK_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-              </div>
-              {forecheck === "Custom" && (
-                <input type="text" value={forecheckCustom} onChange={(e) => setForecheckCustom(e.target.value)} placeholder="Describe your forecheck..." className={`${inputClass} mt-2`} />
-              )}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                <ArrowLeft size={12} className="text-teal rotate-180" /> Breakout
-              </label>
-              <div className="relative">
-                <select value={breakout} onChange={(e) => setBreakout(e.target.value)} className={selectClass}>
-                  <option value="">Select breakout...</option>
-                  {BREAKOUT_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-              </div>
-              {breakout === "Custom" && (
-                <input type="text" value={breakoutCustom} onChange={(e) => setBreakoutCustom(e.target.value)} placeholder="Describe your breakout..." className={`${inputClass} mt-2`} />
-              )}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                <ShieldCheck size={12} className="text-teal" /> Defensive System
-              </label>
-              <div className="relative">
-                <select value={defensiveSystem} onChange={(e) => setDefensiveSystem(e.target.value)} className={selectClass}>
-                  <option value="">Select system...</option>
-                  {DEFENSIVE_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-              </div>
-              {defensiveSystem === "Custom" && (
-                <input type="text" value={defensiveCustom} onChange={(e) => setDefensiveCustom(e.target.value)} placeholder="Describe your system..." className={`${inputClass} mt-2`} />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Step 3: Opponent Analysis */}
-      {step === 3 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Opponent Analysis</h3>
-          <textarea value={opponentAnalysis} onChange={(e) => setOpponentAnalysis(e.target.value)} placeholder="Key players, tendencies, strengths, weaknesses..." rows={8} className={textareaClass} />
-        </div>
-      )}
-
-      {/* Step 4: Our Strategy */}
-      {step === 4 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Our Strategy</h3>
-          <textarea value={ourStrategy} onChange={(e) => setOurStrategy(e.target.value)} placeholder="Game plan, approach, tactical priorities..." rows={8} className={textareaClass} />
-        </div>
-      )}
-
-      {/* Step 5: Special Teams */}
-      {step === 5 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Special Teams Plan</h3>
-          <textarea value={specialTeamsPlan} onChange={(e) => setSpecialTeamsPlan(e.target.value)} placeholder="Power play approach, penalty kill strategy, faceoff plays..." rows={8} className={textareaClass} />
-        </div>
-      )}
-
-      {/* Step 6: Keys to the Game */}
-      {step === 6 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Keys to the Game</h3>
-          <textarea value={keysToGame} onChange={(e) => setKeysToGame(e.target.value)} placeholder={"1. Win the faceoff battle\n2. Limit odd-man rushes\n3. Forecheck with purpose\n4. ..."} rows={8} className={textareaClass} />
-        </div>
-      )}
-
-      {/* Step 7: Talking Points */}
-      {step === 7 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4 flex items-center gap-2">
-            <MessageSquare size={14} className="text-teal" /> Talking Points
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-navy mb-1">Pre-Game Speech</label>
-              <textarea value={pregameSpeech} onChange={(e) => setPregameSpeech(e.target.value)} placeholder="Set the tone, key message, energy level..." rows={4} className={textareaClass} />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                  <Trophy size={12} className="text-green-600" /> Post-Game Win Message
-                </label>
-                <textarea value={postgameWin} onChange={(e) => setPostgameWin(e.target.value)} placeholder="Celebrate what went right, maintain standards..." rows={3} className={textareaClass} />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-navy mb-1 flex items-center gap-1">
-                  <span className="text-red-500 text-xs font-bold">L</span> Post-Game Loss Message
-                </label>
-                <textarea value={postgameLoss} onChange={(e) => setPostgameLoss(e.target.value)} placeholder="Address effort, identify fixable issues, rally the group..." rows={3} className={textareaClass} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Step 8: Review & Save */}
-      {step === 8 && (
-        <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-4">Review & Save</h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-muted w-28">Session Type</span>
-              <span className="text-navy font-medium">{sessionType}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-muted w-28">Status</span>
-              <span className={`text-xs px-2 py-0.5 rounded font-medium uppercase ${STATUS_COLORS[status] || ""}`}>{STATUS_LABELS[status] || status}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-muted w-28">Team</span>
-              <span className="text-navy font-medium">{teamName || "—"}</span>
-            </div>
-            {needsOpponent && (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-muted w-28">Opponent</span>
-                  <span className="text-navy font-medium">{opponentName || "—"}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-muted w-28">Game Date</span>
-                  <span className="text-navy font-medium">{gameDate || "—"}</span>
-                </div>
-              </>
-            )}
-            {forecheck && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted w-28">Forecheck</span>
-                <span className="text-navy">{resolveValue(forecheck, forecheckCustom)}</span>
-              </div>
-            )}
-            {breakout && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted w-28">Breakout</span>
-                <span className="text-navy">{resolveValue(breakout, breakoutCustom)}</span>
-              </div>
-            )}
-            {defensiveSystem && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted w-28">Defense</span>
-                <span className="text-navy">{resolveValue(defensiveSystem, defensiveCustom)}</span>
-              </div>
-            )}
-            {opponentAnalysis && (
-              <div>
-                <span className="text-xs font-semibold text-muted">Opponent Analysis</span>
-                <p className="text-navy text-xs mt-1 line-clamp-3">{opponentAnalysis}</p>
-              </div>
-            )}
-            {ourStrategy && (
-              <div>
-                <span className="text-xs font-semibold text-muted">Our Strategy</span>
-                <p className="text-navy text-xs mt-1 line-clamp-3">{ourStrategy}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Navigation + Save */}
-      <div className="flex items-center justify-between mt-6">
-        <button
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
-          disabled={step === 0}
-          className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors disabled:opacity-30"
+      {/* ═══════════════════════════════════════════════════════
+          2. SYSTEMS STRIP — white bar
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-white px-5 py-3 flex items-center gap-3 flex-wrap mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${STATUS_COLORS[status] || STATUS_COLORS.draft}`}
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}
         >
-          <ArrowLeft size={14} />
-          Back
-        </button>
-
-        <div className="flex items-center gap-2">
-          {step < STEPS.length - 1 ? (
-            <button
-              onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
-              className="flex items-center gap-1 px-5 py-2 bg-navy text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
-            >
-              Next
-              <ChevronRight size={14} />
-            </button>
-          ) : (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-teal to-teal/80 text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save size={14} />
-                  Save Session
-                </>
-              )}
-            </button>
-          )}
-        </div>
+          {STATUS_LABELS[status] || status}
+        </span>
+        {teamName && <SystemPill label="Team" value={teamName} />}
+        {opponentName && <SystemPill label="Opponent" value={opponentName} />}
+        {forecheck && <SystemPill label="Forecheck" value={forecheck} />}
+        {breakout && <SystemPill label="Breakout" value={breakout} />}
+        {defensiveSystem && <SystemPill label="Defence" value={defensiveSystem} />}
       </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          3. CANVAS SECTION — collapsible
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-white mb-4 overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
+        {/* Canvas toolbar bar */}
+        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: canvasExpanded ? "1px solid #DDE6EF" : "none" }}>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+            <span
+              className="font-bold uppercase"
+              style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}
+            >
+              BOARD
+            </span>
+            {boardName && <span className="text-xs" style={{ color: "#8BA4BB" }}>— {boardName}</span>}
+          </div>
+          <button
+            onClick={() => setCanvasExpanded(!canvasExpanded)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-80"
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1px solid #DDE6EF" }}
+          >
+            {canvasExpanded ? <><EyeOff size={12} /> Collapse</> : <><Eye size={12} /> Expand Canvas</>}
+          </button>
+        </div>
+
+        {/* Canvas area */}
+        {canvasExpanded && (
+          <div style={{ height: 400 }}>
+            <RinkCanvas
+              key={canvasKey}
+              ref={canvasRef}
+              initialData={boardData || undefined}
+              editable
+              showToolbar
+              backgroundMode={bgMode}
+              onBackgroundModeChange={setBgMode}
+              onSave={handleSaveBoard}
+              className="w-full h-full"
+            />
+          </div>
+        )}
+
+        {/* Below canvas: My Boards + Save Board */}
+        {canvasExpanded && (
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid #DDE6EF" }}>
+            <Link
+              href="/rink-builder"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-80"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0F2942", border: "1.5px solid #DDE6EF" }}
+            >
+              My Boards
+            </Link>
+            <button
+              onClick={() => {
+                if (canvasRef.current) {
+                  const data = canvasRef.current.getDiagramData();
+                  const svg = canvasRef.current.getSvgString();
+                  handleSaveBoard(data, svg);
+                }
+              }}
+              disabled={boardSaving}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold uppercase transition-colors hover:opacity-90 disabled:opacity-50"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
+            >
+              {boardSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              Save Board
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          4. INTELLIGENCE GRID — 2×2
+          ═══════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* ── TOP LEFT: Opponent Intelligence ─────────────── */}
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #EA580C" }}>
+          {/* Dark navy header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
+              <span
+                className="font-bold uppercase text-white"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+              >
+                OPPONENT INTELLIGENCE
+              </span>
+            </div>
+            <button
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
+              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.15)" }}
+              title="PXI Analyse — coming soon"
+            >
+              <Sparkles size={10} /> PXI ANALYSE
+            </button>
+          </div>
+          {/* Body */}
+          <div className="bg-white px-5 py-4">
+            {opponentAnalysis ? (
+              <div className="space-y-3">
+                <p className="text-sm leading-relaxed" style={{ color: "#0F2942" }}>{opponentAnalysis}</p>
+                {threatLines.length > 1 && (
+                  <div>
+                    <p className="font-bold uppercase mb-2" style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#5A7291" }}>
+                      KEY THREATS
+                    </p>
+                    <div className="space-y-1.5">
+                      {threatLines.slice(0, 5).map((line, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" style={{ color: "#EA580C" }} />
+                          <span className="text-xs" style={{ color: "#0F2942" }}>{line.replace(/^[-•]\s*/, "")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm italic" style={{ color: "#8BA4BB" }}>No opponent analysis entered yet. Edit session to add.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ── TOP RIGHT: Our System ───────────────────────── */}
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
+          {/* White header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid #DDE6EF" }}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+              <span
+                className="font-bold uppercase"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}
+              >
+                OUR SYSTEM
+              </span>
+            </div>
+            <button
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
+              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.08)" }}
+              title="PXI Recommend — coming soon"
+            >
+              <Sparkles size={10} /> PXI RECOMMEND
+            </button>
+          </div>
+          {/* Body: 3 system cards */}
+          <div className="bg-white px-5 py-4">
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <SystemCard icon={<Target size={14} style={{ color: "#0D9488" }} />} label="Forecheck" value={forecheck} />
+              <SystemCard icon={<ArrowLeft size={14} className="rotate-180" style={{ color: "#0D9488" }} />} label="Breakout" value={breakout} />
+              <SystemCard icon={<ShieldCheck size={14} style={{ color: "#0D9488" }} />} label="Defensive" value={defensiveSystem} />
+            </div>
+            {ourStrategy ? (
+              <div>
+                <p className="font-bold uppercase mb-1.5" style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#5A7291" }}>
+                  MATCHUP PRIORITY
+                </p>
+                <p className="text-xs leading-relaxed" style={{ color: "#0F2942" }}>{ourStrategy}</p>
+              </div>
+            ) : (
+              <p className="text-xs italic" style={{ color: "#8BA4BB" }}>No strategy notes entered yet.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ── BOTTOM LEFT: Keys to the Game ───────────────── */}
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
+          {/* White header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid #DDE6EF" }}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+              <span
+                className="font-bold uppercase"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}
+              >
+                KEYS TO THE GAME
+              </span>
+            </div>
+            <button
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
+              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.08)" }}
+              title="PXI Generate — coming soon"
+            >
+              <Sparkles size={10} /> PXI GENERATE
+            </button>
+          </div>
+          {/* Body */}
+          <div className="bg-white px-5 py-4">
+            {keysList.length > 0 ? (
+              <div className="space-y-3">
+                {keysList.map((k, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span
+                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", background: "#0D9488" }}
+                    >
+                      {i + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "#0F2942" }}>{k.title}</p>
+                      {k.note && <p className="text-xs mt-0.5" style={{ color: "#5A7291" }}>{k.note}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm italic" style={{ color: "#8BA4BB" }}>No keys entered yet. Edit session to add.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ── BOTTOM RIGHT: Talking Points ────────────────── */}
+        <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #EA580C" }}>
+          {/* Dark navy header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
+              <span
+                className="font-bold uppercase text-white"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+              >
+                TALKING POINTS
+              </span>
+            </div>
+            <button
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
+              style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.15)" }}
+              title="PXI Speech — coming soon"
+            >
+              <Mic size={10} /> PXI SPEECH
+            </button>
+          </div>
+          {/* Body */}
+          <div className="bg-white px-5 py-4 space-y-4">
+            {/* Pre-Game Speech */}
+            <div>
+              {pregameSpeech ? (
+                <div className="rounded-lg px-4 py-3" style={{ borderLeft: "3px solid #EA580C", background: "#FFFBF5" }}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <MessageSquare size={10} style={{ color: "#EA580C" }} />
+                    <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#EA580C" }}>
+                      PRE-GAME SPEECH
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-white font-bold uppercase" style={{ fontSize: 8, fontFamily: "ui-monospace, monospace", background: "#EA580C" }}>
+                      PXI-GENERATED
+                    </span>
+                  </div>
+                  <p className="text-sm italic leading-relaxed" style={{ color: "#0F2942" }}>{pregameSpeech}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg px-4 py-3" style={{ borderLeft: "3px solid #DDE6EF", background: "#F8FAFC" }}>
+                  <p className="text-xs font-bold uppercase mb-1" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}>PRE-GAME SPEECH</p>
+                  <p className="text-xs italic" style={{ color: "#8BA4BB" }}>Not yet written. Edit session or use PXI Speech.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Post-Game Win */}
+            <div>
+              {postgameWin ? (
+                <div className="rounded-lg px-4 py-3" style={{ borderLeft: "3px solid #16A34A", background: "#F0FDF4" }}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Trophy size={10} style={{ color: "#16A34A" }} />
+                    <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#16A34A" }}>
+                      POST-GAME WIN
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed" style={{ color: "#0F2942" }}>{postgameWin}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg px-4 py-3" style={{ borderLeft: "3px solid #DDE6EF", background: "#F8FAFC" }}>
+                  <p className="text-xs font-bold uppercase mb-1" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}>POST-GAME WIN</p>
+                  <p className="text-xs italic" style={{ color: "#8BA4BB" }}>Not yet written.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Post-Game Loss */}
+            <div>
+              {postgameLoss ? (
+                <div className="rounded-lg px-4 py-3" style={{ borderLeft: "3px solid #DC2626", background: "#FEF2F2" }}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="font-bold" style={{ fontSize: 10, color: "#DC2626" }}>L</span>
+                    <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#DC2626" }}>
+                      POST-GAME LOSS
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed" style={{ color: "#0F2942" }}>{postgameLoss}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg px-4 py-3" style={{ borderLeft: "3px solid #DDE6EF", background: "#F8FAFC" }}>
+                  <p className="text-xs font-bold uppercase mb-1" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}>POST-GAME LOSS</p>
+                  <p className="text-xs italic" style={{ color: "#8BA4BB" }}>Not yet written.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+/* ── Sub-components ─────────────────────────────────────────── */
+
+function SystemPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}>
+        {label}
+      </span>
+      <span
+        className="px-2.5 py-1 rounded-md font-bold"
+        style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", color: "#0D9488", background: "rgba(13,148,136,0.08)" }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function SystemCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg p-3" style={{ border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        {icon}
+        <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}>
+          {label}
+        </span>
+      </div>
+      <p className="text-sm font-semibold" style={{ color: "#0F2942" }}>
+        {value || <span className="italic font-normal" style={{ color: "#8BA4BB" }}>—</span>}
+      </p>
     </div>
   );
 }
