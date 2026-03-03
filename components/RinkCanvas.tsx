@@ -43,6 +43,7 @@ interface RinkCanvasProps {
   className?: string;
   onToggleHelp?: () => void;
   backgroundMode?: BackgroundMode;
+  onBackgroundModeChange?: (mode: BackgroundMode) => void;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -205,6 +206,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   className = "",
   onToggleHelp,
   backgroundMode = "full_rink",
+  onBackgroundModeChange,
 }, ref) {
   // ── State ──
   const [rinkType, setRinkType] = useState<RinkType>(initialData?.rinkType || "full");
@@ -1128,6 +1130,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             onToggleHelp={onToggleHelp}
             onExportGif={exportGif}
             exportingGif={exportingGif}
+            backgroundMode={backgroundMode}
+            onBackgroundModeChange={onBackgroundModeChange}
           />
         </div>
       )}

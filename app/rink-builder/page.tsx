@@ -524,8 +524,8 @@ function RinkBuilderInner() {
           </div>
         )}
 
-        {/* Mode Toggle + Background Selector */}
-        <div className="flex items-center justify-center gap-4 mb-6">
+        {/* Mode Toggle */}
+        <div className="flex items-center justify-center mb-6">
           <div className="inline-flex rounded-full border-2 border-navy/20 p-0.5 bg-navy/[0.03]">
             <button
               onClick={() => setMode("custom_drill")}
@@ -547,26 +547,6 @@ function RinkBuilderInner() {
             >
               Chalk Talk
             </button>
-          </div>
-
-          <div className="inline-flex rounded-[14px] border-[1.5px] border-[#DDE6EF] p-0.5 bg-white shadow-[0_1px_3px_rgba(9,28,48,.06),0_4px_18px_rgba(9,28,48,.08)]">
-            {([
-              { value: "full_rink" as BackgroundMode, label: "Full Rink" },
-              { value: "half_rink" as BackgroundMode, label: "Half Rink" },
-              { value: "blank" as BackgroundMode, label: "Blank Board" },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setBackgroundMode(opt.value)}
-                className={`px-4 py-1.5 rounded-[12px] text-xs font-medium transition-all ${
-                  backgroundMode === opt.value
-                    ? "bg-teal text-white"
-                    : "text-navy hover:text-teal"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -606,6 +586,7 @@ function RinkBuilderInner() {
           editable={true}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
           backgroundMode={backgroundMode}
+          onBackgroundModeChange={setBackgroundMode}
         />
 
         {/* ── Chalk Talk Save Button + My Boards toggle (only in chalk_talk mode) ── */}

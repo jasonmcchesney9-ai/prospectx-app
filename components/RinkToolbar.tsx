@@ -6,6 +6,8 @@
 import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2, Type, Minus, Square } from "lucide-react";
 import { RINK_COLORS, MARKER_COLORS, RINK_LABELS, type RinkType, type ToolMode, type RinkElement } from "@/types/rink";
 
+type BackgroundMode = "full_rink" | "half_rink" | "blank";
+
 interface RinkToolbarProps {
   rinkType: RinkType;
   onRinkTypeChange: (type: RinkType) => void;
@@ -23,6 +25,8 @@ interface RinkToolbarProps {
   onToggleHelp?: () => void;
   onExportGif?: () => void;
   exportingGif?: boolean;
+  backgroundMode?: BackgroundMode;
+  onBackgroundModeChange?: (mode: BackgroundMode) => void;
 }
 
 // ── Mini marker preview (inline SVG) ─────────────────────────
@@ -236,26 +240,45 @@ export default function RinkToolbar({
   onToggleHelp,
   onExportGif,
   exportingGif,
+  backgroundMode = "full_rink",
+  onBackgroundModeChange,
 }: RinkToolbarProps) {
-  const rinkTypes: RinkType[] = ["full", "half", "quarter"];
+  const isBlank = backgroundMode === "blank";
 
   return (
     <div className="flex flex-wrap items-center gap-1 px-3 py-2 bg-white border border-teal/20 rounded-xl">
       {/* ── Rink Type Selector ── */}
-      <div className="flex rounded-lg overflow-hidden border border-teal/20 mr-2">
-        {rinkTypes.map((rt) => (
+      <div className="inline-flex rounded-[14px] border-[1.5px] border-[#DDE6EF] p-0.5 bg-white shadow-[0_1px_3px_rgba(9,28,48,.06),0_4px_18px_rgba(9,28,48,.08)] mr-2">
+        {(["full", "half", "quarter"] as RinkType[]).map((rt) => (
           <button
             key={rt}
-            onClick={() => onRinkTypeChange(rt)}
-            className={`px-2.5 py-1 text-[10px] font-oswald uppercase tracking-wider transition-colors ${
-              rinkType === rt
-                ? "bg-navy text-white"
-                : "bg-navy/[0.03] text-navy/50 hover:bg-navy/[0.08] hover:text-navy/70"
+            onClick={() => {
+              onRinkTypeChange(rt);
+              if (onBackgroundModeChange) onBackgroundModeChange("full_rink");
+            }}
+            className={`px-3 py-1.5 rounded-[10px] text-xs font-medium transition-all ${
+              rinkType === rt && !isBlank
+                ? "bg-[#0D9488] text-white"
+                : "text-[#0F2942] hover:text-[#0D9488]"
             }`}
+            style={{ fontFamily: "'DM Sans', sans-serif" }}
           >
             {RINK_LABELS[rt]}
           </button>
         ))}
+        <button
+          onClick={() => {
+            if (onBackgroundModeChange) onBackgroundModeChange("blank");
+          }}
+          className={`px-3 py-1.5 rounded-[10px] text-xs font-medium transition-all ${
+            isBlank
+              ? "bg-[#0D9488] text-white"
+              : "text-[#0F2942] hover:text-[#0D9488]"
+          }`}
+          style={{ fontFamily: "'DM Sans', sans-serif" }}
+        >
+          Blank Board
+        </button>
       </div>
 
       {/* ── Divider ── */}

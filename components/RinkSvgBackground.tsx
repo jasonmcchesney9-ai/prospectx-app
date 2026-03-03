@@ -27,8 +27,8 @@ function FullRink({ w = 600, h = 280 }: { w?: number; h?: number }) {
       <line x1={Math.floor(w * 0.67)} y1={2} x2={Math.floor(w * 0.67)} y2={h - 2} stroke={BLUE_LINE} strokeWidth={2} />
       {/* Center circle */}
       <circle cx={cx} cy={cy} r={30} fill="none" stroke={CIRCLE_COLOR} strokeWidth={1.5} />
-      {/* PXI crosshair mark — inline SVG for export compatibility */}
-      <g transform={`translate(${cx - 40}, ${cy - 40}) scale(${80 / 200})`} opacity={0.35} style={{ pointerEvents: "none" }}>
+      {/* PXI crosshair mark — sized to fit inside center circle (r=30) */}
+      <g transform={`translate(${cx - 23}, ${cy - 23}) scale(${46 / 200})`} opacity={0.35} style={{ pointerEvents: "none" }}>
         <line x1="16" y1="16" x2="184" y2="184" stroke="#14B8A8" strokeWidth="36" strokeLinecap="round" />
         <line x1="184" y1="16" x2="16" y2="184" stroke="#14B8A8" strokeWidth="36" strokeLinecap="round" />
         <circle cx="100" cy="100" r="20" fill="#F97316" />
@@ -37,17 +37,12 @@ function FullRink({ w = 600, h = 280 }: { w?: number; h?: number }) {
       </g>
       {/* Center ice face-off dot */}
       <circle cx={cx} cy={cy} r={3} fill={CIRCLE_COLOR} />
-      {/* Neutral zone face-off dots (no circles) */}
-      <circle cx={Math.floor(w * 0.22)} cy={Math.floor(h * 0.32)} r={3} fill={CIRCLE_COLOR} />
-      <circle cx={Math.floor(w * 0.22)} cy={Math.floor(h * 0.68)} r={3} fill={CIRCLE_COLOR} />
-      <circle cx={Math.floor(w * 0.78)} cy={Math.floor(h * 0.32)} r={3} fill={CIRCLE_COLOR} />
-      <circle cx={Math.floor(w * 0.78)} cy={Math.floor(h * 0.68)} r={3} fill={CIRCLE_COLOR} />
       {/* Face-off circles (end zones) */}
       <circle cx={Math.floor(w * 0.17)} cy={Math.floor(h * 0.35)} r={25} fill="none" stroke={CIRCLE_COLOR} strokeWidth={1} opacity={0.5} />
       <circle cx={Math.floor(w * 0.17)} cy={Math.floor(h * 0.65)} r={25} fill="none" stroke={CIRCLE_COLOR} strokeWidth={1} opacity={0.5} />
       <circle cx={Math.floor(w * 0.83)} cy={Math.floor(h * 0.35)} r={25} fill="none" stroke={CIRCLE_COLOR} strokeWidth={1} opacity={0.5} />
       <circle cx={Math.floor(w * 0.83)} cy={Math.floor(h * 0.65)} r={25} fill="none" stroke={CIRCLE_COLOR} strokeWidth={1} opacity={0.5} />
-      {/* End zone face-off dots (centered in their circles) */}
+      {/* Face-off dots (centered in their circles) */}
       <circle cx={Math.floor(w * 0.17)} cy={Math.floor(h * 0.35)} r={3} fill={CIRCLE_COLOR} />
       <circle cx={Math.floor(w * 0.17)} cy={Math.floor(h * 0.65)} r={3} fill={CIRCLE_COLOR} />
       <circle cx={Math.floor(w * 0.83)} cy={Math.floor(h * 0.35)} r={3} fill={CIRCLE_COLOR} />
