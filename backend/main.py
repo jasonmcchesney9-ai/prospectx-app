@@ -4054,6 +4054,42 @@ def init_db():
             conn.commit()
             logger.info("Migration: added %s column to chalk_talk_comments", col_name)
 
+    # ── Table: chalk_talk_sessions (session context layer for chalk talk boards) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chalk_talk_sessions (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            chalk_talk_id TEXT,
+            session_type TEXT NOT NULL,
+            team_id TEXT,
+            opponent_team_id TEXT,
+            game_id TEXT,
+            game_date TEXT,
+            forecheck TEXT,
+            breakout TEXT,
+            defensive_system TEXT,
+            opponent_analysis TEXT,
+            our_strategy TEXT,
+            special_teams_plan TEXT,
+            keys_to_game TEXT,
+            pregame_speech TEXT,
+            postgame_win_message TEXT,
+            postgame_loss_message TEXT,
+            visibility TEXT DEFAULT 'staff_only',
+            status TEXT DEFAULT 'draft',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (created_by) REFERENCES users(id),
+            FOREIGN KEY (chalk_talk_id) REFERENCES chalk_talks(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_org ON chalk_talk_sessions(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_team ON chalk_talk_sessions(team_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_type ON chalk_talk_sessions(session_type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_chalk ON chalk_talk_sessions(chalk_talk_id)")
+
     conn.commit()
 
     # ── Table: pxr_scores (ProspectX Rating engine) ──
@@ -37937,6 +37973,303 @@ async def delete_chalk_talk(chalk_id: str, token_data: dict = Depends(verify_tok
         conn.execute("DELETE FROM chalk_talks WHERE id = ? AND org_id = ?", (chalk_id, org_id))
         conn.commit()
         return {"deleted": True, "id": chalk_id}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# CHALK TALK SESSIONS API
+# ============================================================
+
+VALID_SESSION_TYPES = {"Pre-Game", "Post-Game", "Practice", "Season Notes"}
+
+
+def _auto_session_name(session_type: str, team_name: str, opponent_name: str = None, game_date: str = None) -> str:
+    """Generate an auto-name for a chalk talk session board.
+
+    Patterns:
+      Pre-Game:     [Team] vs [Opponent] — Pre-Game — [Date]
+      Post-Game:    [Team] vs [Opponent] — Post-Game — [Date]
+      Practice:     [Team] — Practice — [Date]
+      Season Notes: [Team] — Season Notes — [Date]
+    """
+    date_str = ""
+    if game_date:
+        try:
+            dt = datetime.fromisoformat(game_date.replace("Z", "+00:00"))
+            date_str = dt.strftime("%b %-d") if hasattr(dt, "strftime") else game_date[:10]
+        except Exception:
+            date_str = game_date[:10] if len(game_date) >= 10 else game_date
+
+    team = team_name or "Team"
+
+    if session_type in ("Pre-Game", "Post-Game") and opponent_name:
+        parts = [team, "vs", opponent_name, "\u2014", session_type]
+    else:
+        parts = [team, "\u2014", session_type]
+
+    if date_str:
+        parts.extend(["\u2014", date_str])
+
+    return " ".join(parts)
+
+
+@app.post("/chalk-talk-sessions", status_code=201)
+async def create_chalk_talk_session(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a new chalk talk session.
+
+    Auto-creates a linked chalk_talk board when no chalk_talk_id is provided.
+    Auto-generates a board name from session context.
+    """
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+
+    session_type = (body.get("session_type") or "").strip()
+    if session_type not in VALID_SESSION_TYPES:
+        raise HTTPException(status_code=400, detail=f"session_type must be one of: {', '.join(sorted(VALID_SESSION_TYPES))}")
+
+    team_id = body.get("team_id")
+    if not team_id:
+        raise HTTPException(status_code=400, detail="team_id is required")
+
+    conn = get_db()
+    try:
+        session_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        chalk_talk_id = body.get("chalk_talk_id")
+
+        # Auto-create linked chalk_talk board if none provided
+        if not chalk_talk_id:
+            # Resolve team/opponent names for auto-name
+            team_row = conn.execute("SELECT name FROM teams WHERE id = ? AND org_id = ?", (team_id, org_id)).fetchone()
+            team_name = (team_row["name"] if team_row and hasattr(team_row, "keys") else (team_row[0] if team_row else None)) if team_row else None
+
+            opponent_name = None
+            opponent_team_id = body.get("opponent_team_id")
+            if opponent_team_id:
+                opp_row = conn.execute("SELECT name FROM teams WHERE id = ?", (opponent_team_id,)).fetchone()
+                opponent_name = (opp_row["name"] if hasattr(opp_row, "keys") else opp_row[0]) if opp_row else None
+
+            board_name = _auto_session_name(session_type, team_name, opponent_name, body.get("game_date"))
+            chalk_talk_id = str(uuid.uuid4())
+            conn.execute("""
+                INSERT INTO chalk_talks (id, org_id, team_id, created_by_user_id, name, description, board_layout, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                chalk_talk_id, org_id, team_id, user_id, board_name,
+                f"{session_type} session board", None, now, now,
+            ))
+
+        conn.execute("""
+            INSERT INTO chalk_talk_sessions
+                (id, org_id, created_by, chalk_talk_id, session_type, team_id, opponent_team_id,
+                 game_id, game_date, forecheck, breakout, defensive_system, opponent_analysis,
+                 our_strategy, special_teams_plan, keys_to_game, pregame_speech,
+                 postgame_win_message, postgame_loss_message, visibility, status, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            session_id, org_id, user_id, chalk_talk_id, session_type,
+            team_id, body.get("opponent_team_id"), body.get("game_id"), body.get("game_date"),
+            body.get("forecheck"), body.get("breakout"), body.get("defensive_system"),
+            body.get("opponent_analysis"), body.get("our_strategy"), body.get("special_teams_plan"),
+            body.get("keys_to_game"), body.get("pregame_speech"),
+            body.get("postgame_win_message"), body.get("postgame_loss_message"),
+            body.get("visibility", "staff_only"), body.get("status", "draft"),
+            now, now,
+        ))
+        conn.commit()
+
+        return {
+            "id": session_id, "org_id": org_id, "created_by": user_id,
+            "chalk_talk_id": chalk_talk_id, "session_type": session_type,
+            "team_id": team_id, "opponent_team_id": body.get("opponent_team_id"),
+            "game_id": body.get("game_id"), "game_date": body.get("game_date"),
+            "forecheck": body.get("forecheck"), "breakout": body.get("breakout"),
+            "defensive_system": body.get("defensive_system"),
+            "opponent_analysis": body.get("opponent_analysis"),
+            "our_strategy": body.get("our_strategy"),
+            "special_teams_plan": body.get("special_teams_plan"),
+            "keys_to_game": body.get("keys_to_game"),
+            "pregame_speech": body.get("pregame_speech"),
+            "postgame_win_message": body.get("postgame_win_message"),
+            "postgame_loss_message": body.get("postgame_loss_message"),
+            "visibility": body.get("visibility", "staff_only"),
+            "status": body.get("status", "draft"),
+            "created_at": now, "updated_at": now,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk-sessions")
+async def list_chalk_talk_sessions(
+    team_id: Optional[str] = Query(None),
+    session_type: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    token_data: dict = Depends(verify_token),
+):
+    """List chalk talk sessions for the org with optional filters."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        sql = """
+            SELECT cts.*, ct.name AS board_name, ct.board_layout
+            FROM chalk_talk_sessions cts
+            LEFT JOIN chalk_talks ct ON cts.chalk_talk_id = ct.id
+            WHERE cts.org_id = ?
+        """
+        params: list = [org_id]
+
+        if team_id:
+            sql += " AND cts.team_id = ?"
+            params.append(team_id)
+        if session_type:
+            sql += " AND cts.session_type = ?"
+            params.append(session_type)
+        if date_from:
+            sql += " AND cts.game_date >= ?"
+            params.append(date_from)
+        if date_to:
+            sql += " AND cts.game_date <= ?"
+            params.append(date_to)
+
+        sql += " ORDER BY cts.updated_at DESC"
+        rows = conn.execute(sql, params).fetchall()
+
+        results = []
+        for r in rows:
+            d = dict(r)
+            if d.get("board_layout"):
+                try:
+                    d["board_layout"] = json.loads(d["board_layout"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk-sessions/{session_id}")
+async def get_chalk_talk_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single chalk talk session with linked board data."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT cts.*, ct.name AS board_name, ct.board_layout
+            FROM chalk_talk_sessions cts
+            LEFT JOIN chalk_talks ct ON cts.chalk_talk_id = ct.id
+            WHERE cts.id = ? AND cts.org_id = ?
+        """, (session_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chalk talk session not found")
+        d = dict(row)
+        if d.get("board_layout"):
+            try:
+                d["board_layout"] = json.loads(d["board_layout"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return d
+    finally:
+        conn.close()
+
+
+@app.patch("/chalk-talk-sessions/{session_id}")
+async def update_chalk_talk_session(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update a chalk talk session. Does not modify the linked board."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chalk_talk_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chalk talk session not found")
+
+        # Check ownership — creator or admin
+        user_row = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        is_admin = user_row and user_row["role"] in ("admin", "owner")
+        creator = row["created_by"] if hasattr(row, "keys") else row[2]
+        if creator != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Only the creator or an admin can update this session")
+
+        now = datetime.now(timezone.utc).isoformat()
+        updatable = (
+            "session_type", "team_id", "opponent_team_id", "game_id", "game_date",
+            "forecheck", "breakout", "defensive_system", "opponent_analysis",
+            "our_strategy", "special_teams_plan", "keys_to_game", "pregame_speech",
+            "postgame_win_message", "postgame_loss_message", "visibility", "status",
+        )
+        updates = []
+        params = []
+        for field in updatable:
+            if field in body:
+                if field == "session_type" and body[field] not in VALID_SESSION_TYPES:
+                    raise HTTPException(status_code=400, detail=f"session_type must be one of: {', '.join(sorted(VALID_SESSION_TYPES))}")
+                updates.append(f"{field} = ?")
+                params.append(body[field])
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(session_id)
+        params.append(org_id)
+
+        conn.execute(
+            f"UPDATE chalk_talk_sessions SET {', '.join(updates)} WHERE id = ? AND org_id = ?",
+            params,
+        )
+        conn.commit()
+
+        updated = conn.execute("""
+            SELECT cts.*, ct.name AS board_name, ct.board_layout
+            FROM chalk_talk_sessions cts
+            LEFT JOIN chalk_talks ct ON cts.chalk_talk_id = ct.id
+            WHERE cts.id = ?
+        """, (session_id,)).fetchone()
+        d = dict(updated)
+        if d.get("board_layout"):
+            try:
+                d["board_layout"] = json.loads(d["board_layout"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return d
+    finally:
+        conn.close()
+
+
+@app.delete("/chalk-talk-sessions/{session_id}")
+async def delete_chalk_talk_session(session_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a chalk talk session. Does NOT delete the linked chalk_talk board."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chalk_talk_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Chalk talk session not found")
+
+        # Check ownership — creator or admin
+        user_row = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        is_admin = user_row and user_row["role"] in ("admin", "owner")
+        creator = row["created_by"] if hasattr(row, "keys") else row[2]
+        if creator != user_id and not is_admin:
+            raise HTTPException(status_code=403, detail="Only the creator or an admin can delete this session")
+
+        conn.execute("DELETE FROM chalk_talk_sessions WHERE id = ? AND org_id = ?", (session_id, org_id))
+        conn.commit()
+        return {"deleted": True, "id": session_id}
     finally:
         conn.close()
 
