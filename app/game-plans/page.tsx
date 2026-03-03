@@ -9,6 +9,7 @@ import {
   Search,
   X,
   Info,
+  PenTool,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -115,13 +116,22 @@ function ChalkTalkList() {
             Pre-game plans, post-game reviews, practice notes, and season strategy — your tactical playbook
           </p>
         </div>
-        <Link
-          href="/game-plans/new"
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal to-teal/80 text-white font-oswald font-semibold uppercase tracking-wider text-sm rounded-lg hover:shadow-md transition-shadow"
-        >
-          <Plus size={16} />
-          New Session
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/rink-builder?mode=chalk_talk"
+            className="flex items-center gap-2 px-4 py-2 border border-navy/20 text-navy font-oswald font-semibold uppercase tracking-wider text-sm rounded-lg hover:bg-navy/[0.04] transition-colors"
+          >
+            <PenTool size={16} />
+            Open Whiteboard
+          </Link>
+          <Link
+            href="/game-plans/new"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal to-teal/80 text-white font-oswald font-semibold uppercase tracking-wider text-sm rounded-lg hover:shadow-md transition-shadow"
+          >
+            <Plus size={16} />
+            New Session
+          </Link>
+        </div>
       </div>
 
       {/* Helper Note */}

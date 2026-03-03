@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, ChevronUp, AlertTriangle, PenTool } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -79,6 +79,13 @@ export default function PracticePlansPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/rink-builder?mode=chalk_talk"
+              className="flex items-center gap-2 px-4 py-2 border border-navy/20 text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.04] transition-colors"
+            >
+              <PenTool size={16} />
+              Open Whiteboard
+            </Link>
             <Link
               href="/practice-plans/from-game-issue"
               className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-orange/90 transition-colors"
