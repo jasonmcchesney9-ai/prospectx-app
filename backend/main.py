@@ -2819,6 +2819,13 @@ def init_db():
         conn.commit()
         logger.info("Migration: added mode column to bench_talk_conversations")
 
+    # ── Migration: flag column on bench_talk_messages ──
+    btm_cols = _get_table_columns(conn, "bench_talk_messages")
+    if "flag" not in btm_cols:
+        conn.execute("ALTER TABLE bench_talk_messages ADD COLUMN flag TEXT DEFAULT NULL")
+        conn.commit()
+        logger.info("Migration: added flag column to bench_talk_messages")
+
     # ── Migration: Share columns on reports ──
     rpt_cols = _get_table_columns(conn, "reports")
     for col_name, col_type in [
@@ -33530,6 +33537,56 @@ async def flag_correction_from_bench_talk(
     except Exception as e:
         logger.error("flag_correction_from_bench_talk error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to submit correction")
+    finally:
+        conn.close()
+
+
+# ── Bench Talk Message Flag Update ─────────────────────────────────
+
+class BenchTalkMessageFlagUpdate(BaseModel):
+    flag: str
+
+
+@app.patch("/bench-talk/{message_id}/flag")
+async def update_bench_talk_message_flag(
+    message_id: str,
+    payload: BenchTalkMessageFlagUpdate,
+    token_data: dict = Depends(verify_token),
+):
+    """Update the flag field on a bench_talk_messages record."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        # Verify message exists and belongs to user's conversation
+        row = conn.execute("""
+            SELECT m.id, m.conversation_id, m.role, m.content, m.flag, m.created_at
+            FROM bench_talk_messages m
+            JOIN bench_talk_conversations c ON m.conversation_id = c.id
+            WHERE m.id = ? AND c.user_id = ?
+        """, (message_id, user_id)).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Message not found")
+
+        conn.execute(
+            "UPDATE bench_talk_messages SET flag = ? WHERE id = ?",
+            (payload.flag, message_id)
+        )
+        conn.commit()
+
+        return {
+            "id": row["id"],
+            "conversation_id": row["conversation_id"],
+            "role": row["role"],
+            "content": row["content"],
+            "flag": payload.flag,
+            "created_at": row["created_at"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("update_bench_talk_message_flag error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update flag")
     finally:
         conn.close()
 
