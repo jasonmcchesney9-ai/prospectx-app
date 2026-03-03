@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle, Search, Trash2, FolderOpen, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle, Search, Trash2, FolderOpen, PanelLeftOpen, PanelLeftClose, ArrowLeft, Calendar } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -19,6 +19,7 @@ import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { DRILL_CATEGORIES } from "@/types/api";
 import type { RinkDiagramData } from "@/types/rink";
 import { RINK_DIMENSIONS } from "@/types/rink";
+import type { ChalkTalkSession } from "@/types/api";
 
 interface SaveForm {
   name: string;
@@ -90,6 +91,29 @@ function RinkBuilderInner() {
   const [mode, setMode] = useState<"custom_drill" | "chalk_talk">(
     modeParam === "chalk_talk" ? "chalk_talk" : "custom_drill"
   );
+
+  // ── Session context (when loaded from a chalk talk session) ──
+  const sessionIdParam = searchParams.get("session_id");
+  const [sessionCtx, setSessionCtx] = useState<ChalkTalkSession | null>(null);
+  const [sessionTeamName, setSessionTeamName] = useState("");
+  const [sessionOpponentName, setSessionOpponentName] = useState("");
+
+  useEffect(() => {
+    if (!sessionIdParam) return;
+    api.get<ChalkTalkSession>(`/chalk-talk-sessions/${sessionIdParam}`).then(({ data }) => {
+      setSessionCtx(data);
+      // Resolve team names
+      api.get("/teams").then((res) => {
+        const teams = res.data?.teams || res.data || [];
+        const team = teams.find((t: { id: string; name: string }) => t.id === data.team_id);
+        if (team) setSessionTeamName(team.name);
+        if (data.opponent_team_id) {
+          const opp = teams.find((t: { id: string; name: string }) => t.id === data.opponent_team_id);
+          if (opp) setSessionOpponentName(opp.name);
+        }
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [sessionIdParam]);
 
   // ── Chalk Talk save state ──
   const [showChalkSave, setShowChalkSave] = useState(false);
@@ -462,6 +486,39 @@ function RinkBuilderInner() {
             Generate Practice Plan
           </Link>
         </div>
+
+        {/* Session Context Bar (only when loaded from a chalk talk session) */}
+        {sessionCtx && (
+          <div className="mb-4 bg-navy/[0.03] border border-navy/10 rounded-lg px-4 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <span className={`text-[10px] px-2 py-0.5 rounded font-medium uppercase ${
+                sessionCtx.session_type === "Pre-Game" ? "bg-teal/10 text-teal" :
+                sessionCtx.session_type === "Post-Game" ? "bg-orange/10 text-orange" :
+                sessionCtx.session_type === "Practice" ? "bg-navy/10 text-navy" :
+                "bg-gray-100 text-gray-600"
+              }`}>
+                {sessionCtx.session_type}
+              </span>
+              <span className="font-oswald font-semibold text-navy text-xs uppercase tracking-wider">
+                {sessionTeamName || "Team"}
+                {sessionOpponentName ? ` vs ${sessionOpponentName}` : ""}
+              </span>
+              {sessionCtx.game_date && (
+                <span className="text-[10px] text-muted flex items-center gap-1">
+                  <Calendar size={10} />
+                  {new Date(sessionCtx.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </span>
+              )}
+            </div>
+            <Link
+              href={`/chalk-talk/sessions/${sessionCtx.id}`}
+              className="flex items-center gap-1 text-xs text-teal hover:text-teal/80 font-oswald uppercase tracking-wider transition-colors"
+            >
+              <ArrowLeft size={12} />
+              Back to Session
+            </Link>
+          </div>
+        )}
 
         {/* Mode Toggle */}
         <div className="flex items-center justify-center mb-6">
