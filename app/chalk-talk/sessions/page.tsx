@@ -105,6 +105,7 @@ function CoachingHub() {
   const router = useRouter();
   const seriesRef = useRef<HTMLDivElement>(null);
   const [freeBoardCreating, setFreeBoardCreating] = useState(false);
+  const [gamePlanCreating, setGamePlanCreating] = useState(false);
 
   /* ── Data state ──────────────────────────────────────────── */
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
@@ -216,6 +217,23 @@ function CoachingHub() {
     } catch { return 0; }
   };
 
+  /* ── New Game Plan: create + open directly in war room ──── */
+  const handleNewGamePlan = async () => {
+    if (gamePlanCreating) return;
+    setGamePlanCreating(true);
+    try {
+      const { data } = await api.post<ChalkTalkSession>("/chalk-talk-sessions", {
+        session_type: "pre_game",
+        title: "New Game Plan",
+      });
+      router.push(`/chalk-talk/sessions/${data.id}`);
+    } catch {
+      router.push("/chalk-talk/new");
+    } finally {
+      setGamePlanCreating(false);
+    }
+  };
+
   /* ── Free Board: skip wizard, create + open directly ────── */
   const handleFreeBoard = async () => {
     if (freeBoardCreating) return;
@@ -256,14 +274,15 @@ function CoachingHub() {
           2. ACTION BUTTONS ROW
           ═══════════════════════════════════════════════════════ */}
       <div className="bg-white px-6 py-3 flex items-center gap-3 flex-wrap" style={{ borderBottom: "1px solid #DDE6EF" }}>
-        <Link
-          href="/chalk-talk/new"
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
+        <button
+          onClick={handleNewGamePlan}
+          disabled={gamePlanCreating}
+          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
           style={{ background: "#0D9488" }}
         >
-          <Zap size={14} />
-          New Game Plan
-        </Link>
+          {gamePlanCreating ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+          {gamePlanCreating ? "Creating..." : "New Game Plan"}
+        </button>
         <Link
           href="/series/new"
           className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
