@@ -294,10 +294,10 @@ function SessionForm() {
         <div>
           <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
             <Swords size={24} className="text-teal" />
-            New Chalk Talk Session
+            New Game Plan
           </h1>
           <p className="text-muted text-sm mt-0.5">
-            Prepare your strategy, review games, or capture coaching notes
+            Set up your game plan
           </p>
         </div>
       </div>
