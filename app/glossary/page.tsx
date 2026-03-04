@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, BookOpen, Tag, Hash } from "lucide-react";
+import { Search, BookOpen, Tag, Hash, Sparkles } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -134,27 +134,24 @@ function GlossaryContent() {
     return (
       <div className="space-y-6">
         {/* Header skeleton */}
-        <div className="space-y-2">
-          <div className="h-9 w-64 bg-gray-200 rounded animate-pulse" />
-          <div className="h-5 w-96 bg-gray-200 rounded animate-pulse" />
-        </div>
+        <div className="animate-pulse" style={{ borderRadius: 12, background: "#0F2942", height: 72 }} />
         {/* Search skeleton */}
-        <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse" />
+        <div className="animate-pulse" style={{ borderRadius: 12, background: "#DDE6EF", height: 48 }} />
         {/* Pills skeleton */}
         <div className="flex gap-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-8 w-24 bg-gray-200 rounded-full animate-pulse" />
+            <div key={i} className="animate-pulse" style={{ borderRadius: 8, background: "#DDE6EF", height: 32, width: 96 }} />
           ))}
         </div>
         {/* Card skeletons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-              <div className="h-6 w-40 bg-gray-200 rounded animate-pulse" />
-              <div className="h-4 w-20 bg-gray-200 rounded-full animate-pulse" />
-              <div className="space-y-2">
-                <div className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="overflow-hidden animate-pulse" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
+              <div style={{ background: "#0F2942", height: 44 }} />
+              <div className="bg-white p-5 space-y-3">
+                <div style={{ background: "#DDE6EF", height: 16, width: 160, borderRadius: 4 }} />
+                <div style={{ background: "#DDE6EF", height: 14, width: "100%", borderRadius: 4 }} />
+                <div style={{ background: "#DDE6EF", height: 14, width: "75%", borderRadius: 4 }} />
               </div>
             </div>
           ))}
@@ -167,8 +164,8 @@ function GlossaryContent() {
   if (error) {
     return (
       <div className="text-center py-20">
-        <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-        <p className="text-red-600 text-lg">{error}</p>
+        <BookOpen className="mx-auto h-12 w-12 mb-4" style={{ color: "#8BA4BB" }} />
+        <p className="text-lg" style={{ color: "#B91C1C" }}>{error}</p>
       </div>
     );
   }
@@ -176,26 +173,47 @@ function GlossaryContent() {
   /* ---------- Render ---------- */
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-oswald uppercase tracking-wider text-navy flex items-center gap-3">
-          <BookOpen className="h-8 w-8 text-teal" />
-          Hockey Glossary
-        </h1>
-        <p className="mt-1 text-gray-500">
-          Your reference guide to hockey terminology — from analytics to slang.
-        </p>
+      {/* ═══════════════════════════════════════════════════════
+          HEADER — navy bar (war room style)
+          ═══════════════════════════════════════════════════════ */}
+      <div className="px-5 py-4 flex items-center justify-between" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942" }}>
+        <div className="flex items-center gap-3">
+          <span
+            className="px-2.5 py-1 rounded-md text-white font-bold uppercase flex items-center gap-1.5"
+            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
+          >
+            <Sparkles size={10} />
+            PXI
+          </span>
+          <div>
+            <h1 className="text-lg font-bold text-white">
+              HOCKEY GLOSSARY
+            </h1>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
+              Your reference guide to hockey terminology — from analytics to slang.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="font-bold uppercase text-white"
+            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+          >
+            {terms.length} TERMS
+          </span>
+        </div>
       </div>
 
       {/* Search bar */}
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5" style={{ color: "#0D9488" }} />
         <input
           type="text"
           placeholder="Search terms, definitions, or aliases..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-300 bg-white text-navy placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal focus:border-teal transition"
+          className="w-full pl-12 pr-4 py-3 bg-white focus:outline-none focus:ring-2"
+          style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", color: "#0F2942" }}
         />
       </div>
 
@@ -203,25 +221,26 @@ function GlossaryContent() {
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setActiveCategory("all")}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
-            activeCategory === "all"
-              ? "bg-navy text-white"
-              : "bg-navy/5 text-navy hover:bg-navy/10"
-          }`}
+          className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-colors"
+          style={activeCategory === "all"
+            ? { fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }
+            : { fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px solid #DDE6EF" }
+          }
         >
           All
           <span className="ml-1.5 opacity-75">({terms.length})</span>
         </button>
         {sortedCategories.map((cat) => {
-          const { bg, text } = categoryColor(cat);
           const isActive = activeCategory === cat;
           return (
             <button
               key={cat}
               onClick={() => setActiveCategory(isActive ? "all" : cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition ${
-                isActive ? "bg-navy text-white" : "bg-navy/5 text-navy hover:bg-navy/10"
-              }`}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-colors capitalize"
+              style={isActive
+                ? { fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }
+                : { fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px solid #DDE6EF" }
+              }
             >
               {cat}
               <span className="ml-1.5 opacity-75">({categoryCounts[cat]})</span>
@@ -231,15 +250,18 @@ function GlossaryContent() {
       </div>
 
       {/* Result count */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Hash className="h-4 w-4" />
-        <span>
+      <div className="flex items-center gap-2">
+        <Hash className="h-3.5 w-3.5" style={{ color: "#5A7291" }} />
+        <span
+          className="font-bold uppercase"
+          style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#5A7291" }}
+        >
           {filtered.length} {filtered.length === 1 ? "term" : "terms"}
           {activeCategory !== "all" && (
-            <> in <span className="capitalize font-medium text-navy">{activeCategory}</span></>
+            <> in <span className="capitalize" style={{ color: "#0F2942" }}>{activeCategory}</span></>
           )}
           {search && (
-            <> matching &ldquo;<span className="font-medium text-navy">{search}</span>&rdquo;</>
+            <> matching &ldquo;<span style={{ color: "#0F2942" }}>{search}</span>&rdquo;</>
           )}
         </span>
       </div>
@@ -247,61 +269,80 @@ function GlossaryContent() {
       {/* Term cards or empty state */}
       {filtered.length === 0 ? (
         <div className="text-center py-20">
-          <Search className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-          <p className="text-gray-500 text-lg">No terms found.</p>
-          <p className="text-gray-400 text-sm mt-1">Try a different search or category.</p>
+          <Search className="mx-auto h-12 w-12 mb-4" style={{ color: "#8BA4BB" }} />
+          <p className="text-lg" style={{ color: "#5A7291" }}>No terms found.</p>
+          <p className="text-sm mt-1" style={{ color: "#8BA4BB" }}>Try a different search or category.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((t) => {
-            const aliases = parseAliases(t.aliases);
-            const { bg, text } = categoryColor(t.category);
-            return (
-              <div
-                key={t.id}
-                className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md hover:border-teal/40 transition-all duration-200 flex flex-col"
-              >
-                {/* Term + category */}
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <h3 className="text-lg font-bold text-navy leading-tight">
-                    {t.term}
-                  </h3>
+        <div className="space-y-4">
+          {/* Group filtered terms by category */}
+          {(() => {
+            const grouped: Record<string, GlossaryTerm[]> = {};
+            filtered.forEach((t) => {
+              if (!grouped[t.category]) grouped[t.category] = [];
+              grouped[t.category].push(t);
+            });
+            const categoryKeys = Object.keys(grouped).sort();
+            return categoryKeys.map((cat) => (
+              <div key={cat} className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
+                {/* Navy header */}
+                <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+                    <span
+                      className="font-bold uppercase text-white"
+                      style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                    >
+                      {cat}
+                    </span>
+                  </div>
                   <span
-                    className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${bg} ${text}`}
+                    className="font-bold uppercase"
+                    style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "rgba(255,255,255,0.5)" }}
                   >
-                    {t.category}
+                    {grouped[cat].length} {grouped[cat].length === 1 ? "TERM" : "TERMS"}
                   </span>
                 </div>
-
-                {/* Definition */}
-                <p className="text-gray-700 text-sm leading-relaxed flex-1">
-                  {t.definition}
-                </p>
-
-                {/* Aliases */}
-                {aliases.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <Tag className="h-3.5 w-3.5 text-gray-400 mt-0.5 shrink-0" />
-                    {aliases.map((alias) => (
-                      <span
-                        key={alias}
-                        className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs"
-                      >
-                        {alias}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Usage context */}
-                {t.usage_context && (
-                  <p className="mt-3 text-xs italic text-gray-400 border-t border-gray-100 pt-2">
-                    {t.usage_context}
-                  </p>
-                )}
+                {/* Term rows */}
+                <div className="bg-white divide-y" style={{ borderColor: "#DDE6EF" }}>
+                  {grouped[cat].map((t) => {
+                    const aliases = parseAliases(t.aliases);
+                    return (
+                      <div key={t.id} className="px-5 py-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-sm font-bold leading-tight" style={{ color: "#0F2942" }}>
+                            {t.term}
+                          </h3>
+                        </div>
+                        <p className="text-sm leading-relaxed mt-1.5" style={{ color: "#5A7291" }}>
+                          {t.definition}
+                        </p>
+                        {aliases.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+                            <Tag className="h-3 w-3 shrink-0" style={{ color: "#8BA4BB" }} />
+                            {aliases.map((alias) => (
+                              <span
+                                key={alias}
+                                className="px-2 py-0.5 rounded text-[10px]"
+                                style={{ background: "rgba(13,148,136,0.06)", color: "#0D9488" }}
+                              >
+                                {alias}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {t.usage_context && (
+                          <p className="mt-2 text-xs italic pt-2" style={{ color: "#8BA4BB", borderTop: "1px solid #DDE6EF" }}>
+                            {t.usage_context}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            );
-          })}
+            ));
+          })()}
         </div>
       )}
     </div>
