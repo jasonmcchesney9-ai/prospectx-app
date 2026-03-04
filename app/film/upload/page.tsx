@@ -22,6 +22,26 @@ import toast from "react-hot-toast";
 type Step = "details" | "file" | "uploading";
 type UploadStatus = "idle" | "uploading" | "processing" | "ready" | "error";
 
+interface SpeedSample {
+  time: number;
+  bytes: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 1) return "finishing...";
+  if (seconds < 60) return `~${Math.ceil(seconds)} seconds remaining`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.ceil(seconds % 60);
+  return `~${m}m ${s}s remaining`;
+}
+
 const UPLOAD_SOURCES = [
   { value: "manual", label: "Manual Upload" },
   { value: "youtube", label: "YouTube" },
@@ -46,6 +66,13 @@ export default function FilmUploadPage() {
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadId, setUploadId] = useState<string | null>(null);
+
+  // Upload progress details
+  const [bytesUploaded, setBytesUploaded] = useState(0);
+  const [bytesTotal, setBytesTotal] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0); // bytes per second
+  const [uploadEta, setUploadEta] = useState(0); // seconds remaining
+  const speedSamplesRef = useRef<SpeedSample[]>([]);
 
   // External URL link
   const [linkUrl, setLinkUrl] = useState("");
@@ -105,13 +132,46 @@ export default function FilmUploadPage() {
       setUploadId(newUploadId);
 
       // 2. PUT file directly to Mux
+      speedSamplesRef.current = [{ time: performance.now(), bytes: 0 }];
+      setBytesTotal(file.size);
+      setBytesUploaded(0);
+      setUploadSpeed(0);
+      setUploadEta(0);
+
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", upload_url);
 
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            setProgress(Math.round((e.loaded / e.total) * 100));
+            const pct = Math.round((e.loaded / e.total) * 100);
+            setProgress(pct);
+            setBytesUploaded(e.loaded);
+            setBytesTotal(e.total);
+
+            // Speed calculation with rolling 3-sample average
+            const now = performance.now();
+            const samples = speedSamplesRef.current;
+            samples.push({ time: now, bytes: e.loaded });
+
+            // Keep last 4 samples (to compute 3 deltas)
+            if (samples.length > 4) {
+              samples.shift();
+            }
+
+            if (samples.length >= 2) {
+              const oldest = samples[0];
+              const elapsed = (now - oldest.time) / 1000; // seconds
+              if (elapsed > 0) {
+                const bytesDelta = e.loaded - oldest.bytes;
+                const speed = bytesDelta / elapsed;
+                setUploadSpeed(speed);
+
+                const remaining = e.total - e.loaded;
+                const eta = speed > 0 ? remaining / speed : 0;
+                setUploadEta(eta);
+              }
+            }
           }
         };
 
@@ -154,6 +214,11 @@ export default function FilmUploadPage() {
     setErrorMessage("");
     setUploadId(null);
     setLinkUrl("");
+    setBytesUploaded(0);
+    setBytesTotal(0);
+    setUploadSpeed(0);
+    setUploadEta(0);
+    speedSamplesRef.current = [];
   }, [stopPolling]);
 
   const handleLinkVideo = useCallback(async () => {
@@ -398,18 +463,41 @@ export default function FilmUploadPage() {
         {/* Step 3 — Upload & Process */}
         {step === "uploading" && (
           <div className="bg-white rounded-xl border border-border p-6">
-            {/* Uploading */}
+            {/* Uploading with progress details */}
             {uploadStatus === "uploading" && (
-              <div className="text-center py-6">
-                <Loader2 size={28} className="animate-spin text-teal mx-auto mb-3" />
-                <p className="text-sm font-medium text-navy">Uploading...</p>
-                <div className="w-full bg-border rounded-full h-2 mt-4 max-w-md mx-auto">
+              <div className="py-6 max-w-md mx-auto">
+                {/* Percentage */}
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-2xl font-bold text-navy font-oswald">{progress}%</span>
+                  <span className="text-[11px] text-muted font-oswald uppercase tracking-wider">Uploading</span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-border rounded-full h-3">
                   <div
-                    className="bg-teal h-2 rounded-full transition-all duration-300"
+                    className="bg-teal h-3 rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="text-[11px] text-muted mt-2">{progress}%</p>
+
+                {/* Bytes + Speed row */}
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[11px] text-muted font-mono">
+                    {formatBytes(bytesUploaded)} / {formatBytes(bytesTotal)}
+                  </span>
+                  {uploadSpeed > 0 && (
+                    <span className="text-[11px] text-teal font-mono font-medium">
+                      {formatBytes(uploadSpeed)}/s
+                    </span>
+                  )}
+                </div>
+
+                {/* ETA */}
+                {uploadSpeed > 0 && progress < 100 && (
+                  <p className="text-[11px] text-muted/70 text-center mt-2">
+                    {formatEta(uploadEta)}
+                  </p>
+                )}
               </div>
             )}
 
