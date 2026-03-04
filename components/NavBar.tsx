@@ -182,7 +182,6 @@ const COACHING_ITEMS: NavItem[] = [
   { href: "/skill-development-lab", label: "Skills Library", icon: Dumbbell },
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
-  { href: "/chalk-talk/sessions", label: "Game Plans", icon: Swords },
   { href: "/chalk-talk/sessions?scroll=series", label: "Series Plans", icon: Trophy },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
@@ -423,6 +422,21 @@ export default function NavBar() {
 
             {/* Coaching dropdown (PRO only) */}
             {navConfig.showCoaching && <CoachingDropdown pathname={pathname} />}
+
+            {/* Game Plans — top-level (PRO only) */}
+            {navConfig.showCoaching && (
+              <button
+                onClick={handleGamePlansNav}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  pathname.startsWith("/chalk-talk")
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Swords size={16} />
+                Game Plans
+              </button>
+            )}
 
             {/* Broadcast dropdown (PRO only — MEDIA gets direct link via MEDIA_NAV_LEFT) */}
             {navConfig.showBroadcastDropdown && <BroadcastDropdown pathname={pathname} />}
@@ -706,6 +720,22 @@ export default function NavBar() {
             </div>
           )}
 
+          {/* Game Plans — top-level (PRO only — mobile) */}
+          {navConfig.showCoaching && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <Link
+                href="/chalk-talk/sessions"
+                onClick={handleGamePlansNav}
+                className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                  pathname.startsWith("/chalk-talk") ? "text-teal" : "text-white/70"
+                }`}
+              >
+                <Swords size={16} />
+                Game Plans
+              </Link>
+            </div>
+          )}
+
           {/* Coaching section (PRO only) */}
           {navConfig.showCoaching && (
             <div className="border-t border-white/10 mt-1 pt-1">
@@ -714,12 +744,11 @@ export default function NavBar() {
               </p>
               {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
                 const active = pathname.startsWith(href);
-                const isGamePlans = href === "/chalk-talk/sessions";
                 return (
                   <Link
                     key={href}
                     href={href}
-                    onClick={isGamePlans ? handleGamePlansNav : () => setMobileOpen(false)}
+                    onClick={() => setMobileOpen(false)}
                     className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
                       active ? "text-teal" : "text-white/70"
                     }`}
