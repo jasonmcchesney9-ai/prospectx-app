@@ -24,6 +24,7 @@ interface VideoUploadRow {
   created_at: string;
   upload_source: string;
   source_url?: string;
+  session_id?: string | null;
 }
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -266,12 +267,20 @@ export default function FilmRoomPage() {
                         <ExternalLink size={12} />
                         Open
                       </a>
+                    ) : u.status === "ready" && u.session_id ? (
+                      <Link
+                        href={`/film/sessions/${u.session_id}`}
+                        className="flex items-center gap-1 text-xs text-teal font-oswald uppercase tracking-wider hover:text-teal/80 transition-colors"
+                      >
+                        <Eye size={13} />
+                        View
+                      </Link>
                     ) : u.status === "ready" ? (
                       <Link
                         href={`/film/sessions/new?upload=${u.id}`}
-                        className="text-xs text-teal font-oswald uppercase tracking-wider hover:text-teal/80 transition-colors"
+                        className="text-xs text-orange font-oswald uppercase tracking-wider hover:text-orange/80 transition-colors"
                       >
-                        View
+                        Create Session
                       </Link>
                     ) : null}
                     <button

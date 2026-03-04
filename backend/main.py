@@ -39183,8 +39183,9 @@ async def list_film_uploads(
         if player_id:
             where.append("player_id = ?"); params.append(player_id)
         params.append(limit)
+        qualified_where = " AND ".join(f"vu.{c.strip()}" if "." not in c else c for c in where)
         rows = conn.execute(
-            f"SELECT * FROM video_uploads WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT ?",
+            f"SELECT vu.*, vs.id AS session_id FROM video_uploads vu LEFT JOIN video_sessions vs ON vs.upload_id = vu.id WHERE {qualified_where} ORDER BY vu.created_at DESC LIMIT ?",
             params,
         ).fetchall()
         return [dict(r) if hasattr(r, "keys") else r for r in rows]
