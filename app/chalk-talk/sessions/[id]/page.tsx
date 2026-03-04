@@ -419,24 +419,7 @@ function WarRoom() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
-          2. SYSTEMS STRIP — white bar
-          ═══════════════════════════════════════════════════════ */}
-      <div className="bg-white px-5 py-3 flex items-center gap-3 flex-wrap mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${STATUS_COLORS[status] || STATUS_COLORS.draft}`}
-          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}
-        >
-          {STATUS_LABELS[status] || status}
-        </span>
-        {teamName && <SystemPill label="Team" value={teamName} />}
-        {opponentName && <SystemPill label="Opponent" value={opponentName} />}
-        {forecheck && <SystemPill label="Forecheck" value={forecheck} />}
-        {breakout && <SystemPill label="Breakout" value={breakout} />}
-        {defensiveSystem && <SystemPill label="Defence" value={defensiveSystem} />}
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════
-          3. CANVAS SECTION — collapsible
+          2. CANVAS SECTION — collapsible
           ═══════════════════════════════════════════════════════ */}
       <div className="mb-4 overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
         {/* Canvas toolbar bar */}
