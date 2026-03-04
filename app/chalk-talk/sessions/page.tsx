@@ -268,6 +268,15 @@ function CoachingHub() {
             GAME PLANS
           </h1>
         </div>
+        <button
+          onClick={handleNewGamePlan}
+          disabled={gamePlanCreating}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 disabled:opacity-50"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
+        >
+          {gamePlanCreating ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+          New Game Plan
+        </button>
       </div>
 
       {/* ═══════════════════════════════════════════════════════

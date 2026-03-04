@@ -284,23 +284,11 @@ export default function NavBar() {
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
 
-  /* Smart nav: skip list page for single-session coaches */
-  const handleGamePlansNav = async (e: React.MouseEvent) => {
+  /* Game Plans nav — always go to hub */
+  const handleGamePlansNav = (e: React.MouseEvent) => {
     e.preventDefault();
     setMobileOpen(false);
-    try {
-      const { data } = await api.get("/chalk-talk-sessions?limit=2");
-      const sessions = Array.isArray(data) ? data : [];
-      if (sessions.length === 0) {
-        router.push("/chalk-talk/new");
-      } else if (sessions.length === 1) {
-        router.push(`/chalk-talk/sessions/${sessions[0].id}`);
-      } else {
-        router.push("/chalk-talk/sessions");
-      }
-    } catch {
-      router.push("/chalk-talk/sessions");
-    }
+    router.push("/chalk-talk/sessions");
   };
 
   // Effective role: admin override takes priority, otherwise real role
