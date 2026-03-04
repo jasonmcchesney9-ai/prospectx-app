@@ -172,7 +172,7 @@ const REPORTS_DROPDOWN_ITEMS: NavItem[] = [
 // Teams dropdown items (PRO only)
 const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
   { href: "/teams", label: "All Teams", icon: Building2 },
-  { href: "/series", label: "Series Plans", icon: Trophy },
+  { href: "/chalk-talk/sessions?scroll=series", label: "Series Plans", icon: Trophy },
   { href: "/team-systems", label: "Team Systems", icon: Shield },
 ];
 
@@ -183,7 +183,7 @@ const COACHING_ITEMS: NavItem[] = [
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
   { href: "/chalk-talk/sessions", label: "Game Plans", icon: Swords },
-  { href: "/series", label: "Series Plans", icon: Trophy },
+  { href: "/chalk-talk/sessions?scroll=series", label: "Series Plans", icon: Trophy },
   { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
 ];
 
