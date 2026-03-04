@@ -651,7 +651,7 @@ function Dashboard() {
                             <span className="text-[10px] text-muted font-oswald uppercase">{p.position}</span>
                           </div>
                           <Link
-                            href={`/players/${p.id}?tab=player&autoGenerate=true`}
+                            href={`/players/${p.id}?tab=devplan&generate=1`}
                             className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs font-oswald uppercase tracking-wider text-orange hover:bg-orange/5 rounded-lg transition-colors"
                           >
                             <Sparkles size={12} /> Generate

@@ -3295,6 +3295,33 @@ export const DEV_PLAN_SECTION_TITLES: Record<number, string> = {
   8: "Staff Notes",
 };
 
+export interface DevelopmentPlanDraft {
+  player_id: string;
+  player_name: string;
+  season: string;
+  generated_at: string;
+  data_sources: string[];
+  section_1_snapshot: string | null;
+  section_2_context: string | null;
+  section_3_strengths: string | null;
+  section_4_development: string | null;
+  section_5_phase_plan: string | null;
+  section_6_integration: string | null;
+  section_7_metrics: string | null;
+  section_8_staff_notes: string | null;
+  section_9_raw?: string | null;
+  summary: string | null;
+}
+
+export interface DevelopmentPlanHistory {
+  versions: {
+    version: number;
+    created_at: string;
+    generated_by: string;
+    updated_sections: string[];
+  }[];
+}
+
 export interface ParentDashboardPlayer {
   id: string;
   first_name: string;
