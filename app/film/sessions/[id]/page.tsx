@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Users,
   RefreshCw,
+  Upload,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -42,6 +43,7 @@ interface SessionData {
   opponent_team_id?: string | null;
   pxi_output?: string | null;
   pxi_status?: string | null;
+  event_data_source?: string | null;
 }
 
 interface RosterPlayer {
@@ -154,6 +156,13 @@ export default function FilmSessionViewerPage() {
   const [clipTitle, setClipTitle] = useState("");
   const [savingClip, setSavingClip] = useState(false);
   const [clipRefreshKey, setClipRefreshKey] = useState(0);
+
+  // Event data import
+  const [importingEvents, setImportingEvents] = useState(false);
+  const [importResult, setImportResult] = useState<{ events_created: number; clips_created: number; player_matches: number; unmatched_players: string[] } | null>(null);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Video player ref for getting current time
   const currentTimeRef = useRef<number>(0);
@@ -398,6 +407,48 @@ export default function FilmSessionViewerPage() {
       setSavingClip(false);
     }
   }, [clipStart, clipEnd, clipTitle, sessionId, upload]);
+
+  const executeEventImport = useCallback(async (file: File, replace: boolean) => {
+    setImportingEvents(true);
+    setImportResult(null);
+    setShowReplaceConfirm(false);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const url = `/film/sessions/${sessionId}/import-events${replace ? "?replace=true" : ""}`;
+      const res = await api.post(url, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const data = res.data;
+      setImportResult(data);
+      toast.success(`Imported ${data.events_created} events and ${data.clips_created} clips`);
+      // Refresh clips panel
+      setClipRefreshKey((k) => k + 1);
+      // Update session to reflect imported state
+      setSession((prev) => prev ? { ...prev, event_data_source: "xml_import" } : prev);
+    } catch (e: unknown) {
+      const resp = (e as { response?: { status?: number; data?: { detail?: string } } }).response;
+      if (resp?.status === 409) {
+        // Session already has events — ask to replace
+        setPendingImportFile(file);
+        setShowReplaceConfirm(true);
+      } else {
+        const msg = resp?.data?.detail || "Failed to import event data";
+        toast.error(msg);
+      }
+    } finally {
+      setImportingEvents(false);
+    }
+  }, [sessionId]);
+
+  const handleFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset file input so the same file can be re-selected
+    e.target.value = "";
+    const hasExisting = !!session?.event_data_source;
+    executeEventImport(file, hasExisting);
+  }, [session, executeEventImport]);
 
   if (loading) {
     return (
@@ -860,6 +911,81 @@ export default function FilmSessionViewerPage() {
               <div className="text-[11px] text-muted/60">
                 Status: {session.status || "active"}
               </div>
+            </div>
+
+            {/* Import Event Timeline */}
+            <div className="bg-white rounded-xl border border-border p-4">
+              <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2 flex items-center gap-1.5">
+                <Clock size={13} />
+                Event Timeline
+              </h3>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xml,.csv"
+                onChange={handleFileSelected}
+                className="hidden"
+              />
+
+              {importingEvents ? (
+                <div className="flex items-center justify-center gap-2 py-3">
+                  <Loader2 size={14} className="animate-spin text-teal" />
+                  <span className="text-[11px] text-muted font-oswald uppercase tracking-wider">Importing events...</span>
+                </div>
+              ) : showReplaceConfirm ? (
+                <div className="py-2">
+                  <p className="text-[11px] text-navy mb-3">This session already has imported events. Replace them?</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (pendingImportFile) executeEventImport(pendingImportFile, true);
+                      }}
+                      className="flex-1 px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider bg-orange text-white hover:bg-orange/90 transition-colors"
+                    >
+                      Confirm Replace
+                    </button>
+                    <button
+                      onClick={() => { setShowReplaceConfirm(false); setPendingImportFile(null); }}
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {importResult && (
+                    <div className="mb-3 text-[11px] text-teal bg-teal/5 rounded-lg px-3 py-2">
+                      Imported {importResult.events_created} events and {importResult.clips_created} clips
+                      {importResult.player_matches > 0 && ` · ${importResult.player_matches} players matched`}
+                      {importResult.unmatched_players.length > 0 && (
+                        <span className="block text-muted/60 mt-1">
+                          Unmatched: {importResult.unmatched_players.slice(0, 5).join(", ")}
+                          {importResult.unmatched_players.length > 5 && ` +${importResult.unmatched_players.length - 5} more`}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-[11px] font-oswald uppercase tracking-wider text-muted hover:text-navy hover:border-navy/30 transition-colors"
+                  >
+                    {session?.event_data_source ? (
+                      <>
+                        <RefreshCw size={12} />
+                        Re-import Event Data
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={12} />
+                        Import Event Data
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Clip Panel */}
