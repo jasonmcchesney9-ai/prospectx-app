@@ -332,8 +332,8 @@ function CoachingHub() {
             <div className="flex items-center gap-2">
               <Swords size={14} style={{ color: "#0D9488" }} />
               <span
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                className="text-xl font-bold tracking-widest uppercase text-white"
+                style={{ fontFamily: "ui-monospace, monospace" }}
               >
                 GAME PLANS
               </span>
@@ -446,8 +446,8 @@ function CoachingHub() {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
               <span
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                className="text-lg font-bold tracking-widest uppercase text-white"
+                style={{ fontFamily: "ui-monospace, monospace" }}
               >
                 ACTIVE GAME PLANS
               </span>
@@ -549,8 +549,8 @@ function CoachingHub() {
             <div className="flex items-center gap-2">
               <Trophy size={14} style={{ color: "#0D9488" }} />
               <span
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                className="text-lg font-bold tracking-widest uppercase text-white"
+                style={{ fontFamily: "ui-monospace, monospace" }}
               >
                 SERIES PLANS
               </span>
@@ -628,8 +628,8 @@ function CoachingHub() {
             <div className="flex items-center gap-2">
               <Film size={14} style={{ color: "#F97316" }} />
               <span
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                className="text-lg font-bold tracking-widest uppercase text-white"
+                style={{ fontFamily: "ui-monospace, monospace" }}
               >
                 FILM CLIPS
               </span>
