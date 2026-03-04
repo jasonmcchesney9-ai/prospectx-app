@@ -28,6 +28,7 @@ interface ClipPanelProps {
   sessionId: string;
   uploadId: string;
   getCurrentTime: () => number;
+  refreshKey?: number;
 }
 
 function formatTime(seconds: number): string {
@@ -40,6 +41,7 @@ export default function ClipPanel({
   sessionId,
   uploadId,
   getCurrentTime,
+  refreshKey,
 }: ClipPanelProps) {
   const [clips, setClips] = useState<Clip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +71,7 @@ export default function ClipPanel({
 
   useEffect(() => {
     loadClips();
-  }, [loadClips]);
+  }, [loadClips, refreshKey]);
 
   const openCreator = useCallback(
     (clip?: Clip) => {

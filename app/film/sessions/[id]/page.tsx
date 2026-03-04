@@ -15,6 +15,8 @@ import {
   Sparkles,
   X,
   FileText,
+  Scissors,
+  Save,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -104,6 +106,13 @@ export default function FilmSessionViewerPage() {
   // Comment form
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Mark In / Mark Out clip creation
+  const [clipStart, setClipStart] = useState<number | null>(null);
+  const [clipEnd, setClipEnd] = useState<number | null>(null);
+  const [clipTitle, setClipTitle] = useState("");
+  const [savingClip, setSavingClip] = useState(false);
+  const [clipRefreshKey, setClipRefreshKey] = useState(0);
 
   // Video player ref for getting current time
   const currentTimeRef = useRef<number>(0);
@@ -223,6 +232,34 @@ export default function FilmSessionViewerPage() {
     },
     [sessionId, router]
   );
+
+  const handleSaveClip = useCallback(async () => {
+    if (clipStart === null || clipEnd === null) return;
+    if (clipEnd <= clipStart) {
+      toast.error("Mark Out must be after Mark In");
+      return;
+    }
+    setSavingClip(true);
+    try {
+      await api.post("/film/clips", {
+        title: clipTitle.trim() || `Clip ${formatTimestamp(clipStart)}–${formatTimestamp(clipEnd)}`,
+        session_id: sessionId,
+        upload_id: upload?.id || null,
+        start_time_seconds: clipStart,
+        end_time_seconds: clipEnd,
+        clip_type: "manual",
+      });
+      toast.success("Clip saved");
+      setClipStart(null);
+      setClipEnd(null);
+      setClipTitle("");
+      setClipRefreshKey((k) => k + 1);
+    } catch {
+      toast.error("Failed to save clip");
+    } finally {
+      setSavingClip(false);
+    }
+  }, [clipStart, clipEnd, clipTitle, sessionId, upload]);
 
   if (loading) {
     return (
@@ -344,6 +381,67 @@ export default function FilmSessionViewerPage() {
               />
             )}
 
+            {/* Mark In / Mark Out control bar */}
+            {upload?.playback_id && (
+              <div className="bg-white rounded-xl border border-border p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Mark In */}
+                  <button
+                    onClick={() => setClipStart(Math.floor(currentTimeRef.current))}
+                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
+                  >
+                    <Scissors size={12} />
+                    Mark In
+                  </button>
+                  <span className="text-[11px] font-mono text-navy min-w-[56px]">
+                    In: {clipStart !== null ? formatTimestamp(clipStart) : "--:--"}
+                  </span>
+
+                  {/* Mark Out */}
+                  <button
+                    onClick={() => setClipEnd(Math.floor(currentTimeRef.current))}
+                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
+                  >
+                    <Scissors size={12} />
+                    Mark Out
+                  </button>
+                  <span className="text-[11px] font-mono text-navy min-w-[56px]">
+                    Out: {clipEnd !== null ? formatTimestamp(clipEnd) : "--:--"}
+                  </span>
+
+                  {/* Divider */}
+                  <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
+
+                  {/* Title input */}
+                  <input
+                    type="text"
+                    value={clipTitle}
+                    onChange={(e) => setClipTitle(e.target.value)}
+                    placeholder="Clip title..."
+                    className="flex-1 min-w-[120px] border border-border rounded-lg px-2.5 py-1.5 text-xs text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                  />
+
+                  {/* Save Clip */}
+                  <button
+                    onClick={handleSaveClip}
+                    disabled={clipStart === null || clipEnd === null || savingClip}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider transition-colors ${
+                      clipStart !== null && clipEnd !== null && !savingClip
+                        ? "bg-teal text-white hover:bg-teal/90"
+                        : "bg-border text-muted/50 cursor-not-allowed"
+                    }`}
+                  >
+                    {savingClip ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Save size={12} />
+                    )}
+                    Save Clip
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Comments (hidden on mobile — shown via order-3 block below) */}
             <div className="hidden lg:block">
               <div className="bg-white rounded-xl border border-border p-4">
@@ -444,6 +542,7 @@ export default function FilmSessionViewerPage() {
               sessionId={sessionId}
               uploadId={upload?.id || ""}
               getCurrentTime={getCurrentTime}
+              refreshKey={clipRefreshKey}
             />
 
             {/* Game Plan Links */}
