@@ -362,6 +362,50 @@ function WarRoom() {
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════════════
+          ACTION BAR — 4 quick-action buttons
+          ═══════════════════════════════════════════════════════ */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <button
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1.5px solid rgba(13,148,136,0.2)" }}
+          title="Analyse this game plan with PXI"
+          onClick={() => {
+            const ctx = `Analyse my game plan: ${teamName} vs ${opponentName} on ${displayDate}. Forecheck: ${forecheck || "—"}, Breakout: ${breakout || "—"}, Defensive: ${defensiveSystem || "—"}. Opponent analysis: ${opponentAnalysis || "none"}. Our strategy: ${ourStrategy || "none"}. Keys to game: ${keysToGame || "none"}.`;
+            window.open(`/bench-talk?prefill=${encodeURIComponent(ctx)}`, "_blank");
+          }}
+        >
+          <Sparkles size={12} />
+          PXI Analyse
+        </button>
+        <Link
+          href={`/chalk-talk/sessions/${sessionId}/edit`}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(15,41,66,0.06)", color: "#0F2942", border: "1.5px solid #DDE6EF" }}
+        >
+          <PenTool size={12} />
+          Edit Plan
+        </Link>
+        <button
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(15,41,66,0.06)", color: "#0F2942", border: "1.5px solid #DDE6EF" }}
+          title="Export game plan"
+          onClick={() => window.print()}
+        >
+          <Save size={12} />
+          Export
+        </button>
+        <button
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(234,88,12,0.08)", color: "#EA580C", border: "1.5px solid rgba(234,88,12,0.2)" }}
+          title="Link a film clip to this game plan"
+          onClick={openClipModal}
+        >
+          <Film size={12} />
+          Link Film Clip
+        </button>
+      </div>
+
       {/* Alerts */}
       {error && (
         <div className="mb-4 px-4 py-3 rounded-xl text-sm" style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C" }}>
