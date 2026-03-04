@@ -26613,103 +26613,69 @@ async def generate_devplan_v2(player_id: str, token_data: dict = Depends(verify_
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
-        # Build AI prompt
-        prompt = f"""You are an elite hockey player development specialist. Generate a detailed, actionable in-season development plan for the following player.
+        # Build PXI system prompt via player_season_roadmap_v2
+        _resolved_mode = resolve_mode(user_hockey_role=hockey_role, template_slug="player_season_roadmap")
+        base_prompt = f"""Generate a Player Season Roadmap / Development Plan for the player below.
+Return ONLY valid JSON with these exact keys:
+{{"section_1_snapshot": "...", "section_2_context": "...", "section_3_strengths": "...",
+  "section_4_development": "...", "section_5_phase_plan": "...", "section_6_integration": "...",
+  "section_7_metrics": "...", "section_8_staff_notes": "...", "summary": "..."}}"""
 
-PLAYER: {player_name}
+        system_prompt = build_report_system_prompt(
+            mode=_resolved_mode,
+            base_prompt=base_prompt,
+            report_type="player_season_roadmap",
+            level="Junior",
+            data_depth="intermediate" if instat_stats else "basic",
+            audience="coach_gm",
+        )
+
+        user_prompt = f"""PLAYER: {player_name}
 POSITION: {position}
 TEAM: {team} ({league})
 {"DOB: " + str(player['dob']) if player['dob'] else ""}
 {"STATS: " + stats_text if stats_text else "NO STATS AVAILABLE — base plan on position and profile."}
 {"SCOUTING INTELLIGENCE: " + intel_text if intel_text else ""}
 {"RECENT GAME LOG (last 10):\n" + game_log_text if game_log_text else ""}
-{"SCOUT NOTES:\n" + notes_text if notes_text else ""}
-
-Generate a development plan with EXACTLY these 8 sections, using these EXACT headers:
-
-## PLAYER SNAPSHOT
-A concise identity summary — who this player is right now (role, style, system fit).
-
-## SEASON CONTEXT
-Where the player sits in the season, team context, upcoming milestones.
-
-## CURRENT STRENGTHS
-Top 3-5 strengths with specific evidence from stats and scouting.
-
-## DEVELOPMENT PRIORITIES
-Top 3 development areas ranked by impact, with specific targets and drills.
-
-## PHASE PLAN
-Break the remainder of the season into 2-3 phases with specific focus areas per phase.
-
-## PRACTICE & GAME INTEGRATION
-How development priorities translate into daily practice and game-day execution.
-
-## SUCCESS METRICS
-Measurable indicators of progress — stat targets, behavioral markers, coaching checkpoints.
-
-## STAFF NOTES
-Internal coaching observations, personality notes, communication approach.
-
-Also provide a 2-sentence summary after all sections.
-
-Return ONLY valid JSON in this format:
-{{
-  "section_1_snapshot": "...",
-  "section_2_context": "...",
-  "section_3_strengths": "...",
-  "section_4_development": "...",
-  "section_5_phase_plan": "...",
-  "section_6_integration": "...",
-  "section_7_metrics": "...",
-  "section_8_staff_notes": "...",
-  "summary": "..."
-}}"""
+{"SCOUT NOTES:\n" + notes_text if notes_text else ""}"""
 
         try:
-            import httpx
-            async with httpx.AsyncClient(timeout=60) as http_client:
-                resp = await http_client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json={
-                        "model": "claude-sonnet-4-20250514",
-                        "max_tokens": 6000,
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                ai_text = data["content"][0]["text"]
+            client = get_anthropic_client()
+            if not client:
+                raise Exception("No Anthropic client available")
 
-                # Extract JSON from markdown blocks if present
-                if "```json" in ai_text:
-                    ai_text = ai_text.split("```json")[1].split("```")[0].strip()
-                elif "```" in ai_text:
-                    ai_text = ai_text.split("```")[1].split("```")[0].strip()
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8000,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            ai_text = message.content[0].text
 
-                plan_data = json.loads(ai_text)
+            # Extract JSON from markdown blocks if present
+            if "```json" in ai_text:
+                ai_text = ai_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in ai_text:
+                ai_text = ai_text.split("```")[1].split("```")[0].strip()
 
-                return {
-                    "section_1_snapshot": plan_data.get("section_1_snapshot", ""),
-                    "section_2_context": plan_data.get("section_2_context", ""),
-                    "section_3_strengths": plan_data.get("section_3_strengths", ""),
-                    "section_4_development": plan_data.get("section_4_development", ""),
-                    "section_5_phase_plan": plan_data.get("section_5_phase_plan", ""),
-                    "section_6_integration": plan_data.get("section_6_integration", ""),
-                    "section_7_metrics": plan_data.get("section_7_metrics", ""),
-                    "section_8_staff_notes": plan_data.get("section_8_staff_notes", ""),
-                    "summary": plan_data.get("summary", ""),
-                    "data_sources": [s for s in ["player_stats" if stats else None, "instat_player_stats" if instat_stats else None,
-                                                  "instat_player_game_log" if game_log else None, "player_intelligence" if intel else None,
-                                                  "scout_notes" if notes else None] if s],
-                    "player_name": player_name,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                }
+            plan_data = json.loads(ai_text)
+
+            return {
+                "section_1_snapshot": plan_data.get("section_1_snapshot", ""),
+                "section_2_context": plan_data.get("section_2_context", ""),
+                "section_3_strengths": plan_data.get("section_3_strengths", ""),
+                "section_4_development": plan_data.get("section_4_development", ""),
+                "section_5_phase_plan": plan_data.get("section_5_phase_plan", ""),
+                "section_6_integration": plan_data.get("section_6_integration", ""),
+                "section_7_metrics": plan_data.get("section_7_metrics", ""),
+                "section_8_staff_notes": plan_data.get("section_8_staff_notes", ""),
+                "summary": plan_data.get("summary", ""),
+                "data_sources": [s for s in ["player_stats" if stats else None, "instat_player_stats" if instat_stats else None,
+                                              "instat_player_game_log" if game_log else None, "player_intelligence" if intel else None,
+                                              "scout_notes" if notes else None] if s],
+                "player_name": player_name,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
 
         except Exception as e:
             logger.warning("AI dev plan v2 generation failed: %s", e)
