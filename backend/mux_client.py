@@ -108,6 +108,11 @@ def create_asset_from_url(url: str, passthrough: str = "") -> dict:
         passthrough=passthrough or None,
     )
 
+    logger.info(
+        "Mux create_asset_from_url: url=%s passthrough=%s",
+        url, passthrough,
+    )
+
     try:
         response = assets_api.create_asset(create_request)
         asset = response.data
@@ -116,13 +121,23 @@ def create_asset_from_url(url: str, passthrough: str = "") -> dict:
         if asset.playback_ids and len(asset.playback_ids) > 0:
             playback_id = asset.playback_ids[0].id
 
+        logger.info(
+            "Mux asset created: asset_id=%s status=%s playback_id=%s",
+            asset.id, asset.status, playback_id,
+        )
         return {
             "asset_id": asset.id,
             "status": asset.status,
             "playback_id": playback_id,
         }
     except ApiException as e:
-        logger.error("Mux create_asset_from_url(%s) failed: %s", url, e)
+        logger.error(
+            "Mux create_asset_from_url FAILED: url=%s status=%s reason=%s body=%s",
+            url,
+            getattr(e, "status", "N/A"),
+            getattr(e, "reason", "N/A"),
+            getattr(e, "body", "N/A"),
+        )
         raise
 
 

@@ -39330,9 +39330,16 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
 
+    import traceback as _tb
+    logger.info("[from-url] Calling Mux create_asset_from_url — url=%s title=%s user=%s", url, title, user_id)
     try:
         mux_result = mux_from_url(url=url, passthrough=title)
+        logger.info("[from-url] Mux returned: %s", mux_result)
     except Exception as e:
+        logger.error(
+            "[from-url] Mux API FAILED — url=%s title=%s error_type=%s error=%r\n%s",
+            url, title, type(e).__name__, e, _tb.format_exc(),
+        )
         raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
 
     upload_id = str(uuid.uuid4())
