@@ -11,6 +11,7 @@ import {
   Loader2,
   Film,
   RefreshCw,
+  Link2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -45,6 +46,10 @@ export default function FilmUploadPage() {
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
   const [uploadId, setUploadId] = useState<string | null>(null);
+
+  // External URL link
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -148,7 +153,40 @@ export default function FilmUploadPage() {
     setProgress(0);
     setErrorMessage("");
     setUploadId(null);
+    setLinkUrl("");
   }, [stopPolling]);
+
+  const handleLinkVideo = useCallback(async () => {
+    const trimmed = linkUrl.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+      toast.error("URL must start with http:// or https://");
+      return;
+    }
+    if (!title.trim()) {
+      toast.error("Title is required — go back to Step 1");
+      return;
+    }
+    setLinkSubmitting(true);
+    try {
+      const res = await api.post("/film/uploads/from-url", {
+        url: trimmed,
+        title: title.trim(),
+        description: description.trim() || null,
+      });
+      const id = res.data.id;
+      setUploadId(id);
+      setStep("uploading");
+      setUploadStatus("processing");
+      pollStatus(id);
+      toast.success("Video link submitted — processing...");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to link video";
+      toast.error(msg);
+    } finally {
+      setLinkSubmitting(false);
+    }
+  }, [linkUrl, title, description, pollStatus]);
 
   return (
     <ProtectedRoute>
@@ -281,6 +319,50 @@ export default function FilmUploadPage() {
               selectedFile={file}
               onClear={() => setFile(null)}
             />
+
+            {/* ── Or paste a video link ── */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-3 text-[11px] font-oswald uppercase tracking-wider text-muted">
+                  Or paste a video link
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative">
+                <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted/50" />
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); handleLinkVideo(); }
+                  }}
+                  placeholder="Paste video URL..."
+                  className="w-full border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                />
+              </div>
+              <button
+                onClick={handleLinkVideo}
+                disabled={!linkUrl.trim() || linkSubmitting}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-sm whitespace-nowrap transition-colors ${
+                  linkUrl.trim() && !linkSubmitting
+                    ? "bg-teal text-white hover:bg-teal/90"
+                    : "bg-border text-muted/50 cursor-not-allowed"
+                }`}
+              >
+                {linkSubmitting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Link2 size={14} />
+                )}
+                Link Video
+              </button>
+            </div>
 
             <div className="flex justify-between">
               <button
