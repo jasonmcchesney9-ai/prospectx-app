@@ -40413,14 +40413,59 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
         ).fetchall()
         events = [dict(e) if hasattr(e, "keys") else e for e in event_rows]
 
+        # 3b. Resolve player UUIDs to names for clip and event context
+        player_uuid_set = set()
+        for c in clips:
+            raw_pids = c.get("player_ids")
+            if raw_pids:
+                try:
+                    pids = json.loads(raw_pids) if isinstance(raw_pids, str) else raw_pids
+                    if isinstance(pids, list):
+                        player_uuid_set.update(pid for pid in pids if pid)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        for e in events:
+            pid = e.get("player_id")
+            if pid:
+                player_uuid_set.add(pid)
+
+        player_name_lookup: dict = {}
+        if player_uuid_set:
+            uuid_list = list(player_uuid_set)
+            placeholders = ",".join("?" * len(uuid_list))
+            p_rows = conn.execute(
+                f"SELECT id, first_name, last_name FROM players WHERE id IN ({placeholders})",
+                uuid_list,
+            ).fetchall()
+            for pr in p_rows:
+                prd = dict(pr) if hasattr(pr, "keys") else pr
+                fn = (prd.get("first_name") or "").strip()
+                ln = (prd.get("last_name") or "").strip()
+                player_name_lookup[prd["id"]] = f"{fn} {ln}".strip() or "Unknown Player"
+
         # 4. Build film context string
         def _format_clips(clips_list):
             if not clips_list:
                 return "  (no clips tagged)"
             lines = []
             for i, c in enumerate(clips_list, 1):
-                tags = c.get("tags") or ""
-                player = c.get("tagged_player_name") or "untagged"
+                raw_tags = c.get("tags") or ""
+                try:
+                    tags = json.loads(raw_tags) if isinstance(raw_tags, str) else raw_tags
+                    tags = ", ".join(tags) if isinstance(tags, list) else str(tags)
+                except (json.JSONDecodeError, TypeError):
+                    tags = str(raw_tags)
+                # Resolve player names from player_ids
+                raw_pids = c.get("player_ids")
+                player_names = []
+                if raw_pids:
+                    try:
+                        pids = json.loads(raw_pids) if isinstance(raw_pids, str) else raw_pids
+                        if isinstance(pids, list):
+                            player_names = [player_name_lookup.get(pid, "Unknown Player") for pid in pids if pid]
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                player = ", ".join(player_names) if player_names else "untagged"
                 lines.append(
                     f"  Clip {i}: {c.get('title', 'Untitled')} "
                     f"({c.get('start_time_seconds', 0)}s → {c.get('end_time_seconds', 0)}s) "
@@ -40434,7 +40479,8 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
             lines = []
             for e in events_list:
                 label = e.get("event_label") or ""
-                player = e.get("player_name") or "untagged"
+                pid = e.get("player_id")
+                player = player_name_lookup.get(pid, "untagged") if pid else "untagged"
                 lines.append(
                     f"  {e.get('time_seconds', 0)}s — {e.get('event_type', 'unknown')}"
                     f"{': ' + label if label else ''} | Player: {player}"
