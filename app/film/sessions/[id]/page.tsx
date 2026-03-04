@@ -22,6 +22,7 @@ import {
   Users,
   RefreshCw,
   Upload,
+  Filter,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -74,6 +75,54 @@ interface Comment {
   comment_text: string;
   timestamp_seconds: number | null;
   created_at: string;
+}
+
+interface SessionEvent {
+  id: string;
+  event_type: string;
+  event_label?: string;
+  time_seconds: number;
+  player_id?: string | null;
+  notes?: string;
+  source?: string;
+}
+
+type EventCategory = "all" | "offensive" | "defensive" | "special_teams" | "other";
+
+const EVENT_CATEGORY_MAP: Record<string, EventCategory> = {
+  shot: "offensive", goal: "offensive", zone_entry: "offensive", cycle: "offensive",
+  chance: "offensive", scoring_chance: "offensive", offensive: "offensive",
+  block: "defensive", clear: "defensive", breakout: "defensive", turnover: "defensive",
+  dz_coverage: "defensive", defensive: "defensive", gap_control: "defensive",
+  pp_setup: "special_teams", pk_clear: "special_teams", faceoff: "special_teams",
+  power_play: "special_teams", penalty_kill: "special_teams", pp: "special_teams", pk: "special_teams",
+};
+
+const EVENT_CATEGORY_LABELS: { value: EventCategory; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "offensive", label: "Offensive" },
+  { value: "defensive", label: "Defensive" },
+  { value: "special_teams", label: "Special Teams" },
+  { value: "other", label: "Other" },
+];
+
+const EVENT_CATEGORY_COLORS: Record<EventCategory, string> = {
+  all: "bg-navy/10 text-navy",
+  offensive: "bg-teal/10 text-teal",
+  defensive: "bg-navy/10 text-navy",
+  special_teams: "bg-orange/10 text-orange",
+  other: "bg-gray-100 text-gray-500",
+};
+
+function getEventCategory(eventType: string): EventCategory {
+  // Check all parts of the event type (e.g., "zone_entry" matches "zone_entry")
+  const normalized = eventType.toLowerCase().replace(/\s+/g, "_");
+  if (EVENT_CATEGORY_MAP[normalized]) return EVENT_CATEGORY_MAP[normalized];
+  // Try matching partial — check if any key is contained in the event type
+  for (const [key, cat] of Object.entries(EVENT_CATEGORY_MAP)) {
+    if (normalized.includes(key)) return cat;
+  }
+  return "other";
 }
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -164,6 +213,10 @@ export default function FilmSessionViewerPage() {
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Event timeline display
+  const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
+  const [eventFilter, setEventFilter] = useState<EventCategory>("all");
+
   // Video player ref for getting current time
   const currentTimeRef = useRef<number>(0);
 
@@ -219,6 +272,14 @@ export default function FilmSessionViewerPage() {
         } catch {
           // Comments may not exist yet
         }
+
+        // Load session events
+        try {
+          const eventsRes = await api.get(`/film/events`, { params: { session_id: sessionId, limit: 500 } });
+          setSessionEvents(Array.isArray(eventsRes.data) ? eventsRes.data : []);
+        } catch {
+          // Events may not exist yet
+        }
       } catch (e: unknown) {
         const msg =
           (e as { response?: { data?: { detail?: string } } }).response?.data
@@ -248,6 +309,16 @@ export default function FilmSessionViewerPage() {
       setComments(res.data);
     } catch {
       // Silently fail on comment refresh
+    }
+  }, [sessionId]);
+
+  const loadSessionEvents = useCallback(async () => {
+    try {
+      const res = await api.get(`/film/events`, { params: { session_id: sessionId, limit: 500 } });
+      const events = Array.isArray(res.data) ? res.data : [];
+      setSessionEvents(events);
+    } catch {
+      // Silently fail on events load
     }
   }, [sessionId]);
 
@@ -422,8 +493,9 @@ export default function FilmSessionViewerPage() {
       const data = res.data;
       setImportResult(data);
       toast.success(`Imported ${data.events_created} events and ${data.clips_created} clips`);
-      // Refresh clips panel
+      // Refresh clips panel and event timeline
       setClipRefreshKey((k) => k + 1);
+      loadSessionEvents();
       // Update session to reflect imported state
       setSession((prev) => prev ? { ...prev, event_data_source: "xml_import" } : prev);
     } catch (e: unknown) {
@@ -439,7 +511,7 @@ export default function FilmSessionViewerPage() {
     } finally {
       setImportingEvents(false);
     }
-  }, [sessionId]);
+  }, [sessionId, loadSessionEvents]);
 
   const handleFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -762,6 +834,84 @@ export default function FilmSessionViewerPage() {
                 </div>
               </div>
             )}
+
+            {/* Event Timeline */}
+            {sessionEvents.length > 0 && (() => {
+              const filteredEvents = eventFilter === "all"
+                ? sessionEvents
+                : sessionEvents.filter((ev) => getEventCategory(ev.event_type) === eventFilter);
+              return (
+                <div className="bg-white rounded-xl border border-border p-4">
+                  <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-1.5">
+                    <Filter size={13} />
+                    Event Timeline
+                    <span className="text-muted/60 font-normal ml-1">
+                      ({filteredEvents.length === sessionEvents.length
+                        ? `${sessionEvents.length} events`
+                        : `${filteredEvents.length} of ${sessionEvents.length}`})
+                    </span>
+                  </h3>
+
+                  {/* Filter buttons */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {EVENT_CATEGORY_LABELS.map((cat) => (
+                      <button
+                        key={cat.value}
+                        onClick={() => setEventFilter(cat.value)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-oswald uppercase tracking-wider transition-colors ${
+                          eventFilter === cat.value
+                            ? "bg-teal text-white"
+                            : "border border-border text-muted hover:text-navy hover:border-navy/30"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Scrollable event list */}
+                  <div className="max-h-[300px] overflow-y-auto space-y-1">
+                    {filteredEvents.length === 0 ? (
+                      <p className="text-[11px] text-muted/50 text-center py-4">
+                        No events match this filter.
+                      </p>
+                    ) : (
+                      filteredEvents.map((ev) => {
+                        const cat = getEventCategory(ev.event_type);
+                        const colorClass = EVENT_CATEGORY_COLORS[cat];
+                        return (
+                          <button
+                            key={ev.id}
+                            onClick={() => setStartTime(ev.time_seconds)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-navy/[0.03] transition-colors text-left group"
+                          >
+                            {/* Timestamp */}
+                            <span className="text-[11px] font-mono text-teal shrink-0 min-w-[40px]">
+                              {formatTimestamp(ev.time_seconds)}
+                            </span>
+
+                            {/* Event badge + label */}
+                            <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                              <span className={`text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${colorClass}`}>
+                                {ev.event_type.replace(/_/g, " ")}
+                              </span>
+                              {ev.event_label && ev.event_label !== ev.event_type && (
+                                <span className="text-[11px] text-navy truncate">{ev.event_label}</span>
+                              )}
+                            </div>
+
+                            {/* Play button */}
+                            <span className="shrink-0 text-muted/30 group-hover:text-teal transition-colors">
+                              <Play size={11} />
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* PXI Report Display (generating spinner or completed report) */}
             {generating && (
