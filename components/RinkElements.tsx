@@ -4,7 +4,7 @@
 // Visual style ported from backend/rink_diagrams.py
 // ============================================================
 
-import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText, type RinkZone, type RinkStraightLine, type RinkPlayerToken } from "@/types/rink";
+import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText, type RinkZone, type RinkStraightLine, type RinkPlayerToken, type RinkStickyNote } from "@/types/rink";
 
 // ── Marker Element ───────────────────────────────────────────
 
@@ -514,6 +514,89 @@ export function PlayerTokenElement({ token, selected, onMouseDown, onDoubleClick
       >
         {token.number}
       </text>
+    </g>
+  );
+}
+
+// ── Sticky Note Element ──────────────────────────────────
+
+interface StickyNoteElementProps {
+  note: RinkStickyNote;
+  selected: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onDoubleClick: (e: React.MouseEvent) => void;
+}
+
+export function StickyNoteElement({ note, selected, onMouseDown, onDoubleClick }: StickyNoteElementProps) {
+  const pad = 6;
+  // Wrap text into lines that fit within the sticky note width
+  const maxCharsPerLine = Math.floor((note.width - pad * 2) / 6);
+  const lines: string[] = [];
+  if (note.content) {
+    const words = note.content.split(" ");
+    let currentLine = "";
+    for (const word of words) {
+      if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = currentLine ? currentLine + " " + word : word;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+  }
+
+  return (
+    <g onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} style={{ cursor: "pointer" }}>
+      {/* Selection border */}
+      {selected && (
+        <rect
+          x={note.x - 3}
+          y={note.y - 3}
+          width={note.width + 6}
+          height={note.height + 6}
+          rx={4}
+          fill="none"
+          stroke={RINK_COLORS.ORANGE}
+          strokeWidth={2}
+          strokeDasharray="4,3"
+        />
+      )}
+      {/* Drop shadow */}
+      <rect
+        x={note.x + 2}
+        y={note.y + 2}
+        width={note.width}
+        height={note.height}
+        rx={3}
+        fill="rgba(0,0,0,0.15)"
+      />
+      {/* Main sticky note */}
+      <rect
+        x={note.x}
+        y={note.y}
+        width={note.width}
+        height={note.height}
+        rx={3}
+        fill={note.color}
+        stroke="#F59E0B"
+        strokeWidth={1}
+      />
+      {/* Text content */}
+      {lines.map((line, i) => (
+        <text
+          key={i}
+          x={note.x + pad}
+          y={note.y + pad + 10 + i * 12}
+          fontFamily="'DM Sans', sans-serif"
+          fontSize={10}
+          fontWeight="500"
+          fill="#78350F"
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
+          {line}
+        </text>
+      ))}
     </g>
   );
 }

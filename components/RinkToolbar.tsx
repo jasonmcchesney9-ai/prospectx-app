@@ -3,7 +3,7 @@
 // Tool selection, rink type, actions (undo, clear, export)
 // ============================================================
 
-import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2, Type, Minus, Square } from "lucide-react";
+import { Undo2, Redo2, Trash2, Download, Image, MousePointer2, Eraser, X as XIcon, HelpCircle, Film, Loader2, Type, Minus, Square, StickyNote } from "lucide-react";
 import { RINK_COLORS, MARKER_COLORS, RINK_LABELS, type RinkType, type ToolMode, type RinkElement } from "@/types/rink";
 
 type BackgroundMode = "full_rink" | "half_rink" | "blank";
@@ -174,6 +174,18 @@ function PlayerTokenPreview() {
       <text x={8} y={9} textAnchor="middle" dominantBaseline="central" fontSize={7} fontWeight="bold" fill="white">
         #
       </text>
+    </svg>
+  );
+}
+
+// ── Sticky Note preview ────────────────────────────────────
+
+function StickyNotePreview() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16">
+      <rect x={2} y={2} width={12} height={12} rx={1.5} fill="#FEF08A" stroke="#F59E0B" strokeWidth={0.8} />
+      <line x1={4} y1={6} x2={12} y2={6} stroke="#78350F" strokeWidth={0.6} opacity={0.5} />
+      <line x1={4} y1={9} x2={10} y2={9} stroke="#78350F" strokeWidth={0.6} opacity={0.5} />
     </svg>
   );
 }
@@ -360,6 +372,9 @@ export default function RinkToolbar({
       </ToolBtn>
       <ToolBtn active={toolMode === "player_token"} onClick={() => onToolModeChange("player_token")} label="Jersey" title="Player Jersey Token — click to place">
         <PlayerTokenPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "sticky_note"} onClick={() => onToolModeChange("sticky_note")} label="Note" title="Sticky Note (K) — click to place, double-click to edit">
+        <StickyNotePreview />
       </ToolBtn>
       <ToolBtn active={toolMode === "zone"} onClick={() => onToolModeChange("zone")} label="Zone" title="Zone Highlight (Z) — click + drag">
         <Square size={14} />

@@ -40,7 +40,8 @@ export type ToolMode =
   | "text"
   | "zone"
   | "straight_line"
-  | "player_token";
+  | "player_token"
+  | "sticky_note";
 
 // ── Element Types ────────────────────────────────────────────
 
@@ -136,7 +137,18 @@ export interface RinkPlayerToken {
   variant: "home" | "away";
 }
 
-export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText | RinkZone | RinkStraightLine | RinkPlayerToken;
+export interface RinkStickyNote {
+  id: string;
+  type: "sticky_note";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  content: string;
+  color: string;
+}
+
+export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText | RinkZone | RinkStraightLine | RinkPlayerToken | RinkStickyNote;
 
 // ── Diagram Data (serializable to JSON) ──────────────────────
 

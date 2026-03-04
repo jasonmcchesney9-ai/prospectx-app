@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import RinkSvgBackground from "./RinkSvgBackground";
-import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement, ZoneElement, StraightLineElement, PlayerTokenElement } from "./RinkElements";
+import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement, ZoneElement, StraightLineElement, PlayerTokenElement, StickyNoteElement } from "./RinkElements";
 import RinkToolbar from "./RinkToolbar";
 import {
   RINK_COLORS,
@@ -29,6 +29,7 @@ import {
   type RinkStraightLine,
   type ArrowVariant,
   type RinkPlayerToken,
+  type RinkStickyNote,
 } from "@/types/rink";
 
 // ── Props ────────────────────────────────────────────────────
@@ -90,8 +91,8 @@ function hitTest(
     const cy = el.y - approxH / 2;
     return Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
   }
-  if (el.type === "zone") {
-    // Check if point is within the zone rectangle
+  if (el.type === "zone" || el.type === "sticky_note") {
+    // Check if point is within the rectangle
     if (px >= el.x && px <= el.x + el.width && py >= el.y && py <= el.y + el.height) {
       return 0;
     }
@@ -232,6 +233,10 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [tokenPopover, setTokenPopover] = useState<{ x: number; y: number; number: string; variant: "home" | "away"; editId?: string } | null>(null);
   const tokenInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Sticky Note popover state ──
+  const [stickyPopover, setStickyPopover] = useState<{ x: number; y: number; content: string; editId?: string } | null>(null);
+  const stickyInputRef = useRef<HTMLTextAreaElement>(null);
+
   // ── Zone + Straight Line tool state ──
   const [zoneDrag, setZoneDrag] = useState<{ startX: number; startY: number } | null>(null);
   const [lineDrag, setLineDrag] = useState<{ startX: number; startY: number; shiftKey: boolean } | null>(null);
@@ -340,7 +345,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         if (el.type === "text") {
           return { ...el, x: el.x + dx, y: el.y + dy };
         }
-        if (el.type === "zone") {
+        if (el.type === "zone" || el.type === "sticky_note") {
           return { ...el, x: el.x + dx, y: el.y + dy };
         }
         if (el.type === "straight_line") {
@@ -374,6 +379,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         setFreehandPoints([]);
         setTextInput(null);
         setTokenPopover(null);
+        setStickyPopover(null);
         return;
       }
 
@@ -425,6 +431,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         o: "pylon",
         n: "net",
         j: "player_token",
+        k: "sticky_note",
       };
       const numKeys: Record<string, ToolMode> = {
         "1": "marker_X",
@@ -558,6 +565,13 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         return;
       }
 
+      // ── Sticky Note: show popover ──
+      if (toolMode === "sticky_note") {
+        setStickyPopover({ x: pt.x, y: pt.y, content: "" });
+        setTimeout(() => stickyInputRef.current?.focus(), 50);
+        return;
+      }
+
       // ── Arrow: two-click (all arrow variants) ──
       const arrowToolConfig: Record<string, { style: "solid" | "dashed"; color: string; variant: ArrowVariant; strokeWidth?: number }> = {
         arrow_solid:         { style: "solid",  color: RINK_COLORS.TEAL,      variant: "skate" },
@@ -646,6 +660,9 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
             }
             if (el.type === "zone") {
               return { ...el, x: (snap as RinkZone).x + dx, y: (snap as RinkZone).y + dy };
+            }
+            if (el.type === "sticky_note") {
+              return { ...el, x: (snap as RinkStickyNote).x + dx, y: (snap as RinkStickyNote).y + dy };
             }
             if (el.type === "straight_line") {
               const s = snap as RinkStraightLine;
@@ -855,6 +872,51 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
       setTokenPopover({ x: el.x, y: el.y, number: el.number, variant: el.variant, editId: el.id });
       setSelectedId(el.id);
       setTimeout(() => tokenInputRef.current?.focus(), 50);
+    },
+    [editable]
+  );
+
+  // ── Sticky Note: commit popover ──
+  const commitStickyPopover = useCallback(() => {
+    if (!stickyPopover) return;
+    const val = stickyPopover.content.trim();
+    pushHistory();
+    if (stickyPopover.editId) {
+      // Editing existing sticky note
+      const next = elements.map((el) =>
+        el.id === stickyPopover.editId && el.type === "sticky_note"
+          ? { ...el, content: val } as RinkStickyNote
+          : el
+      );
+      setElements(next);
+      notifyChange(next, rinkType);
+    } else {
+      // New sticky note
+      const note: RinkStickyNote = {
+        id: uid(),
+        type: "sticky_note",
+        x: stickyPopover.x,
+        y: stickyPopover.y,
+        width: 120,
+        height: 100,
+        content: val,
+        color: "#FEF08A",
+      };
+      const next = [...elements, note];
+      setElements(next);
+      notifyChange(next, rinkType);
+    }
+    setStickyPopover(null);
+  }, [stickyPopover, elements, pushHistory, rinkType, notifyChange]);
+
+  // ── Sticky Note: handle double-click to edit ──
+  const handleStickyDoubleClick = useCallback(
+    (el: RinkStickyNote, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!editable) return;
+      setStickyPopover({ x: el.x, y: el.y, content: el.content, editId: el.id });
+      setSelectedId(el.id);
+      setTimeout(() => stickyInputRef.current?.focus(), 50);
     },
     [editable]
   );
@@ -1140,6 +1202,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const zoneElements = elements.filter((el): el is RinkZone => el.type === "zone");
   const straightLineElements = elements.filter((el): el is RinkStraightLine => el.type === "straight_line");
   const playerTokens = elements.filter((el): el is RinkPlayerToken => el.type === "player_token");
+  const stickyNotes = elements.filter((el): el is RinkStickyNote => el.type === "sticky_note");
 
   // Cursor style based on tool
   const cursorMap: Record<ToolMode, string> = {
@@ -1165,6 +1228,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     zone: "crosshair",
     straight_line: "crosshair",
     player_token: "crosshair",
+    sticky_note: "crosshair",
   };
 
   return (
@@ -1227,6 +1291,19 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
                 zone={zone}
                 selected={zone.id === selectedId}
                 onMouseDown={(e) => handleElementMouseDown(zone, e)}
+              />
+            ))}
+          </g>
+
+          {/* Layer 1.75: Sticky Notes */}
+          <g>
+            {stickyNotes.map((note) => (
+              <StickyNoteElement
+                key={note.id}
+                note={note}
+                selected={note.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(note, e)}
+                onDoubleClick={(e) => handleStickyDoubleClick(note, e)}
               />
             ))}
           </g>
@@ -1527,6 +1604,52 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
                 </button>
                 <button
                   onClick={() => setTokenPopover(null)}
+                  className="px-3 py-1 rounded text-xs font-bold uppercase text-navy/50 hover:text-navy hover:bg-navy/5 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Sticky Note popover overlay */}
+        {stickyPopover && svgRef.current && (() => {
+          const rect = svgRef.current.getBoundingClientRect();
+          const vb = svgRef.current.viewBox.baseVal;
+          const scaleX = rect.width / vb.width;
+          const scaleY = rect.height / vb.height;
+          const left = stickyPopover.x * scaleX;
+          const top = stickyPopover.y * scaleY + 10 * scaleY;
+          return (
+            <div
+              className="absolute bg-white rounded-lg shadow-lg border border-teal/30 p-3"
+              style={{ left: `${left}px`, top: `${top}px`, zIndex: 10, minWidth: 180 }}
+            >
+              <div className="mb-2">
+                <textarea
+                  ref={stickyInputRef}
+                  value={stickyPopover.content}
+                  onChange={(e) => setStickyPopover({ ...stickyPopover, content: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitStickyPopover(); }
+                    if (e.key === "Escape") { e.preventDefault(); setStickyPopover(null); }
+                    e.stopPropagation();
+                  }}
+                  placeholder="Note text..."
+                  rows={3}
+                  className="w-full px-2 py-1 border border-teal/30 rounded text-sm text-navy bg-[#FEF08A]/30 outline-none focus:ring-1 focus:ring-teal resize-none"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={commitStickyPopover}
+                  className="flex-1 px-3 py-1 rounded text-xs font-bold uppercase bg-teal text-white hover:bg-teal/90 transition-colors"
+                >
+                  Place
+                </button>
+                <button
+                  onClick={() => setStickyPopover(null)}
                   className="px-3 py-1 rounded text-xs font-bold uppercase text-navy/50 hover:text-navy hover:bg-navy/5 transition-colors"
                 >
                   Cancel
