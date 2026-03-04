@@ -165,6 +165,19 @@ function PuckPreview() {
   );
 }
 
+// ── Player Token preview ────────────────────────────────────
+
+function PlayerTokenPreview() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16">
+      <circle cx={8} cy={8} r={6.5} fill="#14B8A6" stroke="#0D9488" strokeWidth={1} />
+      <text x={8} y={9} textAnchor="middle" dominantBaseline="central" fontSize={7} fontWeight="bold" fill="white">
+        #
+      </text>
+    </svg>
+  );
+}
+
 // ── Tool Button ──────────────────────────────────────────────
 
 function ToolBtn({
@@ -344,6 +357,9 @@ export default function RinkToolbar({
       </ToolBtn>
       <ToolBtn active={toolMode === "net"} onClick={() => onToolModeChange("net")} label="Net" title="Place Net">
         <NetPreview />
+      </ToolBtn>
+      <ToolBtn active={toolMode === "player_token"} onClick={() => onToolModeChange("player_token")} label="Jersey" title="Player Jersey Token — click to place">
+        <PlayerTokenPreview />
       </ToolBtn>
       <ToolBtn active={toolMode === "zone"} onClick={() => onToolModeChange("zone")} label="Zone" title="Zone Highlight (Z) — click + drag">
         <Square size={14} />

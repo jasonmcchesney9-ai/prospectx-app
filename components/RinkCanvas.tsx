@@ -8,7 +8,7 @@
 
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import RinkSvgBackground from "./RinkSvgBackground";
-import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement, ZoneElement, StraightLineElement } from "./RinkElements";
+import { MarkerElement, ArrowElement, PuckElement, PylonElement, NetElement, FreehandLineElement, TextElement, ZoneElement, StraightLineElement, PlayerTokenElement } from "./RinkElements";
 import RinkToolbar from "./RinkToolbar";
 import {
   RINK_COLORS,
@@ -28,6 +28,7 @@ import {
   type RinkZone,
   type RinkStraightLine,
   type ArrowVariant,
+  type RinkPlayerToken,
 } from "@/types/rink";
 
 // ── Props ────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ function hitTest(
   py: number,
   el: RinkElement
 ): number {
-  if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net") {
+  if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net" || el.type === "player_token") {
     const dx = px - el.x;
     const dy = py - el.y;
     return Math.sqrt(dx * dx + dy * dy);
@@ -227,6 +228,10 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const [textFontSize, setTextFontSize] = useState(20);
   const textInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Player Token popover state ──
+  const [tokenPopover, setTokenPopover] = useState<{ x: number; y: number; number: string; variant: "home" | "away"; editId?: string } | null>(null);
+  const tokenInputRef = useRef<HTMLInputElement>(null);
+
   // ── Zone + Straight Line tool state ──
   const [zoneDrag, setZoneDrag] = useState<{ startX: number; startY: number } | null>(null);
   const [lineDrag, setLineDrag] = useState<{ startX: number; startY: number; shiftKey: boolean } | null>(null);
@@ -323,7 +328,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     setElements((prev) =>
       prev.map((el) => {
         if (el.id !== selectedId) return el;
-        if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net") {
+        if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net" || el.type === "player_token") {
           return { ...el, x: el.x + dx, y: el.y + dy };
         }
         if (el.type === "arrow") {
@@ -368,6 +373,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         setIsDrawingFreehand(false);
         setFreehandPoints([]);
         setTextInput(null);
+        setTokenPopover(null);
         return;
       }
 
@@ -418,6 +424,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         l: "straight_line",
         o: "pylon",
         n: "net",
+        j: "player_token",
       };
       const numKeys: Record<string, ToolMode> = {
         "1": "marker_X",
@@ -544,6 +551,13 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         return;
       }
 
+      // ── Player Token: show popover ──
+      if (toolMode === "player_token") {
+        setTokenPopover({ x: pt.x, y: pt.y, number: "", variant: "home" });
+        setTimeout(() => tokenInputRef.current?.focus(), 50);
+        return;
+      }
+
       // ── Arrow: two-click (all arrow variants) ──
       const arrowToolConfig: Record<string, { style: "solid" | "dashed"; color: string; variant: ArrowVariant; strokeWidth?: number }> = {
         arrow_solid:         { style: "solid",  color: RINK_COLORS.TEAL,      variant: "skate" },
@@ -616,8 +630,8 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
         setElements((prev) =>
           prev.map((el) => {
             if (el.id !== dragState.id) return el;
-            if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net") {
-              return { ...el, x: (snap as RinkMarker | RinkPuck | RinkPylon | RinkNet).x + dx, y: (snap as RinkMarker | RinkPuck | RinkPylon | RinkNet).y + dy };
+            if (el.type === "marker" || el.type === "puck" || el.type === "pylon" || el.type === "net" || el.type === "player_token") {
+              return { ...el, x: (snap as RinkMarker | RinkPuck | RinkPylon | RinkNet | RinkPlayerToken).x + dx, y: (snap as RinkMarker | RinkPuck | RinkPylon | RinkNet | RinkPlayerToken).y + dy };
             }
             if (el.type === "arrow") {
               const s = snap as RinkArrow;
@@ -801,6 +815,49 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     }
     setTextInput(null);
   }, [textInput, textFontSize, elements, pushHistory, rinkType, notifyChange]);
+
+  // ── Player Token: commit popover ──
+  const commitTokenPopover = useCallback(() => {
+    if (!tokenPopover) return;
+    const num = tokenPopover.number.trim() || "#";
+    pushHistory();
+    if (tokenPopover.editId) {
+      // Editing existing token
+      const next = elements.map((el) =>
+        el.id === tokenPopover.editId && el.type === "player_token"
+          ? { ...el, number: num, variant: tokenPopover.variant } as RinkPlayerToken
+          : el
+      );
+      setElements(next);
+      notifyChange(next, rinkType);
+    } else {
+      // New token
+      const token: RinkPlayerToken = {
+        id: uid(),
+        type: "player_token",
+        x: tokenPopover.x,
+        y: tokenPopover.y,
+        number: num,
+        variant: tokenPopover.variant,
+      };
+      const next = [...elements, token];
+      setElements(next);
+      notifyChange(next, rinkType);
+    }
+    setTokenPopover(null);
+  }, [tokenPopover, elements, pushHistory, rinkType, notifyChange]);
+
+  // ── Player Token: handle double-click to edit ──
+  const handleTokenDoubleClick = useCallback(
+    (el: RinkPlayerToken, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!editable) return;
+      setTokenPopover({ x: el.x, y: el.y, number: el.number, variant: el.variant, editId: el.id });
+      setSelectedId(el.id);
+      setTimeout(() => tokenInputRef.current?.focus(), 50);
+    },
+    [editable]
+  );
 
   // ── Text tool: handle double-click on text element to edit ──
   const handleTextDoubleClick = useCallback(
@@ -1082,6 +1139,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   const textElements = elements.filter((el): el is RinkText => el.type === "text");
   const zoneElements = elements.filter((el): el is RinkZone => el.type === "zone");
   const straightLineElements = elements.filter((el): el is RinkStraightLine => el.type === "straight_line");
+  const playerTokens = elements.filter((el): el is RinkPlayerToken => el.type === "player_token");
 
   // Cursor style based on tool
   const cursorMap: Record<ToolMode, string> = {
@@ -1106,6 +1164,7 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
     text: "text",
     zone: "crosshair",
     straight_line: "crosshair",
+    player_token: "crosshair",
   };
 
   return (
@@ -1240,6 +1299,19 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
                 marker={marker}
                 selected={marker.id === selectedId}
                 onMouseDown={(e) => handleElementMouseDown(marker, e)}
+              />
+            ))}
+          </g>
+
+          {/* Layer 7.25: Player Tokens */}
+          <g>
+            {playerTokens.map((token) => (
+              <PlayerTokenElement
+                key={token.id}
+                token={token}
+                selected={token.id === selectedId}
+                onMouseDown={(e) => handleElementMouseDown(token, e)}
+                onDoubleClick={(e) => handleTokenDoubleClick(token, e)}
               />
             ))}
           </g>
@@ -1389,6 +1461,77 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
                 className="px-1 py-0.5 border border-teal rounded text-navy bg-white/95 outline-none"
                 style={{ fontSize: `${textFontSize * scaleY}px`, minWidth: "80px" }}
               />
+            </div>
+          );
+        })()}
+
+        {/* Player Token popover overlay */}
+        {tokenPopover && svgRef.current && (() => {
+          const rect = svgRef.current.getBoundingClientRect();
+          const vb = svgRef.current.viewBox.baseVal;
+          const scaleX = rect.width / vb.width;
+          const scaleY = rect.height / vb.height;
+          const left = tokenPopover.x * scaleX;
+          const top = tokenPopover.y * scaleY + 20 * scaleY;
+          return (
+            <div
+              className="absolute bg-white rounded-lg shadow-lg border border-teal/30 p-3"
+              style={{ left: `${left}px`, top: `${top}px`, zIndex: 10, minWidth: 160 }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  ref={tokenInputRef}
+                  type="text"
+                  maxLength={3}
+                  value={tokenPopover.number}
+                  onChange={(e) => setTokenPopover({ ...tokenPopover, number: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); commitTokenPopover(); }
+                    if (e.key === "Escape") { e.preventDefault(); setTokenPopover(null); }
+                    e.stopPropagation();
+                  }}
+                  placeholder="#"
+                  className="w-14 px-2 py-1 border border-teal/30 rounded text-sm text-center font-bold text-navy bg-white outline-none focus:ring-1 focus:ring-teal"
+                />
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setTokenPopover({ ...tokenPopover, variant: "home" })}
+                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold transition-all ${
+                      tokenPopover.variant === "home"
+                        ? "bg-[#14B8A6] border-[#0D9488] text-white ring-2 ring-teal/30"
+                        : "bg-[#14B8A6]/20 border-[#14B8A6]/40 text-[#14B8A6]"
+                    }`}
+                    title="Home"
+                  >
+                    H
+                  </button>
+                  <button
+                    onClick={() => setTokenPopover({ ...tokenPopover, variant: "away" })}
+                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold transition-all ${
+                      tokenPopover.variant === "away"
+                        ? "bg-white border-[#0F172A] text-[#0F172A] ring-2 ring-navy/30"
+                        : "bg-white/60 border-gray-300 text-gray-400"
+                    }`}
+                    title="Away"
+                  >
+                    A
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={commitTokenPopover}
+                  className="flex-1 px-3 py-1 rounded text-xs font-bold uppercase bg-teal text-white hover:bg-teal/90 transition-colors"
+                >
+                  Place
+                </button>
+                <button
+                  onClick={() => setTokenPopover(null)}
+                  className="px-3 py-1 rounded text-xs font-bold uppercase text-navy/50 hover:text-navy hover:bg-navy/5 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           );
         })()}

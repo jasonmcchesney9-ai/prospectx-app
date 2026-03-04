@@ -4,7 +4,7 @@
 // Visual style ported from backend/rink_diagrams.py
 // ============================================================
 
-import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText, type RinkZone, type RinkStraightLine } from "@/types/rink";
+import { RINK_COLORS, MARKER_COLORS, type RinkMarker, type RinkArrow, type RinkPuck, type RinkPylon, type RinkNet, type RinkFreehandLine, type RinkText, type RinkZone, type RinkStraightLine, type RinkPlayerToken } from "@/types/rink";
 
 // ── Marker Element ───────────────────────────────────────────
 
@@ -457,6 +457,63 @@ export function StraightLineElement({ line, selected, onMouseDown }: StraightLin
         strokeLinecap="round"
         opacity={0.7}
       />
+    </g>
+  );
+}
+
+// ── Player Token Element ──────────────────────────────────
+
+interface PlayerTokenElementProps {
+  token: RinkPlayerToken;
+  selected: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onDoubleClick: (e: React.MouseEvent) => void;
+}
+
+export function PlayerTokenElement({ token, selected, onMouseDown, onDoubleClick }: PlayerTokenElementProps) {
+  const r = 18;
+  const isHome = token.variant === "home";
+  const fill = isHome ? "#14B8A6" : "#FFFFFF";
+  const stroke = isHome ? "#0D9488" : "#0F172A";
+  const textColor = isHome ? "#FFFFFF" : "#0F172A";
+
+  return (
+    <g onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} style={{ cursor: "pointer" }}>
+      {/* Selection ring */}
+      {selected && (
+        <circle
+          cx={token.x}
+          cy={token.y}
+          r={r + 5}
+          fill="none"
+          stroke={RINK_COLORS.ORANGE}
+          strokeWidth={2}
+          strokeDasharray="4,3"
+        />
+      )}
+      {/* Main circle */}
+      <circle
+        cx={token.x}
+        cy={token.y}
+        r={r}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={isHome ? 1.5 : 2}
+      />
+      {/* Jersey number */}
+      <text
+        x={token.x}
+        y={token.y + 1}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontFamily="Arial, sans-serif"
+        fontSize={14}
+        fontWeight="bold"
+        fill={textColor}
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        {token.number}
+      </text>
     </g>
   );
 }

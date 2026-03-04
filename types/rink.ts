@@ -39,7 +39,8 @@ export type ToolMode =
   | "eraser"
   | "text"
   | "zone"
-  | "straight_line";
+  | "straight_line"
+  | "player_token";
 
 // ── Element Types ────────────────────────────────────────────
 
@@ -126,7 +127,16 @@ export interface RinkStraightLine {
   strokeWidth: number;
 }
 
-export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText | RinkZone | RinkStraightLine;
+export interface RinkPlayerToken {
+  id: string;
+  type: "player_token";
+  x: number;
+  y: number;
+  number: string;
+  variant: "home" | "away";
+}
+
+export type RinkElement = RinkMarker | RinkArrow | RinkPuck | RinkPylon | RinkNet | RinkFreehandLine | RinkText | RinkZone | RinkStraightLine | RinkPlayerToken;
 
 // ── Diagram Data (serializable to JSON) ──────────────────────
 
