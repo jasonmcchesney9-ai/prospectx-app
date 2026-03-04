@@ -10,7 +10,6 @@ import {
   X,
   PenTool,
   Trash2,
-  ExternalLink,
   Info,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
@@ -270,9 +269,13 @@ function SessionList() {
               : tName || s.board_name || "Untitled";
 
             return (
-              <div
+              <Link
                 key={s.id}
-                className="bg-white rounded-xl border border-teal/20 p-5 hover:shadow-md hover:border-teal/30 transition-all group relative"
+                href={`/chalk-talk/sessions/${s.id}`}
+                className="bg-white rounded-xl p-5 transition-all group relative block cursor-pointer"
+                style={{ border: "1.5px solid #DDE6EF" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#0D9488"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#DDE6EF"; e.currentTarget.style.boxShadow = "none"; }}
               >
                 {/* Badges */}
                 <div className="flex items-center justify-between mb-3">
@@ -331,23 +334,16 @@ function SessionList() {
                   </span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {s.chalk_talk_id && (
-                      <Link
-                        href={`/rink-builder?mode=chalk_talk&session_id=${s.id}`}
-                        className="p-1.5 rounded hover:bg-teal/10 text-teal transition-colors"
+                      <span
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/rink-builder?mode=chalk_talk&session_id=${s.id}`; }}
+                        className="p-1.5 rounded hover:bg-teal/10 text-teal transition-colors cursor-pointer"
                         title="Open Whiteboard"
                       >
                         <PenTool size={13} />
-                      </Link>
+                      </span>
                     )}
-                    <Link
-                      href={`/chalk-talk/sessions/${s.id}`}
-                      className="p-1.5 rounded hover:bg-navy/10 text-navy transition-colors"
-                      title="View Details"
-                    >
-                      <ExternalLink size={13} />
-                    </Link>
                     <button
-                      onClick={() => handleDelete(s.id)}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(s.id); }}
                       disabled={deleting === s.id}
                       className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors disabled:opacity-30"
                       title="Delete Session"
@@ -356,7 +352,7 @@ function SessionList() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
