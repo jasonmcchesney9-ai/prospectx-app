@@ -101,8 +101,8 @@ export default function FilmUploadPage() {
         upload_source: uploadSource,
       });
 
-      const { upload_url, upload_id } = createRes.data;
-      setUploadId(upload_id);
+      const { upload_url, id: newUploadId } = createRes.data;
+      setUploadId(newUploadId);
 
       // 2. PUT file directly to Mux
       await new Promise<void>((resolve, reject) => {
@@ -129,10 +129,10 @@ export default function FilmUploadPage() {
 
       // 3. Notify backend upload is complete
       setUploadStatus("processing");
-      await api.patch(`/film/uploads/${upload_id}/complete`);
+      await api.patch(`/film/uploads/${newUploadId}/complete`);
 
       // 4. Start polling for readiness
-      pollStatus(upload_id);
+      pollStatus(newUploadId);
     } catch (e: unknown) {
       stopPolling();
       setUploadStatus("error");
