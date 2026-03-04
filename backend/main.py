@@ -4113,6 +4113,23 @@ def init_db():
         )
     """)
 
+    # ── Table: series_pxi_outputs (series memory for PXI) ──
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS series_pxi_outputs (
+            id TEXT PRIMARY KEY,
+            series_id TEXT NOT NULL,
+            game_number INTEGER NOT NULL,
+            report_type TEXT NOT NULL DEFAULT '',
+            output_text TEXT NOT NULL DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (series_id) REFERENCES series_plans(id) ON DELETE CASCADE
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_series_pxi_outputs_series
+        ON series_pxi_outputs(series_id)
+    """)
+
     conn.commit()
 
     # ── Table: pxr_scores (ProspectX Rating engine) ──
