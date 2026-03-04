@@ -808,19 +808,19 @@ export default function PlayerDetailPage() {
     return () => { setActivePxiContext(null); };
   }, [player, playerId, currentUser, intelligence, pxrData, setActivePxiContext]);
 
-  // Auto-trigger: deep-link from dashboard with ?tab=player&autoGenerate=true
+  // Auto-trigger: deep-link from dashboard with ?tab=devplan&generate=1
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
     const tabParam = sp.get("tab");
-    const autoGen = sp.get("autoGenerate");
-    if (tabParam === "player") {
+    const autoGen = sp.get("generate") || sp.get("autoGenerate");
+    if (tabParam === "devplan" || tabParam === "player") {
       setActiveTab("player");
     }
-    if (autoGen === "true" && !loading && !devPlanV2 && planStatus === "empty") {
+    if ((autoGen === "1" || autoGen === "true") && !loading && !devPlanV2 && planStatus === "empty") {
       setActiveTab("player");
       handleGenerateV2();
-      router.replace(`/players/${playerId}?tab=player`, { scroll: false });
+      router.replace(`/players/${playerId}?tab=devplan`, { scroll: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
@@ -1920,7 +1920,7 @@ export default function PlayerDetailPage() {
             { key: "stats" as Tab, label: "Stats", count: stats.length },
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
-            { key: "player" as Tab, label: "Player", count: devPlanV2History.length || devPlanVersions.length || null },
+            { key: "player" as Tab, label: "Dev Plan", count: devPlanV2History.length || devPlanVersions.length || null },
             { key: "video" as Tab, label: "Video", count: filmClips.length || null },
           ]).map(({ key, label, count }) => (
             <button
@@ -3181,7 +3181,7 @@ export default function PlayerDetailPage() {
                       className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-orange text-white rounded-lg hover:bg-orange/90 disabled:opacity-50"
                     >
                       {generatingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                      {devPlanV2 ? "Generate New Version" : "Generate Development Plan"}
+                      {devPlanV2 ? "Generate New Version" : "Generate Dev Plan"}
                     </button>
                   )}
                 </div>
@@ -3223,7 +3223,7 @@ export default function PlayerDetailPage() {
                   ) : (
                     <>
                       <p className="text-muted text-sm mb-1">No development plan on file for {new Date().getFullYear()}-{String(new Date().getFullYear() + 1).slice(2)}</p>
-                      <p className="text-muted/60 text-xs">Click &quot;Generate Development Plan&quot; to create an AI-powered roadmap.</p>
+                      <p className="text-muted/60 text-xs">Click &quot;Generate Dev Plan&quot; to create an AI-powered roadmap.</p>
                     </>
                   )}
                 </div>
@@ -3233,7 +3233,7 @@ export default function PlayerDetailPage() {
               {planStatus === "generating" && (
                 <div className="text-center py-12">
                   <Loader2 size={28} className="mx-auto text-teal animate-spin mb-3" />
-                  <p className="text-sm text-navy font-medium">PXI is generating {player?.first_name}&apos;s development plan...</p>
+                  <p className="text-sm text-navy font-medium">&#9889; PXI is building the plan...</p>
                   <p className="text-xs text-muted mt-1">This may take 15-30 seconds</p>
                 </div>
               )}
@@ -3302,7 +3302,7 @@ export default function PlayerDetailPage() {
                       className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider bg-navy text-white rounded-lg hover:bg-navy/90 disabled:opacity-50"
                     >
                       {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                      Save as Draft
+                      Save Plan
                     </button>
                     <button
                       onClick={() => handleSaveV2("final")}
@@ -3310,7 +3310,7 @@ export default function PlayerDetailPage() {
                       className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
                     >
                       <CheckCircle size={14} />
-                      Finalize
+                      Mark Final
                     </button>
                     <button
                       onClick={() => { setDraftSections(null); setPlanStatus(devPlanV2 ? "saved" : "empty"); }}
@@ -3328,7 +3328,7 @@ export default function PlayerDetailPage() {
                   {/* Plan header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium uppercase ${
                         devPlanV2.status === "final" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
                       }`}>
                         {devPlanV2.status}
@@ -3348,6 +3348,11 @@ export default function PlayerDetailPage() {
                     const isVisible = devPlanV2[visKey] as boolean;
                     const title = DEV_PLAN_SECTION_TITLES[num] || `Section ${num}`;
 
+                    // Diff indicator: compare against previous version
+                    const prevVersion = devPlanV2History.length > 1 ? devPlanV2History.find(v => v.version === devPlanV2.version - 1) : null;
+                    const prevContent = prevVersion ? (prevVersion[sectionKey] as string | null) : null;
+                    const isUpdated = devPlanV2.version > 1 && prevVersion && content !== prevContent;
+
                     // For family roles, skip hidden sections
                     if (FAMILY_ROLES.has(userRole) && !isVisible) return null;
                     if (!content) return null;
@@ -3358,6 +3363,14 @@ export default function PlayerDetailPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-oswald text-muted">{num}.</span>
                             <h4 className="text-sm font-semibold text-navy">{title}</h4>
+                            {isUpdated && (
+                              <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Updated
+                              </span>
+                            )}
+                            {!isUpdated && devPlanV2.version > 1 && prevVersion && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" title="Unchanged" />
+                            )}
                             {!isVisible && COACH_ROLES.has(userRole) && (
                               <span className="flex items-center gap-1 text-xs text-muted/60 bg-gray-100 px-2 py-0.5 rounded-full">
                                 <EyeOff size={10} /> Hidden
