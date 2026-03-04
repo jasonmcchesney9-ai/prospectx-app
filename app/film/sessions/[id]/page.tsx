@@ -17,6 +17,10 @@ import {
   FileText,
   Scissors,
   Save,
+  ChevronDown,
+  ChevronRight,
+  Users,
+  RefreshCw,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -33,6 +37,23 @@ interface SessionData {
   description: string | null;
   status: string;
   created_at: string;
+  team_id?: string | null;
+  player_id?: string | null;
+  opponent_team_id?: string | null;
+  pxi_output?: string | null;
+  pxi_status?: string | null;
+}
+
+interface RosterPlayer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position?: string;
+}
+
+interface TeamOption {
+  id: string;
+  name: string;
 }
 
 interface UploadData {
@@ -81,10 +102,10 @@ function formatDate(iso: string): string {
 }
 
 const FILM_REPORT_TYPES = [
-  { value: "film_post_game_review", label: "Post-Game Review" },
-  { value: "film_opponent_prep", label: "Opponent Prep" },
-  { value: "film_player_analysis", label: "Player Analysis" },
-  { value: "film_practice_review", label: "Practice Review" },
+  { value: "film_post_game_review", label: "Post-Game Review", desc: "Breakdown of game footage — personnel, tactics, adjustments", needsPlayer: false, needsOpponent: false },
+  { value: "film_player_analysis", label: "Player Film Analysis", desc: "Clip-by-clip assessment of a specific player", needsPlayer: true, needsOpponent: false },
+  { value: "film_opponent_prep", label: "Opponent Prep", desc: "Tactical breakdown for game preparation", needsPlayer: false, needsOpponent: true },
+  { value: "film_practice_review", label: "Practice Review", desc: "Drill execution, standouts, system concepts", needsPlayer: false, needsOpponent: false },
 ];
 
 export default function FilmSessionViewerPage() {
@@ -104,6 +125,21 @@ export default function FilmSessionViewerPage() {
   const [generating, setGenerating] = useState(false);
   const [reportType, setReportType] = useState("");
   const [showTypeSelector, setShowTypeSelector] = useState(false);
+  const [pendingReportType, setPendingReportType] = useState<string | null>(null);
+
+  // Player selector (for Player Film Analysis)
+  const [rosterPlayers, setRosterPlayers] = useState<RosterPlayer[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [loadingRoster, setLoadingRoster] = useState(false);
+
+  // Opponent selector (for Opponent Prep)
+  const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [selectedOpponentId, setSelectedOpponentId] = useState("");
+  const [loadingTeams, setLoadingTeams] = useState(false);
+
+  // Generated report display
+  const [generatedReport, setGeneratedReport] = useState<{ id: string; title: string; output_text: string } | null>(null);
+  const [reportExpanded, setReportExpanded] = useState(true);
 
   // Comment form
   const [commentText, setCommentText] = useState("");
@@ -147,6 +183,22 @@ export default function FilmSessionViewerPage() {
             upload_source: u.upload_source,
             source_url: u.source_url,
           });
+        }
+
+        // Load existing PXI report if session has one
+        if (sessionData.pxi_output && sessionData.pxi_status === "completed") {
+          try {
+            const reportRes = await api.get(`/reports/${sessionData.pxi_output}`);
+            if (reportRes.data?.output_text) {
+              setGeneratedReport({
+                id: reportRes.data.id,
+                title: reportRes.data.title || "Film Analysis",
+                output_text: reportRes.data.output_text,
+              });
+            }
+          } catch {
+            // Report may have been deleted
+          }
         }
 
         // Load comments
@@ -223,19 +275,90 @@ export default function FilmSessionViewerPage() {
     [sessionId]
   );
 
-  const handleGenerateReport = useCallback(
+  const handleSelectReportType = useCallback(
     async (type: string) => {
-      if (!type) return;
+      const config = FILM_REPORT_TYPES.find((rt) => rt.value === type);
+      if (!config) return;
+
+      // Player Film Analysis — needs a player selector
+      if (config.needsPlayer) {
+        setPendingReportType(type);
+        setSelectedPlayerId("");
+        setShowTypeSelector(false);
+        // Load roster if we have a team_id
+        if (session?.team_id) {
+          setLoadingRoster(true);
+          try {
+            const res = await api.get(`/players`, { params: { team_id: session.team_id, limit: 200 } });
+            const players = Array.isArray(res.data) ? res.data : res.data?.players || [];
+            setRosterPlayers(players);
+          } catch {
+            setRosterPlayers([]);
+          } finally {
+            setLoadingRoster(false);
+          }
+        }
+        return;
+      }
+
+      // Opponent Prep — needs opponent selection if not already set
+      if (config.needsOpponent && !session?.opponent_team_id) {
+        setPendingReportType(type);
+        setSelectedOpponentId("");
+        setShowTypeSelector(false);
+        setLoadingTeams(true);
+        try {
+          const res = await api.get(`/teams`);
+          const teamList = Array.isArray(res.data) ? res.data : res.data?.teams || [];
+          setTeams(teamList.map((t: { id?: string; name?: string; team_name?: string }) => ({
+            id: t.id || t.name || t.team_name || "",
+            name: t.name || t.team_name || "Unknown",
+          })));
+        } catch {
+          setTeams([]);
+        } finally {
+          setLoadingTeams(false);
+        }
+        return;
+      }
+
+      // Direct generation (Post-Game Review, Practice Review, or Opponent Prep with existing opponent)
+      await executeGeneration(type);
+    },
+    [session]
+  );
+
+  const executeGeneration = useCallback(
+    async (type: string, playerId?: string, opponentTeamId?: string) => {
       setGenerating(true);
+      setPendingReportType(null);
+      setShowTypeSelector(false);
       try {
+        const payload: Record<string, string> = { report_type: type };
+        if (playerId) payload.player_id = playerId;
+        if (opponentTeamId) payload.opponent_team_id = opponentTeamId;
+        else if (session?.opponent_team_id) payload.opponent_team_id = session.opponent_team_id;
+
         const res = await api.post(
           `/film/sessions/${sessionId}/generate-report`,
-          { report_type: type }
+          payload
         );
         toast.success("Report generated!");
-        setShowTypeSelector(false);
-        setReportType("");
-        router.push(`/reports/${res.data.report_id}`);
+
+        // Load the generated report content inline
+        try {
+          const reportRes = await api.get(`/reports/${res.data.report_id}`);
+          if (reportRes.data?.output_text) {
+            setGeneratedReport({
+              id: reportRes.data.id,
+              title: reportRes.data.title || "Film Analysis",
+              output_text: reportRes.data.output_text,
+            });
+            setReportExpanded(true);
+          }
+        } catch {
+          // Fallback: still show success
+        }
       } catch (e: unknown) {
         const msg =
           (e as { response?: { data?: { detail?: string } } }).response?.data
@@ -245,7 +368,7 @@ export default function FilmSessionViewerPage() {
         setGenerating(false);
       }
     },
-    [sessionId, router]
+    [sessionId, session]
   );
 
   const handleSaveClip = useCallback(async () => {
@@ -330,10 +453,10 @@ export default function FilmSessionViewerPage() {
             </div>
           </div>
 
-          {/* Generate Analysis button */}
+          {/* Generate Analysis button + dropdown */}
           <div className="relative shrink-0">
             <button
-              onClick={() => setShowTypeSelector(!showTypeSelector)}
+              onClick={() => { setShowTypeSelector(!showTypeSelector); setPendingReportType(null); }}
               disabled={generating}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-sm transition-colors ${
                 generating
@@ -346,32 +469,163 @@ export default function FilmSessionViewerPage() {
               ) : (
                 <Sparkles size={14} />
               )}
-              {generating ? "Generating..." : "Generate Analysis"}
+              {generating ? "Generating..." : generatedReport ? "Regenerate" : "Generate Analysis"}
             </button>
 
+            {/* Report type dropdown */}
             {showTypeSelector && !generating && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl border border-border shadow-lg z-20 py-1">
+              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-20 py-1">
                 {FILM_REPORT_TYPES.map((rt) => (
                   <button
                     key={rt.value}
-                    onClick={() => handleGenerateReport(rt.value)}
-                    className="w-full text-left px-4 py-2.5 text-sm text-navy hover:bg-navy/[0.03] transition-colors font-oswald tracking-wider"
+                    onClick={() => handleSelectReportType(rt.value)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-navy/[0.03] transition-colors group"
                   >
-                    {rt.label}
+                    <span className="text-sm text-navy font-oswald tracking-wider">{rt.label}</span>
+                    <span className="block text-[10px] text-muted/60 mt-0.5 leading-tight">{rt.desc}</span>
                   </button>
                 ))}
                 <div className="border-t border-border mt-1 pt-1">
                   <button
-                    onClick={() => {
-                      setShowTypeSelector(false);
-                      setReportType("");
-                    }}
+                    onClick={() => { setShowTypeSelector(false); setPendingReportType(null); }}
                     className="w-full text-left px-4 py-2 text-xs text-muted hover:text-navy transition-colors flex items-center gap-1.5"
                   >
                     <X size={12} />
                     Cancel
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Player selector (for Player Film Analysis) */}
+            {pendingReportType === "film_player_analysis" && !generating && (
+              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-20 p-4">
+                <h4 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2 flex items-center gap-1.5">
+                  <Users size={12} />
+                  Select Player
+                </h4>
+                {loadingRoster ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 size={16} className="animate-spin text-teal" />
+                  </div>
+                ) : rosterPlayers.length === 0 ? (
+                  <div>
+                    <p className="text-[11px] text-muted/60 mb-3">No roster loaded. Enter player ID or generate without a specific player.</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => executeGeneration("film_player_analysis")}
+                        className="flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider bg-teal text-white hover:bg-teal/90 transition-colors"
+                      >
+                        Generate Anyway
+                      </button>
+                      <button
+                        onClick={() => setPendingReportType(null)}
+                        className="px-3 py-1.5 rounded-lg text-xs text-muted hover:text-navy transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <select
+                      value={selectedPlayerId}
+                      onChange={(e) => setSelectedPlayerId(e.target.value)}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy mb-3 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                    >
+                      <option value="">Choose a player...</option>
+                      {rosterPlayers.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.first_name} {p.last_name}{p.position ? ` (${p.position})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => executeGeneration("film_player_analysis", selectedPlayerId || undefined)}
+                        disabled={!selectedPlayerId}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
+                          selectedPlayerId
+                            ? "bg-teal text-white hover:bg-teal/90"
+                            : "bg-border text-muted/50 cursor-not-allowed"
+                        }`}
+                      >
+                        Generate
+                      </button>
+                      <button
+                        onClick={() => setPendingReportType(null)}
+                        className="px-3 py-1.5 rounded-lg text-xs text-muted hover:text-navy transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Opponent selector (for Opponent Prep without existing opponent) */}
+            {pendingReportType === "film_opponent_prep" && !generating && (
+              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-20 p-4">
+                <h4 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2 flex items-center gap-1.5">
+                  <Users size={12} />
+                  Select Opponent
+                </h4>
+                {loadingTeams ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 size={16} className="animate-spin text-teal" />
+                  </div>
+                ) : teams.length === 0 ? (
+                  <div>
+                    <p className="text-[11px] text-muted/60 mb-3">No teams found. Generate without a specific opponent.</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => executeGeneration("film_opponent_prep")}
+                        className="flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider bg-teal text-white hover:bg-teal/90 transition-colors"
+                      >
+                        Generate Anyway
+                      </button>
+                      <button
+                        onClick={() => setPendingReportType(null)}
+                        className="px-3 py-1.5 rounded-lg text-xs text-muted hover:text-navy transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <select
+                      value={selectedOpponentId}
+                      onChange={(e) => setSelectedOpponentId(e.target.value)}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm text-navy mb-3 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                    >
+                      <option value="">Choose opponent...</option>
+                      {teams.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => executeGeneration("film_opponent_prep", undefined, selectedOpponentId || undefined)}
+                        disabled={!selectedOpponentId}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
+                          selectedOpponentId
+                            ? "bg-teal text-white hover:bg-teal/90"
+                            : "bg-border text-muted/50 cursor-not-allowed"
+                        }`}
+                      >
+                        Generate
+                      </button>
+                      <button
+                        onClick={() => setPendingReportType(null)}
+                        className="px-3 py-1.5 rounded-lg text-xs text-muted hover:text-navy transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -455,6 +709,61 @@ export default function FilmSessionViewerPage() {
                     Save Clip
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* PXI Report Display (generating spinner or completed report) */}
+            {generating && (
+              <div className="bg-white rounded-xl border border-border p-6 flex items-center justify-center gap-3">
+                <Loader2 size={20} className="animate-spin text-teal" />
+                <span className="text-sm text-muted font-oswald uppercase tracking-wider">Generating analysis...</span>
+              </div>
+            )}
+
+            {generatedReport && !generating && (
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <button
+                  onClick={() => setReportExpanded(!reportExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-navy/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={14} className="text-orange" />
+                    <span className="text-xs font-oswald uppercase tracking-wider text-navy">
+                      {generatedReport.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowTypeSelector(true);
+                        setPendingReportType(null);
+                      }}
+                      className="flex items-center gap-1 text-[10px] text-muted hover:text-teal transition-colors font-oswald uppercase tracking-wider"
+                      title="Regenerate with a different report type"
+                    >
+                      <RefreshCw size={10} />
+                      Regenerate
+                    </button>
+                    {reportExpanded ? <ChevronDown size={14} className="text-muted" /> : <ChevronRight size={14} className="text-muted" />}
+                  </div>
+                </button>
+                {reportExpanded && (
+                  <div className="border-t border-border px-4 py-4">
+                    <div className="border-l-3 border-teal pl-4 text-sm text-navy leading-relaxed whitespace-pre-wrap">
+                      {generatedReport.output_text}
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Link
+                        href={`/reports/${generatedReport.id}`}
+                        className="text-[10px] font-oswald uppercase tracking-wider text-teal hover:text-teal/80 transition-colors flex items-center gap-1"
+                      >
+                        <FileText size={10} />
+                        View Full Report
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
