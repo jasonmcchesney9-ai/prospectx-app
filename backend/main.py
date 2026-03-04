@@ -10045,6 +10045,8 @@ class ReportGenerateRequest(BaseModel):
     data_depth: Optional[str] = "basic"   # basic/intermediate/advanced
     audience: Optional[str] = "coach_gm"  # coach_gm/scout/agent/parent/player
     perspective: Optional[str] = "internal"  # internal/external/both
+    series_id: Optional[str] = None         # Link to series_plans for series memory
+    game_number: Optional[int] = None       # Game number within series (1-based)
 
 class ReportResponse(BaseModel):
     model_config = {"extra": "ignore"}
@@ -20049,6 +20051,19 @@ This report was generated in demo mode. Add your Anthropic API key to backend/.e
         logger.info("Team report generated: %s (%s) in %d ms, quality=%.1f", title, request.report_type, generation_ms, quality["score"])
         # Track report usage
         _increment_usage(user_id, "report", report_id, org_id, conn)
+
+        # ── Series memory: store PXI output for series context ──
+        if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
+            try:
+                conn.execute("""
+                    INSERT INTO series_pxi_outputs (id, series_id, game_number, report_type, output_text)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), request.series_id, request.game_number, request.report_type, output_text))
+                conn.commit()
+                logger.info("Series memory stored: series=%s game=%d type=%s", request.series_id, request.game_number, request.report_type)
+            except Exception as sm_err:
+                logger.warning("Series memory write failed (non-fatal): %s", str(sm_err))
+
         conn.close()
         return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
 
@@ -20867,6 +20882,19 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
         logger.info("Report generated: %s (%s) in %d ms, quality=%.1f", title, request.report_type, generation_ms, quality["score"])
         # Track report usage
         _increment_usage(user_id, "report", report_id, org_id, conn)
+
+        # ── Series memory: store PXI output for series context ──
+        if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
+            try:
+                conn.execute("""
+                    INSERT INTO series_pxi_outputs (id, series_id, game_number, report_type, output_text)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), request.series_id, request.game_number, request.report_type, output_text))
+                conn.commit()
+                logger.info("Series memory stored: series=%s game=%d type=%s", request.series_id, request.game_number, request.report_type)
+            except Exception as sm_err:
+                logger.warning("Series memory write failed (non-fatal): %s", str(sm_err))
+
         conn.close()
 
         # Trigger intelligence refresh from report insights (background)
