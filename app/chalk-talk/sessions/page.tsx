@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -101,7 +102,9 @@ export default function ChalkTalkSessionsPage() {
 }
 
 function CoachingHub() {
+  const router = useRouter();
   const seriesRef = useRef<HTMLDivElement>(null);
+  const [freeBoardCreating, setFreeBoardCreating] = useState(false);
 
   /* ── Data state ──────────────────────────────────────────── */
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
@@ -213,6 +216,23 @@ function CoachingHub() {
     } catch { return 0; }
   };
 
+  /* ── Free Board: skip wizard, create + open directly ────── */
+  const handleFreeBoard = async () => {
+    if (freeBoardCreating) return;
+    setFreeBoardCreating(true);
+    try {
+      const { data } = await api.post<ChalkTalkSession>("/chalk-talk-sessions", {
+        session_type: "free_board",
+      });
+      router.push(`/chalk-talk/sessions/${data.id}`);
+    } catch {
+      // Fallback: open the wizard with free_board pre-selected
+      router.push("/chalk-talk/new?type=free_board");
+    } finally {
+      setFreeBoardCreating(false);
+    }
+  };
+
   return (
     <div>
       {/* ═══════════════════════════════════════════════════════
@@ -252,14 +272,15 @@ function CoachingHub() {
           <Trophy size={14} />
           New Series Plan
         </Link>
-        <Link
-          href="/chalk-talk/new?type=free_board"
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
+        <button
+          onClick={handleFreeBoard}
+          disabled={freeBoardCreating}
+          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
           style={{ background: "#0D9488" }}
         >
-          <PenTool size={14} />
+          {freeBoardCreating ? <Loader2 size={14} className="animate-spin" /> : <PenTool size={14} />}
           Free Board
-        </Link>
+        </button>
         <Link
           href="/film"
           className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
