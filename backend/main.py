@@ -38117,6 +38117,155 @@ def _auto_session_name(session_type: str, team_name: str, opponent_name: str = N
     return " ".join(parts)
 
 
+# ═══════════════════════════════════════════════════════════
+#  COACHING HUB — Next Game Intel
+# ═══════════════════════════════════════════════════════════
+
+@app.get("/coaching/next-game-intel")
+async def coaching_next_game_intel(token_data: dict = Depends(verify_token)):
+    """PXI-powered next game intelligence for the coaching hub dashboard.
+
+    Finds the next scheduled game from the events table, gathers
+    opponent/our stats, calls PXI for a 2-sentence brief.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # 1. Find next game event for this org (type = GAME, date >= today)
+        next_event = conn.execute(
+            """SELECT id, title, start_time, opponent_name, team_id, is_home, location
+               FROM events
+               WHERE org_id = ? AND type = 'GAME' AND start_time >= ?
+               ORDER BY start_time ASC LIMIT 1""",
+            (org_id, today),
+        ).fetchone()
+
+        if not next_event:
+            return {"next_game": None, "pxi_brief": None}
+
+        evt = dict(next_event) if hasattr(next_event, "keys") else {
+            "id": next_event[0], "title": next_event[1], "start_time": next_event[2],
+            "opponent_name": next_event[3], "team_id": next_event[4],
+            "is_home": next_event[5], "location": next_event[6],
+        }
+
+        opponent_name = evt.get("opponent_name") or ""
+        game_date = (evt.get("start_time") or "")[:10]
+        home_away = "home" if evt.get("is_home") else "away"
+        team_id = evt.get("team_id")
+
+        # Resolve our team name
+        our_team_name = ""
+        if team_id:
+            t_row = conn.execute("SELECT name FROM teams WHERE id = ?", (team_id,)).fetchone()
+            our_team_name = (t_row["name"] if hasattr(t_row, "keys") else t_row[0]) if t_row else ""
+
+        # 2. Gather opponent last 5 game results from player_game_stats (team level)
+        their_last_5 = ""
+        our_last_5 = ""
+        opponent_pp_pct = None
+
+        # Check if opponent has a team record — search by name
+        opp_team = conn.execute(
+            "SELECT id FROM teams WHERE name = ? LIMIT 1", (opponent_name,)
+        ).fetchone()
+        opp_team_id = (opp_team["id"] if hasattr(opp_team, "keys") else opp_team[0]) if opp_team else None
+
+        # Look for opponent top scorers from player_stats
+        opp_scorers_text = ""
+        if opp_team_id:
+            opp_rows = conn.execute(
+                """SELECT p.first_name, p.last_name, ps.g, ps.a, ps.p, ps.gp, ps.ppg
+                   FROM player_stats ps
+                   JOIN players p ON ps.player_id = p.id
+                   WHERE ps.team_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+                   ORDER BY ps.p DESC LIMIT 5""",
+                (opp_team_id,),
+            ).fetchall()
+            lines = []
+            for r in opp_rows:
+                rd = dict(r) if hasattr(r, "keys") else r
+                fn = rd.get("first_name", "") if isinstance(rd, dict) else ""
+                ln = rd.get("last_name", "") if isinstance(rd, dict) else ""
+                g = rd.get("g", 0) if isinstance(rd, dict) else 0
+                a = rd.get("a", 0) if isinstance(rd, dict) else 0
+                p = rd.get("p", 0) if isinstance(rd, dict) else 0
+                gp = rd.get("gp", 0) if isinstance(rd, dict) else 0
+                ppg = rd.get("ppg", 0) if isinstance(rd, dict) else 0
+                lines.append(f"{fn} {ln}: {g}G {a}A {p}P in {gp}GP ({ppg} PPG)")
+            opp_scorers_text = "; ".join(lines) if lines else "No stats available"
+
+        # 3. Check for existing game plan for this matchup
+        existing_plan = conn.execute(
+            """SELECT id FROM chalk_talk_sessions
+               WHERE org_id = ? AND opponent_team_id = ? AND game_date = ?
+               ORDER BY updated_at DESC LIMIT 1""",
+            (org_id, opp_team_id or "", game_date),
+        ).fetchone()
+        existing_plan_id = None
+        if existing_plan:
+            existing_plan_id = existing_plan["id"] if hasattr(existing_plan, "keys") else existing_plan[0]
+
+        # If no exact match, try matching by opponent name in session data
+        if not existing_plan_id:
+            existing_plan2 = conn.execute(
+                """SELECT cs.id FROM chalk_talk_sessions cs
+                   LEFT JOIN teams t ON cs.opponent_team_id = t.id
+                   WHERE cs.org_id = ? AND t.name = ? AND cs.game_date = ?
+                   ORDER BY cs.updated_at DESC LIMIT 1""",
+                (org_id, opponent_name, game_date),
+            ).fetchone()
+            if existing_plan2:
+                existing_plan_id = existing_plan2["id"] if hasattr(existing_plan2, "keys") else existing_plan2[0]
+
+        # 4. Call PXI for 2-sentence brief
+        pxi_brief = None
+        api_key = ANTHROPIC_API_KEY
+        if api_key and opponent_name:
+            try:
+                import anthropic
+                from pxi_prompt_core import PRE_GAME_INTEL_BRIEF
+
+                client = anthropic.Anthropic(api_key=api_key)
+                user_msg = (
+                    f"Our team: {our_team_name}\n"
+                    f"Next game: vs {opponent_name} on {game_date} ({home_away})\n"
+                    f"Opponent top scorers: {opp_scorers_text}\n"
+                    f"Generate the 2-sentence coaching brief."
+                )
+                resp = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=200,
+                    system=PRE_GAME_INTEL_BRIEF,
+                    messages=[{"role": "user", "content": user_msg}],
+                )
+                pxi_brief = resp.content[0].text.strip() if resp.content else None
+            except Exception as e:
+                logger.warning("PXI next-game-intel brief error: %s", e)
+
+        if not pxi_brief:
+            pxi_brief = "Schedule your next game to unlock PXI intel." if not opponent_name else None
+
+        return {
+            "next_game": {
+                "opponent": opponent_name,
+                "date": game_date,
+                "home_away": home_away,
+                "game_id": evt.get("id"),
+                "our_team": our_team_name,
+            },
+            "pxi_brief": pxi_brief,
+            "existing_plan_id": existing_plan_id,
+            "opponent_pp_pct": opponent_pp_pct,
+            "our_last_5": our_last_5,
+            "their_last_5": their_last_5,
+        }
+    finally:
+        conn.close()
+
+
 @app.post("/chalk-talk/pre-populate")
 async def chalk_talk_pre_populate(request: Request, token_data: dict = Depends(verify_token)):
     """PXI-powered pre-population for a game plan session.

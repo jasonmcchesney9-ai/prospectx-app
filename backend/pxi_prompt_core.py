@@ -6028,6 +6028,25 @@ Write for a coaching staff / GM audience. Be honest about fit. Data-backed. No w
 
 
 # ─────────────────────────────────────────────────────────
+# Addendum 12 — Pre-Game Intel Brief (coaching hub strip)
+# ─────────────────────────────────────────────────────────
+PRE_GAME_INTEL_BRIEF = '''
+NEXT GAME INTELLIGENCE BRIEF
+=============================
+Audience: Head coach. One glance on the hub dashboard.
+Purpose: Single most important thing to know about the next game.
+Output: Exactly 2 sentences maximum. No headers. No bullets.
+        Sentence 1: The opponent's most dangerous current tendency
+        with a specific stat.
+        Sentence 2: One specific thing we must do to win this game.
+Tone: Direct. Coaching voice. Like a trusted assistant coach
+      leaning over and saying "here's what you need to know."
+Never generic. Always tied to real data. If no data:
+return "Schedule your next game to unlock PXI intel."
+'''
+
+
+# ─────────────────────────────────────────────────────────
 # O) build_system_prompt — general-purpose (Bench Talk, etc.)
 # ─────────────────────────────────────────────────────────
 def build_system_prompt(
