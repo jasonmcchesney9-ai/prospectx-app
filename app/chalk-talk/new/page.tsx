@@ -154,6 +154,26 @@ function SessionForm() {
   const isFreeBoard = sessionType === "free_board";
   const STEPS = isFreeBoard ? STEPS_FREE_BOARD : STEPS_FULL;
 
+  /* Free Board via ?type=free_board: skip wizard, create + go to war room */
+  const [freeBoardRedirecting, setFreeBoardRedirecting] = useState(false);
+  useEffect(() => {
+    if (typeParam !== "free_board") return;
+    let cancelled = false;
+    setFreeBoardRedirecting(true);
+    api.post<ChalkTalkSession>("/chalk-talk-sessions", {
+      session_type: "free_board",
+    })
+      .then(({ data }) => {
+        if (!cancelled) router.push(`/chalk-talk/sessions/${data.id}`);
+      })
+      .catch(() => {
+        // If POST fails, fall back to showing the wizard
+        if (!cancelled) setFreeBoardRedirecting(false);
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* Clamp step when switching to Free Board from a later step */
   useEffect(() => {
     if (isFreeBoard && step >= STEPS_FREE_BOARD.length) {
@@ -283,6 +303,16 @@ function SessionForm() {
   /* Find team name for display */
   const teamName = teams.find((t) => t.id === teamId)?.name || "";
   const opponentName = teams.find((t) => t.id === opponentTeamId)?.name || "";
+
+  /* If free board is being created, show loading instead of wizard */
+  if (freeBoardRedirecting) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <Loader2 size={32} className="animate-spin text-teal" />
+        <p className="text-sm text-muted font-oswald uppercase tracking-wider">Opening Free Board...</p>
+      </div>
+    );
+  }
 
   return (
     <div>
