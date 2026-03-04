@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -90,7 +90,9 @@ const FILM_REPORT_TYPES = [
 export default function FilmSessionViewerPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const sessionId = params.id as string;
+  const seekTime = searchParams.get("t");
 
   const [session, setSession] = useState<SessionData | null>(null);
   const [upload, setUpload] = useState<UploadData | null>(null);
@@ -106,6 +108,9 @@ export default function FilmSessionViewerPage() {
   // Comment form
   const [commentText, setCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Seek-to time from ?t= query param
+  const [startTime, setStartTime] = useState<number | undefined>(undefined);
 
   // Mark In / Mark Out clip creation
   const [clipStart, setClipStart] = useState<number | null>(null);
@@ -165,6 +170,16 @@ export default function FilmSessionViewerPage() {
     };
     loadData();
   }, [sessionId]);
+
+  // Seek to ?t= timestamp after upload is loaded
+  useEffect(() => {
+    if (seekTime && upload?.playback_id) {
+      const t = parseFloat(seekTime);
+      if (!isNaN(t) && t > 0) {
+        setStartTime(t);
+      }
+    }
+  }, [seekTime, upload]);
 
   const loadComments = useCallback(async () => {
     try {
@@ -370,6 +385,7 @@ export default function FilmSessionViewerPage() {
             <VideoPlayer
               playbackId={upload?.playback_id || null}
               onTimeUpdate={handleTimeUpdate}
+              startTime={startTime}
             />
 
             {/* Event Tag Bar */}

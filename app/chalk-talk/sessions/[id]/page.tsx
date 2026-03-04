@@ -119,10 +119,12 @@ function WarRoom() {
   const canvasRef = useRef<RinkCanvasHandle | null>(null);
 
   /* ── Linked Film Clips state ─────────────────────────── */
-  const [linkedClips, setLinkedClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; link_id?: string }[]>([]);
+  const [linkedClips, setLinkedClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; session_name?: string; link_id?: string }[]>([]);
   const [showClipModal, setShowClipModal] = useState(false);
   const [availableClips, setAvailableClips] = useState<{ id: string; title: string; start_time_seconds: number; end_time_seconds: number; session_id?: string }[]>([]);
   const [clipSearchLoading, setClipSearchLoading] = useState(false);
+  const [filmSessions, setFilmSessions] = useState<{ id: string; name: string; created_at: string }[]>([]);
+  const [selectedFilmSession, setSelectedFilmSession] = useState<string | null>(null);
 
   /* ── Derived ───────────────────────────────────────────── */
   const teamName = teams.find((t) => t.id === teamId)?.name || "";
@@ -241,9 +243,21 @@ function WarRoom() {
 
   const openClipModal = async () => {
     setShowClipModal(true);
+    setSelectedFilmSession(null);
+    setAvailableClips([]);
     setClipSearchLoading(true);
     try {
-      const { data } = await api.get("/film/clips", { params: { limit: 100 } });
+      const { data } = await api.get("/film/sessions", { params: { limit: 100 } });
+      setFilmSessions(Array.isArray(data) ? data : []);
+    } catch { /* ignore */ }
+    finally { setClipSearchLoading(false); }
+  };
+
+  const selectFilmSession = async (fsId: string) => {
+    setSelectedFilmSession(fsId);
+    setClipSearchLoading(true);
+    try {
+      const { data } = await api.get("/film/clips", { params: { session_id: fsId, limit: 100 } });
       const all = Array.isArray(data) ? data : [];
       const linkedIds = new Set(linkedClips.map((c) => c.id));
       setAvailableClips(all.filter((c: { id: string }) => !linkedIds.has(c.id)));
@@ -781,8 +795,10 @@ function WarRoom() {
                             <Clock size={10} />
                             {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
                           </span>
-                          {clip.description && (
-                            <span className="text-[10px] truncate" style={{ color: "#8BA4BB" }}>{clip.description}</span>
+                          {clip.session_name && (
+                            <span className="text-[10px] truncate" style={{ color: "#8BA4BB" }}>
+                              from {clip.session_name}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -790,7 +806,7 @@ function WarRoom() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       {clip.session_id && (
                         <Link
-                          href={`/film-room/sessions/${clip.session_id}?seek=${clip.start_time_seconds}`}
+                          href={`/film/sessions/${clip.session_id}?t=${clip.start_time_seconds}`}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
                           style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.08)", color: "#0D9488" }}
                         >
@@ -814,59 +830,104 @@ function WarRoom() {
           </div>
         </div>
 
-        {/* ── Link Clip Modal ──────────────────────────────────── */}
+        {/* ── Link Clip Modal — two-step: sessions → clips ──── */}
         {showClipModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,41,66,0.5)" }}>
             <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4" style={{ border: "1.5px solid #DDE6EF" }}>
               <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid #DDE6EF" }}>
                 <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#0F2942" }}>
                   <Link2 size={14} style={{ color: "#0D9488" }} />
-                  Link Film Clip
+                  {selectedFilmSession ? "Select Clip" : "Select Film Session"}
                 </h3>
-                <button onClick={() => setShowClipModal(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
-                  <X size={16} style={{ color: "#8BA4BB" }} />
-                </button>
+                <div className="flex items-center gap-2">
+                  {selectedFilmSession && (
+                    <button
+                      onClick={() => { setSelectedFilmSession(null); setAvailableClips([]); }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                      style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0F2942", border: "1px solid #DDE6EF" }}
+                    >
+                      <ArrowLeft size={10} />
+                      Back
+                    </button>
+                  )}
+                  <button onClick={() => setShowClipModal(false)} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
+                    <X size={16} style={{ color: "#8BA4BB" }} />
+                  </button>
+                </div>
               </div>
               <div className="p-5 max-h-[400px] overflow-y-auto">
                 {clipSearchLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 size={20} className="animate-spin" style={{ color: "#0D9488" }} />
-                    <span className="ml-2 text-xs" style={{ color: "#8BA4BB" }}>Loading clips...</span>
+                    <span className="ml-2 text-xs" style={{ color: "#8BA4BB" }}>Loading...</span>
                   </div>
-                ) : availableClips.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Scissors size={24} className="mx-auto mb-2" style={{ color: "#DDE6EF" }} />
-                    <p className="text-xs" style={{ color: "#8BA4BB" }}>No available clips to link.</p>
-                    <p className="text-[10px] mt-1" style={{ color: "#B8C9DA" }}>
-                      Create clips in the Film Room first.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {availableClips.map((clip) => (
-                      <div
-                        key={clip.id}
-                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg transition-all hover:bg-teal/[0.02]"
-                        style={{ border: "1px solid #E8EFF5" }}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{clip.title}</p>
-                          <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: "#0D9488" }}>
-                            <Clock size={10} />
-                            {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
-                          </span>
-                        </div>
+                ) : !selectedFilmSession ? (
+                  /* ── Step 1: Film Sessions list ─── */
+                  filmSessions.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Film size={24} className="mx-auto mb-2" style={{ color: "#DDE6EF" }} />
+                      <p className="text-xs" style={{ color: "#8BA4BB" }}>No film sessions found.</p>
+                      <p className="text-[10px] mt-1" style={{ color: "#B8C9DA" }}>
+                        Create a film session and add clips first.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filmSessions.map((fs) => (
                         <button
-                          onClick={() => handleLinkClip(clip.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
-                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
+                          key={fs.id}
+                          onClick={() => selectFilmSession(fs.id)}
+                          className="w-full flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg transition-all hover:bg-teal/[0.02] text-left"
+                          style={{ border: "1px solid #E8EFF5" }}
                         >
-                          <Plus size={10} />
-                          Link
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{fs.name}</p>
+                            <p className="text-[10px]" style={{ color: "#8BA4BB" }}>
+                              {new Date(fs.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </p>
+                          </div>
+                          <ChevronDown size={14} className="-rotate-90" style={{ color: "#8BA4BB" }} />
                         </button>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  /* ── Step 2: Clips for selected session ─── */
+                  availableClips.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Scissors size={24} className="mx-auto mb-2" style={{ color: "#DDE6EF" }} />
+                      <p className="text-xs" style={{ color: "#8BA4BB" }}>No available clips in this session.</p>
+                      <p className="text-[10px] mt-1" style={{ color: "#B8C9DA" }}>
+                        Add clips using Mark In / Mark Out in the Film Room.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {availableClips.map((clip) => (
+                        <div
+                          key={clip.id}
+                          className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg transition-all hover:bg-teal/[0.02]"
+                          style={{ border: "1px solid #E8EFF5" }}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{clip.title}</p>
+                            <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: "#0D9488" }}>
+                              <Clock size={10} />
+                              {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleLinkClip(clip.id)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
+                          >
+                            <Plus size={10} />
+                            Link
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
             </div>

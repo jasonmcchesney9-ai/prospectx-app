@@ -38811,9 +38811,11 @@ async def list_chalk_talk_session_clips(session_id: str, token_data: dict = Depe
     try:
         rows = conn.execute("""
             SELECT vc.id, vc.title, vc.description, vc.start_time_seconds, vc.end_time_seconds,
-                   vc.session_id, vc.clip_type, vc.created_at, ctsc.id AS link_id
+                   vc.session_id, vc.clip_type, vc.created_at, ctsc.id AS link_id,
+                   vs.name AS session_name
             FROM chalk_talk_session_clips ctsc
             JOIN video_clips vc ON ctsc.video_clip_id = vc.id
+            LEFT JOIN video_sessions vs ON vc.session_id = vs.id
             WHERE ctsc.chalk_talk_session_id = ? AND ctsc.org_id = ?
             ORDER BY vc.start_time_seconds
         """, (session_id, org_id)).fetchall()
