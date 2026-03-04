@@ -35,8 +35,11 @@ interface SessionData {
 interface UploadData {
   id: string;
   playback_id: string | null;
+  mux_playback_id?: string | null;
   status: string;
   title: string;
+  upload_source?: string;
+  source_url?: string;
 }
 
 interface Comment {
@@ -118,20 +121,17 @@ export default function FilmSessionViewerPage() {
         const sessionData = sessionRes.data;
         setSession(sessionData);
 
-        // Try to load the first upload attached to this session
-        // The session may have uploads listed via video_upload_id or via the uploads list
-        try {
-          const uploadsRes = await api.get(`/film/uploads`);
-          const uploads = uploadsRes.data as UploadData[];
-          // Find the first ready upload — for now pick the most recent ready one
-          const readyUpload = uploads.find(
-            (u: UploadData) => u.status === "ready" && u.playback_id
-          );
-          if (readyUpload) {
-            setUpload(readyUpload);
-          }
-        } catch {
-          // No uploads or error — that's fine
+        // Use the upload linked to this session (returned inline from the backend)
+        if (sessionData.upload) {
+          const u = sessionData.upload;
+          setUpload({
+            id: u.id,
+            playback_id: u.mux_playback_id || u.playback_id || null,
+            status: u.status,
+            title: u.title,
+            upload_source: u.upload_source,
+            source_url: u.source_url,
+          });
         }
 
         // Load comments

@@ -3849,6 +3849,7 @@ def init_db():
         ("status", "TEXT DEFAULT 'active'"),
         ("shared_link_token", "TEXT"),
         ("updated_at", "TEXT"),
+        ("upload_id", "TEXT"),
     ]:
         if col_name not in vs_cols:
             conn.execute(f"ALTER TABLE video_sessions ADD COLUMN {col_name} {col_def}")
@@ -3859,6 +3860,7 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_game ON video_sessions(game_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_type ON video_sessions(session_type)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_player ON video_sessions(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_sessions_upload ON video_sessions(upload_id)")
 
     # ── Film Room Phase 1: ALTER chalk_talks (additive columns) ──
     ct_cols = _get_table_columns(conn, "chalk_talks")
@@ -39784,6 +39786,7 @@ async def create_film_session(request: Request, token_data: dict = Depends(verif
     if not title:
         raise HTTPException(status_code=400, detail="title is required")
     session_type = body.get("session_type", "general")
+    video_upload_id = body.get("video_upload_id") or None
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db()
@@ -39792,18 +39795,20 @@ async def create_film_session(request: Request, token_data: dict = Depends(verif
             INSERT INTO video_sessions
                 (id, org_id, name, description, created_by, created_at,
                  session_type, game_id, team_id, player_id, opponent_team_id,
-                 pxi_status, visibility, status, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 pxi_status, visibility, status, updated_at, upload_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             session_id, org_id, title, body.get("description"), user_id, now,
             session_type, body.get("game_id"), body.get("team_id"),
             body.get("player_id"), body.get("opponent_team_id"),
             "pending", body.get("visibility", "org"), body.get("status", "draft"), now,
+            video_upload_id,
         ))
         conn.commit()
         return {
             "id": session_id, "title": title, "session_type": session_type,
             "status": "draft", "pxi_status": "pending", "created_at": now,
+            "upload_id": video_upload_id,
         }
     finally:
         conn.close()
@@ -39891,6 +39896,16 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
             clip_list.append(cd)
         if isinstance(d, dict):
             d["clips"] = clip_list
+            # Include linked upload data so the viewer can find the playback_id
+            linked_upload_id = d.get("upload_id")
+            if linked_upload_id:
+                upload_row = conn.execute(
+                    "SELECT id, title, status, mux_playback_id, mux_asset_id, upload_source, source_url FROM video_uploads WHERE id = ? AND org_id = ?",
+                    (linked_upload_id, org_id),
+                ).fetchone()
+                if upload_row:
+                    ud = dict(upload_row) if hasattr(upload_row, "keys") else upload_row
+                    d["upload"] = ud
         return d
     finally:
         conn.close()
