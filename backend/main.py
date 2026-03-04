@@ -3850,6 +3850,7 @@ def init_db():
         ("shared_link_token", "TEXT"),
         ("updated_at", "TEXT"),
         ("upload_id", "TEXT"),
+        ("event_data_source", "VARCHAR(50)"),
     ]:
         if col_name not in vs_cols:
             conn.execute(f"ALTER TABLE video_sessions ADD COLUMN {col_name} {col_def}")
@@ -40595,6 +40596,261 @@ No AI analysis available in demo mode."""
                 pass
             logger.error("Film report generation failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)[:200]}")
+    finally:
+        conn.close()
+
+
+# ── Film Event Data Import ────────────────────────────────────
+
+
+def _parse_event_xml(file_content: bytes) -> list:
+    """Parse event data XML and return a list of normalised event dicts.
+
+    Tries multiple common root / container patterns:
+      <AllInstances>, <file><AllInstances>, <instances>, root-level <Instance> elements.
+    """
+    try:
+        root = ET.fromstring(file_content)
+    except ET.ParseError:
+        raise HTTPException(status_code=400, detail="Could not parse event data file")
+
+    # Collect <Instance> elements — try several common container paths
+    instances: list = []
+    for xpath in ("AllInstances/Instance", ".//AllInstances/Instance",
+                  "instances/Instance", ".//instances/Instance",
+                  "Instance", ".//Instance"):
+        instances = root.findall(xpath)
+        if instances:
+            break
+
+    if not instances:
+        raise HTTPException(status_code=400, detail="No events found in file")
+
+    jersey_re = re.compile(r"#(\d{1,3})\s*(.*)")
+    parsed: list = []
+    for inst in instances:
+        code = (inst.findtext("code") or "").strip()
+        start_raw = (inst.findtext("start") or "").strip()
+        end_raw = (inst.findtext("end") or "").strip()
+        label1 = (inst.findtext("label1") or "").strip()
+        label2 = (inst.findtext("label2") or "").strip()
+        group = (inst.findtext("group") or "").strip()
+        sort_order_raw = (inst.findtext("sort_order") or "").strip()
+
+        # Normalise event_type: lowercase, strip, spaces → underscores
+        event_type = re.sub(r"\s+", "_", code.lower().strip()) if code else "unknown"
+
+        # Parse start / end as floats (seconds)
+        try:
+            start_seconds = float(start_raw) if start_raw else 0.0
+        except ValueError:
+            start_seconds = 0.0
+        try:
+            end_seconds = float(end_raw) if end_raw else None
+        except ValueError:
+            end_seconds = None
+
+        # Parse player info from label2:  "#12 Smith" → number=12, name="Smith"
+        player_number: int | None = None
+        player_name_raw: str = ""
+        if label2:
+            m = jersey_re.match(label2)
+            if m:
+                player_number = int(m.group(1))
+                player_name_raw = m.group(2).strip()
+            else:
+                player_name_raw = label2  # no jersey match — keep raw
+
+        try:
+            sort_order = int(sort_order_raw) if sort_order_raw else 0
+        except ValueError:
+            sort_order = 0
+
+        parsed.append({
+            "event_type": event_type,
+            "start_seconds": start_seconds,
+            "end_seconds": end_seconds,
+            "label": label1 or code,
+            "player_number": player_number,
+            "player_name_raw": player_name_raw,
+            "group": group,
+            "sort_order": sort_order,
+            "notes": f"{label1} | {label2}".strip(" |") if (label1 or label2) else "",
+        })
+
+    return parsed
+
+
+@app.post("/film/sessions/{session_id}/import-events")
+async def import_film_session_events(
+    session_id: str,
+    file: UploadFile = File(...),
+    replace: bool = Query(False),
+    token_data: dict = Depends(verify_token),
+):
+    """Import events (and optional clips) from an XML file into a film session."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    # Validate extension
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xml") or filename.endswith(".csv")):
+        raise HTTPException(status_code=400, detail="File must be .xml or .csv")
+
+    file_content = await file.read()
+    if not file_content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    # Parse the XML (raises 400 on failure)
+    parsed_events = _parse_event_xml(file_content)
+
+    conn = get_db()
+    try:
+        # 1. Verify session exists and belongs to this org
+        session_row = conn.execute(
+            "SELECT id, team_id, event_data_source FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not session_row:
+            raise HTTPException(status_code=404, detail="Film session not found")
+        session = dict(session_row) if hasattr(session_row, "keys") else session_row
+
+        # 2. Check for existing imports — conflict guard
+        if session.get("event_data_source") and not replace:
+            raise HTTPException(
+                status_code=409,
+                detail="Session already has imported events. Use ?replace=true to overwrite.",
+            )
+
+        # 3. If replace=true, delete previously imported events and clips
+        if replace:
+            conn.execute(
+                "DELETE FROM video_events WHERE session_id = ? AND org_id = ? AND source = 'xml_import'",
+                (session_id, org_id),
+            )
+            conn.execute(
+                "DELETE FROM video_clips WHERE session_id = ? AND org_id = ? AND clip_type = 'imported'",
+                (session_id, org_id),
+            )
+            conn.commit()
+
+        # 4. Build player roster lookup for matching
+        team_id = session.get("team_id")
+        roster: list = []
+        if team_id:
+            roster_rows = conn.execute(
+                "SELECT id, first_name, last_name, jersey_number FROM players WHERE team_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+                (team_id,),
+            ).fetchall()
+            roster = [dict(r) if hasattr(r, "keys") else r for r in roster_rows]
+
+        def _match_player(number: int | None, name_raw: str) -> str | None:
+            """Match by jersey_number first, then by last_name."""
+            if not roster:
+                return None
+            # Try jersey number match
+            if number is not None:
+                for p in roster:
+                    try:
+                        if p.get("jersey_number") is not None and int(p["jersey_number"]) == number:
+                            return p["id"]
+                    except (ValueError, TypeError):
+                        pass
+            # Fallback: last_name match (case-insensitive)
+            if name_raw:
+                name_lower = name_raw.lower()
+                for p in roster:
+                    ln = (p.get("last_name") or "").strip().lower()
+                    if ln and ln == name_lower:
+                        return p["id"]
+            return None
+
+        # 5. Import events and clips
+        now = datetime.now(timezone.utc).isoformat()
+        events_created = 0
+        clips_created = 0
+        player_matches = 0
+        unmatched_players: list = []
+
+        for ev in parsed_events:
+            matched_player_id = _match_player(ev["player_number"], ev["player_name_raw"])
+            if matched_player_id:
+                player_matches += 1
+            elif ev["player_name_raw"] or ev["player_number"] is not None:
+                desc = f"#{ev['player_number']} {ev['player_name_raw']}".strip() if ev["player_number"] else ev["player_name_raw"]
+                if desc and desc not in unmatched_players:
+                    unmatched_players.append(desc)
+
+            # Create video_events row
+            event_id = str(uuid.uuid4())
+            try:
+                conn.execute("""
+                    INSERT INTO video_events
+                        (id, org_id, session_id, event_type, event_label,
+                         time_seconds, player_id, notes, created_by, created_at, source)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    event_id, org_id, session_id, ev["event_type"], ev["label"],
+                    ev["start_seconds"], matched_player_id, ev["notes"],
+                    user_id, now, "xml_import",
+                ))
+                events_created += 1
+            except Exception as exc:
+                logger.warning("Skipping event import (event_type=%s): %s", ev["event_type"], exc)
+                continue
+
+            # Create video_clips row if we have a time range
+            if ev["end_seconds"] is not None and ev["end_seconds"] > ev["start_seconds"]:
+                clip_id = str(uuid.uuid4())
+                clip_title = f"{ev['event_type']}: {ev['label']}" if ev["label"] else ev["event_type"]
+                clip_player_ids = json.dumps([matched_player_id]) if matched_player_id else "[]"
+                clip_tags = json.dumps([ev["group"]]) if ev["group"] else "[]"
+                try:
+                    conn.execute("""
+                        INSERT INTO video_clips
+                            (id, org_id, session_id, title, description,
+                             start_time_seconds, end_time_seconds, clip_type,
+                             player_ids, tags, created_by, created_at, updated_at,
+                             sort_order)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        clip_id, org_id, session_id, clip_title[:200], ev["notes"],
+                        ev["start_seconds"], ev["end_seconds"], "imported",
+                        clip_player_ids, clip_tags, user_id, now, now,
+                        ev["sort_order"],
+                    ))
+                    clips_created += 1
+                except Exception as exc:
+                    logger.warning("Skipping clip import (title=%s): %s", clip_title[:60], exc)
+
+        # 6. Update event_data_source on the session
+        conn.execute(
+            "UPDATE video_sessions SET event_data_source = ? WHERE id = ? AND org_id = ?",
+            ("xml_import", session_id, org_id),
+        )
+        conn.commit()
+
+        logger.info(
+            "Film event import: session=%s events=%d clips=%d matched=%d unmatched=%d",
+            session_id, events_created, clips_created, player_matches, len(unmatched_players),
+        )
+
+        return {
+            "events_created": events_created,
+            "clips_created": clips_created,
+            "player_matches": player_matches,
+            "unmatched_players": unmatched_players,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.error("Film event import failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Event import failed: {str(e)[:200]}")
     finally:
         conn.close()
 
