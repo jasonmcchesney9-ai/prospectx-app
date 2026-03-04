@@ -12,6 +12,8 @@ import {
   Film,
   RefreshCw,
   Link2,
+  FileText,
+  X,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -73,6 +75,11 @@ export default function FilmUploadPage() {
   const [uploadSpeed, setUploadSpeed] = useState(0); // bytes per second
   const [uploadEta, setUploadEta] = useState(0); // seconds remaining
   const speedSamplesRef = useRef<SpeedSample[]>([]);
+
+  // Optional event data file
+  const [eventDataFile, setEventDataFile] = useState<File | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const eventFileInputRef = useRef<HTMLInputElement>(null);
 
   // External URL link
   const [linkUrl, setLinkUrl] = useState("");
@@ -219,7 +226,51 @@ export default function FilmUploadPage() {
     setUploadSpeed(0);
     setUploadEta(0);
     speedSamplesRef.current = [];
+    setEventDataFile(null);
   }, [stopPolling]);
+
+  const handleCreateSessionWithEvents = useCallback(async () => {
+    setCreatingSession(true);
+    try {
+      // 1. Create the film session
+      const payload: Record<string, string | null> = {
+        title: title.trim(),
+        session_type: "general",
+        description: description.trim() || null,
+      };
+      if (uploadId) {
+        payload.video_upload_id = uploadId;
+      }
+      const res = await api.post("/film/sessions", payload);
+      const newSessionId = res.data.id;
+      toast.success("Film session created");
+
+      // 2. Import event data if attached
+      if (eventDataFile) {
+        try {
+          const formData = new FormData();
+          formData.append("file", eventDataFile);
+          const importRes = await api.post(
+            `/film/sessions/${newSessionId}/import-events`,
+            formData,
+            { headers: { "Content-Type": "multipart/form-data" } }
+          );
+          toast.success(`Imported ${importRes.data.events_created} events and ${importRes.data.clips_created} clips`);
+        } catch {
+          toast.error("Event data import failed — session was created successfully");
+        }
+      }
+
+      // 3. Navigate to the session
+      router.push(`/film/sessions/${newSessionId}`);
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
+        "Failed to create session";
+      toast.error(msg);
+      setCreatingSession(false);
+    }
+  }, [title, description, uploadId, eventDataFile, router]);
 
   const handleLinkVideo = useCallback(async () => {
     const trimmed = linkUrl.trim();
@@ -520,14 +571,77 @@ export default function FilmUploadPage() {
                 <p className="text-[11px] text-muted mt-1">
                   Your video has been processed and is ready for viewing.
                 </p>
+
+                {/* Attach Event Data (Optional) */}
+                <div className="mt-5 mx-auto max-w-sm">
+                  <input
+                    ref={eventFileInputRef}
+                    type="file"
+                    accept=".xml,.csv"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      setEventDataFile(f);
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+                  {eventDataFile ? (
+                    <div className="flex items-center justify-center gap-2 border border-teal/30 bg-teal/5 rounded-lg px-4 py-2.5">
+                      <CheckCircle size={14} className="text-teal shrink-0" />
+                      <span className="text-[11px] text-navy truncate max-w-[180px]">{eventDataFile.name}</span>
+                      <button
+                        onClick={() => setEventDataFile(null)}
+                        className="text-muted/50 hover:text-red-500 transition-colors shrink-0"
+                        title="Remove event data file"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => eventFileInputRef.current?.click()}
+                      className="w-full flex flex-col items-center gap-1.5 border border-dashed border-border rounded-lg px-4 py-3 hover:border-navy/30 transition-colors group"
+                    >
+                      <div className="flex items-center gap-1.5 text-muted group-hover:text-navy transition-colors">
+                        <FileText size={14} />
+                        <span className="text-[11px] font-oswald uppercase tracking-wider">
+                          Attach Event Data (Optional)
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-muted/50 leading-tight">
+                        Upload an event timeline file to auto-tag your video with plays, events, and key moments.
+                      </span>
+                    </button>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-center gap-3 mt-6">
-                  <Link
-                    href={`/film/sessions/new?upload=${uploadId}`}
-                    className="flex items-center gap-2 bg-teal text-white px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-teal/90 transition-colors"
-                  >
-                    <Film size={14} />
-                    Create Film Session
-                  </Link>
+                  {eventDataFile ? (
+                    <button
+                      onClick={handleCreateSessionWithEvents}
+                      disabled={creatingSession}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm transition-colors ${
+                        creatingSession
+                          ? "bg-teal/50 text-white cursor-not-allowed"
+                          : "bg-teal text-white hover:bg-teal/90"
+                      }`}
+                    >
+                      {creatingSession ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Film size={14} />
+                      )}
+                      {creatingSession ? "Creating..." : "Create Film Session"}
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/film/sessions/new?upload=${uploadId}`}
+                      className="flex items-center gap-2 bg-teal text-white px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-teal/90 transition-colors"
+                    >
+                      <Film size={14} />
+                      Create Film Session
+                    </Link>
+                  )}
                   <button
                     onClick={handleReset}
                     className="flex items-center gap-2 bg-navy/5 text-navy px-5 py-2.5 rounded-lg font-oswald uppercase tracking-wider text-sm hover:bg-navy/10 transition-colors"
