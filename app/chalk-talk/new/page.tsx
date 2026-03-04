@@ -261,13 +261,11 @@ function SessionForm() {
         postgame_win_message: postgameWin || null,
         postgame_loss_message: postgameLoss || null,
       });
-      // Free Board → war room; PXI pre-populated → war room; others → rink builder
-      if (isFreeBoard) {
-        router.push(`/chalk-talk/sessions/${data.id}`);
-      } else if (pxiData) {
+      // Always open the new session in the war room
+      if (pxiData) {
         router.push(`/chalk-talk/sessions/${data.id}?pxi=1`);
       } else {
-        router.push(`/rink-builder?mode=chalk_talk&session_id=${data.id}`);
+        router.push(`/chalk-talk/sessions/${data.id}`);
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
