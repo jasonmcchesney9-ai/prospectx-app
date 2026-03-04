@@ -427,14 +427,15 @@ export default function NavBar() {
             {navConfig.showCoaching && (
               <button
                 onClick={handleGamePlansNav}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                title="Game Plans"
+                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                   pathname.startsWith("/chalk-talk")
                     ? "bg-white/10 text-teal"
                     : "text-white/70 hover:bg-white/5 hover:text-white"
                 }`}
               >
-                <Swords size={16} />
-                Game Plans
+                <Swords size={16} className="shrink-0" />
+                <span className="hidden xl:inline">Game Plans</span>
               </button>
             )}
 
