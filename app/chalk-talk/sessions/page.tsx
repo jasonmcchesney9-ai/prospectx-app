@@ -137,10 +137,10 @@ function SessionList() {
         <div>
           <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
             <Swords size={24} className="text-teal" />
-            Chalk Talk Sessions
+            Game Plans
           </h1>
           <p className="text-muted text-sm mt-1">
-            Pre-game plans, post-game reviews, practice notes, and season strategy
+            Pre-game prep, post-game reviews, practice notes, and season strategy
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -148,15 +148,15 @@ function SessionList() {
             href="/rink-builder?mode=chalk_talk"
             className="flex items-center gap-2 px-4 py-2 border border-navy/20 text-navy font-oswald font-semibold uppercase tracking-wider text-sm rounded-lg hover:bg-navy/[0.04] transition-colors"
           >
-            <PenTool size={16} />
-            Quick Board
+            <Plus size={16} />
+            Free Board
           </Link>
           <Link
             href="/chalk-talk/new"
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal to-teal/80 text-white font-oswald font-semibold uppercase tracking-wider text-sm rounded-lg hover:shadow-md transition-shadow"
           >
             <Plus size={16} />
-            New Session
+            New Game Plan
           </Link>
         </div>
       </div>

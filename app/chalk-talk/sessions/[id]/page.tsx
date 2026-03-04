@@ -13,7 +13,6 @@ import {
   PenTool,
   Trash2,
   Loader2,
-  Maximize2,
   Eye,
   EyeOff,
   Sparkles,
@@ -351,16 +350,6 @@ function WarRoom() {
             <PenTool size={12} />
             Edit Session
           </Link>
-          <a
-            href={`/rink-builder?mode=chalk_talk&session_id=${sessionId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold uppercase transition-colors hover:opacity-90"
-            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
-          >
-            <Maximize2 size={12} />
-            Open Whiteboard
-          </a>
           <button
             onClick={handleDelete}
             disabled={deleting}
