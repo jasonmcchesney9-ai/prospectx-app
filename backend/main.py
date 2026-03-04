@@ -19790,6 +19790,58 @@ If data is limited for any focus area, note what additional data would strengthe
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def summarize_series_context(series_id: str, current_game_number: int) -> str:
+    """Summarize prior game PXI outputs for series context injection.
+
+    Returns concatenated prior outputs (if under ~500 tokens) or a Claude-summarized
+    context block (if over ~500 tokens). Returns "" if no prior outputs exist.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT game_number, output_text FROM series_pxi_outputs
+            WHERE series_id = ? AND game_number < ?
+            ORDER BY game_number ASC
+        """, (series_id, current_game_number)).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return ""
+
+    # Concatenate prior outputs with game separators
+    parts = []
+    for row in rows:
+        gn = row[0] if isinstance(row, (list, tuple)) else row["game_number"]
+        text = row[1] if isinstance(row, (list, tuple)) else row["output_text"]
+        parts.append(f"--- Game {gn} ---\n{text}")
+    concatenated = "\n\n".join(parts)
+
+    # Estimate token count (rough: len / 4)
+    est_tokens = len(concatenated) / 4
+    if est_tokens <= 500:
+        return concatenated
+
+    # Summarize with Claude if over ~500 tokens
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        # No API key — return truncated raw text
+        return concatenated[:2000]
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=600,
+            system="Summarize the following series analysis into a concise context block of approximately 500 tokens. Focus on: key matchup trends, tactical patterns, player performance arcs, and series momentum. Do not include specific stat lines — focus on narrative themes.",
+            messages=[{"role": "user", "content": concatenated}],
+        )
+        return message.content[0].text
+    except Exception as e:
+        logger.warning("Series context summarization failed: %s", str(e))
+        return concatenated[:2000]
+
+
 async def _generate_team_report(request, org_id: str, user_id: str, conn):
     """Generate a team-level report (team_identity, opponent_gameplan, etc.)."""
     team_name = request.team_name
