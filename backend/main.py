@@ -39315,12 +39315,16 @@ async def create_mux_upload_url(request: Request, token_data: dict = Depends(ver
 
 @app.post("/film/uploads/from-url", status_code=201)
 async def create_mux_upload_from_url(request: Request, token_data: dict = Depends(verify_token)):
-    """Create a Mux asset by ingesting a public video URL.
+    """Create a video upload from a URL.
 
-    Works with YouTube, Vimeo, or direct video file URLs. Mux fetches
-    and processes the video server-side — no client upload needed.
+    Direct video file URLs (.mp4, .mov, etc.) are sent to Mux for processing.
+    All other URLs (streaming platforms, etc.) are stored as external reference
+    links — no Mux processing required.
     """
     from mux_client import create_asset_from_url as mux_from_url
+    from urllib.parse import urlparse
+
+    _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
@@ -39330,58 +39334,97 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
 
-    import traceback as _tb
-    logger.info("[from-url] Calling Mux create_asset_from_url — url=%s title=%s user=%s", url, title, user_id)
-    try:
-        mux_result = mux_from_url(url=url, passthrough=title)
-        logger.info("[from-url] Mux returned: %s", mux_result)
-    except Exception as e:
-        logger.error(
-            "[from-url] Mux API FAILED — url=%s title=%s error_type=%s error=%r\n%s",
-            url, title, type(e).__name__, e, _tb.format_exc(),
-        )
-        raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
+    # Detect URL type: direct video file vs external link
+    parsed_path = urlparse(url).path.lower()
+    is_direct_video = any(parsed_path.endswith(ext) for ext in _VIDEO_EXTENSIONS)
+    logger.info("[from-url] url=%s is_direct_video=%s user=%s", url, is_direct_video, user_id)
 
     upload_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    conn = get_db()
-    try:
-        conn.execute("""
-            INSERT INTO video_uploads
-                (id, org_id, uploaded_by, title, description, game_id, team_id, player_id,
-                 upload_source, source_url, mux_asset_id, mux_playback_id,
-                 duration_seconds, status, visibility, created_by, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            upload_id, org_id, user_id, title, body.get("description"),
-            body.get("game_id"), body.get("team_id"), body.get("player_id"),
-            "mux_url", url,
-            mux_result.get("asset_id"),
-            mux_result.get("playback_id"),
-            None,  # duration — set when asset is ready
-            "processing",
-            body.get("visibility", "org"), user_id, now, now,
-        ))
-        # Link to session if provided
-        session_id = body.get("session_id")
-        if session_id:
-            cols = _get_table_columns("video_sessions", conn)
-            if "mux_asset_id" in cols:
-                conn.execute(
-                    "UPDATE video_sessions SET mux_asset_id = ?, updated_at = ? WHERE id = ? AND org_id = ?",
-                    (mux_result.get("asset_id"), now, session_id, org_id),
-                )
-        conn.commit()
-        return {
-            "id": upload_id,
-            "mux_asset_id": mux_result.get("asset_id"),
-            "mux_playback_id": mux_result.get("playback_id"),
-            "title": title,
-            "status": "processing",
-            "created_at": now,
-        }
-    finally:
-        conn.close()
+
+    if is_direct_video:
+        # ── Direct video file → send to Mux for processing ──
+        import traceback as _tb
+        logger.info("[from-url] Calling Mux create_asset_from_url — url=%s title=%s", url, title)
+        try:
+            mux_result = mux_from_url(url=url, passthrough=title)
+            logger.info("[from-url] Mux returned: %s", mux_result)
+        except Exception as e:
+            logger.error(
+                "[from-url] Mux API FAILED — url=%s title=%s error_type=%s error=%r\n%s",
+                url, title, type(e).__name__, e, _tb.format_exc(),
+            )
+            raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
+
+        conn = get_db()
+        try:
+            conn.execute("""
+                INSERT INTO video_uploads
+                    (id, org_id, uploaded_by, title, description, game_id, team_id, player_id,
+                     upload_source, source_url, mux_asset_id, mux_playback_id,
+                     duration_seconds, status, visibility, created_by, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                upload_id, org_id, user_id, title, body.get("description"),
+                body.get("game_id"), body.get("team_id"), body.get("player_id"),
+                "mux_url", url,
+                mux_result.get("asset_id"),
+                mux_result.get("playback_id"),
+                None,  # duration — set when asset is ready
+                "processing",
+                body.get("visibility", "org"), user_id, now, now,
+            ))
+            # Link to session if provided
+            session_id = body.get("session_id")
+            if session_id:
+                cols = _get_table_columns("video_sessions", conn)
+                if "mux_asset_id" in cols:
+                    conn.execute(
+                        "UPDATE video_sessions SET mux_asset_id = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+                        (mux_result.get("asset_id"), now, session_id, org_id),
+                    )
+            conn.commit()
+            return {
+                "id": upload_id,
+                "source_type": "mux_url",
+                "mux_asset_id": mux_result.get("asset_id"),
+                "mux_playback_id": mux_result.get("playback_id"),
+                "title": title,
+                "status": "processing",
+                "created_at": now,
+            }
+        finally:
+            conn.close()
+    else:
+        # ── External link (streaming platform, etc.) → store as reference ──
+        logger.info("[from-url] Storing as external_link — url=%s title=%s", url, title)
+        conn = get_db()
+        try:
+            conn.execute("""
+                INSERT INTO video_uploads
+                    (id, org_id, uploaded_by, title, description, game_id, team_id, player_id,
+                     upload_source, source_url, mux_asset_id, mux_playback_id,
+                     duration_seconds, status, visibility, created_by, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                upload_id, org_id, user_id, title, body.get("description"),
+                body.get("game_id"), body.get("team_id"), body.get("player_id"),
+                "external_link", url,
+                None, None, None,
+                "ready",
+                body.get("visibility", "org"), user_id, now, now,
+            ))
+            conn.commit()
+            return {
+                "id": upload_id,
+                "source_type": "external_link",
+                "external_url": url,
+                "title": title,
+                "status": "ready",
+                "created_at": now,
+            }
+        finally:
+            conn.close()
 
 
 @app.get("/film/uploads/{upload_id}/status")
@@ -39410,12 +39453,23 @@ async def get_film_upload_status(upload_id: str, token_data: dict = Depends(veri
             return {
                 "id": upload_id,
                 "status": current_status,
+                "source_type": rec.get("upload_source") if isinstance(rec, dict) else None,
+                "external_url": rec.get("source_url") if isinstance(rec, dict) and rec.get("upload_source") == "external_link" else None,
                 "mux_asset_id": rec.get("mux_asset_id") if isinstance(rec, dict) else None,
                 "mux_playback_id": rec.get("mux_playback_id") if isinstance(rec, dict) else None,
                 "duration_seconds": rec.get("duration_seconds") if isinstance(rec, dict) else None,
             }
 
         upload_source = rec.get("upload_source") if isinstance(rec, dict) else None
+
+        # External links are always "ready" — no Mux processing
+        if upload_source == "external_link":
+            return {
+                "id": upload_id,
+                "status": "ready",
+                "source_type": "external_link",
+                "external_url": rec.get("source_url") if isinstance(rec, dict) else None,
+            }
 
         # For URL-based ingests, we already have the asset ID — poll asset directly
         if upload_source == "mux_url":

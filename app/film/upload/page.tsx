@@ -177,9 +177,17 @@ export default function FilmUploadPage() {
       const id = res.data.id;
       setUploadId(id);
       setStep("uploading");
-      setUploadStatus("processing");
-      pollStatus(id);
-      toast.success("Video link submitted — processing...");
+
+      if (res.data.source_type === "external_link") {
+        // External link — already "ready", no Mux processing needed
+        setUploadStatus("ready");
+        toast.success("Video link saved!");
+      } else {
+        // Direct video file — Mux is processing, poll for status
+        setUploadStatus("processing");
+        pollStatus(id);
+        toast.success("Video link submitted — processing...");
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to link video";
       toast.error(msg);

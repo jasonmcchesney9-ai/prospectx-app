@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Film, Upload, Video, Clock, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw } from "lucide-react";
+import { Film, Upload, Video, Clock, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw, ExternalLink } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -23,6 +23,7 @@ interface VideoUploadRow {
   status: string;
   created_at: string;
   upload_source: string;
+  source_url?: string;
 }
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -230,7 +231,11 @@ export default function FilmRoomPage() {
                   className="flex items-center justify-between px-5 py-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <Video size={16} className="text-muted/50 shrink-0" />
+                    {u.upload_source === "external_link" ? (
+                      <ExternalLink size={16} className="text-teal/50 shrink-0" />
+                    ) : (
+                      <Video size={16} className="text-muted/50 shrink-0" />
+                    )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-navy truncate">
                         {u.title}
@@ -251,14 +256,24 @@ export default function FilmRoomPage() {
                         <RefreshCw size={13} />
                       </button>
                     )}
-                    {u.status === "ready" && (
+                    {u.status === "ready" && u.upload_source === "external_link" && u.source_url ? (
+                      <a
+                        href={u.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-teal font-oswald uppercase tracking-wider hover:text-teal/80 transition-colors"
+                      >
+                        <ExternalLink size={12} />
+                        Open
+                      </a>
+                    ) : u.status === "ready" ? (
                       <Link
                         href={`/film/sessions/new?upload=${u.id}`}
                         className="text-xs text-teal font-oswald uppercase tracking-wider hover:text-teal/80 transition-colors"
                       >
                         View
                       </Link>
-                    )}
+                    ) : null}
                     <button
                       onClick={() => handleDeleteUpload(u.id)}
                       className="p-1.5 rounded-lg text-muted/40 hover:text-red-500 hover:bg-red-50 transition-colors"
