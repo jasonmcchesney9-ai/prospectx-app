@@ -14,6 +14,7 @@ import {
   Clock,
   Sparkles,
   X,
+  FileText,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -324,10 +325,10 @@ export default function FilmSessionViewerPage() {
           </div>
         </div>
 
-        {/* Split layout */}
-        <div className="flex gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
-          {/* LEFT PANEL — 65% */}
-          <div className="w-[65%] flex flex-col gap-4">
+        {/* Split layout — 65/35 on desktop, stacked on mobile */}
+        <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
+          {/* LEFT TOP — Video + Event Tagger (order-1 on mobile) */}
+          <div className="w-full lg:w-[65%] flex flex-col gap-4 order-1">
             {/* Video Player */}
             <VideoPlayer
               playbackId={upload?.playback_id || null}
@@ -343,7 +344,122 @@ export default function FilmSessionViewerPage() {
               />
             )}
 
-            {/* Comments */}
+            {/* Comments (hidden on mobile — shown via order-3 block below) */}
+            <div className="hidden lg:block">
+              <div className="bg-white rounded-xl border border-border p-4">
+                <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-3">
+                  Comments
+                </h3>
+
+                {/* Comment input */}
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmitComment();
+                      }
+                    }}
+                    placeholder="Add a comment..."
+                    className="flex-1 border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                  />
+                  <button
+                    onClick={handleSubmitComment}
+                    disabled={submittingComment || !commentText.trim()}
+                    className={`px-3 py-2 rounded-lg transition-colors ${
+                      submittingComment || !commentText.trim()
+                        ? "bg-border text-muted/50 cursor-not-allowed"
+                        : "bg-teal text-white hover:bg-teal/90"
+                    }`}
+                  >
+                    {submittingComment ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Send size={14} />
+                    )}
+                  </button>
+                </div>
+
+                {/* Comment list */}
+                {comments.length === 0 ? (
+                  <p className="text-[11px] text-muted/50 text-center py-4">
+                    No comments yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {comments.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-start justify-between gap-2 py-2 border-b border-border last:border-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-navy">{c.comment_text}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {c.timestamp_seconds !== null && (
+                              <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
+                                <Clock size={10} />
+                                {formatTimestamp(c.timestamp_seconds)}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted">
+                              {formatDate(c.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteComment(c.id)}
+                          className="text-muted/30 hover:text-red-500 transition-colors shrink-0 mt-0.5"
+                          title="Delete comment"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT PANEL — 35% (order-2 on mobile — between video and comments) */}
+          <div className="w-full lg:w-[35%] flex flex-col gap-4 order-2">
+            {/* Session info */}
+            <div className="bg-white rounded-xl border border-border p-4">
+              <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2">
+                Session Info
+              </h3>
+              {session.description && (
+                <p className="text-sm text-muted mb-2">{session.description}</p>
+              )}
+              <div className="text-[11px] text-muted/60">
+                Status: {session.status || "active"}
+              </div>
+            </div>
+
+            {/* Clip Panel */}
+            <ClipPanel
+              sessionId={sessionId}
+              uploadId={upload?.id || ""}
+              getCurrentTime={getCurrentTime}
+            />
+
+            {/* Game Plan Links */}
+            <div className="bg-white rounded-xl border border-border p-4">
+              <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2 flex items-center gap-1.5">
+                <FileText size={13} />
+                Game Plan Links
+              </h3>
+              <p className="text-[11px] text-muted/50 text-center py-4">
+                No linked game plans yet.
+              </p>
+            </div>
+          </div>
+
+          {/* MOBILE COMMENTS — order-3 (only visible below lg) */}
+          <div className="lg:hidden order-3 w-full">
             <div className="bg-white rounded-xl border border-border p-4">
               <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-3">
                 Comments
@@ -419,29 +535,6 @@ export default function FilmSessionViewerPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* RIGHT PANEL — 35% */}
-          <div className="w-[35%] flex flex-col gap-4">
-            {/* Session info */}
-            <div className="bg-white rounded-xl border border-border p-4">
-              <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2">
-                Session Info
-              </h3>
-              {session.description && (
-                <p className="text-sm text-muted mb-2">{session.description}</p>
-              )}
-              <div className="text-[11px] text-muted/60">
-                Status: {session.status || "active"}
-              </div>
-            </div>
-
-            {/* Clip Panel */}
-            <ClipPanel
-              sessionId={sessionId}
-              uploadId={upload?.id || ""}
-              getCurrentTime={getCurrentTime}
-            />
           </div>
         </div>
       </main>
