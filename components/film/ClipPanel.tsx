@@ -37,6 +37,29 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+const CLIP_CATEGORY_KEYWORDS: Record<string, string[]> = {
+  teal: ["goal", "shot", "chance", "entry", "cycle", "zone_time", "screen", "net_battle", "offensive", "scoring"],
+  navy: ["hit", "block", "turnover", "exit", "breakout", "dz_coverage", "coverage_miss", "stick_detail", "defensive"],
+  orange: ["faceoff", "pp", "pk", "icing", "penalty", "power_play", "penalty_kill", "special"],
+};
+
+function getClipDotColor(clip: Clip): string {
+  // Check tags first
+  const tagStr = Array.isArray(clip.tags)
+    ? clip.tags.join(" ").toLowerCase()
+    : typeof clip.tags === "string"
+    ? clip.tags.toLowerCase()
+    : "";
+  const titleStr = (clip.title || "").toLowerCase();
+  const combined = `${tagStr} ${titleStr} ${clip.clip_type || ""}`.toLowerCase();
+  for (const [color, keywords] of Object.entries(CLIP_CATEGORY_KEYWORDS)) {
+    for (const kw of keywords) {
+      if (combined.includes(kw)) return `bg-${color}`;
+    }
+  }
+  return "bg-gray-400";
+}
+
 export default function ClipPanel({
   sessionId,
   uploadId,
@@ -336,7 +359,8 @@ export default function ClipPanel({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-navy truncate">
+                    <p className="text-xs font-medium text-navy truncate flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${getClipDotColor(clip)}`} />
                       {clip.title}
                     </p>
                     <div className="flex items-center gap-2 mt-1">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
-import { Loader2, Video } from "lucide-react";
+import { useRef, useEffect } from "react";
+import { Video } from "lucide-react";
+import MuxPlayer from "@mux/mux-player-react";
 
 interface VideoPlayerProps {
   playbackId: string | null;
@@ -14,16 +15,18 @@ export default function VideoPlayer({
   onTimeUpdate,
   startTime,
 }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const playerRef = useRef<any>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Poll current time and send updates
   useEffect(() => {
-    if (!playbackId || !videoRef.current) return;
+    if (!playbackId) return;
 
     intervalRef.current = setInterval(() => {
-      if (videoRef.current) {
-        onTimeUpdate(videoRef.current.currentTime);
+      const el = playerRef.current;
+      if (el && typeof el.currentTime === "number") {
+        onTimeUpdate(el.currentTime);
       }
     }, 250);
 
@@ -36,9 +39,11 @@ export default function VideoPlayer({
 
   // Seek to startTime when it changes
   useEffect(() => {
-    if (startTime !== undefined && videoRef.current) {
-      videoRef.current.currentTime = startTime;
-      videoRef.current.play().catch(() => {});
+    if (startTime === undefined) return;
+    const el = playerRef.current;
+    if (el) {
+      el.currentTime = startTime;
+      el.play?.().catch(() => {});
     }
   }, [startTime]);
 
@@ -54,23 +59,15 @@ export default function VideoPlayer({
     );
   }
 
-  // Use native HLS video element with Mux stream URL
-  const hlsUrl = `https://stream.mux.com/${playbackId}.m3u8`;
-  const posterUrl = `https://image.mux.com/${playbackId}/thumbnail.jpg?time=0`;
-
   return (
     <div className="w-full rounded-xl overflow-hidden border border-border bg-black">
-      <video
-        ref={videoRef}
-        src={hlsUrl}
-        poster={posterUrl}
-        controls
-        playsInline
+      <MuxPlayer
+        ref={playerRef}
+        playbackId={playbackId}
+        streamType="on-demand"
+        accentColor="#14B8A6"
         className="w-full aspect-video"
-        style={{ backgroundColor: "#000" }}
-      >
-        Your browser does not support HLS video playback.
-      </video>
+      />
     </div>
   );
 }

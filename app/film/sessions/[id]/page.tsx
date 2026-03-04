@@ -23,6 +23,8 @@ import {
   RefreshCw,
   Upload,
   Filter,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -216,6 +218,9 @@ export default function FilmSessionViewerPage() {
   // Event timeline display
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
+
+  // Cinema mode
+  const [cinemaMode, setCinemaMode] = useState(false);
 
   // Video player ref for getting current time
   const currentTimeRef = useRef<number>(0);
@@ -757,13 +762,24 @@ export default function FilmSessionViewerPage() {
         {/* Split layout — 65/35 on desktop, stacked on mobile */}
         <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
           {/* LEFT TOP — Video + Event Tagger (order-1 on mobile) */}
-          <div className="w-full lg:w-[65%] flex flex-col gap-4 order-1">
-            {/* Video Player */}
-            <VideoPlayer
-              playbackId={upload?.playback_id || null}
-              onTimeUpdate={handleTimeUpdate}
-              startTime={startTime}
-            />
+          <div className={`w-full flex flex-col gap-4 order-1 ${cinemaMode ? "lg:w-full" : "lg:w-[65%]"}`}>
+            {/* Video Player with Cinema Mode toggle */}
+            <div className="relative">
+              <VideoPlayer
+                playbackId={upload?.playback_id || null}
+                onTimeUpdate={handleTimeUpdate}
+                startTime={startTime}
+              />
+              {upload?.playback_id && (
+                <button
+                  onClick={() => setCinemaMode(!cinemaMode)}
+                  className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-lg transition-colors"
+                  title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
+                >
+                  {cinemaMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+              )}
+            </div>
 
             {/* Event Tag Bar */}
             {upload?.playback_id && (
@@ -1049,7 +1065,7 @@ export default function FilmSessionViewerPage() {
           </div>
 
           {/* RIGHT PANEL — 35% (order-2 on mobile — between video and comments) */}
-          <div className="w-full lg:w-[35%] flex flex-col gap-4 order-2">
+          <div className={`w-full lg:w-[35%] flex flex-col gap-4 order-2 ${cinemaMode ? "hidden" : ""}`}>
             {/* Session info */}
             <div className="bg-white rounded-xl border border-border p-4">
               <h3 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2">
