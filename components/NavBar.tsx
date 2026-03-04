@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import {
   Users,
@@ -278,12 +278,32 @@ const ROLE_GROUP_TO_HOCKEY_ROLE: Record<RoleGroup, string> = {
 // ── Main NavBar ────────────────────────────────────────────────
 export default function NavBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const user = getUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [agentClientCount, setAgentClientCount] = useState<number>(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
+
+  /* Smart nav: skip list page for single-session coaches */
+  const handleGamePlansNav = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setMobileOpen(false);
+    try {
+      const { data } = await api.get("/chalk-talk-sessions?limit=2");
+      const sessions = Array.isArray(data) ? data : [];
+      if (sessions.length === 0) {
+        router.push("/chalk-talk/new");
+      } else if (sessions.length === 1) {
+        router.push(`/chalk-talk/sessions/${sessions[0].id}`);
+      } else {
+        router.push("/chalk-talk/sessions");
+      }
+    } catch {
+      router.push("/chalk-talk/sessions");
+    }
+  };
 
   // Effective role: admin override takes priority, otherwise real role
   const effectiveHockeyRole = roleOverride || user?.hockey_role;
@@ -694,11 +714,12 @@ export default function NavBar() {
               </p>
               {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
                 const active = pathname.startsWith(href);
+                const isGamePlans = href === "/chalk-talk/sessions";
                 return (
                   <Link
                     key={href}
                     href={href}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={isGamePlans ? handleGamePlansNav : () => setMobileOpen(false)}
                     className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
                       active ? "text-teal" : "text-white/70"
                     }`}
@@ -1047,8 +1068,28 @@ function TeamsDropdown({ pathname }: { pathname: string }) {
 function CoachingDropdown({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const isActive = COACHING_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  /* Smart nav: skip list page for single-session coaches */
+  const handleGamePlansClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setOpen(false);
+    try {
+      const { data } = await api.get("/chalk-talk-sessions?limit=2");
+      const sessions = Array.isArray(data) ? data : [];
+      if (sessions.length === 0) {
+        router.push("/chalk-talk/new");
+      } else if (sessions.length === 1) {
+        router.push(`/chalk-talk/sessions/${sessions[0].id}`);
+      } else {
+        router.push("/chalk-talk/sessions");
+      }
+    } catch {
+      router.push("/chalk-talk/sessions");
+    }
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1079,11 +1120,12 @@ function CoachingDropdown({ pathname }: { pathname: string }) {
         <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
           {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
+            const isGamePlans = href === "/chalk-talk/sessions";
             return (
               <Link
                 key={href}
                 href={href}
-                onClick={() => setOpen(false)}
+                onClick={isGamePlans ? handleGamePlansClick : () => setOpen(false)}
                 className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
                   active
                     ? "bg-white/10 text-teal"
