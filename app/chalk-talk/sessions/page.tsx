@@ -253,72 +253,6 @@ function CoachingHub() {
 
   return (
     <div>
-      {/* ═══════════════════════════════════════════════════════
-          1. HEADER BAR — navy
-          ═══════════════════════════════════════════════════════ */}
-      <div className="px-6 py-4 flex items-center justify-between" style={{ background: "#0F2942" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#0D9488" }}>
-            <Swords size={16} className="text-white" />
-          </div>
-          <h1
-            className="font-bold uppercase text-white"
-            style={{ fontSize: 16, fontFamily: "Oswald, sans-serif", letterSpacing: 3 }}
-          >
-            GAME PLANS
-          </h1>
-        </div>
-        <button
-          onClick={handleNewGamePlan}
-          disabled={gamePlanCreating}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 disabled:opacity-50"
-          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
-        >
-          {gamePlanCreating ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-          New Game Plan
-        </button>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════
-          2. ACTION BUTTONS ROW
-          ═══════════════════════════════════════════════════════ */}
-      <div className="bg-white px-6 py-3 flex items-center gap-3 flex-wrap" style={{ borderBottom: "1px solid #DDE6EF" }}>
-        <button
-          onClick={handleNewGamePlan}
-          disabled={gamePlanCreating}
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
-          style={{ background: "#0D9488" }}
-        >
-          {gamePlanCreating ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-          {gamePlanCreating ? "Creating..." : "New Game Plan"}
-        </button>
-        <Link
-          href="/series/new"
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
-          style={{ background: "#0D9488" }}
-        >
-          <Trophy size={14} />
-          New Series Plan
-        </Link>
-        <button
-          onClick={handleFreeBoard}
-          disabled={freeBoardCreating}
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
-          style={{ background: "#0D9488" }}
-        >
-          {freeBoardCreating ? <Loader2 size={14} className="animate-spin" /> : <PenTool size={14} />}
-          Free Board
-        </button>
-        <Link
-          href="/film"
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
-          style={{ background: "#0D9488" }}
-        >
-          <Film size={14} />
-          Link Film Clip
-        </Link>
-      </div>
-
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
         {/* ═══════════════════════════════════════════════════════
@@ -393,15 +327,15 @@ function CoachingHub() {
             4. CANVAS SECTION
             ═══════════════════════════════════════════════════════ */}
         <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderBottom: "2px solid #0D9488" }}>
-          {/* Canvas toolbar bar */}
-          <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942", borderBottom: canvasExpanded ? "1px solid #DDE6EF" : "none" }}>
+          {/* GAME PLANS header bar */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+              <Swords size={14} style={{ color: "#0D9488" }} />
               <span
                 className="font-bold uppercase text-white"
                 style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
               >
-                BOARD
+                GAME PLANS
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -417,6 +351,46 @@ function CoachingHub() {
               </button>
             </div>
           </div>
+
+          {/* Action buttons row */}
+          {canvasExpanded && (
+            <div className="bg-white px-5 py-3 flex items-center gap-3 flex-wrap" style={{ borderBottom: "1px solid #DDE6EF" }}>
+              <button
+                onClick={handleNewGamePlan}
+                disabled={gamePlanCreating}
+                className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
+                style={{ background: "#0D9488" }}
+              >
+                {gamePlanCreating ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                {gamePlanCreating ? "Creating..." : "New Game Plan"}
+              </button>
+              <Link
+                href="/series/new"
+                className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
+                style={{ background: "#0D9488" }}
+              >
+                <Trophy size={14} />
+                New Series Plan
+              </Link>
+              <button
+                onClick={handleFreeBoard}
+                disabled={freeBoardCreating}
+                className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
+                style={{ background: "#0D9488" }}
+              >
+                {freeBoardCreating ? <Loader2 size={14} className="animate-spin" /> : <PenTool size={14} />}
+                Free Board
+              </button>
+              <Link
+                href="/film"
+                className="flex items-center gap-2 px-4 py-2 rounded text-sm font-medium text-white transition-colors hover:opacity-90"
+                style={{ background: "#0D9488" }}
+              >
+                <Film size={14} />
+                Link Film Clip
+              </Link>
+            </div>
+          )}
 
           {/* Canvas area */}
           {canvasExpanded && (
