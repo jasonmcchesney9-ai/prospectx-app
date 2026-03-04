@@ -347,12 +347,12 @@ export default function ClipPanel({
                       </span>
                       {clip.tags && (
                         <div className="flex gap-1 flex-wrap">
-                          {clip.tags.split(",").map((tag, i) => (
+                          {(Array.isArray(clip.tags) ? clip.tags : typeof clip.tags === "string" ? clip.tags.split(",") : []).map((tag, i) => (
                             <span
                               key={i}
                               className="text-[9px] bg-navy/5 text-navy/60 px-1.5 py-0.5 rounded"
                             >
-                              {tag.trim()}
+                              {typeof tag === "string" ? tag.trim() : String(tag)}
                             </span>
                           ))}
                         </div>
