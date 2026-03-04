@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Film, Upload, Video, Clock, Scissors, Eye, Loader2, AlertCircle } from "lucide-react";
+import { Film, Upload, Video, Clock, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -75,6 +75,40 @@ export default function FilmRoomPage() {
       .finally(() => setLoadingUploads(false));
   }, []);
 
+  const handleDeleteSession = async (id: string) => {
+    if (!confirm("Delete this film session? This cannot be undone.")) return;
+    try {
+      await api.delete(`/film/sessions/${id}`);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Session deleted");
+    } catch {
+      toast.error("Failed to delete session");
+    }
+  };
+
+  const handleDeleteUpload = async (id: string) => {
+    if (!confirm("Delete this upload? All linked clips and events will also be removed.")) return;
+    try {
+      await api.delete(`/film/uploads/${id}`);
+      setUploads((prev) => prev.filter((u) => u.id !== id));
+      toast.success("Upload deleted");
+    } catch {
+      toast.error("Failed to delete upload");
+    }
+  };
+
+  const handleRefreshStatus = async (id: string) => {
+    try {
+      const { data } = await api.get(`/film/uploads/${id}/status`);
+      setUploads((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, status: data.status || u.status } : u))
+      );
+      toast.success(`Status: ${data.status || "unknown"}`);
+    } catch {
+      toast.error("Failed to refresh status");
+    }
+  };
+
   return (
     <ProtectedRoute>
       <NavBar />
@@ -145,14 +179,21 @@ export default function FilmRoomPage() {
                       {s.clip_count} clip{s.clip_count !== 1 ? "s" : ""}
                     </div>
                   )}
-                  <div className="mt-auto pt-4">
+                  <div className="mt-auto pt-4 flex items-center gap-2">
                     <Link
                       href={`/film/sessions/${s.id}`}
-                      className="flex items-center justify-center gap-1.5 w-full bg-navy/5 text-navy px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider hover:bg-navy/10 transition-colors"
+                      className="flex items-center justify-center gap-1.5 flex-1 bg-navy/5 text-navy px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider hover:bg-navy/10 transition-colors"
                     >
                       <Eye size={13} />
                       View Session
                     </Link>
+                    <button
+                      onClick={() => handleDeleteSession(s.id)}
+                      className="p-2 rounded-lg text-muted/40 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Delete session"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -201,6 +242,15 @@ export default function FilmRoomPage() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <StatusBadge status={u.status} />
+                    {(u.status === "processing" || u.status === "waiting") && (
+                      <button
+                        onClick={() => handleRefreshStatus(u.id)}
+                        className="p-1.5 rounded-lg text-teal/60 hover:text-teal hover:bg-teal/10 transition-colors"
+                        title="Refresh upload status"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    )}
                     {u.status === "ready" && (
                       <Link
                         href={`/film/sessions/new?upload=${u.id}`}
@@ -209,6 +259,13 @@ export default function FilmRoomPage() {
                         View
                       </Link>
                     )}
+                    <button
+                      onClick={() => handleDeleteUpload(u.id)}
+                      className="p-1.5 rounded-lg text-muted/40 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Delete upload"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
               ))}
