@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Swords,
@@ -94,6 +94,7 @@ export default function NewChalkTalkSessionPage() {
 
 function SessionForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -110,8 +111,11 @@ function SessionForm() {
   const orgTeams = teams.filter((t) => t.org_id === userOrgId);
   const allTeams = teams;
 
-  /* Form state */
-  const [sessionType, setSessionType] = useState("Pre-Game");
+  /* Form state — read ?type= param for pre-selection */
+  const typeParam = searchParams.get("type");
+  const [sessionType, setSessionType] = useState(
+    typeParam === "free_board" ? "free_board" : "Pre-Game"
+  );
   const [teamId, setTeamId] = useState("");
   const [opponentTeamId, setOpponentTeamId] = useState("");
   const [gameDate, setGameDate] = useState("");
