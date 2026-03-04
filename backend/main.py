@@ -20047,6 +20047,25 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
 
             user_prompt = f"Generate a {report_type_name} for {team_name}. Here is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
+            # ── Series context injection ──
+            if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
+                try:
+                    series_ctx = await summarize_series_context(request.series_id, request.game_number)
+                    if series_ctx:
+                        n_prior = request.game_number - 1
+                        context_block = (
+                            f"\n\n--- PRIOR SERIES CONTEXT ---\n"
+                            f"This series has had {n_prior} prior game(s) analyzed.\n"
+                            f"Here is a summary of prior analysis:\n{series_ctx}\n"
+                            f"Use this context to identify trends, evolving matchups, "
+                            f"and carry-over themes. Do not repeat prior analysis verbatim.\n"
+                            f"--- END PRIOR CONTEXT ---\n\n"
+                        )
+                        user_prompt = context_block + user_prompt
+                        logger.info("Series context injected: series=%s game=%d (%d chars)", request.series_id, request.game_number, len(series_ctx))
+                except Exception as sc_err:
+                    logger.warning("Series context injection failed (non-fatal): %s", str(sc_err))
+
             max_tokens = 10000 if team_drill_list else 8000
             message = client.messages.create(
                 model=llm_model,
@@ -20841,6 +20860,25 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                 system_prompt += drill_prompt_addon
 
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+
+            # ── Series context injection ──
+            if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
+                try:
+                    series_ctx = await summarize_series_context(request.series_id, request.game_number)
+                    if series_ctx:
+                        n_prior = request.game_number - 1
+                        context_block = (
+                            f"\n\n--- PRIOR SERIES CONTEXT ---\n"
+                            f"This series has had {n_prior} prior game(s) analyzed.\n"
+                            f"Here is a summary of prior analysis:\n{series_ctx}\n"
+                            f"Use this context to identify trends, evolving matchups, "
+                            f"and carry-over themes. Do not repeat prior analysis verbatim.\n"
+                            f"--- END PRIOR CONTEXT ---\n\n"
+                        )
+                        user_prompt = context_block + user_prompt
+                        logger.info("Series context injected: series=%s game=%d (%d chars)", request.series_id, request.game_number, len(series_ctx))
+                except Exception as sc_err:
+                    logger.warning("Series context injection failed (non-fatal): %s", str(sc_err))
 
             # ── PXR Score Context Injection (append to system prompt for player-facing types) ──
             try:
