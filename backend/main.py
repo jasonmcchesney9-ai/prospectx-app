@@ -3587,6 +3587,34 @@ def init_db():
     conn.commit()
     conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_current ON development_plans(player_id, season, is_current)")
 
+    # --- Migration: Create scout_assignments table ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scout_assignments (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            scout_user_id TEXT,
+            game_id TEXT,
+            team_to_scout TEXT,
+            league TEXT,
+            game_date TEXT,
+            venue TEXT,
+            priority TEXT DEFAULT 'normal',
+            status TEXT DEFAULT 'assigned',
+            notes TEXT,
+            report_submitted INTEGER DEFAULT 0,
+            report_id TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (scout_user_id) REFERENCES users(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scout_assignments_org ON scout_assignments(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scout_assignments_scout ON scout_assignments(scout_user_id)")
+    conn.commit()
+
     # --- Migration: Create player_parents table ---
     conn.execute("""
         CREATE TABLE IF NOT EXISTS player_parents (
@@ -16208,6 +16236,216 @@ async def org_hub_development_dashboard(
             "summary": counts,
             "total": len(results),
         }
+    finally:
+        conn.close()
+
+
+# ============================================================
+# ORG HUB — SCOUTING PIPELINE
+# ============================================================
+
+@app.get("/org-hub/scouting-pipeline")
+async def org_hub_scouting_pipeline(token_data: dict = Depends(verify_token)):
+    """Return assignments grouped by status, scout workload, and upcoming coverage."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # All assignments with scout names
+        rows = conn.execute("""
+            SELECT sa.*,
+                   u.first_name AS scout_first, u.last_name AS scout_last, u.email AS scout_email
+            FROM scout_assignments sa
+            LEFT JOIN users u ON u.id = sa.scout_user_id
+            WHERE sa.org_id = ?
+            ORDER BY
+                CASE sa.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+                sa.game_date ASC
+        """, (org_id,)).fetchall()
+
+        # Group by status
+        grouped: dict = {"assigned": [], "in_progress": [], "completed": [], "canceled": []}
+        for r in rows:
+            d = dict(r)
+            d["scout_name"] = f"{r['scout_first'] or ''} {r['scout_last'] or ''}".strip() or r["scout_email"] or "Unassigned"
+            d["report_submitted"] = bool(r["report_submitted"])
+            status = d.get("status", "assigned")
+            if status in grouped:
+                grouped[status].append(d)
+            else:
+                grouped["assigned"].append(d)
+
+        # Scout workload summary
+        scouts = conn.execute("""
+            SELECT u.id, u.first_name, u.last_name, u.email
+            FROM users u
+            WHERE u.org_id = ? AND u.hockey_role = 'scout'
+            ORDER BY u.last_name, u.first_name
+        """, (org_id,)).fetchall()
+
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        month_start = now.replace(day=1).strftime("%Y-%m-%d")
+
+        workload = []
+        for s in scouts:
+            sid = s["id"]
+            stats = conn.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                    SUM(CASE WHEN status IN ('assigned', 'in_progress') THEN 1 ELSE 0 END) AS pending,
+                    SUM(CASE WHEN report_submitted = 1 AND created_at >= ? THEN 1 ELSE 0 END) AS reports_this_month,
+                    SUM(CASE WHEN status IN ('assigned', 'in_progress') AND game_date < ? THEN 1 ELSE 0 END) AS overdue
+                FROM scout_assignments
+                WHERE org_id = ? AND scout_user_id = ?
+            """, (month_start, now.strftime("%Y-%m-%d"), org_id, sid)).fetchone()
+            pending = stats["pending"] or 0
+            overdue = stats["overdue"] or 0
+            health = "behind" if overdue > 0 else ("overloaded" if pending >= 5 else "on_track")
+            workload.append({
+                "scout_id": sid,
+                "scout_name": f"{s['first_name'] or ''} {s['last_name'] or ''}".strip() or s["email"],
+                "total": stats["total"] or 0,
+                "completed": stats["completed"] or 0,
+                "pending": pending,
+                "reports_this_month": stats["reports_this_month"] or 0,
+                "overdue": overdue,
+                "health": health,
+            })
+
+        return {
+            "assignments": grouped,
+            "workload": workload,
+            "total_assignments": len(rows),
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/scouting-pipeline/assign")
+async def create_scout_assignment(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a new scouting assignment."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        aid = str(uuid.uuid4())
+        conn.execute("""
+            INSERT INTO scout_assignments (id, org_id, scout_user_id, game_id, team_to_scout, league, game_date, venue, priority, status, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'assigned', ?, ?)
+        """, (
+            aid, org_id,
+            body.get("scout_user_id"),
+            body.get("game_id"),
+            body.get("team_to_scout"),
+            body.get("league"),
+            body.get("game_date"),
+            body.get("venue"),
+            body.get("priority", "normal"),
+            body.get("notes"),
+            user_id,
+        ))
+        conn.commit()
+        row = conn.execute("SELECT * FROM scout_assignments WHERE id = ?", (aid,)).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@app.patch("/org-hub/scouting-pipeline/{assignment_id}")
+async def update_scout_assignment(assignment_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update an existing scouting assignment (status, notes, report link)."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT id FROM scout_assignments WHERE id = ? AND org_id = ?", (assignment_id, org_id)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        sets, vals = [], []
+        for field in ("status", "notes", "report_id", "report_submitted", "scout_user_id", "priority", "team_to_scout", "league", "game_date", "venue"):
+            if field in body:
+                sets.append(f"{field} = ?")
+                val = body[field]
+                if field == "report_submitted":
+                    val = 1 if val else 0
+                vals.append(val)
+        if not sets:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        sets.append("updated_at = CURRENT_TIMESTAMP")
+        vals.append(assignment_id)
+        vals.append(org_id)
+        conn.execute(f"UPDATE scout_assignments SET {', '.join(sets)} WHERE id = ? AND org_id = ?", vals)
+        conn.commit()
+        row = conn.execute("SELECT * FROM scout_assignments WHERE id = ?", (assignment_id,)).fetchone()
+        d = dict(row)
+        d["report_submitted"] = bool(d["report_submitted"])
+        return d
+    finally:
+        conn.close()
+
+
+@app.delete("/org-hub/scouting-pipeline/{assignment_id}")
+async def delete_scout_assignment(assignment_id: str, token_data: dict = Depends(verify_token)):
+    """Remove a scouting assignment."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT id FROM scout_assignments WHERE id = ? AND org_id = ?", (assignment_id, org_id)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        conn.execute("DELETE FROM scout_assignments WHERE id = ? AND org_id = ?", (assignment_id, org_id))
+        conn.commit()
+        return {"deleted": True}
+    finally:
+        conn.close()
+
+
+@app.get("/org-hub/scouting-pipeline/workload")
+async def scout_workload(token_data: dict = Depends(verify_token)):
+    """Return per-scout workload stats."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        from datetime import datetime
+        now = datetime.utcnow()
+        month_start = now.replace(day=1).strftime("%Y-%m-%d")
+
+        scouts = conn.execute("""
+            SELECT u.id, u.first_name, u.last_name, u.email
+            FROM users u
+            WHERE u.org_id = ? AND u.hockey_role = 'scout'
+            ORDER BY u.last_name, u.first_name
+        """, (org_id,)).fetchall()
+
+        results = []
+        for s in scouts:
+            sid = s["id"]
+            stats = conn.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                    SUM(CASE WHEN status IN ('assigned', 'in_progress') THEN 1 ELSE 0 END) AS pending,
+                    SUM(CASE WHEN report_submitted = 1 AND created_at >= ? THEN 1 ELSE 0 END) AS reports_this_month,
+                    SUM(CASE WHEN status IN ('assigned', 'in_progress') AND game_date < ? THEN 1 ELSE 0 END) AS overdue
+                FROM scout_assignments
+                WHERE org_id = ? AND scout_user_id = ?
+            """, (month_start, now.strftime("%Y-%m-%d"), org_id, sid)).fetchone()
+            pending = stats["pending"] or 0
+            overdue = stats["overdue"] or 0
+            health = "behind" if overdue > 0 else ("overloaded" if pending >= 5 else "on_track")
+            results.append({
+                "scout_id": sid,
+                "scout_name": f"{s['first_name'] or ''} {s['last_name'] or ''}".strip() or s["email"],
+                "total": stats["total"] or 0,
+                "completed": stats["completed"] or 0,
+                "pending": pending,
+                "reports_this_month": stats["reports_this_month"] or 0,
+                "overdue": overdue,
+                "health": health,
+            })
+        return {"workload": results}
     finally:
         conn.close()
 
