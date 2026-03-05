@@ -22,6 +22,7 @@ import {
   Printer,
   Download,
   Video,
+  Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -63,7 +64,7 @@ function GamePlanDetail() {
   const router = useRouter();
   const planId = params.id as string;
   const currentUser = getUser();
-  const { setActivePxiContext } = useBenchTalk();
+  const { setActivePxiContext, openBenchTalk } = useBenchTalk();
 
   const [plan, setPlan] = useState<GamePlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -313,6 +314,21 @@ function GamePlanDetail() {
         <div className="flex items-center gap-2">
           {!editing && (
             <>
+              <button
+                onClick={() => {
+                  if (plan.opponent_team_name) {
+                    openBenchTalk(`Analyse my game plan for ${plan.team_name} vs ${plan.opponent_team_name}. Opponent analysis: ${plan.opponent_analysis || "not set"}. Our strategy: ${plan.our_strategy || "not set"}. Keys to the game: ${plan.keys_to_game || "not set"}. Give me tactical recommendations, matchup advantages, and things to watch for.`);
+                  } else {
+                    openBenchTalk("Analyse my current game plan. What tactical adjustments should I consider? Suggest opponent tendencies to watch for and keys to winning.");
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 no-print"
+                style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+                title="PXI Analyse — get AI tactical analysis for this game plan"
+              >
+                <Sparkles size={12} />
+                PXI Analyse
+              </button>
               <button
                 onClick={handleDownloadPDF}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
