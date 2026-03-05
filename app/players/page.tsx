@@ -643,83 +643,100 @@ export default function PlayersPage() {
   return (
     <ProtectedRoute>
       <NavBar />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-navy">Players</h1>
-            {!loading && (
-              <p className="text-xs text-muted mt-0.5">{displayCount} player{displayCount !== 1 ? "s" : ""}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Export */}
-            {!loading && displayCount > 0 && (
-              <button
-                onClick={exportCSV}
-                className="flex items-center gap-1.5 px-3 py-2 border border-teal/20 rounded-lg text-xs font-oswald uppercase tracking-wider text-muted hover:text-navy hover:border-navy/30 transition-colors"
-                title="Export filtered results as CSV"
-              >
-                <Download size={14} />
-                CSV
-              </button>
-            )}
-            {/* View toggle */}
-            <div className="flex items-center bg-navy/[0.04] rounded-lg border border-teal/10 p-0.5">
-              <button
-                onClick={() => setViewMode("cards")}
-                className={`p-1.5 rounded-md transition-colors ${
-                  viewMode === "cards" ? "bg-white shadow-sm text-teal" : "text-muted hover:text-navy"
-                }`}
-                title="Card view"
-              >
-                <LayoutGrid size={16} />
-              </button>
-              <button
-                onClick={() => setViewMode("table")}
-                className={`p-1.5 rounded-md transition-colors ${
-                  viewMode === "table" ? "bg-white shadow-sm text-teal" : "text-muted hover:text-navy"
-                }`}
-                title="Table view"
-              >
-                <List size={16} />
-              </button>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* ── War Room Header ─────────────────────────────────── */}
+        <div className="bg-[#0F2942] rounded-xl p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-teal/20 flex items-center justify-center">
+                <PlusCircle size={20} className="text-teal" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-oswald uppercase tracking-wider text-white">Players</h1>
+                  <span className="text-[9px] font-oswald uppercase tracking-widest bg-teal/20 text-teal px-2 py-0.5 rounded">PXI</span>
+                </div>
+                <p className="text-xs text-white/50 mt-0.5">
+                  {!loading ? `${displayCount} player${displayCount !== 1 ? "s" : ""} in your system` : "Loading players..."}
+                </p>
+              </div>
             </div>
-            <Link
-              href="/players/manage"
-              className="flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
-            >
-              <Settings size={16} />
-              Manage
-            </Link>
-            <Link
-              href="/players/new"
-              className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-            >
-              <PlusCircle size={16} />
-              Add Player
-            </Link>
+            <div className="flex items-center gap-2">
+              {/* Export */}
+              {!loading && displayCount > 0 && (
+                <button
+                  onClick={exportCSV}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider text-white/60 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+                  title="Export filtered results as CSV"
+                >
+                  <Download size={14} />
+                  CSV
+                </button>
+              )}
+              {/* View toggle */}
+              <div className="flex items-center bg-white/5 rounded-lg border border-white/10 p-0.5">
+                <button
+                  onClick={() => setViewMode("cards")}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    viewMode === "cards" ? "bg-white/15 text-teal" : "text-white/40 hover:text-white/70"
+                  }`}
+                  title="Card view"
+                >
+                  <LayoutGrid size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    viewMode === "table" ? "bg-white/15 text-teal" : "text-white/40 hover:text-white/70"
+                  }`}
+                  title="Table view"
+                >
+                  <List size={16} />
+                </button>
+              </div>
+              <Link
+                href="/players/manage"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider text-white/60 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <Settings size={16} />
+                Manage
+              </Link>
+              <Link
+                href="/players/new"
+                className="flex items-center gap-1.5 bg-teal text-white px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-xs hover:bg-teal/90 transition-colors"
+              >
+                <PlusCircle size={16} />
+                Add Player
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* ── Tab Toggle ────────────────────────────────── */}
-        <div className="flex gap-1 mb-4">
-          <button
-            onClick={() => setTab("roster")}
-            className={`px-4 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-full border transition-colors ${
-              tab === "roster" ? "bg-teal/10 border-teal/30 text-teal" : "border-border text-muted hover:text-navy"
-            }`}
-          >
-            My Players
-          </button>
-          <button
-            onClick={() => setTab("league")}
-            className={`px-4 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-full border transition-colors ${
-              tab === "league" ? "bg-teal/10 border-teal/30 text-teal" : "border-border text-muted hover:text-navy"
-            }`}
-          >
-            League Search
-          </button>
-        </div>
+        {/* ── Tab Toggle + Filters Card ─────────────────── */}
+        <div style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }} className="bg-white overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-4" style={{ borderBottom: "1px solid #DDE6EF" }}>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#8BA4BB]" style={{ fontFamily: "ui-monospace, monospace" }}>VIEW</span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setTab("roster")}
+                className={`px-4 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-full border transition-colors ${
+                  tab === "roster" ? "bg-teal/10 border-teal/30 text-teal" : "border-border text-muted hover:text-navy"
+                }`}
+              >
+                My Players
+              </button>
+              <button
+                onClick={() => setTab("league")}
+                className={`px-4 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-full border transition-colors ${
+                  tab === "league" ? "bg-teal/10 border-teal/30 text-teal" : "border-border text-muted hover:text-navy"
+                }`}
+              >
+                League Search
+              </button>
+            </div>
+          </div>
+
+          <div className="px-5 py-4">
 
         {tab === "roster" && (<>
         {/* ── Saved Searches Chips ─────────────────────── */}
@@ -1268,6 +1285,9 @@ export default function PlayersPage() {
 
         {/* ── League Search Tab ───────────────────────────────── */}
         {tab === "league" && <LeaguePlayerSearch />}
+
+          </div>{/* end px-5 py-4 */}
+        </div>{/* end card wrapper */}
       </main>
     </ProtectedRoute>
   );

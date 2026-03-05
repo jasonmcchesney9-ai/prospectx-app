@@ -155,18 +155,23 @@ export default function PlayerGuidePage() {
   return (
     <ProtectedRoute>
       <NavBar />
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-teal/10 mb-4">
-            <BookOpen size={32} className="text-teal" />
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* ── War Room Header ─────────────────────────────────── */}
+        <div className="bg-[#0F2942] rounded-xl p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-teal/20 flex items-center justify-center">
+              <BookOpen size={20} className="text-teal" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-oswald uppercase tracking-wider text-white">Player &amp; Family Guide</h1>
+                <span className="text-[9px] font-oswald uppercase tracking-widest bg-teal/20 text-teal px-2 py-0.5 rounded">PXI</span>
+              </div>
+              <p className="text-xs text-white/50 mt-0.5">
+                Your co-pilot for supporting your player&apos;s growth — nutrition, training, pathways, mental game, equipment, and hockey knowledge.
+              </p>
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-navy font-oswald uppercase tracking-wider">
-            Player &amp; Family Guide
-          </h1>
-          <p className="text-sm text-muted mt-2 max-w-lg mx-auto">
-            Your co-pilot for supporting your player&apos;s growth — nutrition, training, pathways, mental game, equipment, and hockey knowledge.
-          </p>
         </div>
 
         {/* Development Journey Tracker */}
@@ -177,35 +182,35 @@ export default function PlayerGuidePage() {
           <ParentDoDontCard />
         </div>
 
-        {/* Tab Bar */}
-        <div className="flex flex-wrap gap-1 mb-4">
-          {GUIDE_SECTIONS.map((section) => (
-            <button
-              key={section.id}
-              onClick={() => setActiveTab(section.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
-                activeTab === section.id
-                  ? "bg-navy text-white"
-                  : "bg-navy/5 text-navy hover:bg-navy/10"
-              }`}
-            >
-              <section.icon size={14} />
-              {section.title}
-            </button>
-          ))}
-        </div>
+        {/* Tab Bar + Content Card */}
+        <div style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }} className="bg-white overflow-hidden">
+          <div className="px-5 py-3 flex flex-wrap gap-1" style={{ borderBottom: "1px solid #DDE6EF" }}>
+            {GUIDE_SECTIONS.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => setActiveTab(section.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
+                  activeTab === section.id
+                    ? "bg-navy text-white"
+                    : "bg-navy/5 text-navy hover:bg-navy/10"
+                }`}
+              >
+                <section.icon size={14} />
+                {section.title}
+              </button>
+            ))}
+          </div>
 
-        {/* Active Tab Content */}
-        {(() => {
-          const active = GUIDE_SECTIONS.find((s) => s.id === activeTab);
-          if (!active) return null;
-          const SectionContent = active.component;
-          return (
-            <div className="bg-white rounded-xl border border-teal/20 p-5">
-              <SectionContent />
-            </div>
-          );
-        })()}
+          {/* Active Tab Content */}
+          <div className="p-5">
+            {(() => {
+              const active = GUIDE_SECTIONS.find((s) => s.id === activeTab);
+              if (!active) return null;
+              const SectionContent = active.component;
+              return <SectionContent />;
+            })()}
+          </div>
+        </div>
 
         {/* PXI Quick Ask bar */}
         <div className="mt-8">

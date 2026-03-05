@@ -306,18 +306,29 @@ export default function FilmUploadPage() {
   return (
     <ProtectedRoute>
       <NavBar />
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link
-            href="/film"
-            className="text-muted hover:text-navy transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </Link>
-          <h1 className="text-2xl font-bold text-navy font-oswald uppercase tracking-wider">
-            Upload Video
-          </h1>
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* ── War Room Header ─────────────────────────────────── */}
+        <div className="bg-[#0F2942] rounded-xl p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/film"
+              className="text-white/40 hover:text-white transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </Link>
+            <div className="w-10 h-10 rounded-lg bg-teal/20 flex items-center justify-center">
+              <Upload size={20} className="text-teal" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-oswald uppercase tracking-wider text-white">Upload Video</h1>
+                <span className="text-[9px] font-oswald uppercase tracking-widest bg-teal/20 text-teal px-2 py-0.5 rounded">PXI</span>
+              </div>
+              <p className="text-xs text-white/50 mt-0.5">
+                Add game footage or paste a video link to start building film sessions.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* FFmpeg unavailable warning */}
@@ -331,46 +342,48 @@ export default function FilmUploadPage() {
         )}
 
         {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          {["Details", "Select File", "Upload"].map((label, i) => {
-            const stepKeys: Step[] = ["details", "file", "uploading"];
-            const idx = stepKeys.indexOf(step);
-            const isActive = i === idx;
-            const isCompleted = i < idx;
-            return (
-              <div key={label} className="flex items-center gap-2">
-                {i > 0 && (
+        <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1.5px solid #DDE6EF" }}>
+          <div className="flex items-center justify-center gap-3 px-5 py-3">
+            {["Details", "Select File", "Upload"].map((label, i) => {
+              const stepKeys: Step[] = ["details", "file", "uploading"];
+              const idx = stepKeys.indexOf(step);
+              const isActive = i === idx;
+              const isCompleted = i < idx;
+              return (
+                <div key={label} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <div
+                      className="w-8 h-px"
+                      style={{ background: isCompleted || isActive ? "#0D9488" : "#DDE6EF" }}
+                    />
+                  )}
                   <div
-                    className={`w-8 h-px ${
-                      isCompleted || isActive ? "bg-teal" : "bg-border"
-                    }`}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-1.5 text-[11px] font-oswald uppercase tracking-wider ${
-                    isActive
-                      ? "text-teal"
-                      : isCompleted
-                      ? "text-teal/60"
-                      : "text-muted/50"
-                  }`}
-                >
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    className={`flex items-center gap-1.5 text-[11px] font-oswald uppercase tracking-wider ${
                       isActive
-                        ? "bg-teal text-white"
+                        ? "text-teal"
                         : isCompleted
-                        ? "bg-teal/20 text-teal"
-                        : "bg-border text-muted/50"
+                        ? "text-teal/60"
+                        : "text-muted/50"
                     }`}
                   >
-                    {isCompleted ? "✓" : i + 1}
-                  </span>
-                  {label}
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold"
+                      style={
+                        isActive
+                          ? { background: "#0D9488", color: "#FFFFFF" }
+                          : isCompleted
+                          ? { background: "rgba(13,148,136,0.15)", color: "#0D9488" }
+                          : { background: "#DDE6EF", color: "#8BA4BB" }
+                      }
+                    >
+                      {isCompleted ? "✓" : i + 1}
+                    </span>
+                    {label}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         {/* Step 1 — Details */}
