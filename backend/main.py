@@ -1994,6 +1994,28 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_org ON playbook_boards(org_id)")
 
+    # ── Org Hub: draft_board_entries table ───────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS draft_board_entries (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            added_by TEXT,
+            board_rank INTEGER NOT NULL,
+            tier TEXT DEFAULT 'watch',
+            scout_grade TEXT,
+            notes TEXT,
+            tags TEXT DEFAULT '[]',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+            FOREIGN KEY (added_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_board_org ON draft_board_entries(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_board_player ON draft_board_entries(player_id)")
+
     # ── Org Foundation: film_clips table ─────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS film_clips (
@@ -15175,6 +15197,241 @@ Return ONLY the JSON array, no markdown fences."""
             recommendations = []
 
         return {"recommendations": recommendations, "source": "pxi"}
+    finally:
+        conn.close()
+
+
+# ── Org Hub: Draft Board ───────────────────────────────────────
+
+DRAFT_BOARD_TIERS = ["target", "watch", "sleeper", "pass"]
+
+@app.get("/org-hub/draft-board")
+async def list_draft_board(token_data: dict = Depends(verify_token)):
+    """List all draft board entries with player data and PXR scores."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT db.*,
+                   p.first_name, p.last_name, p.position, p.current_team,
+                   p.current_league, p.birth_year, p.jersey_number, p.image_url,
+                   ps.gp, ps.g, ps.a, ps.p AS pts, ps.season,
+                   pxr.pxr_score, pxr.confidence_tier AS pxr_confidence, pxr.gp AS pxr_gp
+            FROM draft_board_entries db
+            JOIN players p ON db.player_id = p.id
+            LEFT JOIN (
+                SELECT player_id, gp, g, a, p, season,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM player_stats
+            ) ps ON p.id = ps.player_id AND ps.rn = 1
+            LEFT JOIN (
+                SELECT player_id, pxr_score, confidence_tier, gp,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM pxr_scores
+            ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
+            WHERE db.org_id = ?
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY db.board_rank
+        """, (org_id,)).fetchall()
+        entries = []
+        for r in rows:
+            d = dict(r)
+            if d.get("tags"):
+                try:
+                    d["tags"] = json.loads(d["tags"])
+                except (json.JSONDecodeError, TypeError):
+                    d["tags"] = []
+            d["ppg"] = round(d["pts"] / d["gp"], 2) if d.get("gp") and d["gp"] > 0 and d.get("pts") else None
+            entries.append(d)
+        return {"entries": entries}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/draft-board", status_code=201)
+async def add_to_draft_board(body: dict, token_data: dict = Depends(verify_token)):
+    """Add a player to the draft board."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    player_id = body.get("player_id", "").strip()
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+    tier = body.get("tier", "watch")
+    if tier not in DRAFT_BOARD_TIERS:
+        tier = "watch"
+    notes = (body.get("notes") or "").strip()
+    scout_grade = (body.get("scout_grade") or "").strip() or None
+    conn = get_db()
+    try:
+        # Check not already on board
+        existing = conn.execute(
+            "SELECT id FROM draft_board_entries WHERE org_id = ? AND player_id = ?",
+            (org_id, player_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player already on draft board")
+        # Get next rank
+        max_rank = conn.execute(
+            "SELECT COALESCE(MAX(board_rank), 0) FROM draft_board_entries WHERE org_id = ?",
+            (org_id,),
+        ).fetchone()[0]
+        entry_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO draft_board_entries (id, org_id, player_id, added_by, board_rank, tier, scout_grade, notes, tags, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)
+        """, (entry_id, org_id, player_id, user_id, max_rank + 1, tier, scout_grade, notes, now, now))
+        conn.commit()
+        return {"id": entry_id, "board_rank": max_rank + 1, "detail": "Player added to draft board"}
+    finally:
+        conn.close()
+
+
+@app.patch("/org-hub/draft-board/{entry_id}")
+async def update_draft_board_entry(entry_id: str, body: dict, token_data: dict = Depends(verify_token)):
+    """Update a draft board entry (tier, notes, tags, scout_grade, board_rank)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM draft_board_entries WHERE id = ? AND org_id = ?",
+            (entry_id, org_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        updates = []
+        params = []
+        for field in ("tier", "notes", "scout_grade"):
+            if field in body:
+                updates.append(f"{field} = ?")
+                params.append(body[field])
+        if "tags" in body:
+            updates.append("tags = ?")
+            params.append(json.dumps(body["tags"]) if isinstance(body["tags"], list) else str(body["tags"]))
+        if "board_rank" in body:
+            updates.append("board_rank = ?")
+            params.append(body["board_rank"])
+        if not updates:
+            return {"detail": "Nothing to update"}
+        updates.append("updated_at = ?")
+        params.append(datetime.utcnow().isoformat())
+        params.append(entry_id)
+        conn.execute(f"UPDATE draft_board_entries SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"detail": "Entry updated", "id": entry_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/org-hub/draft-board/{entry_id}")
+async def remove_from_draft_board(entry_id: str, token_data: dict = Depends(verify_token)):
+    """Remove a player from the draft board."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        deleted = conn.execute(
+            "DELETE FROM draft_board_entries WHERE id = ? AND org_id = ?",
+            (entry_id, org_id),
+        ).rowcount
+        conn.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        return {"detail": "Removed from draft board"}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/draft-board/reorder")
+async def reorder_draft_board(body: dict, token_data: dict = Depends(verify_token)):
+    """Bulk update ranks after drag reorder. Expects {ranks: [{id, board_rank}, ...]}."""
+    org_id = token_data["org_id"]
+    ranks = body.get("ranks", [])
+    if not ranks:
+        return {"detail": "Nothing to reorder"}
+    conn = get_db()
+    try:
+        now = datetime.utcnow().isoformat()
+        for item in ranks:
+            conn.execute(
+                "UPDATE draft_board_entries SET board_rank = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+                (item["board_rank"], now, item["id"], org_id),
+            )
+        conn.commit()
+        return {"detail": f"Reordered {len(ranks)} entries"}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/draft-board/analyse")
+async def analyse_draft_board(body: dict, token_data: dict = Depends(verify_token)):
+    """PXI draft board analysis."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT db.board_rank, db.tier, db.scout_grade, db.notes,
+                   p.first_name, p.last_name, p.position, p.current_team,
+                   p.current_league, p.birth_year,
+                   ps.gp, ps.g, ps.a, ps.p AS pts,
+                   pxr.pxr_score, pxr.confidence_tier
+            FROM draft_board_entries db
+            JOIN players p ON db.player_id = p.id
+            LEFT JOIN (
+                SELECT player_id, gp, g, a, p,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM player_stats
+            ) ps ON p.id = ps.player_id AND ps.rn = 1
+            LEFT JOIN (
+                SELECT player_id, pxr_score, confidence_tier,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM pxr_scores
+            ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
+            WHERE db.org_id = ?
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY db.board_rank
+        """, (org_id,)).fetchall()
+
+        if not rows:
+            return {"analysis": "Draft board is empty. Add prospects to get an analysis."}
+
+        board_text = f"DRAFT BOARD ({len(rows)} prospects):\n"
+        for r in rows:
+            name = f"{r['first_name']} {r['last_name']}"
+            pos = r["position"] or "?"
+            team = r["current_team"] or "?"
+            league = r["current_league"] or "?"
+            age = f"Age {2026 - r['birth_year']}" if r["birth_year"] else ""
+            stats = f"{r['gp'] or 0}GP {r['g'] or 0}G {r['a'] or 0}A {r['pts'] or 0}P" if r["gp"] else "No stats"
+            pxr = f"PXR:{r['pxr_score']:.1f}" if r["pxr_score"] else ""
+            tier = r["tier"] or "watch"
+            grade = f"Grade:{r['scout_grade']}" if r["scout_grade"] else ""
+            board_text += f"  #{r['board_rank']} {name} ({pos}) {team}/{league} {age} | {stats} {pxr} | Tier:{tier} {grade}\n"
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return {"analysis": f"**Draft Board Analysis**\n\n{len(rows)} prospects on board. Connect an API key to generate full PXI analysis with tier assessments, positional gap analysis, and draft strategy recommendations."}
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": f"""You are PXI, a professional hockey draft analyst. Analyse this draft board and provide strategic recommendations.
+
+{board_text}
+
+Provide a structured analysis with these sections (use ALL CAPS headers):
+BOARD OVERVIEW — Overall assessment of board strength and depth
+TIER ASSESSMENT — Evaluate the quality of each tier (Target, Watch, Sleeper, Pass)
+POSITIONAL GAPS — Identify missing positions or over-representation
+SYSTEM FIT — How these prospects fit a team's needs
+DRAFT STRATEGY — Recommended priorities and approach
+
+Keep each section to 2-3 sentences. Be specific about players by name."""}],
+        )
+        analysis_text = msg.content[0].text if msg.content else "Analysis failed."
+        return {"analysis": analysis_text}
     finally:
         conn.close()
 
