@@ -41716,8 +41716,31 @@ async def list_film_sessions(
                     d["pxi_output"] = json.loads(d["pxi_output"])
                 except (json.JSONDecodeError, TypeError):
                     pass
+            # Add clip_count and event_count
+            if isinstance(d, dict):
+                sid = d.get("id")
+                if sid:
+                    cc = conn.execute("SELECT COUNT(*) FROM video_clips WHERE session_id = ? AND org_id = ?", (sid, org_id)).fetchone()
+                    d["clip_count"] = cc[0] if cc else 0
+                    ec = conn.execute("SELECT COUNT(*) FROM video_events WHERE session_id = ? AND org_id = ?", (sid, org_id)).fetchone()
+                    d["event_count"] = ec[0] if ec else 0
             results.append(d)
         return results
+    finally:
+        conn.close()
+
+
+@app.get("/film/stats")
+async def get_film_stats(token_data: dict = Depends(verify_token)):
+    """Return aggregate film hub stats for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        sessions = conn.execute("SELECT COUNT(*) FROM video_sessions WHERE org_id = ?", (org_id,)).fetchone()[0]
+        clips = conn.execute("SELECT COUNT(*) FROM video_clips WHERE org_id = ?", (org_id,)).fetchone()[0]
+        events = conn.execute("SELECT COUNT(*) FROM video_events WHERE org_id = ?", (org_id,)).fetchone()[0]
+        film_reports = conn.execute("SELECT COUNT(*) FROM reports WHERE org_id = ? AND source_type = 'film_analysis' AND status = 'complete'", (org_id,)).fetchone()[0]
+        return {"sessions": sessions, "clips": clips, "events": events, "film_reports": film_reports}
     finally:
         conn.close()
 
