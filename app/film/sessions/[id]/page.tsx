@@ -31,6 +31,7 @@ import {
   SkipForward,
   Gauge,
   Film,
+  Search,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -38,6 +39,7 @@ import VideoPlayer, { VideoPlayerHandle } from "@/components/film/VideoPlayer";
 import ClipPanel from "@/components/film/ClipPanel";
 import EventTagger from "@/components/film/EventTagger";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import toast from "react-hot-toast";
 
 interface SessionData {
@@ -190,6 +192,9 @@ export default function FilmSessionViewerPage() {
   const [rosterPlayers, setRosterPlayers] = useState<RosterPlayer[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const [playerSearchResults, setPlayerSearchResults] = useState<RosterPlayer[]>([]);
+  const [searchingPlayers, setSearchingPlayers] = useState(false);
 
   // Opponent selector (for Opponent Prep)
   const [teams, setTeams] = useState<TeamOption[]>([]);
@@ -377,12 +382,15 @@ export default function FilmSessionViewerPage() {
       if (config.needsPlayer) {
         setPendingReportType(type);
         setSelectedPlayerId("");
+        setPlayerSearchQuery("");
+        setPlayerSearchResults([]);
         setShowTypeSelector(false);
-        // Load roster if we have a team_id
-        if (session?.team_id) {
+        // Load roster: try session team_id first, then user's preferred_team_id
+        const teamId = session?.team_id || getUser()?.preferred_team_id;
+        if (teamId) {
           setLoadingRoster(true);
           try {
-            const res = await api.get(`/players`, { params: { team_id: session.team_id, limit: 200 } });
+            const res = await api.get(`/players`, { params: { team_id: teamId, limit: 200 } });
             const players = Array.isArray(res.data) ? res.data : res.data?.players || [];
             setRosterPlayers(players);
           } catch {
@@ -670,13 +678,58 @@ export default function FilmSessionViewerPage() {
                   </div>
                 ) : rosterPlayers.length === 0 ? (
                   <div>
-                    <p className="text-[11px] text-muted/60 mb-3">No roster loaded. Enter player ID or generate without a specific player.</p>
+                    <p className="text-[11px] text-muted/60 mb-2">No team roster available. Search for a player by name:</p>
+                    <div className="relative mb-2">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/40" />
+                      <input
+                        type="text"
+                        value={playerSearchQuery}
+                        onChange={async (e) => {
+                          const q = e.target.value;
+                          setPlayerSearchQuery(q);
+                          if (q.trim().length < 2) { setPlayerSearchResults([]); return; }
+                          setSearchingPlayers(true);
+                          try {
+                            const res = await api.get(`/players`, { params: { search: q.trim(), limit: 20 } });
+                            const results = Array.isArray(res.data) ? res.data : res.data?.players || [];
+                            setPlayerSearchResults(results);
+                          } catch { setPlayerSearchResults([]); }
+                          finally { setSearchingPlayers(false); }
+                        }}
+                        placeholder="Search players..."
+                        className="w-full border border-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                      />
+                    </div>
+                    {searchingPlayers && (
+                      <div className="flex items-center justify-center py-2">
+                        <Loader2 size={12} className="animate-spin text-teal" />
+                      </div>
+                    )}
+                    {playerSearchResults.length > 0 && (
+                      <select
+                        value={selectedPlayerId}
+                        onChange={(e) => setSelectedPlayerId(e.target.value)}
+                        className="w-full border border-border rounded-lg px-3 py-1.5 text-xs text-navy mb-2 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                      >
+                        <option value="">Choose a player...</option>
+                        {playerSearchResults.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.first_name} {p.last_name}{p.position ? ` (${p.position})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => executeGeneration("film_player_analysis")}
-                        className="flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider bg-teal text-white hover:bg-teal/90 transition-colors"
+                        onClick={() => executeGeneration("film_player_analysis", selectedPlayerId || undefined)}
+                        disabled={!selectedPlayerId}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
+                          selectedPlayerId
+                            ? "bg-teal text-white hover:bg-teal/90"
+                            : "bg-border text-muted/50 cursor-not-allowed"
+                        }`}
                       >
-                        Generate Anyway
+                        Generate
                       </button>
                       <button
                         onClick={() => setPendingReportType(null)}

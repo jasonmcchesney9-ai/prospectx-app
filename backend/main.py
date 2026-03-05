@@ -42046,23 +42046,36 @@ async def delete_film_comment(comment_id: str, token_data: dict = Depends(verify
 # ── Film Session PXI Report Generation ────────────────────────
 
 FILM_REPORT_PROMPTS = {
-    "film_post_game_review": """You are analyzing a post-game film session for a junior hockey coaching staff.
+    "film_post_game_review": """You are a head coach reviewing game film with your staff.
+Write like you are talking to your assistants in the video room — direct, specific, no fluff.
+This is a coaching narrative, NOT a data dump. Do not list raw clip numbers or raw timestamps.
+Convert all time references to period + time format (e.g. "midway through the 2nd" or "late 3rd, 2:14 remaining").
+
 Generate a structured post-game review with these sections:
 
 GAME_SUMMARY
-Key sequences from tagged clips — what happened, when, and who was involved.
+Tell the story of the game through the film. What defined this game? What were the critical sequences?
+Weave in who was involved and when — but as a narrative, not a bullet list of clips.
 
 PERSONNEL_OBSERVATIONS
-Player performance observations organized by clip. Reference specific timestamps.
+Who stood out — good and bad? Be specific about what you saw on tape.
+Group by impact, not by clip order. Name players, describe what they did, explain why it matters.
+If a player appears in multiple clips showing the same habit, call it a pattern.
 
 TACTICAL_PATTERNS
-Systems and tendencies identified from the film. Breakout patterns, forecheck structure, defensive coverage.
+What systems worked and what broke down? Breakout execution, forecheck pressure, d-zone coverage.
+Describe what you actually see on the tape — formations, rotations, gaps.
+If the opponent exploited something, say exactly what and how.
 
 ADJUSTMENTS
-Specific recommendations for the next game based on what the film shows.
+What do we fix before the next game? Be coaching-specific:
+- Drill recommendations tied to breakdowns you saw
+- Personnel changes or deployment shifts backed by film evidence
+- System tweaks with clear reasoning from the tape
 
-Use COACH lens. Evidence-based only — reference clips by timestamp. Never invent sequences not in the tagged data.
-If fewer than 3 clips are tagged, note limited film coverage and caveat analysis accordingly.""",
+Use COACH lens throughout. Every observation must come from tagged clip data — never invent sequences.
+If fewer than 3 clips are tagged, note limited film coverage and caveat analysis accordingly.
+Write with urgency and authority — this goes on the whiteboard for tomorrow's practice.""",
 
     "film_opponent_prep": """You are analyzing opponent film for a junior hockey coaching staff preparing for a game.
 Generate a structured opponent prep report with these sections:
