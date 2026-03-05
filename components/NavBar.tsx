@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from "react";
 import {
   Users,
   Building2,
+  ArrowLeftRight,
+  TrendingUp,
   FileText,
   Upload,
   BarChart3,
@@ -195,9 +197,17 @@ const COACHING_ITEMS: NavItem[] = [
 
 // Org Hub items (PRO only — spec Table 11)
 const ORG_HUB_ITEMS: NavItem[] = [
+  { href: "/org-hub", label: "Org Hub", icon: Building2 },
+  { href: "/org-hub/roster-board", label: "Roster Board", icon: Users },
+  { href: "/org-hub/trade-board", label: "Trade Board", icon: ArrowLeftRight },
+  { href: "/org-hub/draft-board", label: "Draft Board", icon: Trophy },
+  { href: "/org-hub/playbook", label: "System Playbook", icon: BookOpen },
+  { href: "/org-hub/development", label: "Development", icon: TrendingUp },
+  { href: "/org-hub/scouting", label: "Scouting Pipeline", icon: Eye },
+  { href: "/org-hub/film-library", label: "Film Library", icon: Film },
+  { href: "/org-hub/whiteboard", label: "Whiteboard", icon: PenTool },
   { href: "/film", label: "Film Room", icon: Video },
   { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/whiteboards", label: "Whiteboard", icon: PenTool },
 ];
 
 // Broadcast items (PRO dropdown — MEDIA gets a direct link)
@@ -434,14 +444,14 @@ export default function NavBar() {
               </button>
             )}
 
+            {/* Org Hub dropdown (PRO only — between Coaching and Imports) */}
+            {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
+
             {/* Broadcast dropdown (PRO only — MEDIA gets direct link via MEDIA_NAV_LEFT) */}
             {navConfig.showBroadcastDropdown && <BroadcastDropdown pathname={pathname} />}
 
             {/* Imports dropdown (PRO only) */}
             {navConfig.showImports && <ImportDropdown pathname={pathname} />}
-
-            {/* Org Hub dropdown (PRO only) */}
-            {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
 
             {navConfig.right.map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
