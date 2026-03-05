@@ -43,6 +43,8 @@ import {
   CheckCircle2,
   RefreshCw,
   Film,
+  WifiOff,
+  Wifi,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -902,6 +904,7 @@ function UploadIndicator() {
   if (upload.phase === "idle") return null;
 
   const isUploading = upload.phase === "uploading";
+  const isPaused = upload.phase === "paused";
   const isProcessing = upload.phase === "processing";
   const isReady = upload.phase === "ready";
   const isError = upload.phase === "error";
@@ -911,12 +914,16 @@ function UploadIndicator() {
     ? "rgba(13,148,136,0.25)"
     : isError
     ? "rgba(239,68,68,0.25)"
+    : isPaused
+    ? "rgba(234,88,12,0.2)"
     : "rgba(13,148,136,0.15)";
-  const pillColor = isReady ? "#10B981" : isError ? "#EF4444" : "#14B8A6";
+  const pillColor = isReady ? "#10B981" : isError ? "#EF4444" : isPaused ? "#EA580C" : "#14B8A6";
   const pillBorder = isReady
     ? "1.5px solid rgba(16,185,129,0.4)"
     : isError
     ? "1.5px solid rgba(239,68,68,0.4)"
+    : isPaused
+    ? "1.5px solid rgba(234,88,12,0.4)"
     : "1.5px solid rgba(13,148,136,0.3)";
 
   // Truncate filename
@@ -937,6 +944,13 @@ function UploadIndicator() {
             <Upload size={10} />
             <span>{upload.progress}%</span>
             <span className="hidden lg:inline max-w-[100px] truncate">{shortName}</span>
+          </>
+        )}
+        {isPaused && (
+          <>
+            <WifiOff size={10} />
+            <span>Paused</span>
+            <span className="hidden lg:inline">{upload.progress}%</span>
           </>
         )}
         {isProcessing && (
@@ -982,20 +996,31 @@ function UploadIndicator() {
               <p className="text-xs truncate" style={{ color: "#0F2942" }}>{upload.fileName}</p>
             </div>
 
-            {/* Progress bar (uploading / processing) */}
-            {(isUploading || isProcessing) && (
+            {/* Progress bar (uploading / paused / processing) */}
+            {(isUploading || isPaused || isProcessing) && (
               <div>
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="text-sm font-bold font-oswald" style={{ color: "#0F2942" }}>{upload.progress}%</span>
-                  <span className="text-[10px] uppercase" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: isProcessing ? "#EA580C" : "#0D9488" }}>
-                    {isProcessing ? "Processing with Mux" : "Uploading"}
+                  <span className="text-[10px] uppercase" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: isPaused ? "#EA580C" : isProcessing ? "#EA580C" : "#0D9488" }}>
+                    {isPaused ? "Paused — Offline" : isProcessing ? "Processing with Mux" : "Uploading"}
                   </span>
                 </div>
                 <div className="w-full rounded-full h-2" style={{ background: "#DDE6EF" }}>
                   <div
                     className="h-2 rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${upload.progress}%`, background: isProcessing ? "#EA580C" : "#0D9488" }}
+                    style={{ width: `${upload.progress}%`, background: isPaused ? "#EA580C" : isProcessing ? "#EA580C" : "#0D9488" }}
                   />
+                </div>
+              </div>
+            )}
+
+            {/* Paused message */}
+            {isPaused && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(234,88,12,0.06)", border: "1px solid rgba(234,88,12,0.15)" }}>
+                <WifiOff size={12} style={{ color: "#EA580C" }} />
+                <div>
+                  <p className="text-[11px] font-medium" style={{ color: "#EA580C" }}>Waiting for connection...</p>
+                  <p className="text-[10px]" style={{ color: "#8BA4BB" }}>Upload will resume automatically when back online.</p>
                 </div>
               </div>
             )}
@@ -1046,7 +1071,7 @@ function UploadIndicator() {
 
             {/* Cancel / Dismiss */}
             <div className="flex justify-end pt-1 border-t" style={{ borderColor: "#DDE6EF" }}>
-              {(isUploading || isProcessing) ? (
+              {(isUploading || isPaused || isProcessing) ? (
                 <button
                   onClick={() => { setExpanded(false); actions.cancelUpload(); }}
                   className="text-[10px] font-bold uppercase transition-colors hover:opacity-70"

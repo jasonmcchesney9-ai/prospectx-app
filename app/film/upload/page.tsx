@@ -149,6 +149,7 @@ export default function FilmUploadPage() {
     // Map context phase → local uploadStatus
     const phaseMap: Record<string, UploadStatus> = {
       uploading: "uploading",
+      paused: "uploading",  // Show as uploading on the page (nav shows paused)
       processing: "processing",
       ready: "ready",
       error: "error",
