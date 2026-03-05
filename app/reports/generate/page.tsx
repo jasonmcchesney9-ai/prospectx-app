@@ -40,7 +40,7 @@ const AUDIENCE_TEMPLATES: Record<Exclude<Audience, "all">, string[]> = {
   coach: ["game_decision", "opponent_gameplan", "practice_plan", "playoff_series", "line_chemistry", "st_optimization", "team_identity", "pre_game_intel", "forward_operating_profile", "defense_operating_profile", "bench_card", "game_day_one_pager", "weekly_coaching_summary"],
   gm: ["trade_target", "goalie_tandem", "free_agent_market", "operations", "season_projection", "forward_operating_profile", "defense_operating_profile", "trade_impact_simulation", "draft_class_summary"],
   agent: ["agent_pack", "development_roadmap", "player_guide_prep_college", "agent_projection"],
-  parent: ["family_card", "development_roadmap", "player_guide_prep_college", "parent_season_update"],
+  parent: ["family_card", "parent_report", "development_roadmap", "player_guide_prep_college", "parent_season_update"],
 };
 
 // Best (recommended) template per audience

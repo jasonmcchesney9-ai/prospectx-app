@@ -1454,6 +1454,8 @@ MODE_TEMPLATE_WIRING = {
     "special_teams_audit":       {"primary": "analyst", "secondary": "scout"},
     # Addendum 13 — Highlight Reel Builder
     "recruiting_highlight_builder": {"primary": "coach", "secondary": "scout"},
+    # Fix — indices_dashboard wiring
+    "indices_dashboard":         {"primary": "analyst",  "secondary": "gm"},
     # Addendum 14 — 5 New General Report Types
     "game_day_one_pager":        {"primary": "coach",   "secondary": None},
     "weekly_coaching_summary":   {"primary": "analyst",  "secondary": "coach"},
@@ -1727,6 +1729,11 @@ REQUIRED_SECTIONS_BY_TYPE = {
     ],
     "recruiting_highlight_builder": [
         "SUGGESTED_ORDER", "SECTION_BREAKS", "OPENING_NOTE", "CLOSING_NOTE",
+    ],
+    # Fix — indices_dashboard sections
+    "indices_dashboard": [
+        "OVERALL_PROSPECTX_GRADE", "METRICS_BREAKDOWN", "PERCENTILE_RANKINGS",
+        "METRIC_CORRELATION", "SYSTEM_FIT", "DEVELOPMENT_PRIORITIES", "COMPARABLE_PLAYERS",
     ],
     # Addendum 14 — 5 New General Report Types
     "game_day_one_pager": [
@@ -4464,6 +4471,9 @@ Perspective: {resolved_perspective}
     # Addendum 13 — Highlight Reel Builder
     elif report_type == "recruiting_highlight_builder":
         parts.append(RECRUITING_HIGHLIGHT_BUILDER)
+    # Fix — indices_dashboard
+    elif report_type == "indices_dashboard":
+        parts.append(INDICES_DASHBOARD_PROMPT)
     # Addendum 14 — 5 New General Report Types
     elif report_type == "game_day_one_pager":
         parts.append(GAME_DAY_ONE_PAGER)
@@ -6632,6 +6642,66 @@ RULES:
 
 
 # ─────────────────────────────────────────────────────────
+# Fix — INDICES_DASHBOARD prompt constant
+# ─────────────────────────────────────────────────────────
+
+INDICES_DASHBOARD_PROMPT = '''
+PROSPECTX METRICS DASHBOARD — PERFORMANCE INDEX ANALYSIS
+==========================================================
+Audience: Coaches, GMs, scouts. Staff-level analytics report.
+Purpose: Visual dashboard of all PXR performance indices with league percentile
+rankings, position group comparisons, and development priority indicators.
+Tokens: 3000 max.
+
+You have been given:
+- Player profile: name, position, age, team, league
+- PXR composite score and 4 pillar scores (Offense, Defense, Possession, Physical)
+- PXI Intelligence score and sub-indices
+- League and cohort percentile rankings
+- Season stats, game log, and progression data
+
+OVERALL_PROSPECTX_GRADE
+Synthesize all metrics into a single letter grade (A through D scale) with numeric score (0-100).
+State the confidence tier (High / Moderate / Small Sample) and explain the basis.
+
+METRICS_BREAKDOWN
+For EACH of the core PXR pillars (Offense, Defense, Possession, Physical) and PXI Intelligence:
+- The score and percentile
+- Rating tier: Elite (90+) / Above Average (75-89) / Average (50-74) / Below Average (25-49) / Developing (<25)
+- 2-3 sentence analysis explaining WHY the player scores at that level, grounded in stats
+
+PERCENTILE_RANKINGS
+Compare this player vs:
+- Position peers in the same league
+- All players in the league regardless of position
+- Age-group peers (same birth year)
+Show where they stand in each context.
+
+METRIC_CORRELATION
+How do the pillars work together? Identify synergies and contradictions.
+Example: "High Offense + High Possession = elite cycle game. But low Physical limits
+net-front effectiveness, creating a ceiling on his power play role."
+
+SYSTEM_FIT
+Based on the metric profile, what tactical role and team system fits this player best?
+What kind of team would maximize his strengths and cover his weaknesses?
+
+DEVELOPMENT_PRIORITIES
+Based on metric analysis, what 3 specific improvements would most impact their game?
+Rank by expected return on development investment.
+
+COMPARABLE_PLAYERS
+2-3 players with similar metric profiles. State which metrics align and which diverge.
+
+RULES:
+- Show specific numbers throughout. This is an analytics document, not prose.
+- If PXR data is incomplete, state DATA NOT AVAILABLE for missing pillars.
+- Never fabricate percentiles or scores not present in the data.
+- Use ANALYST + GM lens. Numbers drive the narrative.
+'''
+
+
+# ─────────────────────────────────────────────────────────
 # Addendum 14 — 5 New General Report Prompts
 # ─────────────────────────────────────────────────────────
 
@@ -7323,6 +7393,9 @@ def build_system_prompt(
     # Addendum 13 — Highlight Reel Builder
     elif report_type == "recruiting_highlight_builder":
         parts.append(RECRUITING_HIGHLIGHT_BUILDER)
+    # Fix — indices_dashboard
+    elif report_type == "indices_dashboard":
+        parts.append(INDICES_DASHBOARD_PROMPT)
     # Addendum 14 — 5 New General Report Types
     elif report_type == "game_day_one_pager":
         parts.append(GAME_DAY_ONE_PAGER)

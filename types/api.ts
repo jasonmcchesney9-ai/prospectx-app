@@ -928,6 +928,7 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   agent_pack: "Agent Pack",
   development_roadmap: "Development Roadmap",
   family_card: "Player/Family Card",
+  parent_report: "Parent Report",
   line_chemistry: "Line Chemistry",
   st_optimization: "Special Teams",
   trade_target: "Trade/Acquisition",
@@ -941,7 +942,6 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   // Priority 2 reports
   indices_dashboard: "ProspectX Metrics Dashboard",
   metrics_dashboard: "ProspectX Metrics Dashboard",
-  player_projection: "Next Season Projection",
   next_season_projection: "Next Season Projection",
   league_benchmarks: "League Benchmarks",
   season_projection: "Season Projection",
@@ -985,12 +985,12 @@ export const PLAYER_REPORT_TYPES = [
   "agent_pack",
   "development_roadmap",
   "family_card",
+  "parent_report",
   "trade_target",
   "draft_comparative",
   "season_progress",
   "indices_dashboard",
   "metrics_dashboard",
-  "player_projection",
   "next_season_projection",
   "player_guide_prep_college",
   "elite_profile",
@@ -1049,7 +1049,7 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     label: "Player Development",
     description: "Development roadmaps, season tracking, and family communication.",
     accent: "teal",
-    types: ["development_roadmap", "season_progress", "player_projection", "next_season_projection", "player_guide_prep_college", "indices_dashboard", "metrics_dashboard", "in_season_projections", "player_season_roadmap", "role_adjustment"],
+    types: ["development_roadmap", "season_progress", "next_season_projection", "player_guide_prep_college", "indices_dashboard", "metrics_dashboard", "in_season_projections", "player_season_roadmap", "role_adjustment"],
   },
   {
     key: "team_strategy",
@@ -1063,7 +1063,7 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     label: "Communication",
     description: "Reports for families, agents, and external stakeholders.",
     accent: "teal",
-    types: ["family_card", "agent_pack", "parent_season_update"],
+    types: ["family_card", "parent_report", "agent_pack", "parent_season_update"],
   },
   {
     key: "risk",
@@ -1094,7 +1094,6 @@ export const REPORT_AUDIENCE_MAP: Record<string, string[]> = {
   // Player Development
   development_roadmap: ["coach", "scout", "parent"],
   season_progress: ["coach", "scout"],
-  player_projection: ["gm", "coach", "scout"],
   next_season_projection: ["gm", "coach", "scout"],
   player_guide_prep_college: ["parent", "agent", "coach"],
   indices_dashboard: ["scout", "gm", "coach"],
@@ -1115,6 +1114,7 @@ export const REPORT_AUDIENCE_MAP: Record<string, string[]> = {
   special_teams_audit: ["coach"],
   // Communication
   family_card: ["parent", "coach"],
+  parent_report: ["parent", "coach"],
   agent_pack: ["agent", "scout"],
   // Risk Management
   trade_target: ["gm", "scout"],
@@ -1138,7 +1138,7 @@ export const WIRED_REPORT_TYPES: Set<string> = new Set([
   // Original 19 templates
   "pro_skater", "unified_prospect", "goalie", "game_decision", "season_intelligence",
   "operations", "team_identity", "opponent_gameplan", "agent_pack", "development_roadmap",
-  "family_card", "line_chemistry", "st_optimization", "trade_target", "draft_comparative",
+  "family_card", "parent_report", "line_chemistry", "st_optimization", "trade_target", "draft_comparative",
   "season_progress", "practice_plan", "playoff_series", "goalie_tandem",
   // Phase 2+3 templates
   "pre_game_intel", "player_guide_prep_college", "elite_profile",
@@ -1151,6 +1151,8 @@ export const WIRED_REPORT_TYPES: Set<string> = new Set([
   // V1 Polish — ReportSpecs_v1
   "next_season_projection", "metrics_dashboard", "free_agent_market",
   "free_agent_target", "league_benchmarks", "season_projection",
+  // Fix — indices_dashboard now wired
+  "indices_dashboard",
   // Addendum 14 — 5 New General Report Types
   "game_day_one_pager", "weekly_coaching_summary", "parent_season_update",
   "trade_impact_simulation", "draft_class_summary",
@@ -1489,11 +1491,11 @@ export const ANALYTICS_CATEGORIES = {
       },
       projections: {
         label: "Projections & Development",
-        types: ["development_roadmap", "draft_comparative", "player_projection"],
+        types: ["development_roadmap", "draft_comparative", "next_season_projection", "in_season_projections"],
       },
       family: {
         label: "Presentation",
-        types: ["family_card", "agent_pack"],
+        types: ["family_card", "parent_report", "agent_pack"],
       },
     },
   },
