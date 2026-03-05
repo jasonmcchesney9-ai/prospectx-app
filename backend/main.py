@@ -13052,9 +13052,9 @@ async def list_players(
                 ) pi ON p.id = pi.player_id"""
 
         if search:
-            where_clauses.append("(p.first_name LIKE ? OR p.last_name LIKE ? OR p.current_team LIKE ?)")
+            where_clauses.append("(p.first_name LIKE ? OR p.last_name LIKE ? OR (p.first_name || ' ' || p.last_name) LIKE ? OR p.current_team LIKE ?)")
             s = f"%{search}%"
-            params.extend([s, s, s])
+            params.extend([s, s, s, s])
         if position:
             where_clauses.append("p.position = ?")
             params.append(position.upper())
@@ -13135,9 +13135,9 @@ async def list_players(
         params = [org_id]
 
         if search:
-            query += " AND (first_name LIKE ? OR last_name LIKE ? OR current_team LIKE ?)"
+            query += " AND (first_name LIKE ? OR last_name LIKE ? OR (first_name || ' ' || last_name) LIKE ? OR current_team LIKE ?)"
             s = f"%{search}%"
-            params.extend([s, s, s])
+            params.extend([s, s, s, s])
         if position:
             query += " AND position = ?"
             params.append(position.upper())
@@ -13229,9 +13229,9 @@ async def list_player_cards(
     params: list = [org_id]
 
     if search:
-        where_clauses.append("(p.first_name LIKE ? OR p.last_name LIKE ? OR p.current_team LIKE ?)")
+        where_clauses.append("(p.first_name LIKE ? OR p.last_name LIKE ? OR (p.first_name || ' ' || p.last_name) LIKE ? OR p.current_team LIKE ?)")
         s = f"%{search}%"
-        params.extend([s, s, s])
+        params.extend([s, s, s, s])
     if position:
         where_clauses.append("p.position = ?")
         params.append(position.upper())
@@ -13511,6 +13511,7 @@ class GameIssueGenerateRequest(BaseModel):
 
 # ── Player Search (autocomplete) ─────────────────────────────
 
+@app.get("/players/search/autocomplete")
 @app.get("/players/search")
 async def search_players_autocomplete(
     q: str = Query(..., min_length=2, max_length=100),
@@ -33984,8 +33985,9 @@ def _pt_search_scout_notes(params: dict, org_id: str, user_id: str) -> tuple[dic
         query_params: list = [org_id, user_id]
 
         if player_name:
-            query += " AND (p.first_name || ' ' || p.last_name LIKE ?)"
-            query_params.append(f"%{player_name}%")
+            query += " AND (p.first_name LIKE ? OR p.last_name LIKE ? OR (p.first_name || ' ' || p.last_name) LIKE ?)"
+            pn = f"%{player_name}%"
+            query_params.extend([pn, pn, pn])
         if note_type:
             query += " AND sn.note_type = ?"
             query_params.append(note_type)
@@ -36043,8 +36045,9 @@ async def list_scouting_list(
         query += " AND sl.priority = ?"
         params.append(priority)
     if search:
-        query += " AND (LOWER(p.first_name || ' ' || p.last_name) LIKE LOWER(?))"
-        params.append(f"%{search}%")
+        query += " AND (p.first_name LIKE ? OR p.last_name LIKE ? OR (p.first_name || ' ' || p.last_name) LIKE ?)"
+        ss = f"%{search}%"
+        params.extend([ss, ss, ss])
     query += " ORDER BY CASE sl.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, sl.created_at DESC"
     query += " LIMIT ? OFFSET ?"
     params.extend([limit, skip])
