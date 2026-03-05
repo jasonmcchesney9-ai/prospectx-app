@@ -129,21 +129,28 @@ function NewHighlightReelPage() {
   // Step 4 — Saving
   const [saving, setSaving] = useState(false);
 
-  /* ─── Load players for search ─── */
+  /* ─── Load players for search (debounced API search) ─── */
   useEffect(() => {
-    async function loadPlayers() {
+    const trimmed = playerSearch.trim();
+    if (!trimmed && !prePlayerId) {
+      // No query and no pre-selected player — load first batch
       setLoadingPlayers(true);
-      try {
-        const res = await api.get("/players", { params: { limit: 200 } });
-        setPlayers(Array.isArray(res.data) ? res.data : res.data.players || []);
-      } catch {
-        // Silently handle
-      } finally {
-        setLoadingPlayers(false);
-      }
+      api.get("/players", { params: { limit: 50 } })
+        .then((res) => setPlayers(Array.isArray(res.data) ? res.data : res.data.players || []))
+        .catch(() => {})
+        .finally(() => setLoadingPlayers(false));
+      return;
     }
-    loadPlayers();
-  }, []);
+    if (!trimmed) return; // pre-selected player but no search text — skip
+    setLoadingPlayers(true);
+    const debounce = setTimeout(() => {
+      api.get("/players", { params: { search: trimmed, limit: 50 } })
+        .then((res) => setPlayers(Array.isArray(res.data) ? res.data : res.data.players || []))
+        .catch(() => {})
+        .finally(() => setLoadingPlayers(false));
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [playerSearch, prePlayerId]);
 
   /* ─── Load clips from session ─── */
   useEffect(() => {
@@ -175,6 +182,11 @@ function NewHighlightReelPage() {
           shoots: p.shoots || "",
           highlights: p.strengths || "",
         });
+        // Ensure selected player is in the players list for selectedPlayer lookup
+        setPlayers((prev) => {
+          if (prev.some((x) => x.id === p.id)) return prev;
+          return [...prev, { id: p.id, first_name: p.first_name, last_name: p.last_name, position: p.position, team: p.current_team }];
+        });
       } catch {
         // Silently handle
       }
@@ -182,16 +194,10 @@ function NewHighlightReelPage() {
     loadPlayerInfo();
   }, [playerId]);
 
-  /* ─── Filtered players for search ─── */
+  /* ─── Filtered players for search (API already filters — just limit display) ─── */
   const filteredPlayers = useMemo(() => {
-    if (!playerSearch.trim()) return players.slice(0, 20);
-    const q = playerSearch.toLowerCase();
-    return players.filter(
-      (p) =>
-        p.first_name.toLowerCase().includes(q) ||
-        p.last_name.toLowerCase().includes(q)
-    ).slice(0, 20);
-  }, [players, playerSearch]);
+    return players.slice(0, 20);
+  }, [players]);
 
   const selectedPlayer = useMemo(
     () => players.find((p) => p.id === playerId) || null,
