@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
-import { setToken, setUser } from "@/lib/auth";
+import { setToken, setUser, setRefreshToken } from "@/lib/auth";
 import type { TokenResponse } from "@/types/api";
 
 const SPIRIT_DEMO_ACCOUNTS = [
@@ -84,6 +84,7 @@ function LoginForm() {
         data = res.data;
       }
       setToken(data.access_token);
+      if (data.refresh_token) setRefreshToken(data.refresh_token);
       setUser(data.user);
       if (inviteToken) {
         router.push("/"); // Skip onboarding for invite joins
@@ -348,6 +349,13 @@ function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm"
               />
+              {mode === "login" && (
+                <div className="mt-1 text-right">
+                  <a href="/forgot-password" className="text-xs text-teal hover:underline">
+                    Forgot Password?
+                  </a>
+                </div>
+              )}
             </div>
 
             {error && (

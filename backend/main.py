@@ -148,7 +148,9 @@ DB_FILE = os.path.join(_DATA_DIR, "prospectx.db")
 _DEFAULT_JWT_SECRET = "prospectx_dev_secret_change_in_production_2026"
 JWT_SECRET = os.getenv("JWT_SECRET", _DEFAULT_JWT_SECRET)
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_HOURS = 8
+JWT_EXPIRY_HOURS = 8  # legacy — kept for reference
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -565,21 +567,23 @@ def _get_user_or_ip(request: Request) -> str:
     return _get_client_ip(request)
 
 # slowapi — handles auth endpoints + global default
-limiter = Limiter(key_func=_get_client_ip, default_limits=["120/minute"])
+limiter = Limiter(key_func=_get_client_ip, default_limits=["60/minute"])
 app.state.limiter = limiter
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(
         status_code=429,
-        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+        content={"detail": "Too many requests. Please try again in a moment."},
     )
 
 # Per-user rate limits for authenticated endpoints (applied via middleware)
 # These use user_id from JWT for accurate per-user limiting
 _USER_RATE_LIMITS: Dict[str, int] = {
-    "/reports/generate": 10,               # 10/min per user
+    "/reports/generate": 20,               # 20/min per user
     "/bench-talk/conversations/*/messages": 10,  # 10/min per user
+    "/film/sessions/*/generate-report": 10,      # 10/min per user
+    "/highlight-reels/*/generate-suggestions": 10,  # 10/min per user
 }
 _HOCKEYTECH_RATE_LIMIT = 30  # 30/min per user for all /hockeytech/* endpoints
 _user_rate_store: Dict[str, Dict[str, Any]] = {}
@@ -599,6 +603,10 @@ async def per_user_rate_limit_middleware(request: Request, call_next):
         limit = _USER_RATE_LIMITS["/reports/generate"]
     elif path.startswith("/bench-talk/conversations/") and path.endswith("/messages") and request.method == "POST":
         limit = _USER_RATE_LIMITS["/bench-talk/conversations/*/messages"]
+    elif path.startswith("/film/sessions/") and path.endswith("/generate-report") and request.method == "POST":
+        limit = _USER_RATE_LIMITS["/film/sessions/*/generate-report"]
+    elif path.startswith("/highlight-reels/") and path.endswith("/generate-suggestions") and request.method == "POST":
+        limit = _USER_RATE_LIMITS["/highlight-reels/*/generate-suggestions"]
     elif path.startswith("/hockeytech/"):
         limit = _HOCKEYTECH_RATE_LIMIT
 
@@ -616,7 +624,7 @@ async def per_user_rate_limit_middleware(request: Request, call_next):
         if entry["count"] > limit:
             return JSONResponse(
                 status_code=429,
-                content={"detail": f"Rate limit exceeded. Max {limit} requests per minute."},
+                content={"detail": "Too many requests. Please try again in a moment."},
             )
     else:
         _user_rate_store[key] = {"window_start": now, "count": 1}
@@ -639,24 +647,17 @@ os.makedirs(_IMAGES_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_IMAGES_DIR), name="uploads")
 
 _allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://prospectx-app-ten.vercel.app",
     "https://prospectxintelligence.com",
     "https://www.prospectxintelligence.com",
-    FRONTEND_URL,
+    "http://localhost:3000",
 ]
-# Remove duplicates and empty strings
-_allowed_origins = list({o for o in _allowed_origins if o})
+# Include FRONTEND_URL if set (e.g. Vercel preview deploys) but keep strict
+if FRONTEND_URL and FRONTEND_URL not in _allowed_origins:
+    _allowed_origins.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=(
-        r"https://prospectx-app(-[a-z0-9]+)?(-[a-z0-9]+)?\.vercel\.app"
-        if (_is_deployed or ENVIRONMENT != "development")
-        else r"^(https://prospectx-app[a-z0-9-]*\.vercel\.app|http://localhost(:\d+)?)$"
-    ),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -3099,6 +3100,18 @@ def init_db():
             token_hash TEXT NOT NULL,
             expires_at TEXT NOT NULL,
             used INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+
+    # ── Refresh tokens table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -10054,6 +10067,7 @@ def _get_org_branding(conn, org_id: str) -> dict:
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
     user: UserOut
 
@@ -10338,10 +10352,29 @@ def create_token(user_id: str, org_id: str, role: str) -> str:
         "user_id": user_id,
         "org_id": org_id,
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _create_refresh_token(user_id: str, conn) -> str:
+    """Generate a refresh token, store its hash in DB, return raw token."""
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)).isoformat()
+    conn.execute(
+        "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+        (gen_id(), user_id, token_hash, expires_at),
+    )
+    conn.commit()
+    return raw_token
+
+
+def _invalidate_user_refresh_tokens(user_id: str, conn):
+    """Delete all refresh tokens for a user (e.g. on password reset)."""
+    conn.execute("DELETE FROM refresh_tokens WHERE user_id = ?", (user_id,))
+    conn.commit()
 
 
 def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
@@ -10390,7 +10423,7 @@ def _org_guard(token_data: dict) -> str:
 # ============================================================
 
 @app.post("/auth/register", response_model=TokenResponse)
-@limiter.limit("3/minute", key_func=get_remote_address)
+@limiter.limit("5/minute", key_func=get_remote_address)
 async def register(request: Request, req: RegisterRequest):
     conn = get_db()
     existing = conn.execute("SELECT id FROM users WHERE email = ?", (req.email.lower().strip(),)).fetchone()
@@ -10433,10 +10466,11 @@ async def register(request: Request, req: RegisterRequest):
         **org_brand,
     )
     token = create_token(user_id, org_id, "admin")
+    refresh = _create_refresh_token(user_id, conn)
     conn.close()
 
     logger.info("User registered: %s (org: %s)", req.email, req.org_name)
-    return TokenResponse(access_token=token, user=user)
+    return TokenResponse(access_token=token, refresh_token=refresh, user=user)
 
 
 @app.post("/auth/login", response_model=TokenResponse)
@@ -10460,7 +10494,6 @@ async def login(request: Request, req: LoginRequest):
         except Exception:
             covered = None
     org_brand = _get_org_branding(conn, row["org_id"])
-    conn.close()
     user = UserOut(
         id=row["id"], org_id=row["org_id"], email=row["email"],
         first_name=row["first_name"], last_name=row["last_name"], role=row["role"],
@@ -10477,8 +10510,10 @@ async def login(request: Request, req: LoginRequest):
         **org_brand,
     )
     token = create_token(row["id"], row["org_id"], row["role"])
+    refresh = _create_refresh_token(row["id"], conn)
+    conn.close()
     logger.info("User logged in: %s", req.email)
-    return TokenResponse(access_token=token, user=user)
+    return TokenResponse(access_token=token, refresh_token=refresh, user=user)
 
 
 @app.get("/auth/me", response_model=UserOut)
@@ -10530,6 +10565,10 @@ class VerifyEmailRequest(BaseModel):
     token: str
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
 @app.put("/auth/hockey-role")
 async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = Depends(verify_token)):
     """Update the user's hockey role (scout, gm, coach, player, parent, broadcaster, producer, agent)."""
@@ -10564,11 +10603,71 @@ async def update_hockey_role(req: UpdateHockeyRoleRequest, token_data: dict = De
 
 
 # ============================================================
+# JWT REFRESH
+# ============================================================
+
+@app.post("/auth/refresh", response_model=TokenResponse)
+@limiter.limit("10/minute", key_func=get_remote_address)
+async def refresh_access_token(request: Request, req: RefreshTokenRequest):
+    """Exchange a valid refresh token for a new access + refresh token pair (rotation)."""
+    token_hash = hashlib.sha256(req.refresh_token.encode()).hexdigest()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, user_id FROM refresh_tokens WHERE token_hash = ? AND expires_at > ?",
+            (token_hash, datetime.now(timezone.utc).isoformat()),
+        ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+        # Delete the old refresh token (single-use rotation)
+        conn.execute("DELETE FROM refresh_tokens WHERE id = ?", (row["id"],))
+        conn.commit()
+
+        # Fetch user to build response
+        user_row = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        if not user_row:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        covered = None
+        if user_row["covered_teams"]:
+            try:
+                covered = json.loads(user_row["covered_teams"])
+            except Exception:
+                covered = None
+        org_brand = _get_org_branding(conn, user_row["org_id"])
+        user = UserOut(
+            id=user_row["id"], org_id=user_row["org_id"], email=user_row["email"],
+            first_name=user_row["first_name"], last_name=user_row["last_name"], role=user_row["role"],
+            hockey_role=user_row["hockey_role"] if user_row["hockey_role"] else "scout",
+            subscription_tier=user_row["subscription_tier"] or "rookie",
+            monthly_reports_used=user_row["monthly_reports_used"] or 0,
+            monthly_bench_talks_used=user_row["monthly_bench_talks_used"] or 0,
+            email_verified=bool(user_row["email_verified"]) if user_row["email_verified"] else False,
+            onboarding_completed=bool(user_row["onboarding_completed"]) if user_row["onboarding_completed"] else False,
+            onboarding_step=user_row["onboarding_step"] or 0,
+            preferred_league=user_row["preferred_league"],
+            preferred_team_id=user_row["preferred_team_id"],
+            covered_teams=covered,
+            **org_brand,
+        )
+
+        new_access = create_token(user_row["id"], user_row["org_id"], user_row["role"])
+        new_refresh = _create_refresh_token(user_row["id"], conn)
+
+        return TokenResponse(access_token=new_access, refresh_token=new_refresh, user=user)
+    finally:
+        conn.close()
+
+
+# ============================================================
 # PASSWORD RESET & EMAIL VERIFICATION
 # ============================================================
 
 @app.post("/auth/forgot-password")
-async def forgot_password(req: ForgotPasswordRequest):
+@limiter.limit("5/minute", key_func=get_remote_address)
+async def forgot_password(request: Request, req: ForgotPasswordRequest):
     """Request a password reset. Always returns 200 to not leak email existence."""
     conn = get_db()
     try:
@@ -10607,7 +10706,8 @@ async def forgot_password(req: ForgotPasswordRequest):
 
 
 @app.post("/auth/reset-password")
-async def reset_password(req: ResetPasswordRequest):
+@limiter.limit("5/minute", key_func=get_remote_address)
+async def reset_password(request: Request, req: ResetPasswordRequest):
     """Reset password using a valid reset token."""
     token_hash = hashlib.sha256(req.token.encode()).hexdigest()
     conn = get_db()
@@ -10627,6 +10727,9 @@ async def reset_password(req: ResetPasswordRequest):
         # Mark token as used
         conn.execute("UPDATE password_reset_tokens SET used = 1 WHERE id = ?", (row["id"],))
         conn.commit()
+
+        # Invalidate all refresh tokens (force re-login on all devices)
+        _invalidate_user_refresh_tokens(row["user_id"], conn)
 
         logger.info("Password reset successful for user_id: %s", row["user_id"])
         return {"message": "Password has been reset successfully. You can now log in."}

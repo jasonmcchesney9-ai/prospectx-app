@@ -1,4 +1,5 @@
 const TOKEN_KEY = "prospectx_token";
+const REFRESH_TOKEN_KEY = "prospectx_refresh_token";
 const USER_KEY = "prospectx_user";
 
 import type { User } from "@/types/api";
@@ -12,8 +13,18 @@ export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setRefreshToken(token: string): void {
+  localStorage.setItem(REFRESH_TOKEN_KEY, token);
+}
+
 export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
