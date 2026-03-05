@@ -902,8 +902,8 @@ export default function FilmSessionViewerPage() {
         <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
           {/* LEFT TOP — Video + Event Tagger (order-1 on mobile) */}
           <div className={`w-full flex flex-col gap-3 order-1 ${cinemaMode ? "lg:w-full" : "lg:w-[70%]"}`}>
-            {/* Video Player with Cinema Mode toggle */}
-            <div className="relative">
+            {/* Video Player — edge-to-edge, no card wrapper */}
+            <div className="relative" style={{ borderRadius: 8, overflow: "hidden", minHeight: "50vh" }}>
               <VideoPlayer
                 ref={videoPlayerRef}
                 playbackId={upload?.playback_id || null}
@@ -942,34 +942,41 @@ export default function FilmSessionViewerPage() {
 
             {/* Mark In / Mark Out control bar */}
             {upload?.playback_id && (
-              <div className="bg-white p-3" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
+                {/* Row 1 — Mark In / timestamps / Mark Out / title / Save */}
+                <div className="flex flex-wrap items-center gap-3 px-4 py-3" style={{ background: "#FFFFFF" }}>
                   {/* Mark In */}
                   <button
                     onClick={() => setClipStart(Math.floor(currentTimeRef.current))}
-                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
+                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
                   >
-                    <Scissors size={12} />
+                    <Scissors size={13} />
                     Mark In
                   </button>
-                  <span className="text-[11px] font-mono text-navy min-w-[56px]">
-                    In: {clipStart !== null ? formatTimestamp(clipStart) : "--:--"}
+                  <span
+                    className="font-bold min-w-[60px]"
+                    style={{ fontSize: 13, fontFamily: "ui-monospace, monospace", color: clipStart !== null ? "#0D9488" : "#CCD6E0" }}
+                  >
+                    {clipStart !== null ? formatTimestamp(clipStart) : "--:--"}
                   </span>
 
                   {/* Mark Out */}
                   <button
                     onClick={() => setClipEnd(Math.floor(currentTimeRef.current))}
-                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
+                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
                   >
-                    <Scissors size={12} />
+                    <Scissors size={13} />
                     Mark Out
                   </button>
-                  <span className="text-[11px] font-mono text-navy min-w-[56px]">
-                    Out: {clipEnd !== null ? formatTimestamp(clipEnd) : "--:--"}
+                  <span
+                    className="font-bold min-w-[60px]"
+                    style={{ fontSize: 13, fontFamily: "ui-monospace, monospace", color: clipEnd !== null ? "#0D9488" : "#CCD6E0" }}
+                  >
+                    {clipEnd !== null ? formatTimestamp(clipEnd) : "--:--"}
                   </span>
 
                   {/* Divider */}
-                  <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
+                  <div className="w-px h-6 hidden sm:block" style={{ background: "#DDE6EF" }} />
 
                   {/* Title input */}
                   <input
@@ -977,80 +984,78 @@ export default function FilmSessionViewerPage() {
                     value={clipTitle}
                     onChange={(e) => setClipTitle(e.target.value)}
                     placeholder="Clip title..."
-                    className="flex-1 min-w-[120px] border border-border rounded-lg px-2.5 py-1.5 text-xs text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                    className="flex-1 min-w-[120px] border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                    style={{ borderColor: "#DDE6EF" }}
                   />
 
                   {/* Save Clip */}
                   <button
                     onClick={handleSaveClip}
                     disabled={clipStart === null || clipEnd === null || savingClip}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider transition-colors ${
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
                       clipStart !== null && clipEnd !== null && !savingClip
                         ? "bg-teal text-white hover:bg-teal/90"
                         : "bg-border text-muted/50 cursor-not-allowed"
                     }`}
                   >
                     {savingClip ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Loader2 size={13} className="animate-spin" />
                     ) : (
-                      <Save size={12} />
+                      <Save size={13} />
                     )}
                     Save Clip
                   </button>
                 </div>
 
-                {/* Speed selector + Frame stepping row */}
-                <div className="flex flex-wrap items-center gap-2 mt-2 pt-2" style={{ borderTop: "1px solid #DDE6EF" }}>
-                  {/* Frame stepping */}
-                  <div className="flex items-center gap-1">
+                {/* Row 2 — Frame step (left) | Speed selector (center) | Cinema mode (right) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5" style={{ borderTop: "1px solid #DDE6EF", background: "#F8FAFC" }}>
+                  {/* Frame stepping — larger buttons */}
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(-5)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
+                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
                       title="Back 5s"
                     >
-                      <Rewind size={12} />
+                      <Rewind size={14} />
                     </button>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(-0.033)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
+                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
                       title="Back 1 frame"
                     >
-                      <SkipBack size={12} />
+                      <SkipBack size={14} />
                     </button>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(0.033)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
+                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
                       title="Forward 1 frame"
                     >
-                      <SkipForward size={12} />
+                      <SkipForward size={14} />
                     </button>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(5)}
-                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
+                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
                       title="Forward 5s"
                     >
-                      <FastForward size={12} />
+                      <FastForward size={14} />
                     </button>
                   </div>
 
-                  {/* Divider */}
-                  <div className="w-px h-5 hidden sm:block" style={{ background: "#DDE6EF" }} />
-
-                  {/* Playback speed */}
-                  <div className="flex items-center gap-1">
-                    <Gauge size={12} style={{ color: "#5A7291" }} />
+                  {/* Playback speed — larger buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <Gauge size={14} style={{ color: "#5A7291" }} />
                     {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
                       <button
                         key={rate}
                         onClick={() => handleSpeedChange(rate)}
-                        className="px-1.5 py-1 rounded text-[10px] font-bold transition-colors"
+                        className="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
                         style={playbackSpeed === rate
                           ? { fontFamily: "ui-monospace, monospace", background: "#0D9488", color: "#FFFFFF" }
-                          : { fontFamily: "ui-monospace, monospace", color: "#5A7291", border: "1px solid #DDE6EF" }
+                          : { fontFamily: "ui-monospace, monospace", color: "#5A7291", border: "1.5px solid #DDE6EF", background: "#FFFFFF" }
                         }
                         title={`${rate}x speed`}
                       >
@@ -1058,6 +1063,17 @@ export default function FilmSessionViewerPage() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Cinema mode toggle */}
+                  <button
+                    onClick={() => setCinemaMode(!cinemaMode)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-80"
+                    style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: cinemaMode ? "#FFFFFF" : "#5A7291", background: cinemaMode ? "#0D9488" : "#FFFFFF", border: "1.5px solid #DDE6EF" }}
+                    title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
+                  >
+                    {cinemaMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                    {cinemaMode ? "Exit" : "Cinema"}
+                  </button>
                 </div>
               </div>
             )}
@@ -1304,110 +1320,121 @@ export default function FilmSessionViewerPage() {
 
           {/* RIGHT PANEL — 35% (order-2 on mobile — between video and comments) */}
           <div className={`w-full lg:w-[30%] flex flex-col gap-4 order-2 ${cinemaMode ? "hidden" : ""}`}>
-            {/* Session info */}
+            {/* Session info — compact */}
             <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-              <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+              <div className="flex items-center justify-between px-4 py-2.5" style={{ background: "#0F2942" }}>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+                  <span
+                    className="font-bold uppercase text-white"
+                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  >
+                    SESSION
+                  </span>
+                </div>
                 <span
-                  className="font-bold uppercase text-white"
-                  style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.3)", color: "#FFFFFF" }}
                 >
-                  SESSION INFO
+                  {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
                 </span>
               </div>
-              <div className="bg-white px-5 py-4">
-                {session.description && (
-                  <p className="text-sm mb-2" style={{ color: "#0F2942" }}>{session.description}</p>
-                )}
-                <div className="text-[11px]" style={{ color: "#5A7291" }}>
-                  Status: {session.status || "active"}
+              <div className="bg-white px-4 py-2.5">
+                <div className="flex items-center gap-2 text-[11px]" style={{ color: "#5A7291" }}>
+                  <span>{formatDate(session.created_at)}</span>
+                  <span style={{ color: "#DDE6EF" }}>·</span>
+                  <span className="capitalize">{session.status || "active"}</span>
                 </div>
+                {session.description && (
+                  <p className="text-xs mt-1 truncate" style={{ color: "#0F2942" }} title={session.description}>{session.description}</p>
+                )}
               </div>
             </div>
 
-            {/* Import Event Timeline */}
-            <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-              <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
-                <span
-                  className="font-bold uppercase text-white"
-                  style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                >
-                  EVENT TIMELINE
-                </span>
-              </div>
-              <div className="bg-white px-5 py-4">
-                {/* Hidden file input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xml,.csv"
-                  onChange={handleFileSelected}
-                  className="hidden"
-                />
-
-                {importingEvents ? (
-                  <div className="flex items-center justify-center gap-2 py-3">
-                    <Loader2 size={14} className="animate-spin" style={{ color: "#0D9488" }} />
-                    <span className="text-[11px] font-bold uppercase" style={{ color: "#5A7291", fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}>Importing events...</span>
-                  </div>
-                ) : showReplaceConfirm ? (
-                  <div className="py-2">
-                    <p className="text-[11px] mb-3" style={{ color: "#0F2942" }}>This session already has imported events. Replace them?</p>
-                    <div className="flex gap-2">
+            {/* Import Event Data — hidden once events exist (show re-import only if importing/confirming) */}
+            {/* Hidden file input (always rendered) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xml,.csv"
+              onChange={handleFileSelected}
+              className="hidden"
+            />
+            {(sessionEvents.length === 0 || importingEvents || showReplaceConfirm || importResult) && (
+              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
+                <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "#0F2942" }}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+                  <span
+                    className="font-bold uppercase text-white"
+                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  >
+                    IMPORT EVENTS
+                  </span>
+                </div>
+                <div className="bg-white px-4 py-3">
+                  {importingEvents ? (
+                    <div className="flex items-center justify-center gap-2 py-2">
+                      <Loader2 size={14} className="animate-spin" style={{ color: "#0D9488" }} />
+                      <span className="text-[11px] font-bold uppercase" style={{ color: "#5A7291", fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}>Importing events...</span>
+                    </div>
+                  ) : showReplaceConfirm ? (
+                    <div className="py-1">
+                      <p className="text-[11px] mb-2" style={{ color: "#0F2942" }}>Replace existing events?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (pendingImportFile) executeEventImport(pendingImportFile, true);
+                          }}
+                          className="flex-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase text-white transition-colors hover:opacity-90"
+                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#EA580C" }}
+                        >
+                          Replace
+                        </button>
+                        <button
+                          onClick={() => { setShowReplaceConfirm(false); setPendingImportFile(null); }}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-colors hover:opacity-80"
+                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      {importResult && (
+                        <div className="mb-2 text-[11px] rounded-lg px-3 py-2" style={{ color: "#0D9488", background: "rgba(13,148,136,0.06)" }}>
+                          Imported {importResult.events_created} events, {importResult.clips_created} clips
+                          {importResult.player_matches > 0 && ` · ${importResult.player_matches} matched`}
+                          {importResult.unmatched_players.length > 0 && (
+                            <span className="block mt-1" style={{ color: "#5A7291" }}>
+                              Unmatched: {importResult.unmatched_players.slice(0, 5).join(", ")}
+                              {importResult.unmatched_players.length > 5 && ` +${importResult.unmatched_players.length - 5} more`}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <button
-                        onClick={() => {
-                          if (pendingImportFile) executeEventImport(pendingImportFile, true);
-                        }}
-                        className="flex-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase text-white transition-colors hover:opacity-90"
-                        style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#EA580C" }}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold uppercase transition-colors hover:opacity-80"
+                        style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px dashed #DDE6EF" }}
                       >
-                        Confirm Replace
-                      </button>
-                      <button
-                        onClick={() => { setShowReplaceConfirm(false); setPendingImportFile(null); }}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-colors hover:opacity-80"
-                        style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}
-                      >
-                        Cancel
+                        {session?.event_data_source ? (
+                          <>
+                            <RefreshCw size={12} />
+                            Re-import Event Data
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={12} />
+                            Import Event Data
+                          </>
+                        )}
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div>
-                    {importResult && (
-                      <div className="mb-3 text-[11px] rounded-lg px-3 py-2" style={{ color: "#0D9488", background: "rgba(13,148,136,0.06)" }}>
-                        Imported {importResult.events_created} events and {importResult.clips_created} clips
-                        {importResult.player_matches > 0 && ` · ${importResult.player_matches} players matched`}
-                        {importResult.unmatched_players.length > 0 && (
-                          <span className="block mt-1" style={{ color: "#5A7291" }}>
-                            Unmatched: {importResult.unmatched_players.slice(0, 5).join(", ")}
-                            {importResult.unmatched_players.length > 5 && ` +${importResult.unmatched_players.length - 5} more`}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold uppercase transition-colors hover:opacity-80"
-                      style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px dashed #DDE6EF" }}
-                    >
-                      {session?.event_data_source ? (
-                        <>
-                          <RefreshCw size={12} />
-                          Re-import Event Data
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={12} />
-                          Import Event Data
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Clip Panel */}
             <ClipPanel

@@ -24,6 +24,8 @@ interface Clip {
   created_at: string;
 }
 
+type ClipCategory = "all" | "teal" | "navy" | "orange" | "gray";
+
 interface ClipPanelProps {
   sessionId: string;
   uploadId: string;
@@ -42,6 +44,20 @@ const CLIP_CATEGORY_KEYWORDS: Record<string, string[]> = {
   navy: ["hit", "block", "turnover", "exit", "breakout", "dz_coverage", "coverage_miss", "stick_detail", "defensive"],
   orange: ["faceoff", "pp", "pk", "icing", "penalty", "power_play", "penalty_kill", "special"],
 };
+
+function cleanClipTitle(title: string): string {
+  // Strip event_type prefix before colon (e.g., "chatham_maroons_faceoffs_in_nz: Chatham Maroons Faceoffs in NZ" → "Chatham Maroons Faceoffs in NZ")
+  let cleaned = title;
+  const colonIdx = title.indexOf(": ");
+  if (colonIdx !== -1) {
+    cleaned = title.substring(colonIdx + 2);
+  }
+  // Truncate to 40 characters
+  if (cleaned.length > 40) {
+    cleaned = cleaned.substring(0, 40) + "…";
+  }
+  return cleaned;
+}
 
 function getClipDotColor(clip: Clip): string {
   // Check tags first
@@ -71,6 +87,7 @@ export default function ClipPanel({
   const [showCreator, setShowCreator] = useState(false);
   const [editingClip, setEditingClip] = useState<Clip | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [clipFilter, setClipFilter] = useState<ClipCategory>("all");
 
   // Creator form state
   const [clipTitle, setClipTitle] = useState("");
@@ -197,22 +214,71 @@ export default function ClipPanel({
     []
   );
 
+  // Filter clips by category color
+  const getClipCategoryKey = (clip: Clip): ClipCategory => {
+    const color = getClipDotColor(clip);
+    if (color.includes("teal")) return "teal";
+    if (color.includes("navy")) return "navy";
+    if (color.includes("orange")) return "orange";
+    return "gray";
+  };
+
+  const filteredClips = clipFilter === "all"
+    ? clips
+    : clips.filter((c) => getClipCategoryKey(c) === clipFilter);
+
   return (
-    <div className="bg-white rounded-xl border border-border p-4 flex flex-col flex-1 min-h-0">
+    <div className="overflow-hidden flex flex-col flex-1 min-h-0" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-oswald uppercase tracking-wider text-navy flex items-center gap-1.5">
-          <Scissors size={13} />
-          Clips
-        </h3>
+      <div className="flex items-center justify-between px-4 py-2.5" style={{ background: "#0F2942" }}>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+          <span
+            className="font-bold uppercase text-white"
+            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+          >
+            CLIPS
+          </span>
+          {!loading && (
+            <span
+              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+              style={{ fontFamily: "ui-monospace, monospace", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
+            >
+              {clips.length}
+            </span>
+          )}
+        </div>
         <button
           onClick={() => openCreator()}
-          className="flex items-center gap-1 bg-teal text-white px-3 py-1.5 rounded-lg text-[11px] font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors"
+          className="flex items-center gap-1 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors hover:opacity-90"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
         >
-          <Plus size={12} />
-          Add Clip
+          <Plus size={11} />
+          Add
         </button>
       </div>
+      {/* Filter bar */}
+      <div className="flex items-center gap-1 px-3 py-2" style={{ background: "#F8FAFC", borderBottom: "1px solid #DDE6EF" }}>
+        {([
+          { value: "all" as ClipCategory, label: "All" },
+          { value: "teal" as ClipCategory, label: "Offensive" },
+          { value: "navy" as ClipCategory, label: "Defensive" },
+          { value: "orange" as ClipCategory, label: "Special" },
+        ]).map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setClipFilter(f.value)}
+            className="px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors"
+            style={clipFilter === f.value
+              ? { fontFamily: "ui-monospace, monospace", letterSpacing: 0.5, background: "#0D9488", color: "#FFFFFF" }
+              : { fontFamily: "ui-monospace, monospace", letterSpacing: 0.5, color: "#5A7291" }
+            }
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      <div className="px-4 pt-3 pb-4 flex flex-col flex-1 min-h-0">
 
       {/* Inline Clip Creator */}
       {showCreator && (
@@ -348,67 +414,84 @@ export default function ClipPanel({
           </div>
         ) : clips.length === 0 ? (
           <p className="text-[11px] text-muted/50 text-center py-8">
-            No clips yet. Click &quot;Add Clip&quot; to create one.
+            No clips yet. Click &quot;Add&quot; to create one.
+          </p>
+        ) : filteredClips.length === 0 ? (
+          <p className="text-[11px] text-center py-6" style={{ color: "#8BA4BB" }}>
+            No clips match this filter.
           </p>
         ) : (
-          <div className="space-y-1.5">
-            {clips.map((clip) => (
+          <div>
+            {filteredClips.map((clip, idx) => (
               <div
                 key={clip.id}
-                className="p-2.5 rounded-lg border border-border hover:border-teal/30 transition-colors group"
+                className="px-2 py-2 transition-colors group cursor-pointer hover:bg-navy/[0.04]"
+                style={{ background: idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC", borderBottom: "1px solid #F0F4F8" }}
+                title={clip.title}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-navy truncate flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${getClipDotColor(clip)}`} />
-                      {clip.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="flex items-center gap-0.5 text-[10px] text-teal font-mono">
-                        <Clock size={9} />
-                        {formatTime(clip.start_time_seconds)} →{" "}
-                        {formatTime(clip.end_time_seconds)}
-                      </span>
-                      {clip.tags && (
-                        <div className="flex gap-1 flex-wrap">
-                          {(Array.isArray(clip.tags) ? clip.tags : typeof clip.tags === "string" ? clip.tags.split(",") : []).map((tag, i) => (
-                            <span
-                              key={i}
-                              className="text-[9px] bg-navy/5 text-navy/60 px-1.5 py-0.5 rounded"
-                            >
-                              {typeof tag === "string" ? tag.trim() : String(tag)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${getClipDotColor(clip)}`} />
+                    <span className="text-sm text-navy truncate" style={{ maxWidth: "100%" }}>
+                      {cleanClipTitle(clip.title)}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
-                      onClick={() => openCreator(clip)}
+                      onClick={(e) => { e.stopPropagation(); openCreator(clip); }}
                       className="text-muted/50 hover:text-teal transition-colors p-0.5"
                       title="Edit clip"
                     >
-                      <Edit3 size={12} />
+                      <Edit3 size={11} />
                     </button>
                     <button
-                      onClick={() => handleDeleteClip(clip.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteClip(clip.id); }}
                       disabled={deletingId === clip.id}
                       className="text-muted/50 hover:text-red-500 transition-colors p-0.5"
                       title="Delete clip"
                     >
                       {deletingId === clip.id ? (
-                        <Loader2 size={12} className="animate-spin" />
+                        <Loader2 size={11} className="animate-spin" />
                       ) : (
-                        <Trash2 size={12} />
+                        <Trash2 size={11} />
                       )}
                     </button>
                   </div>
+                </div>
+                {/* Timestamp — larger, teal, prominent */}
+                <div className="flex items-center gap-2 mt-0.5 pl-3.5">
+                  <span
+                    className="flex items-center gap-1 font-bold"
+                    style={{ fontSize: 12, fontFamily: "ui-monospace, monospace", color: "#0D9488" }}
+                  >
+                    {formatTime(clip.start_time_seconds)} → {formatTime(clip.end_time_seconds)}
+                  </span>
+                  {clip.tags && (() => {
+                    const tagArr: string[] = Array.isArray(clip.tags)
+                      ? clip.tags as unknown as string[]
+                      : typeof clip.tags === "string"
+                      ? clip.tags.split(",")
+                      : [];
+                    return tagArr.length > 0 ? (
+                      <div className="flex gap-1 flex-wrap">
+                        {tagArr.slice(0, 2).map((tag, i) => (
+                          <span
+                            key={i}
+                            className="text-[8px] px-1 py-0.5 rounded"
+                            style={{ background: "rgba(15,41,66,0.05)", color: "#5A7291" }}
+                          >
+                            {tag.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

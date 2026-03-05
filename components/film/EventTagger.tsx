@@ -7,6 +7,7 @@ import {
   Loader2,
   Clock,
   X,
+  HelpCircle,
 } from "lucide-react";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
@@ -97,6 +98,7 @@ export default function EventTagger({
   const [taggingType, setTaggingType] = useState<string | null>(null);
   const [flashType, setFlashType] = useState<string | null>(null);
   const [miniToast, setMiniToast] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const miniToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Group buttons by category
@@ -241,7 +243,7 @@ export default function EventTagger({
                       key={btn.type}
                       onClick={() => tagEvent(btn.type)}
                       disabled={isTagging}
-                      className={`relative flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-medium text-xs transition-all duration-150 ${
+                      className={`relative flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-xs transition-all duration-150 ${
                         isFlashing
                           ? "text-white"
                           : "bg-white text-slate-700 hover:bg-slate-50"
@@ -321,16 +323,28 @@ export default function EventTagger({
           </div>
         )}
 
-        {/* Keyboard shortcuts legend */}
-        <p className="mt-2 text-[9px] leading-tight" style={{ color: "#8BA4BB" }}>
-          Keys:{" "}
-          {favouriteButtons.map((btn, i) => (
-            <span key={btn.type}>
-              {i > 0 && "  "}
-              <span className="font-bold" style={{ fontFamily: "ui-monospace, monospace", color: "#5A7291" }}>{i + 1}</span>={btn.label}
-            </span>
-          ))}
-        </p>
+        {/* Keyboard shortcuts legend — collapsible */}
+        <div className="mt-2 flex items-start gap-1">
+          <button
+            onClick={() => setShowShortcuts(!showShortcuts)}
+            className="shrink-0 p-0.5 rounded transition-colors hover:opacity-70"
+            style={{ color: "#8BA4BB" }}
+            title="Keyboard shortcuts"
+          >
+            <HelpCircle size={12} />
+          </button>
+          {showShortcuts && (
+            <p className="text-[9px] leading-tight" style={{ color: "#8BA4BB" }}>
+              Keys:{" "}
+              {favouriteButtons.map((btn, i) => (
+                <span key={btn.type}>
+                  {i > 0 && "  "}
+                  <span className="font-bold" style={{ fontFamily: "ui-monospace, monospace", color: "#5A7291" }}>{i + 1}</span>={btn.label}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
 
         {/* Recent events */}
         {!loading && recentEvents.length > 0 && (
