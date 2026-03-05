@@ -26,6 +26,7 @@ import {
   Sparkles,
   Pin,
   Calendar,
+  RefreshCw,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -77,11 +78,11 @@ export default function HomePage() {
 
 function CardSkeleton({ lines = 3 }: { lines?: number }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-5 animate-pulse">
+    <div className="animate-pulse space-y-2">
       {Array.from({ length: lines }).map((_, i) => (
         <div
           key={i}
-          className={`h-3 bg-navy/5 rounded ${i === 0 ? "w-2/3 mb-3" : i === lines - 1 ? "w-1/2 mt-2" : "w-full mt-2"}`}
+          style={{ background: "#DDE6EF", borderRadius: 4, height: i === 0 ? 16 : 14, width: i === 0 ? "66%" : i === lines - 1 ? "50%" : "100%" }}
         />
       ))}
     </div>
@@ -375,11 +376,43 @@ function Dashboard() {
           </div>
         )}
 
+        {/* ═══ DASHBOARD Header — navy bar (war room style) ═══ */}
+        <div className="px-5 py-4 flex items-center justify-between mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942" }}>
+          <div className="flex items-center gap-3">
+            <span
+              className="px-2.5 py-1 rounded-md text-white font-bold uppercase flex items-center gap-1.5"
+              style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
+            >
+              <Sparkles size={10} />
+              PXI
+            </span>
+            <div>
+              <h1 className="text-lg font-bold text-white font-oswald tracking-wider uppercase">
+                DASHBOARD
+              </h1>
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+                {user?.first_name ? `Welcome back, ${user.first_name}` : "Hockey Operations Command Center"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {activeTeam && (
+              <span
+                className="font-bold uppercase text-white"
+                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+              >
+                {activeTeam.name}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* ── Team Context Bar ─────────────────────────────── */}
         <TeamContextBar
           teams={teams}
           activeTeam={activeTeam}
           onTeamChange={handleTeamChange}
+          onSync={activeTeam ? async () => { await loadTeamData(activeTeam); } : undefined}
           roster={roster}
           scorebar={scorebar}
           standings={standings}
@@ -1143,25 +1176,41 @@ function DashboardCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-teal/20 p-5">
-      <div className="flex items-center justify-between mb-3">
+    <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
+      {/* Navy header */}
+      <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
         <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
           {icon}
-          <h3 className="text-sm font-oswald font-bold text-navy uppercase tracking-wider">{title}</h3>
+          <span
+            className="font-bold uppercase text-white"
+            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+          >
+            {title}
+          </span>
         </div>
-        <Link href={viewAllHref} className="text-xs text-teal hover:underline font-medium">View all</Link>
+        <Link
+          href={viewAllHref}
+          className="font-bold uppercase transition-colors hover:opacity-80"
+          style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0D9488" }}
+        >
+          View all
+        </Link>
       </div>
-      {loading ? (
-        <CardSkeleton lines={3} />
-      ) : empty ? (
-        <div className="text-center py-5">
-          {emptyIcon && <div className="mb-2">{emptyIcon}</div>}
-          {emptyText && <p className="text-muted text-sm">{emptyText}</p>}
-          {emptyLink && <Link href={emptyLink} className="inline-block mt-2 text-xs text-teal hover:underline">{emptyLinkText}</Link>}
-        </div>
-      ) : (
-        children
-      )}
+      {/* White body */}
+      <div className="bg-white px-5 py-4">
+        {loading ? (
+          <CardSkeleton lines={3} />
+        ) : empty ? (
+          <div className="text-center py-5">
+            {emptyIcon && <div className="mb-2">{emptyIcon}</div>}
+            {emptyText && <p className="text-sm" style={{ color: "#5A7291" }}>{emptyText}</p>}
+            {emptyLink && <Link href={emptyLink} className="inline-block mt-2 text-xs hover:underline" style={{ color: "#0D9488" }}>{emptyLinkText}</Link>}
+          </div>
+        ) : (
+          children
+        )}
+      </div>
     </div>
   );
 }

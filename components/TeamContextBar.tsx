@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronDown, CheckCircle, Calendar, AlertCircle } from "lucide-react";
+import { Building2, ChevronDown, CheckCircle, Calendar, AlertCircle, RefreshCw, Loader2 } from "lucide-react";
 import { assetUrl } from "@/lib/api";
 import { leagueAbbr } from "@/lib/leagues";
 import type { Team, HTGame, HTStandings, GamePlan, Player } from "@/types/api";
@@ -10,6 +11,7 @@ interface TeamContextBarProps {
   teams: Team[];
   activeTeam: Team | null;
   onTeamChange: (team: Team) => void;
+  onSync?: () => Promise<void>;
   roster: Player[];
   scorebar: HTGame[];
   standings: HTStandings[];
@@ -74,12 +76,14 @@ export default function TeamContextBar({
   teams,
   activeTeam,
   onTeamChange,
+  onSync,
   roster,
   scorebar,
   standings,
   gamePlans,
   loading,
 }: TeamContextBarProps) {
+  const [syncing, setSyncing] = useState(false);
   if (loading || !activeTeam) {
     return (
       <div className="bg-gradient-to-r from-navy to-navy-light rounded-xl p-4 mb-4 animate-pulse">
@@ -125,7 +129,7 @@ export default function TeamContextBar({
 
           {/* Team Name + League */}
           <div>
-            <Link href={`/teams/${encodeURIComponent(activeTeam.name)}`} className="text-lg sm:text-xl font-oswald font-bold tracking-wide hover:underline cursor-pointer">
+            <Link href={`/teams/${encodeURIComponent(activeTeam.name)}`} className="text-lg sm:text-xl font-oswald font-bold tracking-wide hover:underline hover:text-teal transition-colors cursor-pointer">
               {activeTeam.name}
             </Link>
             <div className="flex items-center gap-2 mt-0.5">
@@ -166,17 +170,24 @@ export default function TeamContextBar({
         </div>
 
         {/* Sync Button */}
-        <Link
-          href={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}?tab=sync` : "/imports"}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-300 rounded hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition-colors"
+        <button
+          onClick={async () => {
+            if (!onSync || syncing) return;
+            setSyncing(true);
+            try {
+              await onSync();
+            } finally {
+              setSyncing(false);
+            }
+          }}
+          disabled={syncing || !onSync}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 disabled:opacity-50"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.15)", color: "#14B8A6", border: "1.5px solid rgba(13,148,136,0.3)" }}
           title="Sync roster and stats"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
-            <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-          </svg>
-          Sync
-        </Link>
+          {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          {syncing ? "Syncing..." : "Sync"}
+        </button>
 
         {/* Team Selector */}
         {teams.length > 1 && (
