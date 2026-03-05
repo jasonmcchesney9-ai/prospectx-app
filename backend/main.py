@@ -3598,6 +3598,22 @@ def init_db():
     conn.commit()
     conn.execute("CREATE INDEX IF NOT EXISTS idx_devplans_current ON development_plans(player_id, season, is_current)")
 
+    # --- dev_tracking_entries: manually tracked players for dev dashboard ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dev_tracking_entries (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            added_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+            FOREIGN KEY (added_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_dev_tracking_org_player ON dev_tracking_entries(org_id, player_id)")
+    conn.commit()
+
     # --- Migration: Create scout_assignments table ---
     conn.execute("""
         CREATE TABLE IF NOT EXISTS scout_assignments (
@@ -15467,7 +15483,7 @@ Keep each section to 2-3 sentences. Be specific about players by name."""}],
 
 PLAYBOOK_CATEGORIES = [
     "forecheck", "breakout", "powerplay", "penaltykill",
-    "defensive_zone", "offensive_zone", "neutral_zone", "faceoff", "other",
+    "defensive_zone", "offensive_zone", "neutral_zone", "faceoff", "scratch_pad", "other",
 ]
 
 def _playbook_row_to_dict(row) -> dict:
@@ -15596,6 +15612,55 @@ async def delete_playbook_board(board_id: str, token_data: dict = Depends(verify
         if not deleted:
             raise HTTPException(status_code=404, detail="Board not found")
         return {"detail": "Board deleted"}
+    finally:
+        conn.close()
+
+
+@app.get("/org-hub/playbook/scratch-pad")
+async def get_scratch_pad(token_data: dict = Depends(verify_token)):
+    """Get or create the scratch pad board for this org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM playbook_boards WHERE org_id = ? AND category = 'scratch_pad' ORDER BY created_at LIMIT 1",
+            (org_id,),
+        ).fetchone()
+        if row:
+            return _playbook_row_to_dict(row)
+        return {"id": None, "board_layout": None}
+    finally:
+        conn.close()
+
+
+@app.put("/org-hub/playbook/scratch-pad")
+async def save_scratch_pad(body: dict, token_data: dict = Depends(verify_token)):
+    """Save/upsert the scratch pad board for this org."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    board_layout = body.get("board_layout", {})
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM playbook_boards WHERE org_id = ? AND category = 'scratch_pad' ORDER BY created_at LIMIT 1",
+            (org_id,),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE playbook_boards SET board_layout = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(board_layout) if isinstance(board_layout, (dict, list)) else str(board_layout), now, existing["id"]),
+            )
+            conn.commit()
+            return {"id": existing["id"], "detail": "Scratch pad saved"}
+        else:
+            pad_id = str(uuid.uuid4())
+            conn.execute("""
+                INSERT INTO playbook_boards (id, org_id, created_by, title, category, description, board_layout, visibility, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, 'Scratch Pad', 'scratch_pad', 'Quick diagram scratch pad', ?, 'staff_only', 0, ?, ?)
+            """, (pad_id, org_id, user_id, json.dumps(board_layout) if isinstance(board_layout, (dict, list)) else str(board_layout), now, now))
+            conn.commit()
+            return {"id": pad_id, "detail": "Scratch pad created"}
     finally:
         conn.close()
 
@@ -16142,6 +16207,53 @@ Keep each section to 2-4 sentences. Be specific about players by name. Reference
 # ORG HUB — DEVELOPMENT DASHBOARD
 # ============================================================
 
+@app.post("/org-hub/dev-tracking", status_code=201)
+async def add_dev_tracking(body: dict, token_data: dict = Depends(verify_token)):
+    """Add a player to the dev tracking list."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    player_id = body.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+    conn = get_db()
+    try:
+        # verify player exists
+        p = conn.execute("SELECT id FROM players WHERE id = ?", (player_id,)).fetchone()
+        if not p:
+            raise HTTPException(status_code=404, detail="Player not found")
+        # check not duplicate
+        existing = conn.execute("SELECT id FROM dev_tracking_entries WHERE org_id = ? AND player_id = ?", (org_id, player_id)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player already tracked")
+        entry_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO dev_tracking_entries (id, org_id, player_id, added_by, created_at) VALUES (?, ?, ?, ?, ?)",
+            (entry_id, org_id, player_id, user_id, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+        return {"id": entry_id, "detail": "Player added to dev tracking"}
+    finally:
+        conn.close()
+
+
+@app.delete("/org-hub/dev-tracking/{player_id}")
+async def remove_dev_tracking(player_id: str, token_data: dict = Depends(verify_token)):
+    """Remove a player from the dev tracking list."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        deleted = conn.execute(
+            "DELETE FROM dev_tracking_entries WHERE org_id = ? AND player_id = ?",
+            (org_id, player_id),
+        ).rowcount
+        conn.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Tracking entry not found")
+        return {"detail": "Removed from dev tracking"}
+    finally:
+        conn.close()
+
+
 @app.get("/org-hub/development-dashboard")
 async def org_hub_development_dashboard(
     token_data: dict = Depends(verify_token),
@@ -16150,6 +16262,7 @@ async def org_hub_development_dashboard(
     org_id = token_data["org_id"]
     conn = get_db()
     try:
+        # Roster players (org_id match) + tracked players (via dev_tracking_entries)
         rows = conn.execute("""
             SELECT
                 p.id            AS player_id,
@@ -16157,6 +16270,8 @@ async def org_hub_development_dashboard(
                 p.last_name,
                 p.position,
                 p.current_team,
+                t.id            AS team_id,
+                CASE WHEN p.org_id = ? THEN 'roster' ELSE 'tracked' END AS source,
                 dp.id           AS plan_id,
                 dp.version      AS plan_version,
                 dp.status       AS plan_status,
@@ -16171,20 +16286,27 @@ async def org_hub_development_dashboard(
                 dp.section_7_metrics,
                 dp.section_8_staff_notes,
                 dp.section_9_raw
-            FROM players p
+            FROM (
+                SELECT id FROM players WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+                UNION
+                SELECT player_id AS id FROM dev_tracking_entries WHERE org_id = ?
+            ) combined
+            JOIN players p ON p.id = combined.id AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            LEFT JOIN teams t ON t.name = p.current_team AND t.org_id = ?
             LEFT JOIN development_plans dp
                 ON dp.player_id = p.id
-                AND dp.org_id = p.org_id
+                AND dp.org_id = ?
                 AND dp.is_current = 1
-            WHERE p.org_id = ?
-              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
             ORDER BY p.last_name, p.first_name
-        """, (org_id,)).fetchall()
+        """, (org_id, org_id, org_id, org_id, org_id)).fetchall()
 
         from datetime import datetime, timedelta
         now = datetime.utcnow()
         thirty_days = timedelta(days=30)
         sixty_days = timedelta(days=60)
+
+        # Collect unique team names for filter
+        team_names_set: set = set()
 
         results = []
         counts = {"on_track": 0, "needs_attention": 0, "behind": 0}
@@ -16192,6 +16314,8 @@ async def org_hub_development_dashboard(
             has_plan = r["plan_id"] is not None
             plan_status = r["plan_status"] if has_plan else "none"
             updated_at = r["plan_updated_at"] if has_plan else None
+            if r["current_team"]:
+                team_names_set.add(r["current_team"])
 
             # Traffic light classification
             if not has_plan:
@@ -16234,6 +16358,8 @@ async def org_hub_development_dashboard(
                 "last_name": r["last_name"],
                 "position": r["position"],
                 "current_team": r["current_team"],
+                "team_id": r["team_id"],
+                "source": r["source"],
                 "has_dev_plan": has_plan,
                 "plan_id": r["plan_id"],
                 "plan_status": plan_status,
@@ -16248,6 +16374,7 @@ async def org_hub_development_dashboard(
             "players": results,
             "summary": counts,
             "total": len(results),
+            "teams": sorted(team_names_set),
         }
     finally:
         conn.close()

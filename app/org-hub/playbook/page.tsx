@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,11 +13,16 @@ import {
   ChevronUp,
   Clock,
   XIcon,
+  PenTool,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import type { RinkDiagramData } from "@/types/rink";
+import type { RinkCanvasHandle } from "@/components/RinkCanvas";
+
+const RinkCanvas = lazy(() => import("@/components/RinkCanvas"));
 
 /* ── Types ────────────────────────────────────────────────── */
 interface PlaybookBoard {
@@ -130,6 +135,41 @@ export default function PlaybookPage() {
   const [showPxi, setShowPxi] = useState(false);
   const [pxiLoading, setPxiLoading] = useState(false);
   const [recommendations, setRecommendations] = useState<PxiRecommendation[]>([]);
+
+  // Scratch pad
+  const [scratchOpen, setScratchOpen] = useState(false);
+  const [scratchData, setScratchData] = useState<RinkDiagramData | null>(null);
+  const [scratchLoading, setScratchLoading] = useState(false);
+  const [scratchLoaded, setScratchLoaded] = useState(false);
+  const scratchRef = useRef<RinkCanvasHandle>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* ── Load scratch pad ───────────────────────────────────── */
+  const loadScratchPad = useCallback(async () => {
+    if (scratchLoaded) return;
+    setScratchLoading(true);
+    try {
+      const res = await api.get("/org-hub/playbook/scratch-pad");
+      if (res.data?.board_layout) {
+        setScratchData(res.data.board_layout as RinkDiagramData);
+      }
+    } catch { /* ignore */ }
+    setScratchLoading(false);
+    setScratchLoaded(true);
+  }, [scratchLoaded]);
+
+  useEffect(() => {
+    if (scratchOpen && !scratchLoaded) loadScratchPad();
+  }, [scratchOpen, scratchLoaded, loadScratchPad]);
+
+  function handleScratchChange(data: RinkDiagramData) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await api.put("/org-hub/playbook/scratch-pad", { board_layout: data });
+      } catch { /* non-fatal */ }
+    }, 1500);
+  }
 
   /* ── Fetch boards ──────────────────────────────────────── */
   useEffect(() => {
@@ -311,6 +351,59 @@ export default function PlaybookPage() {
             </div>
           )}
 
+          {/* ── Scratch Pad ──────────────────────────────── */}
+          <div
+            className="mb-4 overflow-hidden"
+            style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #EA580C" }}
+          >
+            <div
+              className="flex items-center justify-between px-5 py-3 cursor-pointer select-none"
+              style={{ background: "#0F2942" }}
+              onClick={() => setScratchOpen(!scratchOpen)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full" style={{ background: "#EA580C" }} />
+                <PenTool size={13} className="text-white/80" />
+                <span
+                  className="font-bold uppercase text-white"
+                  style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                >
+                  Scratch Pad
+                </span>
+                <span className="text-[9px] text-white/30" style={{ fontFamily: "ui-monospace, monospace" }}>
+                  Quick diagram — auto-saves
+                </span>
+              </div>
+              {scratchOpen ? <ChevronUp size={14} className="text-white/40" /> : <ChevronDown size={14} className="text-white/40" />}
+            </div>
+            {scratchOpen && (
+              <div className="bg-white" style={{ height: 400 }}>
+                {scratchLoading ? (
+                  <div className="flex items-center justify-center h-full gap-2">
+                    <Loader2 size={16} className="animate-spin" style={{ color: "#0D9488" }} />
+                    <span className="text-xs" style={{ color: "#5A7291" }}>Loading scratch pad...</span>
+                  </div>
+                ) : (
+                  <Suspense fallback={
+                    <div className="flex items-center justify-center h-full gap-2">
+                      <Loader2 size={16} className="animate-spin" style={{ color: "#0D9488" }} />
+                      <span className="text-xs" style={{ color: "#5A7291" }}>Loading canvas...</span>
+                    </div>
+                  }>
+                    <RinkCanvas
+                      ref={scratchRef}
+                      initialData={scratchData || undefined}
+                      onChange={handleScratchChange}
+                      showToolbar={true}
+                      editable={true}
+                      className="h-full"
+                    />
+                  </Suspense>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* ── Loading state ─────────────────────────────── */}
           {loading && (
             <div className="flex items-center justify-center py-16 gap-2">
@@ -320,7 +413,7 @@ export default function PlaybookPage() {
           )}
 
           {/* ── Category Sections ─────────────────────────── */}
-          {!loading && CATEGORIES.map((cat) => {
+          {!loading && CATEGORIES.filter((c) => c.key !== "scratch_pad").map((cat) => {
             const catBoards = grouped[cat.key] || [];
             const isCollapsed = collapsed[cat.key] && catBoards.length > 0;
             return (

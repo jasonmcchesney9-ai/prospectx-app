@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  UserPlus,
+  XIcon,
+  Trash2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -28,6 +31,8 @@ interface DevPlayer {
   last_name: string;
   position: string | null;
   current_team: string | null;
+  team_id: string | null;
+  source: "roster" | "tracked";
   has_dev_plan: boolean;
   plan_id: string | null;
   plan_status: string;
@@ -38,10 +43,19 @@ interface DevPlayer {
   sections: Record<string, string>;
 }
 
+interface SearchResult {
+  id: string;
+  first_name: string;
+  last_name: string;
+  position: string | null;
+  current_team: string | null;
+}
+
 interface DashboardData {
   players: DevPlayer[];
   summary: { on_track: number; needs_attention: number; behind: number };
   total: number;
+  teams: string[];
 }
 
 /* ── Helpers ──────────────────────────────────────────────── */
@@ -74,6 +88,17 @@ export default function DevelopmentDashboard() {
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [teamFilter, setTeamFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "roster" | "tracked">("all");
+
+  // Add player modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<SearchResult | null>(null);
+  const [adding, setAdding] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Bulk generate
   const [generating, setGenerating] = useState(false);
@@ -106,6 +131,8 @@ export default function DevelopmentDashboard() {
   const filtered = (data?.players || []).filter((p) => {
     if (posFilter !== "all" && p.position !== posFilter) return false;
     if (statusFilter !== "all" && p.overall_status !== statusFilter) return false;
+    if (teamFilter !== "all" && p.current_team !== teamFilter) return false;
+    if (sourceFilter !== "all" && p.source !== sourceFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const name = `${p.first_name} ${p.last_name}`.toLowerCase();
@@ -115,6 +142,43 @@ export default function DevelopmentDashboard() {
   });
 
   const positions = Array.from(new Set((data?.players || []).map((p) => p.position).filter(Boolean))).sort();
+
+  /* ── Player search for add modal ─────────────────────── */
+  function handleAddSearch(q: string) {
+    setAddSearch(q);
+    setSelectedPlayer(null);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (q.length < 2) { setSearchResults([]); return; }
+    searchTimeout.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await api.get(`/players/search/autocomplete?q=${encodeURIComponent(q)}&limit=12`);
+        setSearchResults(res.data?.results || []);
+      } catch { setSearchResults([]); }
+      setSearching(false);
+    }, 300);
+  }
+
+  async function handleAddPlayer() {
+    if (!selectedPlayer) return;
+    setAdding(true);
+    try {
+      await api.post("/org-hub/dev-tracking", { player_id: selectedPlayer.id });
+      setShowAddModal(false);
+      setSelectedPlayer(null);
+      setAddSearch("");
+      await fetchDashboard();
+    } catch { /* 409 duplicate */ }
+    setAdding(false);
+  }
+
+  async function handleRemoveTracking(playerId: string) {
+    if (!confirm("Remove this player from development tracking?")) return;
+    try {
+      await api.delete(`/org-hub/dev-tracking/${playerId}`);
+      await fetchDashboard();
+    } catch { /* ignore */ }
+  }
 
   /* ── Generate single plan ──────────────────────────────── */
   const handleGenerate = async (playerId: string) => {
@@ -183,6 +247,14 @@ export default function DevelopmentDashboard() {
                   {user.org_name || "My Org"}
                 </span>
               )}
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold uppercase transition-colors hover:opacity-90"
+                style={{ fontSize: 10, fontFamily: MONO, letterSpacing: 1, background: "#EA580C" }}
+              >
+                <UserPlus size={12} />
+                Add Player
+              </button>
               {missingCount > 0 && !generating && (
                 <button
                   onClick={() => setShowGenConfirm(true)}
@@ -294,6 +366,18 @@ export default function DevelopmentDashboard() {
                     <option key={pos} value={pos!}>{pos}</option>
                   ))}
                 </select>
+                {/* Team filter */}
+                <select
+                  value={teamFilter}
+                  onChange={(e) => setTeamFilter(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-md text-xs font-bold uppercase"
+                  style={{ border: "1px solid #DDE6EF", color: "#0F2942", fontFamily: MONO, letterSpacing: 1, background: "#F8FAFC" }}
+                >
+                  <option value="all">All Teams</option>
+                  {(data?.teams || []).map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
                 {/* Status filter */}
                 <select
                   value={statusFilter}
@@ -306,6 +390,24 @@ export default function DevelopmentDashboard() {
                   <option value="needs_attention">Needs Attention</option>
                   <option value="behind">Behind</option>
                 </select>
+                {/* Source filter */}
+                <div className="flex items-center rounded-md overflow-hidden" style={{ border: "1px solid #DDE6EF" }}>
+                  {(["all", "roster", "tracked"] as const).map((sf) => (
+                    <button
+                      key={sf}
+                      onClick={() => setSourceFilter(sf)}
+                      className="px-2.5 py-1.5 text-xs font-bold uppercase transition-colors"
+                      style={{
+                        fontFamily: MONO,
+                        letterSpacing: 1,
+                        background: sourceFilter === sf ? "#0F2942" : "#F8FAFC",
+                        color: sourceFilter === sf ? "#FFFFFF" : "#5A7291",
+                      }}
+                    >
+                      {sf === "all" ? "All" : sf === "roster" ? "Roster" : "Tracked"}
+                    </button>
+                  ))}
+                </div>
                 {/* Refresh */}
                 <button
                   onClick={fetchDashboard}
@@ -346,12 +448,12 @@ export default function DevelopmentDashboard() {
                 <div
                   className="grid items-center px-5 py-2.5"
                   style={{
-                    gridTemplateColumns: "2fr 80px 80px 100px 2fr 120px",
+                    gridTemplateColumns: "2fr 1.2fr 80px 80px 100px 2fr 140px",
                     background: "#F8FAFC",
                     borderBottom: "1px solid #DDE6EF",
                   }}
                 >
-                  {["Player", "Status", "Version", "Updated", "Key Focus", "Actions"].map((h) => (
+                  {["Player", "Team", "Status", "Version", "Updated", "Key Focus", "Actions"].map((h) => (
                     <span
                       key={h}
                       className="font-bold uppercase"
@@ -380,7 +482,7 @@ export default function DevelopmentDashboard() {
                         key={p.player_id}
                         className="grid items-center px-5 py-3 transition-colors hover:bg-gray-50/50"
                         style={{
-                          gridTemplateColumns: "2fr 80px 80px 100px 2fr 120px",
+                          gridTemplateColumns: "2fr 1.2fr 80px 80px 100px 2fr 140px",
                           background: idx % 2 === 0 ? "#FFFFFF" : "#FAFCFE",
                           borderBottom: "1px solid #F0F4F8",
                         }}
@@ -401,6 +503,33 @@ export default function DevelopmentDashboard() {
                             >
                               {p.position}
                             </span>
+                          )}
+                          <span
+                            className="shrink-0 px-1.5 py-0.5 rounded font-bold uppercase"
+                            style={{
+                              fontSize: 7,
+                              fontFamily: MONO,
+                              letterSpacing: 0.5,
+                              color: p.source === "roster" ? "#0D9488" : "#EA580C",
+                              background: p.source === "roster" ? "rgba(13,148,136,0.1)" : "rgba(234,88,12,0.1)",
+                            }}
+                          >
+                            {p.source === "roster" ? "Roster" : "Tracked"}
+                          </span>
+                        </div>
+
+                        {/* Team */}
+                        <div className="min-w-0">
+                          {p.current_team ? (
+                            <Link
+                              href={`/teams/${encodeURIComponent(p.current_team)}`}
+                              className="text-xs hover:underline truncate block"
+                              style={{ color: "#0F2942" }}
+                            >
+                              {p.current_team}
+                            </Link>
+                          ) : (
+                            <span className="text-xs" style={{ color: "#CCD6E0" }}>—</span>
                           )}
                         </div>
 
@@ -481,6 +610,16 @@ export default function DevelopmentDashboard() {
                               {isGen ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
                             </button>
                           )}
+                          {p.source === "tracked" && (
+                            <button
+                              onClick={() => handleRemoveTracking(p.player_id)}
+                              className="flex items-center gap-1 px-1.5 py-1 rounded-md font-bold uppercase transition-colors hover:opacity-70"
+                              style={{ fontSize: 8, fontFamily: MONO, letterSpacing: 0.5, color: "#EF4444", border: "1px solid rgba(239,68,68,0.2)" }}
+                              title="Remove from tracking"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -528,6 +667,103 @@ export default function DevelopmentDashboard() {
                     >
                       <Sparkles size={11} />
                       Generate All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Add Player Modal ───────────────────────── */}
+          {showAddModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div
+                className="mx-4 w-full max-w-md"
+                style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#FFFFFF", overflow: "hidden" }}
+              >
+                <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
+                  <div className="flex items-center gap-2">
+                    <UserPlus size={14} className="text-white/80" />
+                    <span
+                      className="font-bold uppercase text-white"
+                      style={{ fontSize: 11, fontFamily: MONO, letterSpacing: 2 }}
+                    >
+                      Add Player to Tracking
+                    </span>
+                  </div>
+                  <button onClick={() => { setShowAddModal(false); setSelectedPlayer(null); setAddSearch(""); }} className="text-white/50 hover:text-white/80">
+                    <XIcon size={14} />
+                  </button>
+                </div>
+                <div className="px-5 py-5 space-y-3">
+                  <p className="text-xs" style={{ color: "#5A7291" }}>
+                    Search for a player to add to your development tracking list.
+                  </p>
+                  {/* Search input */}
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#8BA4BB" }} />
+                    <input
+                      value={addSearch}
+                      onChange={(e) => handleAddSearch(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 rounded-lg text-sm"
+                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", outline: "none" }}
+                      placeholder="Type player name..."
+                      autoFocus
+                    />
+                  </div>
+                  {/* Results */}
+                  {(searchResults.length > 0 || searching) && !selectedPlayer && (
+                    <div className="max-h-48 overflow-y-auto rounded-lg" style={{ border: "1.5px solid #DDE6EF" }}>
+                      {searching && (
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <Loader2 size={12} className="animate-spin" style={{ color: "#0D9488" }} />
+                          <span className="text-xs" style={{ color: "#5A7291" }}>Searching...</span>
+                        </div>
+                      )}
+                      {searchResults.map((sr) => {
+                        const alreadyTracked = (data?.players || []).some((dp) => dp.player_id === sr.id);
+                        return (
+                          <button
+                            key={sr.id}
+                            onClick={() => { if (!alreadyTracked) setSelectedPlayer(sr); }}
+                            disabled={alreadyTracked}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 border-b last:border-b-0"
+                            style={{ borderColor: "#DDE6EF", opacity: alreadyTracked ? 0.4 : 1 }}
+                          >
+                            <span className="font-bold" style={{ color: "#0F2942" }}>{sr.first_name} {sr.last_name}</span>
+                            {sr.position && <span className="text-[9px] uppercase" style={{ color: "#5A7291" }}>{sr.position}</span>}
+                            {sr.current_team && <span className="text-[10px]" style={{ color: "#8BA4BB" }}>{sr.current_team}</span>}
+                            {alreadyTracked && <span className="text-[9px] ml-auto" style={{ color: "#8BA4BB" }}>Already on list</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Selected player */}
+                  {selectedPlayer && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(13,148,136,0.06)", border: "1.5px solid rgba(13,148,136,0.2)" }}>
+                      <span className="text-sm font-bold" style={{ color: "#0F2942" }}>{selectedPlayer.first_name} {selectedPlayer.last_name}</span>
+                      {selectedPlayer.position && <span className="text-[10px]" style={{ color: "#5A7291" }}>{selectedPlayer.position}</span>}
+                      {selectedPlayer.current_team && <span className="text-[10px]" style={{ color: "#8BA4BB" }}>{selectedPlayer.current_team}</span>}
+                      <button onClick={() => { setSelectedPlayer(null); setAddSearch(""); }} className="ml-auto"><XIcon size={12} style={{ color: "#8BA4BB" }} /></button>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => { setShowAddModal(false); setSelectedPlayer(null); setAddSearch(""); }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold uppercase"
+                      style={{ fontFamily: MONO, letterSpacing: 1, color: "#5A7291", border: "1px solid #DDE6EF" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddPlayer}
+                      disabled={!selectedPlayer || adding}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-bold uppercase transition-colors hover:opacity-90 disabled:opacity-50"
+                      style={{ fontFamily: MONO, letterSpacing: 1, background: "#0D9488" }}
+                    >
+                      {adding && <Loader2 size={11} className="animate-spin" />}
+                      Add to Tracking
                     </button>
                   </div>
                 </div>
