@@ -14757,6 +14757,193 @@ async def delete_line(line_id: str, token_data: dict = Depends(verify_token)):
     return {"detail": "Line deleted"}
 
 
+# ── Org Hub: Roster Board ──────────────────────────────────────
+
+class RosterBoardSaveLines(BaseModel):
+    team_name: str
+    lines: dict  # { forwards: [{order, label, players: [{player_id, name, jersey, position}]}], defense: [...], goalies: [...] }
+
+@app.get("/org-hub/roster-board/{team_name}")
+async def get_roster_board(team_name: str, token_data: dict = Depends(verify_token)):
+    """Combined roster + lines + PXR scores for the Roster Board."""
+    org_id = token_data["org_id"]
+    decoded_name = team_name.replace("%20", " ")
+    conn = get_db()
+    try:
+        # 1. Roster with stats
+        player_rows = conn.execute("""
+            SELECT p.*,
+                   ps.gp, ps.g, ps.a, ps.p AS pts,
+                   COALESCE(ps.plus_minus, 0) as plus_minus,
+                   COALESCE(ps.pim, 0) as pim, ps.season,
+                   gs.gp as g_gp, gs.ga as g_ga, gs.sv as g_sv, gs.gaa, gs.sv_pct,
+                   pxr.pxr_score, pxr.confidence_tier, pxr.gp as pxr_gp
+            FROM players p
+            LEFT JOIN (
+                SELECT player_id, gp, g, a, p, plus_minus, pim, season,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+                FROM player_stats
+            ) ps ON p.id = ps.player_id AND ps.rn = 1
+            LEFT JOIN (
+                SELECT player_id, gp, ga, sv, gaa, sv_pct,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+                FROM goalie_stats
+            ) gs ON p.id = gs.player_id AND gs.rn = 1
+            LEFT JOIN (
+                SELECT player_id, pxr_score, confidence_tier, gp,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+                FROM pxr_scores
+            ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
+            WHERE p.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY p.position, p.last_name
+        """, (org_id, decoded_name)).fetchall()
+
+        players = []
+        for r in player_rows:
+            d = _player_from_row(r)
+            d["stats"] = {
+                "gp": r["gp"] or 0, "g": r["g"] or 0, "a": r["a"] or 0,
+                "p": r["pts"] or 0, "plus_minus": r["plus_minus"] or 0,
+                "pim": r["pim"] or 0, "season": r["season"],
+            } if r["gp"] else None
+            d["goalie_stats"] = {
+                "gp": r["g_gp"] or 0, "ga": r["g_ga"] or 0, "sv": r["g_sv"] or 0,
+                "gaa": r["gaa"], "sv_pct": r["sv_pct"],
+            } if r["g_gp"] else None
+            d["pxr"] = {
+                "score": r["pxr_score"], "confidence_tier": r["pxr_gp"],
+                "gp": r["pxr_gp"],
+            } if r["pxr_score"] else None
+            players.append(d)
+
+        # 2. Existing manual line combinations
+        line_rows = conn.execute(
+            "SELECT * FROM line_combinations WHERE org_id = ? AND LOWER(team_name) = LOWER(?) AND data_source = 'manual' ORDER BY line_type, line_order",
+            (org_id, decoded_name),
+        ).fetchall()
+        lines = [_line_row_to_dict(r) for r in line_rows]
+
+        return {"players": players, "lines": lines, "team_name": decoded_name}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/roster-board/save-lines")
+async def save_roster_board_lines(body: RosterBoardSaveLines, token_data: dict = Depends(verify_token)):
+    """Bulk save the entire lineup from the Roster Board depth chart."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    team_name = body.team_name
+    conn = get_db()
+    try:
+        # Delete existing manual lines for this team
+        conn.execute(
+            "DELETE FROM line_combinations WHERE org_id = ? AND LOWER(team_name) = LOWER(?) AND data_source = 'manual'",
+            (org_id, team_name),
+        )
+
+        # Insert new lines
+        now = datetime.utcnow().isoformat()
+        for line_type, groups in body.lines.items():
+            if not isinstance(groups, list):
+                continue
+            for group in groups:
+                order = group.get("order", 0)
+                label = group.get("label", "")
+                players_list = group.get("players", [])
+                if not players_list:
+                    continue
+                player_names = " - ".join(p.get("name", "?") for p in players_list if p.get("name"))
+                player_refs = json.dumps(players_list)
+                line_id = str(uuid.uuid4())
+                conn.execute("""
+                    INSERT INTO line_combinations (id, org_id, team_name, line_type, line_label, line_order, player_names, player_refs, data_source, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)
+                """, (line_id, org_id, team_name, line_type, label, order, player_names, player_refs, now, now))
+
+        conn.commit()
+        return {"detail": "Lines saved", "team_name": team_name}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/roster-board/analyse")
+async def analyse_roster_board(body: dict, token_data: dict = Depends(verify_token)):
+    """Generate a PXI roster analysis using the team_identity report type."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    team_name = body.get("team_name", "")
+    if not team_name:
+        raise HTTPException(status_code=400, detail="team_name is required")
+
+    conn = get_db()
+    try:
+        # Gather roster data for the prompt
+        player_rows = conn.execute("""
+            SELECT p.first_name, p.last_name, p.position, p.birth_year, p.jersey_number,
+                   ps.gp, ps.g, ps.a, ps.p AS pts,
+                   pxr.pxr_score, pxr.confidence_tier
+            FROM players p
+            LEFT JOIN (
+                SELECT player_id, gp, g, a, p,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+                FROM player_stats
+            ) ps ON p.id = ps.player_id AND ps.rn = 1
+            LEFT JOIN (
+                SELECT player_id, pxr_score, confidence_tier,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
+                FROM pxr_scores
+            ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
+            WHERE p.org_id = ? AND LOWER(p.current_team) = LOWER(?)
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY p.position, ps.p DESC
+        """, (org_id, team_name)).fetchall()
+
+        if not player_rows:
+            return {"analysis": "No players found for this team. Sync your roster first."}
+
+        # Build roster summary for the prompt
+        roster_text = f"TEAM: {team_name}\nROSTER ({len(player_rows)} players):\n"
+        for r in player_rows:
+            name = f"{r['first_name']} {r['last_name']}"
+            pos = r["position"] or "?"
+            jersey = f"#{r['jersey_number']}" if r["jersey_number"] else ""
+            age = f"Age {2026 - r['birth_year']}" if r["birth_year"] else ""
+            stats = f"{r['gp'] or 0}GP {r['g'] or 0}G {r['a'] or 0}A {r['pts'] or 0}P" if r["gp"] else "No stats"
+            pxr = f"PXR:{r['pxr_score']:.1f}" if r["pxr_score"] else ""
+            roster_text += f"  {jersey} {name} ({pos}) {age} | {stats} {pxr}\n"
+
+        # Check for API key
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return {"analysis": f"**Roster Analysis — {team_name}**\n\n{len(player_rows)} players on roster. Connect an API key to generate full PXI analysis with lineup recommendations, depth chart evaluation, and trade target suggestions."}
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": f"""You are PXI, a professional hockey intelligence analyst. Analyze this team roster and provide a concise scouting report.
+
+{roster_text}
+
+Provide a structured analysis with these sections (use ALL CAPS headers):
+ROSTER OVERVIEW — Overall roster composition and depth
+LINEUP STRENGTHS — Top performers and competitive advantages
+AREAS OF CONCERN — Gaps, thin positions, development needs
+LINEUP RECOMMENDATION — Suggested top 6 forwards, top 4 D, starting goalie
+TRADE TARGETS — 2-3 types of players the team should target
+
+Keep each section to 2-3 sentences. Be specific about players by name."""}],
+        )
+        analysis_text = msg.content[0].text if msg.content else "Analysis failed."
+        return {"analysis": analysis_text}
+    finally:
+        conn.close()
+
+
 # ============================================================
 # DRILL LIBRARY — CRUD
 # ============================================================
