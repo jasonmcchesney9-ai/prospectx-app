@@ -45,6 +45,7 @@ import {
   Film,
   WifiOff,
   Wifi,
+  Zap,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -903,6 +904,7 @@ function UploadIndicator() {
 
   if (upload.phase === "idle") return null;
 
+  const isCompressing = upload.phase === "compressing";
   const isUploading = upload.phase === "uploading";
   const isPaused = upload.phase === "paused";
   const isProcessing = upload.phase === "processing";
@@ -916,14 +918,18 @@ function UploadIndicator() {
     ? "rgba(239,68,68,0.25)"
     : isPaused
     ? "rgba(234,88,12,0.2)"
+    : isCompressing
+    ? "rgba(59,130,246,0.15)"
     : "rgba(13,148,136,0.15)";
-  const pillColor = isReady ? "#10B981" : isError ? "#EF4444" : isPaused ? "#EA580C" : "#14B8A6";
+  const pillColor = isReady ? "#10B981" : isError ? "#EF4444" : isPaused ? "#EA580C" : isCompressing ? "#3B82F6" : "#14B8A6";
   const pillBorder = isReady
     ? "1.5px solid rgba(16,185,129,0.4)"
     : isError
     ? "1.5px solid rgba(239,68,68,0.4)"
     : isPaused
     ? "1.5px solid rgba(234,88,12,0.4)"
+    : isCompressing
+    ? "1.5px solid rgba(59,130,246,0.3)"
     : "1.5px solid rgba(13,148,136,0.3)";
 
   // Truncate filename
@@ -939,6 +945,12 @@ function UploadIndicator() {
         className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-colors"
         style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: pillBg, color: pillColor, border: pillBorder }}
       >
+        {isCompressing && (
+          <>
+            <Zap size={10} />
+            <span>Compressing {upload.compressionProgress}%</span>
+          </>
+        )}
         {isUploading && (
           <>
             <Upload size={10} />
@@ -996,6 +1008,27 @@ function UploadIndicator() {
               <p className="text-xs truncate" style={{ color: "#0F2942" }}>{upload.fileName}</p>
             </div>
 
+            {/* Compression progress bar */}
+            {isCompressing && (
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-sm font-bold font-oswald" style={{ color: "#0F2942" }}>{upload.compressionProgress}%</span>
+                  <span className="text-[10px] uppercase" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#3B82F6" }}>
+                    Optimizing Video
+                  </span>
+                </div>
+                <div className="w-full rounded-full h-2" style={{ background: "#DDE6EF" }}>
+                  <div
+                    className="h-2 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${upload.compressionProgress}%`, background: "#3B82F6" }}
+                  />
+                </div>
+                <p className="text-[10px] mt-1" style={{ fontFamily: "ui-monospace, monospace", color: "#8BA4BB" }}>
+                  {formatUploadBytes(upload.originalSize)} → compressing...
+                </p>
+              </div>
+            )}
+
             {/* Progress bar (uploading / paused / processing) */}
             {(isUploading || isPaused || isProcessing) && (
               <div>
@@ -1011,6 +1044,12 @@ function UploadIndicator() {
                     style={{ width: `${upload.progress}%`, background: isPaused ? "#EA580C" : isProcessing ? "#EA580C" : "#0D9488" }}
                   />
                 </div>
+                {/* Show compression savings if file was compressed */}
+                {upload.compressedSize > 0 && isUploading && (
+                  <p className="text-[10px] mt-1" style={{ fontFamily: "ui-monospace, monospace", color: "#3B82F6" }}>
+                    Compressed: {formatUploadBytes(upload.originalSize)} → {formatUploadBytes(upload.compressedSize)} ({Math.round((1 - upload.compressedSize / upload.originalSize) * 100)}% smaller)
+                  </p>
+                )}
               </div>
             )}
 
@@ -1071,7 +1110,7 @@ function UploadIndicator() {
 
             {/* Cancel / Dismiss */}
             <div className="flex justify-end pt-1 border-t" style={{ borderColor: "#DDE6EF" }}>
-              {(isUploading || isPaused || isProcessing) ? (
+              {(isCompressing || isUploading || isPaused || isProcessing) ? (
                 <button
                   onClick={() => { setExpanded(false); actions.cancelUpload(); }}
                   className="text-[10px] font-bold uppercase transition-colors hover:opacity-70"

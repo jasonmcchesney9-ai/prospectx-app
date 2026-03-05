@@ -148,6 +148,7 @@ export default function FilmUploadPage() {
     if (globalUpload.uploadId) setUploadId(globalUpload.uploadId);
     // Map context phase → local uploadStatus
     const phaseMap: Record<string, UploadStatus> = {
+      compressing: "uploading",  // Show as uploading step (compression UI is in nav)
       uploading: "uploading",
       paused: "uploading",  // Show as uploading on the page (nav shows paused)
       processing: "processing",
@@ -468,8 +469,41 @@ export default function FilmUploadPage() {
         {/* Step 3 — Upload & Process */}
         {step === "uploading" && (
           <div className="bg-white rounded-xl border border-border p-6">
+            {/* Compressing (shown when context is in compressing phase) */}
+            {uploadStatus === "uploading" && globalUpload.phase === "compressing" && (
+              <div className="py-6 max-w-md mx-auto">
+                {/* Percentage */}
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-2xl font-bold text-navy font-oswald">{globalUpload.compressionProgress}%</span>
+                  <span className="text-[11px] font-oswald uppercase tracking-wider" style={{ color: "#3B82F6" }}>Optimizing Video</span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-border rounded-full h-3">
+                  <div
+                    className="h-3 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${globalUpload.compressionProgress}%`, background: "#3B82F6" }}
+                  />
+                </div>
+
+                {/* Size info */}
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[11px] text-muted font-mono">
+                    Original: {formatBytes(globalUpload.originalSize)}
+                  </span>
+                  <span className="text-[11px] font-mono font-medium" style={{ color: "#3B82F6" }}>
+                    Compressing...
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-muted/60 text-center mt-3">
+                  Reducing file size before upload for faster transfer.
+                </p>
+              </div>
+            )}
+
             {/* Uploading with progress details */}
-            {uploadStatus === "uploading" && (
+            {uploadStatus === "uploading" && globalUpload.phase !== "compressing" && (
               <div className="py-6 max-w-md mx-auto">
                 {/* Percentage */}
                 <div className="flex items-baseline justify-between mb-2">
@@ -502,6 +536,15 @@ export default function FilmUploadPage() {
                   <p className="text-[11px] text-muted/70 text-center mt-2">
                     {formatEta(uploadEta)}
                   </p>
+                )}
+
+                {/* Compression savings */}
+                {globalUpload.compressedSize > 0 && (
+                  <div className="mt-3 rounded-lg px-3 py-2 text-center" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
+                    <p className="text-[10px] font-medium" style={{ color: "#3B82F6" }}>
+                      Compressed: {formatBytes(globalUpload.originalSize)} → {formatBytes(globalUpload.compressedSize)} ({Math.round((1 - globalUpload.compressedSize / globalUpload.originalSize) * 100)}% smaller)
+                    </p>
+                  </div>
                 )}
 
                 {/* Background navigation banner */}

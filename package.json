@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@mux/mux-player-react": "^3.11.5",
     "@mux/upchunk": "^3.5.0",
     "axios": "^1.7.9",

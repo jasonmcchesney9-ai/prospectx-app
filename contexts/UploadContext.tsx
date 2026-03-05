@@ -2,11 +2,13 @@
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { createUpload, type UpChunk } from "@mux/upchunk";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import api from "@/lib/api";
 
 /* ─── Types ─── */
 
-export type UploadPhase = "idle" | "uploading" | "paused" | "processing" | "ready" | "error";
+export type UploadPhase = "idle" | "compressing" | "uploading" | "paused" | "processing" | "ready" | "error";
 
 export interface UploadState {
   phase: UploadPhase;
@@ -21,6 +23,10 @@ export interface UploadState {
   title: string;       // session title for "Create Session" link
   /** Timestamp when upload completed (drives auto-dismiss) */
   completedAt: number | null;
+  /** Compression tracking */
+  compressionProgress: number;  // 0-100
+  originalSize: number;         // bytes (pre-compression)
+  compressedSize: number;       // bytes (post-compression, 0 if not compressed)
 }
 
 interface SpeedSample {
@@ -52,6 +58,9 @@ const INITIAL_STATE: UploadState = {
   error: null,
   title: "",
   completedAt: null,
+  compressionProgress: 0,
+  originalSize: 0,
+  compressedSize: 0,
 };
 
 const UploadContext = createContext<UploadContextValue | null>(null);
@@ -125,13 +134,85 @@ export default function UploadProvider({ children }: { children: React.ReactNode
     lastFileRef.current = file;
     lastMetaRef.current = metadata;
 
-    setState({
-      ...INITIAL_STATE,
+    const COMPRESSION_THRESHOLD = 500 * 1024 * 1024; // 500 MB
+    let fileToUpload: File = file;
+
+    // ── Compression step (files > 500 MB) ──
+    if (file.size > COMPRESSION_THRESHOLD) {
+      setState({
+        ...INITIAL_STATE,
+        phase: "compressing",
+        fileName: file.name,
+        bytesTotal: file.size,
+        originalSize: file.size,
+        title: metadata.title,
+      });
+
+      try {
+        const ffmpeg = new FFmpeg();
+
+        ffmpeg.on("progress", ({ progress }) => {
+          const pct = Math.min(Math.round(progress * 100), 100);
+          setState((prev) => ({ ...prev, compressionProgress: pct }));
+        });
+
+        // Load FFmpeg WASM from CDN
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+
+        // Write input file to FFmpeg virtual FS
+        const inputName = "input" + (file.name.includes(".") ? file.name.substring(file.name.lastIndexOf(".")) : ".mp4");
+        const outputName = "compressed.mp4";
+        await ffmpeg.writeFile(inputName, await fetchFile(file));
+
+        // Compress: H.264 CRF 23, fast preset, AAC 128k, scale to 1080p max
+        await ffmpeg.exec([
+          "-i", inputName,
+          "-c:v", "libx264",
+          "-crf", "23",
+          "-preset", "fast",
+          "-c:a", "aac",
+          "-b:a", "128k",
+          "-movflags", "+faststart",
+          "-vf", "scale=-2:'min(1080,ih)'",
+          "-y", outputName,
+        ]);
+
+        // Read compressed file
+        const data = await ffmpeg.readFile(outputName);
+        const compressedBlob = new Blob([data as BlobPart], { type: "video/mp4" });
+        const compressedFile = new File([compressedBlob], file.name.replace(/\.[^.]+$/, "") + "_compressed.mp4", { type: "video/mp4" });
+
+        fileToUpload = compressedFile;
+        setState((prev) => ({
+          ...prev,
+          compressedSize: compressedFile.size,
+          bytesTotal: compressedFile.size,
+        }));
+
+        // Clean up FFmpeg
+        ffmpeg.terminate();
+
+        console.info(`[FFmpeg] Compressed ${(file.size / 1024 / 1024).toFixed(1)} MB → ${(compressedFile.size / 1024 / 1024).toFixed(1)} MB (${Math.round((1 - compressedFile.size / file.size) * 100)}% reduction)`);
+      } catch (compErr) {
+        // Graceful fallback — upload original file
+        console.warn("[FFmpeg] Compression failed, uploading original file:", compErr);
+        fileToUpload = file;
+      }
+    }
+
+    // Transition to uploading phase
+    setState((prev) => ({
+      ...prev,
       phase: "uploading",
       fileName: file.name,
-      bytesTotal: file.size,
+      bytesTotal: fileToUpload.size,
+      compressionProgress: prev.originalSize > 0 ? 100 : 0,
       title: metadata.title,
-    });
+    }));
 
     try {
       // 1. Create Mux direct upload URL
@@ -150,7 +231,7 @@ export default function UploadProvider({ children }: { children: React.ReactNode
 
       const upload = createUpload({
         endpoint: upload_url,
-        file: file,
+        file: fileToUpload,
         chunkSize: 5120,             // 5 MB chunks
         attempts: 5,                 // retry each chunk up to 5 times
         delayBeforeAttempt: 1,       // 1 second between retries
@@ -160,9 +241,10 @@ export default function UploadProvider({ children }: { children: React.ReactNode
       upchunkRef.current = upload;
 
       // ── Progress ──
+      const uploadFileSize = fileToUpload.size;
       upload.on("progress", (evt: CustomEvent) => {
         const pct = Math.round(evt.detail ?? 0);
-        const bytesUploaded = Math.round((pct / 100) * file.size);
+        const bytesUploaded = Math.round((pct / 100) * uploadFileSize);
 
         // Speed calculation with rolling samples
         const now = performance.now();
@@ -177,7 +259,7 @@ export default function UploadProvider({ children }: { children: React.ReactNode
           const elapsed = (now - oldest.time) / 1000;
           if (elapsed > 0) {
             speed = (bytesUploaded - oldest.bytes) / elapsed;
-            const remaining = file.size - bytesUploaded;
+            const remaining = uploadFileSize - bytesUploaded;
             eta = speed > 0 ? remaining / speed : 0;
           }
         }
@@ -187,7 +269,7 @@ export default function UploadProvider({ children }: { children: React.ReactNode
           phase: prev.phase === "paused" ? "paused" : "uploading",
           progress: pct,
           bytesUploaded,
-          bytesTotal: file.size,
+          bytesTotal: uploadFileSize,
           speed,
           eta,
         }));
