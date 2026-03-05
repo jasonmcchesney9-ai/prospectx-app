@@ -48,6 +48,7 @@ const CATEGORIES: { key: string; label: string }[] = [
   { key: "offensive_zone", label: "Offensive Zone" },
   { key: "neutral_zone", label: "Neutral Zone" },
   { key: "faceoff", label: "Faceoffs" },
+  { key: "meeting_notes", label: "Meeting Notes" },
   { key: "other", label: "Other" },
 ];
 
