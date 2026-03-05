@@ -1615,13 +1615,31 @@ export interface SubscriptionTier {
   founders_price?: number;
 }
 
+export interface UsageDetail {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
 export interface SubscriptionUsage {
   tier: string;
   tier_config: SubscriptionTier;
+  usage: {
+    reports: UsageDetail;
+    bench_talks: UsageDetail;
+    practice_plans: UsageDetail;
+    uploads: UsageDetail;
+    highlight_reels: UsageDetail;
+  };
+  // Legacy fields (backwards compat)
   monthly_reports_used: number;
   monthly_reports_limit: number;
   monthly_bench_talks_used: number;
   monthly_bench_talks_limit: number;
+  reports_used: number;
+  reports_limit: number;
+  bench_talks_used: number;
+  bench_talks_limit: number;
   usage_reset_at: string | null;
   reports_remaining: number | string;
   bench_talks_remaining: number | string;

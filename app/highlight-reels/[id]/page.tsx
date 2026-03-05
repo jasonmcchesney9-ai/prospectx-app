@@ -121,8 +121,17 @@ export default function HighlightReelViewerPage() {
       const updated = await api.get(`/highlight-reels/${reelId}`);
       setReel(updated.data);
       toast.success("PXI suggestions generated!");
-    } catch {
-      toast.error("Failed to generate suggestions");
+    } catch (e: unknown) {
+      const resp = (e as { response?: { status?: number; data?: { detail?: { error?: string; limit?: number; used?: number } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const limitMsg = typeof detail === "object" && detail?.error === "usage_limit_exceeded"
+          ? `Highlight reel limit reached (${detail.used}/${detail.limit}). Upgrade your plan.`
+          : "Highlight reel limit reached. Upgrade your plan.";
+        toast.error(limitMsg);
+      } else {
+        toast.error("Failed to generate suggestions");
+      }
     } finally {
       setGeneratingSuggestions(false);
     }

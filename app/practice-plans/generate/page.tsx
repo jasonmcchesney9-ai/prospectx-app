@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import UpgradeModal from "@/components/UpgradeModal";
 import api from "@/lib/api";
 import { formatLeague } from "@/lib/leagues";
+import { getUser } from "@/lib/auth";
 import type { TeamReference, PracticePlan, PracticePlanGenerateRequest } from "@/types/api";
 import {
   DRILL_AGE_LEVELS,
@@ -45,6 +47,7 @@ export default function GeneratePracticePlanPage() {
   const [genState, setGenState] = useState<GenState>("idle");
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
 
   useEffect(() => {
     async function load() {
@@ -98,11 +101,20 @@ export default function GeneratePracticePlanPage() {
       setStatusMessage("Practice plan generated! Redirecting...");
       setTimeout(() => router.push(`/practice-plans/${data.id}`), 800);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Failed to generate practice plan.";
-      setError(msg);
-      setGenState("failed");
+      const resp = (err as { response?: { status?: number; data?: { detail?: { used?: number; limit?: number; error?: string } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const used = typeof detail === "object" ? detail?.used || 0 : 0;
+        const limit = typeof detail === "object" ? detail?.limit || 0 : 0;
+        setUpgradeModal({ open: true, used, limit });
+        setError("You've reached your monthly practice plan limit. Upgrade your plan to generate more.");
+        setGenState("failed");
+      } else {
+        const msg =
+          (typeof resp?.data?.detail === "string" ? resp.data.detail : null) || "Failed to generate practice plan.";
+        setError(msg);
+        setGenState("failed");
+      }
     }
   };
 
@@ -347,6 +359,14 @@ export default function GeneratePracticePlanPage() {
           </div>
         )}
       </main>
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ ...upgradeModal, open: false })}
+        limitType="report"
+        currentTier={getUser()?.subscription_tier || "rookie"}
+        used={upgradeModal.used}
+        limit={upgradeModal.limit}
+      />
     </ProtectedRoute>
   );
 }

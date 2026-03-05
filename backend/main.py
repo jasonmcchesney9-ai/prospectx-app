@@ -200,6 +200,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": 0,
         "monthly_bench_talks": 150,  # 5/day × 30
         "monthly_practice_plans": 0,
+        "monthly_highlight_reels": 0,
         "max_seats": 1,
         "description": "Browse players, live stats, and basic Bench Talk.",
         "target_user": "Casual browsers",
@@ -225,6 +226,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": 3,
         "monthly_bench_talks": 600,  # 20/day × 30
         "monthly_practice_plans": 0,
+        "monthly_highlight_reels": 1,
         "max_seats": 1,
         "description": "Development tracking, reports, and advisor directory for hockey parents.",
         "target_user": "Hockey parents",
@@ -250,6 +252,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": 10,
         "monthly_bench_talks": 1500,  # 50/day × 30
         "monthly_practice_plans": 3,
+        "monthly_highlight_reels": 3,
         "monthly_game_plans": 3,
         "max_seats": 1,
         "description": "Scout Notes, rated search, limited coaching tools, and PXI basic.",
@@ -276,6 +279,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
+        "monthly_highlight_reels": -1,
         "max_seats": 1,
         "description": "Unlimited reports, full PXI (10 modes), all coaching tools, InStat, and export.",
         "target_user": "Head coaches, agents, GMs",
@@ -301,6 +305,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
+        "monthly_highlight_reels": -1,
         "max_seats": 1,
         "description": "Everything in Pro plus PXI Auto-Scout, bulk reports, API access, and priority support.",
         "target_user": "Power users, agencies",
@@ -329,6 +334,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
+        "monthly_highlight_reels": -1,
         "max_seats": 10,
         "description": "All Pro features for up to 10 seats with shared scouting data.",
         "target_user": "Single team organizations",
@@ -355,6 +361,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
+        "monthly_highlight_reels": -1,
         "max_seats": 30,
         "description": "Multi-team platform with cross-team scouting boards and org-wide analytics.",
         "target_user": "AAA organizations, multi-team programs",
@@ -381,6 +388,7 @@ SUBSCRIPTION_TIERS = {
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
+        "monthly_highlight_reels": -1,
         "max_seats": -1,  # Unlimited
         "description": "Custom solution with unlimited seats, dedicated onboarding, and SLA support.",
         "target_user": "OHL/WHL teams, large agencies",
@@ -460,6 +468,7 @@ def _check_tier_limit(user_id: str, resource_type: str, conn) -> dict:
         "bench_talks": ("monthly_bench_talks", "monthly_bench_talks_used"),
         "practice_plans": ("monthly_practice_plans", None),
         "uploads": ("max_uploads_per_month", None),
+        "highlight_reels": ("monthly_highlight_reels", None),
     }
     tier_key, legacy_col = limit_map.get(resource_type, (None, None))
     if not tier_key:
@@ -489,6 +498,7 @@ def _check_tier_limit(user_id: str, resource_type: str, conn) -> dict:
         "bench_talks": "bench_talks_count",
         "practice_plans": "practice_plans_count",
         "uploads": "uploads_count",
+        "highlight_reels": "highlight_reels_count",
     }
     tracking_col = tracking_col_map.get(resource_type)
     if tracking_col:
@@ -505,11 +515,12 @@ def _check_tier_limit(user_id: str, resource_type: str, conn) -> dict:
     # -1 means unlimited
     if limit != -1 and used >= limit:
         raise HTTPException(status_code=429, detail={
-            "error": f"{resource_type}_limit_reached",
+            "error": "usage_limit_exceeded",
+            "resource": resource_type,
             "tier": tier,
             "limit": limit,
             "used": used,
-            "upgrade_url": "/pricing",
+            "upgrade_url": "/billing",
         })
 
     return {"tier": tier, "limit": limit, "used": used}
@@ -535,6 +546,7 @@ def _increment_tracking(user_id: str, resource_type: str, conn):
         "bench_talks": "bench_talks_count",
         "practice_plans": "practice_plans_count",
         "uploads": "uploads_count",
+        "highlight_reels": "highlight_reels_count",
     }
     col = tracking_col_map.get(resource_type)
     if not col:
@@ -2427,6 +2439,7 @@ def init_db():
             reports_count INTEGER DEFAULT 0,
             practice_plans_count INTEGER DEFAULT 0,
             uploads_count INTEGER DEFAULT 0,
+            highlight_reels_count INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, month),
@@ -2559,6 +2572,13 @@ def init_db():
             conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
             conn.commit()
             logger.info("Migration: added %s column to users", col_name)
+
+    # ── Migration: highlight_reels_count on usage_tracking ───────
+    ut_cols = _get_table_columns(conn, "usage_tracking")
+    if "highlight_reels_count" not in ut_cols and ut_cols:
+        conn.execute("ALTER TABLE usage_tracking ADD COLUMN highlight_reels_count INTEGER DEFAULT 0")
+        conn.commit()
+        logger.info("Migration: added highlight_reels_count column to usage_tracking")
 
     # ── Migration: rename PXI chat tables to Bench Talk ──────────
     if USE_PG:
@@ -10868,7 +10888,7 @@ async def get_subscription_usage(token_data: dict = Depends(verify_token)):
         now = datetime.now(timezone.utc)
         current_month = now.strftime("%Y-%m")
         tracking_row = conn.execute(
-            "SELECT reports_count, bench_talks_count, practice_plans_count, uploads_count FROM usage_tracking WHERE user_id = ? AND month = ?",
+            "SELECT reports_count, bench_talks_count, practice_plans_count, uploads_count, highlight_reels_count FROM usage_tracking WHERE user_id = ? AND month = ?",
             (user_id, current_month),
         ).fetchone()
 
@@ -10876,6 +10896,7 @@ async def get_subscription_usage(token_data: dict = Depends(verify_token)):
         bench_talks_used = (tracking_row["bench_talks_count"] if tracking_row else None) or (row["monthly_bench_talks_used"] or 0)
         practice_plans_used = (tracking_row["practice_plans_count"] if tracking_row else 0) or 0
         uploads_used = (tracking_row["uploads_count"] if tracking_row else 0) or 0
+        highlight_reels_used = (tracking_row["highlight_reels_count"] if tracking_row else 0) or 0
 
         def remaining(limit, used):
             return -1 if limit == -1 else max(0, limit - used)
@@ -10904,6 +10925,11 @@ async def get_subscription_usage(token_data: dict = Depends(verify_token)):
                     "used": uploads_used,
                     "limit": tier_config.get("max_uploads_per_month", 0),
                     "remaining": remaining(tier_config.get("max_uploads_per_month", 0), uploads_used),
+                },
+                "highlight_reels": {
+                    "used": highlight_reels_used,
+                    "limit": tier_config.get("monthly_highlight_reels", 0),
+                    "remaining": remaining(tier_config.get("monthly_highlight_reels", 0), highlight_reels_used),
                 },
             },
             # Boolean permissions
@@ -40201,6 +40227,14 @@ async def create_film_upload(request: Request, token_data: dict = Depends(verify
     """Create a video upload record (link or placeholder for Mux upload)."""
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
+
+    # ── Tier limit check: uploads ──
+    limit_conn = get_db()
+    try:
+        _check_tier_limit(user_id, "uploads", limit_conn)
+    finally:
+        limit_conn.close()
+
     body = await request.json()
     title = (body.get("title") or "").strip()
     if not title:
@@ -40224,6 +40258,7 @@ async def create_film_upload(request: Request, token_data: dict = Depends(verify
             body.get("visibility", "org"), user_id, now, now,
         ))
         conn.commit()
+        _increment_tracking(user_id, "uploads", conn)
         return {"id": upload_id, "title": title, "status": body.get("status", "processing"), "created_at": now}
     finally:
         conn.close()
@@ -40335,6 +40370,14 @@ async def create_mux_upload_url(request: Request, token_data: dict = Depends(ver
 
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
+
+    # ── Tier limit check: uploads ──
+    limit_conn = get_db()
+    try:
+        _check_tier_limit(user_id, "uploads", limit_conn)
+    finally:
+        limit_conn.close()
+
     body = await request.json()
     title = (body.get("title") or "").strip()
     if not title:
@@ -40374,6 +40417,7 @@ async def create_mux_upload_url(request: Request, token_data: dict = Depends(ver
             (mux_result["upload_id"], upload_id),
         )
         conn.commit()
+        _increment_tracking(user_id, "uploads", conn)
         return {
             "id": upload_id,
             "upload_url": mux_result["upload_url"],
@@ -40401,6 +40445,14 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
 
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
+
+    # ── Tier limit check: uploads ──
+    limit_conn = get_db()
+    try:
+        _check_tier_limit(user_id, "uploads", limit_conn)
+    finally:
+        limit_conn.close()
+
     body = await request.json()
     url = (body.get("url") or "").strip()
     title = (body.get("title") or "").strip() or "Video from URL"
@@ -40457,6 +40509,7 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
                         (mux_result.get("asset_id"), now, session_id, org_id),
                     )
             conn.commit()
+            _increment_tracking(user_id, "uploads", conn)
             return {
                 "id": upload_id,
                 "source_type": "mux_url",
@@ -40488,6 +40541,7 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
                 body.get("visibility", "org"), user_id, now, now,
             ))
             conn.commit()
+            _increment_tracking(user_id, "uploads", conn)
             return {
                 "id": upload_id,
                 "source_type": "external_link",
@@ -41683,6 +41737,7 @@ KEY EVENTS ({min(len(events), MAX_INDIVIDUAL_EVENTS)} of {len(events)} shown):
                 logger.info("Film report generated: %s (%s) in %dms — %d clips, %d events",
                             report_id, report_type, generation_ms, len(clips), len(events))
 
+                _increment_tracking(user_id, "reports", conn)
                 return {"report_id": report_id, "status": "complete", "title": title, "generation_time_ms": generation_ms}
             else:
                 # No API key — mock mode
@@ -41705,6 +41760,7 @@ No AI analysis available in demo mode."""
                     WHERE id = ?
                 """, (title, mock_text, now_iso(), generation_ms, report_id))
                 conn.commit()
+                _increment_tracking(user_id, "reports", conn)
                 return {"report_id": report_id, "status": "complete", "title": title, "generation_time_ms": generation_ms}
 
         except Exception as e:
@@ -42301,6 +42357,15 @@ async def delete_highlight_reel(reel_id: str, token_data: dict = Depends(verify_
 async def generate_highlight_suggestions(reel_id: str, token_data: dict = Depends(verify_token)):
     """Use PXI to suggest clip order and reel structure for a highlight reel."""
     org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    # ── Tier limit check: highlight reels ──
+    limit_conn = get_db()
+    try:
+        _check_tier_limit(user_id, "highlight_reels", limit_conn)
+    finally:
+        limit_conn.close()
+
     conn = get_db()
     try:
         row = conn.execute(
@@ -42360,6 +42425,7 @@ async def generate_highlight_suggestions(reel_id: str, token_data: dict = Depend
                 }), datetime.now(timezone.utc).isoformat(), reel_id),
             )
             conn.commit()
+            _increment_tracking(user_id, "highlight_reels", conn)
             return {"status": "completed", "message": "Mock suggestions generated (no API key)"}
 
         # Mark as generating
@@ -42408,6 +42474,7 @@ CLIPS ({len(clips_data)} total):
             ("completed", json.dumps(suggestions), datetime.now(timezone.utc).isoformat(), reel_id),
         )
         conn.commit()
+        _increment_tracking(user_id, "highlight_reels", conn)
         return {"status": "completed", "suggestions": suggestions}
 
     except HTTPException:

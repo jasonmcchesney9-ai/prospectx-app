@@ -802,7 +802,7 @@ export default function BenchTalkDrawer() {
           {
             id: `limit-${Date.now()}`,
             role: "assistant",
-            content: `You've reached your monthly Bench Talk limit (${used}/${limit} messages). [Upgrade your plan](/pricing) to keep the conversation going.`,
+            content: `You've reached your monthly Bench Talk limit (${used}/${limit} messages). [Upgrade your plan](/billing) to keep the conversation going.`,
             metadata: null,
             tokens_used: 0,
             created_at: new Date().toISOString(),

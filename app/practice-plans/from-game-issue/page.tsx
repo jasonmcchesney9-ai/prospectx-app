@@ -18,7 +18,9 @@ import {
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import UpgradeModal from "@/components/UpgradeModal";
 import api from "@/lib/api";
+import { getUser } from "@/lib/auth";
 import type { PracticePlan } from "@/types/api";
 
 interface QuickIssue {
@@ -111,6 +113,7 @@ export default function FromGameIssuePage() {
   const [saved, setSaved] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
   const [focusOverride, setFocusOverride] = useState<string[]>([]);
+  const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
 
   useEffect(() => {
     async function loadTeams() {
@@ -140,8 +143,14 @@ export default function FromGameIssuePage() {
         focus_override: focusOverride,
       });
       setGeneratedPlan(data);
-    } catch {
-      // non-critical
+    } catch (err: unknown) {
+      const resp = (err as { response?: { status?: number; data?: { detail?: { used?: number; limit?: number } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const used = typeof detail === "object" ? detail?.used || 0 : 0;
+        const limit = typeof detail === "object" ? detail?.limit || 0 : 0;
+        setUpgradeModal({ open: true, used, limit });
+      }
     } finally {
       setGenerating(false);
     }
@@ -493,6 +502,14 @@ export default function FromGameIssuePage() {
           </div>
         )}
       </main>
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ ...upgradeModal, open: false })}
+        limitType="report"
+        currentTier={getUser()?.subscription_tier || "rookie"}
+        used={upgradeModal.used}
+        limit={upgradeModal.limit}
+      />
     </ProtectedRoute>
   );
 }

@@ -314,12 +314,22 @@ export default function UploadProvider({ children }: { children: React.ReactNode
       pollStatus(newUploadId);
     } catch (e: unknown) {
       stopPolling();
-      const msg = e instanceof Error ? e.message : "Upload failed";
-      // Don't overwrite state if the user explicitly cancelled
-      if (msg === "Upload cancelled") {
-        setState(INITIAL_STATE);
+      // Detect 429 usage limit exceeded
+      const resp = (e as { response?: { status?: number; data?: { detail?: { error?: string; limit?: number; used?: number } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const limitMsg = typeof detail === "object" && detail?.error === "usage_limit_exceeded"
+          ? `Upload limit reached (${detail.used}/${detail.limit}). Upgrade your plan at /billing`
+          : "Upload limit reached. Upgrade your plan to upload more files.";
+        setState((prev) => ({ ...prev, phase: "error", error: limitMsg }));
       } else {
-        setState((prev) => ({ ...prev, phase: "error", error: msg }));
+        const msg = e instanceof Error ? e.message : "Upload failed";
+        // Don't overwrite state if the user explicitly cancelled
+        if (msg === "Upload cancelled") {
+          setState(INITIAL_STATE);
+        } else {
+          setState((prev) => ({ ...prev, phase: "error", error: msg }));
+        }
       }
     }
   }, [pollStatus, stopPolling]);

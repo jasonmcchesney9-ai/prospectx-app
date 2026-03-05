@@ -820,6 +820,18 @@ function Dashboard() {
                 </div>
               )}
             </div>
+
+            {/* Monthly Usage */}
+            <div className="bg-white rounded-xl border border-border p-5 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
+                <Link href="/billing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
+                  <Crown size={10} />
+                  {user?.subscription_tier || "Rookie"}
+                </Link>
+              </div>
+              <BenchTalkUsage />
+            </div>
           </>
         )}
 
@@ -1028,7 +1040,7 @@ function Dashboard() {
               <div className="bg-white rounded-xl border border-border p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                  <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
+                  <Link href="/billing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
                     <Crown size={10} />
                     {user?.subscription_tier || "Rookie"}
                   </Link>
@@ -1141,7 +1153,7 @@ function Dashboard() {
                 <div className="bg-white rounded-xl border border-border p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                    <Link href="/pricing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
+                    <Link href="/billing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
                       <Crown size={10} />
                       {user?.subscription_tier || "Rookie"}
                     </Link>

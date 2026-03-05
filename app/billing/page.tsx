@@ -20,6 +20,7 @@ import api from "@/lib/api";
 import { extractApiError } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import BenchTalkUsage from "@/components/BenchTalkUsage";
 
 interface BillingStatus {
   tier: string;
@@ -240,6 +241,14 @@ function BillingContent() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Monthly Usage */}
+            <div className="bg-white rounded-xl border border-border p-6 mb-8">
+              <h3 className="font-oswald text-sm font-bold text-navy uppercase tracking-wider mb-4">
+                Monthly Usage
+              </h3>
+              <BenchTalkUsage />
             </div>
 
             {/* Plan Cards — show for free/inactive users */}

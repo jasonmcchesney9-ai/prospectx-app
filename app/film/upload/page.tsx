@@ -260,8 +260,17 @@ export default function FilmUploadPage() {
         toast.success("Video link submitted — processing...");
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to link video";
-      toast.error(msg);
+      const resp = (e as { response?: { status?: number; data?: { detail?: { error?: string; limit?: number; used?: number } | string } } })?.response;
+      if (resp?.status === 429) {
+        const detail = resp.data?.detail;
+        const limitMsg = typeof detail === "object" && detail?.error === "usage_limit_exceeded"
+          ? `Upload limit reached (${detail.used}/${detail.limit}). Upgrade your plan.`
+          : "Upload limit reached. Upgrade your plan.";
+        toast.error(limitMsg);
+      } else {
+        const msg = e instanceof Error ? e.message : "Failed to link video";
+        toast.error(msg);
+      }
     } finally {
       setLinkSubmitting(false);
     }
