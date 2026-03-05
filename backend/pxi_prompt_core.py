@@ -1446,6 +1446,8 @@ MODE_TEMPLATE_WIRING = {
     "free_agent_target":         {"primary": "gm",      "secondary": "scout"},
     # Addendum — Special Teams Audit
     "special_teams_audit":       {"primary": "analyst", "secondary": "scout"},
+    # Addendum 13 — Highlight Reel Builder
+    "recruiting_highlight_builder": {"primary": "coach", "secondary": "scout"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -1710,6 +1712,9 @@ REQUIRED_SECTIONS_BY_TYPE = {
     ],
     "recruit_fit_report": [
         "SYSTEM_FIT", "PILLAR_FIT", "FRICTION_POINTS", "FIT_VERDICT",
+    ],
+    "recruiting_highlight_builder": [
+        "SUGGESTED_ORDER", "SECTION_BREAKS", "OPENING_NOTE", "CLOSING_NOTE",
     ],
 }
 
@@ -4423,6 +4428,9 @@ Perspective: {resolved_perspective}
         parts.append(POSTGAME_LOSS_SPEECH)
     elif report_type == "pre_game_intel_prompt":
         parts.append(PRE_GAME_INTEL_PROMPT)
+    # Addendum 13 — Highlight Reel Builder
+    elif report_type == "recruiting_highlight_builder":
+        parts.append(RECRUITING_HIGHLIGHT_BUILDER)
 
     return "\n\n".join(parts)
 
@@ -6249,6 +6257,43 @@ Write for a coaching staff / GM audience. Be honest about fit. Data-backed. No w
 
 
 # ─────────────────────────────────────────────────────────
+# Addendum 13 — RECRUITING_HIGHLIGHT_BUILDER (highlight reel generation)
+# ─────────────────────────────────────────────────────────
+RECRUITING_HIGHLIGHT_BUILDER = """You are PXI — ProspectX Intelligence — acting as a recruiting highlight reel consultant.
+
+You will receive: player profile info, player stats, level (junior/college/pro), and a list of video clips with metadata (title, type, start/end times, tags, description).
+
+Your job is to suggest the OPTIMAL order and structure for a recruiting highlight reel that showcases this player's strengths to scouts, coaches, and GMs at the target level.
+
+Return a JSON object with these EXACT keys:
+
+{
+  "suggested_order": ["clip_id_1", "clip_id_2", ...],
+  "section_breaks": [
+    {"after_clip_index": 2, "label": "SKATING & SPEED"},
+    {"after_clip_index": 5, "label": "HOCKEY SENSE"}
+  ],
+  "opening_note": "1-sentence suggestion for the reel opening — what to lead with and why.",
+  "closing_note": "1-sentence suggestion for the reel closer — what leaves the lasting impression.",
+  "cut_suggestions": ["clip_id to consider removing and why"],
+  "duration_estimate_seconds": 120,
+  "notes": "2-3 sentence overall assessment of the reel's strength and any gaps."
+}
+
+RULES:
+1. Lead with the player's BEST attribute — the thing scouts will remember.
+2. Group similar plays together (skating, shooting, battles, IQ plays) but vary pacing.
+3. For junior → college reels: emphasize compete level, skating, and coachability moments.
+4. For junior → pro reels: emphasize hockey IQ, pace of play, and translatable skills.
+5. Keep total reel under 3 minutes if possible — attention spans are short.
+6. End with a signature play — the clip that defines who this player is.
+7. If clips are weak or redundant, say so in cut_suggestions. Honest feedback only.
+8. Every suggestion must reference actual clip data provided — never invent clips.
+9. If player stats are available, note which clips validate the statistical profile.
+10. Return ONLY valid JSON. No markdown, no preamble, no explanation outside the JSON."""
+
+
+# ─────────────────────────────────────────────────────────
 # Addendum 12 — PRE_GAME_INTEL_PROMPT (full JSON pre-populate)
 # ─────────────────────────────────────────────────────────
 PRE_GAME_INTEL_PROMPT = '''
@@ -7046,5 +7091,8 @@ def build_system_prompt(
         parts.append(POSTGAME_LOSS_SPEECH)
     elif report_type == "pre_game_intel_prompt":
         parts.append(PRE_GAME_INTEL_PROMPT)
+    # Addendum 13 — Highlight Reel Builder
+    elif report_type == "recruiting_highlight_builder":
+        parts.append(RECRUITING_HIGHLIGHT_BUILDER)
 
     return "\n\n".join(parts)

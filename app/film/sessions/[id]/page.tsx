@@ -30,6 +30,7 @@ import {
   SkipBack,
   SkipForward,
   Gauge,
+  Film,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -607,8 +608,16 @@ export default function FilmSessionViewerPage() {
             </div>
           </div>
 
-          {/* Generate Analysis button + dropdown */}
+          {/* Generate Analysis + Build Reel buttons */}
           <div className="relative shrink-0 flex items-center gap-2">
+            <Link
+              href={`/highlight-reels/new?session=${sessionId}${session.player_id ? `&player=${session.player_id}` : ""}`}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(234,88,12,0.1)", color: "#EA580C", border: "1.5px solid rgba(234,88,12,0.2)" }}
+            >
+              <Film size={12} />
+              Build Reel
+            </Link>
             <button
               onClick={() => { setShowTypeSelector(!showTypeSelector); setPendingReportType(null); }}
               disabled={generating}

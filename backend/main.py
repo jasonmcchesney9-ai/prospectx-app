@@ -4411,6 +4411,36 @@ def init_db():
         logger.warning(
             "Migration: idx_goalie_stats_season_unique skipped — %s", e)
 
+    # ── Table: highlight_reels (Highlight Reel system) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS highlight_reels (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_id TEXT,
+            created_by TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            level TEXT DEFAULT 'junior',
+            clip_ids TEXT DEFAULT '[]',
+            clip_order TEXT DEFAULT '[]',
+            player_info TEXT DEFAULT '{}',
+            pxi_suggestions TEXT DEFAULT '{}',
+            pxi_status TEXT DEFAULT 'pending',
+            visibility TEXT DEFAULT 'org',
+            status TEXT DEFAULT 'draft',
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (player_id) REFERENCES players(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_highlight_reels_org ON highlight_reels(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_highlight_reels_player ON highlight_reels(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_highlight_reels_created_by ON highlight_reels(created_by)")
+    conn.commit()
+    logger.info("Migration: highlight_reels table ready")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -40930,9 +40960,336 @@ async def delete_chalk_talk_comment(comment_id: str, token_data: dict = Depends(
         conn.close()
 
 
-# ============================================================
-# TEMPORARY: Data Migration Endpoint (remove after use)
-# ============================================================
+# ── Highlight Reels ──────────────────────────────────────────
+
+
+@app.post("/highlight-reels", status_code=201)
+async def create_highlight_reel(request: Request, token_data: dict = Depends(verify_token)):
+    """Create a new highlight reel."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    reel_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO highlight_reels
+                (id, org_id, player_id, created_by, title, description, level,
+                 clip_ids, clip_order, player_info, pxi_suggestions, pxi_status,
+                 visibility, status, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            reel_id, org_id, body.get("player_id"), user_id,
+            title, body.get("description", ""), body.get("level", "junior"),
+            json.dumps(body.get("clip_ids", [])),
+            json.dumps(body.get("clip_order", [])),
+            json.dumps(body.get("player_info", {})),
+            json.dumps(body.get("pxi_suggestions", {})),
+            "pending",
+            body.get("visibility", "org"),
+            body.get("status", "draft"),
+            now, now,
+        ))
+        conn.commit()
+        return {
+            "id": reel_id, "title": title, "status": "draft",
+            "player_id": body.get("player_id"), "created_at": now,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/highlight-reels")
+async def list_highlight_reels(
+    player_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    token_data: dict = Depends(verify_token),
+):
+    """List highlight reels for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        where = ["hr.org_id = ?"]
+        params: list = [org_id]
+        if player_id:
+            where.append("hr.player_id = ?")
+            params.append(player_id)
+        if status:
+            where.append("hr.status = ?")
+            params.append(status)
+        params.append(limit)
+        rows = conn.execute(f"""
+            SELECT hr.*,
+                   p.first_name AS player_first_name,
+                   p.last_name AS player_last_name
+            FROM highlight_reels hr
+            LEFT JOIN players p ON hr.player_id = p.id
+            WHERE {' AND '.join(where)}
+            ORDER BY hr.created_at DESC
+            LIMIT ?
+        """, params).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else r
+            if isinstance(d, dict):
+                for jf in ("clip_ids", "clip_order", "player_info", "pxi_suggestions"):
+                    if d.get(jf):
+                        try:
+                            d[jf] = json.loads(d[jf])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
+@app.get("/highlight-reels/{reel_id}")
+async def get_highlight_reel(reel_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single highlight reel with its clips."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT hr.*,
+                   p.first_name AS player_first_name,
+                   p.last_name AS player_last_name
+            FROM highlight_reels hr
+            LEFT JOIN players p ON hr.player_id = p.id
+            WHERE hr.id = ? AND hr.org_id = ?
+        """, (reel_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Highlight reel not found")
+        d = dict(row) if hasattr(row, "keys") else row
+        if isinstance(d, dict):
+            for jf in ("clip_ids", "clip_order", "player_info", "pxi_suggestions"):
+                if d.get(jf):
+                    try:
+                        d[jf] = json.loads(d[jf])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            # Fetch full clip data for the reel
+            clip_ids = d.get("clip_ids", [])
+            if clip_ids and isinstance(clip_ids, list) and len(clip_ids) > 0:
+                placeholders = ",".join("?" for _ in clip_ids)
+                clips = conn.execute(
+                    f"SELECT * FROM video_clips WHERE id IN ({placeholders}) AND org_id = ?",
+                    clip_ids + [org_id],
+                ).fetchall()
+                clip_map = {}
+                for c in clips:
+                    cd = dict(c) if hasattr(c, "keys") else c
+                    if isinstance(cd, dict):
+                        for jf2 in ("player_ids", "tags"):
+                            if cd.get(jf2):
+                                try:
+                                    cd[jf2] = json.loads(cd[jf2])
+                                except (json.JSONDecodeError, TypeError):
+                                    pass
+                        clip_map[cd["id"]] = cd
+                d["clips"] = [clip_map[cid] for cid in clip_ids if cid in clip_map]
+            else:
+                d["clips"] = []
+        return d
+    finally:
+        conn.close()
+
+
+@app.patch("/highlight-reels/{reel_id}")
+async def update_highlight_reel(reel_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Update a highlight reel."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM highlight_reels WHERE id = ? AND org_id = ?",
+            (reel_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Highlight reel not found")
+        allowed = {
+            "title", "description", "level", "clip_ids", "clip_order",
+            "player_info", "pxi_suggestions", "pxi_status", "visibility",
+            "status", "player_id",
+        }
+        updates = []
+        params_list: list = []
+        for key in allowed:
+            if key in body:
+                val = body[key]
+                if key in ("clip_ids", "clip_order", "player_info", "pxi_suggestions") and isinstance(val, (list, dict)):
+                    val = json.dumps(val)
+                updates.append(f"{key} = ?")
+                params_list.append(val)
+        if not updates:
+            raise HTTPException(status_code=400, detail="Nothing to update")
+        updates.append("updated_at = ?")
+        params_list.append(datetime.now(timezone.utc).isoformat())
+        params_list.append(reel_id)
+        conn.execute(
+            f"UPDATE highlight_reels SET {', '.join(updates)} WHERE id = ?",
+            params_list,
+        )
+        conn.commit()
+        return {"status": "updated", "id": reel_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/highlight-reels/{reel_id}")
+async def delete_highlight_reel(reel_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a highlight reel."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM highlight_reels WHERE id = ? AND org_id = ?",
+            (reel_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Highlight reel not found")
+        conn.execute("DELETE FROM highlight_reels WHERE id = ?", (reel_id,))
+        conn.commit()
+        return {"status": "deleted", "id": reel_id}
+    finally:
+        conn.close()
+
+
+@app.post("/highlight-reels/{reel_id}/generate-suggestions")
+async def generate_highlight_suggestions(reel_id: str, token_data: dict = Depends(verify_token)):
+    """Use PXI to suggest clip order and reel structure for a highlight reel."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM highlight_reels WHERE id = ? AND org_id = ?",
+            (reel_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Highlight reel not found")
+        reel = dict(row) if hasattr(row, "keys") else row
+
+        # Parse JSON fields
+        clip_ids = json.loads(reel.get("clip_ids", "[]")) if isinstance(reel.get("clip_ids"), str) else reel.get("clip_ids", [])
+        player_info = json.loads(reel.get("player_info", "{}")) if isinstance(reel.get("player_info"), str) else reel.get("player_info", {})
+
+        # Fetch clip data
+        clips_data = []
+        if clip_ids:
+            placeholders = ",".join("?" for _ in clip_ids)
+            clips = conn.execute(
+                f"SELECT * FROM video_clips WHERE id IN ({placeholders}) AND org_id = ?",
+                clip_ids + [org_id],
+            ).fetchall()
+            for c in clips:
+                cd = dict(c) if hasattr(c, "keys") else c
+                if isinstance(cd, dict):
+                    for jf in ("player_ids", "tags"):
+                        if cd.get(jf):
+                            try:
+                                cd[jf] = json.loads(cd[jf])
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                clips_data.append(cd)
+
+        # Fetch player stats if player_id set
+        player_stats = None
+        player_id = reel.get("player_id")
+        if player_id:
+            stats_row = conn.execute(
+                "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+                (player_id,),
+            ).fetchone()
+            if stats_row:
+                player_stats = dict(stats_row) if hasattr(stats_row, "keys") else stats_row
+
+        # Build PXI prompt
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            # Return mock suggestions if no API key
+            conn.execute(
+                "UPDATE highlight_reels SET pxi_status = ?, pxi_suggestions = ?, updated_at = ? WHERE id = ?",
+                ("completed", json.dumps({
+                    "suggested_order": clip_ids,
+                    "opening_note": "Lead with the most dynamic play to grab attention.",
+                    "closing_note": "End with a signature moment that defines this player.",
+                    "section_breaks": [],
+                    "notes": "PXI suggestions unavailable — no API key configured.",
+                }), datetime.now(timezone.utc).isoformat(), reel_id),
+            )
+            conn.commit()
+            return {"status": "completed", "message": "Mock suggestions generated (no API key)"}
+
+        # Mark as generating
+        conn.execute(
+            "UPDATE highlight_reels SET pxi_status = ?, updated_at = ? WHERE id = ?",
+            ("generating", datetime.now(timezone.utc).isoformat(), reel_id),
+        )
+        conn.commit()
+
+        from pxi_prompt_core import RECRUITING_HIGHLIGHT_BUILDER
+        import anthropic
+
+        prompt_context = f"""PLAYER INFO:
+{json.dumps(player_info, indent=2)}
+
+PLAYER STATS:
+{json.dumps(player_stats, indent=2) if player_stats else 'No stats available.'}
+
+LEVEL: {reel.get('level', 'junior')}
+
+CLIPS ({len(clips_data)} total):
+"""
+        for i, clip in enumerate(clips_data):
+            prompt_context += f"\nClip {i+1}: id={clip.get('id')}, title=\"{clip.get('title', 'Untitled')}\", "
+            prompt_context += f"type={clip.get('clip_type', 'manual')}, "
+            prompt_context += f"start={clip.get('start_time_seconds', 0)}s, end={clip.get('end_time_seconds', 0)}s, "
+            prompt_context += f"tags={clip.get('tags', [])}, description=\"{clip.get('description', '')}\""
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            system=RECRUITING_HIGHLIGHT_BUILDER,
+            messages=[{"role": "user", "content": prompt_context}],
+        )
+
+        suggestion_text = response.content[0].text if response.content else "{}"
+        # Try to parse as JSON
+        try:
+            suggestions = json.loads(suggestion_text)
+        except json.JSONDecodeError:
+            suggestions = {"raw_response": suggestion_text}
+
+        conn.execute(
+            "UPDATE highlight_reels SET pxi_status = ?, pxi_suggestions = ?, updated_at = ? WHERE id = ?",
+            ("completed", json.dumps(suggestions), datetime.now(timezone.utc).isoformat(), reel_id),
+        )
+        conn.commit()
+        return {"status": "completed", "suggestions": suggestions}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Highlight reel PXI generation failed: %s", e)
+        try:
+            conn.execute(
+                "UPDATE highlight_reels SET pxi_status = ?, updated_at = ? WHERE id = ?",
+                ("error", datetime.now(timezone.utc).isoformat(), reel_id),
+            )
+            conn.commit()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"PXI generation failed: {str(e)[:200]}")
+    finally:
+        conn.close()
+
 
 # ============================================================
 # MAIN
