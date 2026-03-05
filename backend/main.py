@@ -40505,11 +40505,51 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
                 )
             return "\n".join(lines)
 
-        def _format_events(events_list):
+        # ── Event summarisation (avoid dumping 1000+ raw events into the prompt) ──
+        # Priority tiers: high-value events get individual entries; routine events get counted only
+        HIGH_PRIORITY_TYPES = {"goal", "goals", "chance", "chances", "penalty", "penalties",
+                               "turnover", "turnovers", "takeaway", "takeaways", "scoring_chance",
+                               "odd_man_rush", "breakaway", "power_play", "shorthanded",
+                               "big_hit", "hit", "fight", "misconduct"}
+        MED_PRIORITY_TYPES = {"shot", "shots", "shot_on_goal", "shot_attempt",
+                              "entry", "zone_entry", "exit", "zone_exit",
+                              "retrieval", "retrievals", "blocked_shot", "save"}
+        MAX_INDIVIDUAL_EVENTS = 40
+        MAX_CONTEXT_CHARS = 12000
+
+        def _summarize_events(events_list):
+            """Return (summary_header, individual_lines) for the event list."""
             if not events_list:
-                return "  (no events tagged)"
-            lines = []
+                return "  (no events tagged)", ""
+
+            # 1. Group by event_type and count
+            from collections import Counter
+            type_counts: Counter = Counter()
             for e in events_list:
+                type_counts[e.get("event_type") or "unknown"] += 1
+
+            breakdown_parts = [f"{etype.replace('_', ' ').title()} ({cnt})" for etype, cnt in type_counts.most_common()]
+            summary = f"  {len(events_list)} total events. Breakdown: {', '.join(breakdown_parts)}"
+
+            # 2. Select individual events to include (prioritise high-value, then medium, then chronological)
+            high = [e for e in events_list if (e.get("event_type") or "").lower() in HIGH_PRIORITY_TYPES]
+            med = [e for e in events_list if (e.get("event_type") or "").lower() in MED_PRIORITY_TYPES]
+            low = [e for e in events_list if e not in high and e not in med]
+
+            selected: list = []
+            for bucket in (high, med, low):
+                for e in bucket:
+                    if len(selected) >= MAX_INDIVIDUAL_EVENTS:
+                        break
+                    selected.append(e)
+                if len(selected) >= MAX_INDIVIDUAL_EVENTS:
+                    break
+
+            # Sort selected by time for chronological context
+            selected.sort(key=lambda e: float(e.get("time_seconds") or 0))
+
+            lines = []
+            for e in selected:
                 label = e.get("event_label") or ""
                 pid = e.get("player_id")
                 player = player_name_lookup.get(pid, "untagged") if pid else "untagged"
@@ -40517,9 +40557,14 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
                     f"  {e.get('time_seconds', 0)}s — {e.get('event_type', 'unknown')}"
                     f"{': ' + label if label else ''} | Player: {player}"
                 )
-            return "\n".join(lines)
+            if len(events_list) > len(selected):
+                lines.append(f"  ... ({len(events_list) - len(selected)} additional routine events omitted)")
+
+            return summary, "\n".join(lines)
 
         session_name = session.get("name") or session.get("title") or "Untitled Session"
+        event_summary, event_details = _summarize_events(events)
+
         film_context = f"""FILM SESSION CONTEXT:
 Session: {session_name}
 Type: {session.get('session_type', 'general')}
@@ -40529,8 +40574,22 @@ Description: {session.get('description') or 'None provided'}
 TAGGED CLIPS ({len(clips)} total):
 {_format_clips(clips)}
 
-TAGGED EVENTS ({len(events)} total):
-{_format_events(events)}"""
+EVENT SUMMARY:
+{event_summary}
+
+KEY EVENTS ({min(len(events), MAX_INDIVIDUAL_EVENTS)} of {len(events)} shown):
+{event_details}"""
+
+        # Cap total context size to avoid token explosion
+        if len(film_context) > MAX_CONTEXT_CHARS:
+            # Keep header + clips + summary, truncate individual events
+            cutoff_marker = "\nKEY EVENTS"
+            cut_idx = film_context.find(cutoff_marker)
+            if cut_idx > 0:
+                remaining = MAX_CONTEXT_CHARS - cut_idx - 200  # leave room for truncation note
+                film_context = film_context[:cut_idx] + cutoff_marker.replace("\n", "") + f" (truncated to fit context window):\n{event_details[:max(remaining, 500)]}\n  ... (truncated)"
+            else:
+                film_context = film_context[:MAX_CONTEXT_CHARS] + "\n  ... (truncated)"
 
         # 5. Get template for this report type
         template = conn.execute(
