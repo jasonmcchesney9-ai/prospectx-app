@@ -48,6 +48,7 @@ import {
   WifiOff,
   Wifi,
   Zap,
+  CreditCard,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -480,6 +481,15 @@ export default function NavBar() {
                 >
                   {user.subscription_tier || "Rookie"}
                 </Link>
+                {/* Upgrade pill — free tier only */}
+                {(!user.subscription_tier || user.subscription_tier === "rookie") && (
+                  <Link
+                    href="/billing"
+                    className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-orange text-white uppercase font-oswald tracking-wider hover:bg-orange/90 transition-colors shadow-sm shadow-orange/30"
+                  >
+                    Upgrade
+                  </Link>
+                )}
                 {(user.role === "admin" || user.role === "superadmin") && (
                   <Link
                     href="/admin"
@@ -508,6 +518,13 @@ export default function NavBar() {
                 )}
               </>
             )}
+            <Link
+              href="/billing"
+              className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition-colors"
+            >
+              <CreditCard size={14} />
+              Billing
+            </Link>
             <button
               onClick={logout}
               className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition-colors"
@@ -858,6 +875,14 @@ export default function NavBar() {
               </Link>
             </div>
           )}
+          <Link
+            href="/billing"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-3 py-3 text-sm text-white/50 hover:text-white"
+          >
+            <CreditCard size={16} />
+            Billing
+          </Link>
           <button
             onClick={logout}
             className="flex items-center gap-2 px-3 py-3 text-sm text-white/50 hover:text-white w-full"

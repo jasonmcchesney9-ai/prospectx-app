@@ -105,12 +105,12 @@ export default function UpgradeModal({ isOpen, onClose, limitType, currentTier, 
               Maybe Later
             </button>
             <Link
-              href="/pricing"
+              href="/billing"
               onClick={onClose}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-orange text-white font-oswald font-bold uppercase tracking-wider text-sm hover:bg-orange/90 transition-colors shadow-lg shadow-orange/20"
             >
               <ArrowUpCircle size={16} />
-              View Plans
+              Upgrade Now
             </Link>
           </div>
         </div>

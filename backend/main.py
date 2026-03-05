@@ -72,6 +72,16 @@ except ImportError:
         "python-docx not available — DOCX export disabled"
     )
 
+try:
+    import stripe as _stripe_lib
+    _stripe_available = True
+except ImportError:
+    _stripe_lib = None
+    _stripe_available = False
+    logging.getLogger("prospectx").warning(
+        "stripe not available — billing integration disabled"
+    )
+
 from pxi_prompt_core import (
     PXI_CORE_GUARDRAILS,
     PXI_MODE_BLOCKS,
@@ -160,6 +170,25 @@ if ENVIRONMENT != "development" and JWT_SECRET == _DEFAULT_JWT_SECRET:
     sys.exit(1)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+
+# ── Stripe Billing ────────────────────────────────────────
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+if _stripe_available and STRIPE_SECRET_KEY:
+    _stripe_lib.api_key = STRIPE_SECRET_KEY
+
+# Map internal tier slugs → Stripe Price IDs (env-configurable)
+STRIPE_PRICE_MAP = {
+    "parent": os.getenv("STRIPE_PRICE_PARENT", "price_placeholder_parent"),
+    "scout": os.getenv("STRIPE_PRICE_SCOUT", "price_placeholder_scout"),
+    "pro": os.getenv("STRIPE_PRICE_PRO", "price_placeholder_pro"),
+    "elite": os.getenv("STRIPE_PRICE_ELITE", "price_placeholder_elite"),
+    "team_org": os.getenv("STRIPE_PRICE_TEAM", "price_placeholder_team"),
+    "program_org": os.getenv("STRIPE_PRICE_ORG", "price_placeholder_org"),
+}
+
+# Reverse lookup: Stripe Price ID → internal tier slug
+_STRIPE_PRICE_TO_TIER = {v: k for k, v in STRIPE_PRICE_MAP.items() if v and not v.startswith("price_placeholder")}
 
 # ── Subscription Tiers ─────────────────────────────────────
 SUBSCRIPTION_TIERS = {
@@ -2513,6 +2542,19 @@ def init_db():
         "max_seats": "INTEGER DEFAULT 1",
     }
     for col_name, col_type in sub_cols.items():
+        if col_name not in user_cols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to users", col_name)
+
+    # ── Stripe billing columns on users ──────────────────────────
+    user_cols = _get_table_columns(conn, "users")
+    stripe_cols = {
+        "stripe_customer_id": "TEXT",
+        "stripe_subscription_id": "TEXT",
+        "subscription_status": "TEXT DEFAULT 'inactive'",
+    }
+    for col_name, col_type in stripe_cols.items():
         if col_name not in user_cols:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
             conn.commit()
@@ -10901,6 +10943,219 @@ async def upgrade_subscription(req: SubscriptionUpgradeRequest, token_data: dict
         )
         conn.commit()
         return {"success": True, "tier": req.tier, "message": f"Upgraded to {SUBSCRIPTION_TIERS[req.tier]['name']}"}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# STRIPE BILLING
+# ============================================================
+
+class StripeCheckoutRequest(BaseModel):
+    tier: str
+
+
+class StripePortalRequest(BaseModel):
+    pass
+
+
+@app.post("/stripe/create-checkout")
+async def stripe_create_checkout(req: StripeCheckoutRequest, token_data: dict = Depends(verify_token)):
+    """Create a Stripe Checkout Session for the given tier."""
+    if not _stripe_available or not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe billing is not configured. Set STRIPE_SECRET_KEY.")
+
+    if req.tier not in STRIPE_PRICE_MAP:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}. Valid: {', '.join(STRIPE_PRICE_MAP.keys())}")
+
+    price_id = STRIPE_PRICE_MAP[req.tier]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT email, stripe_customer_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        # Create or reuse Stripe Customer
+        customer_id = row["stripe_customer_id"]
+        if not customer_id:
+            customer = _stripe_lib.Customer.create(
+                email=row["email"],
+                metadata={"prospectx_user_id": user_id},
+            )
+            customer_id = customer.id
+            conn.execute("UPDATE users SET stripe_customer_id = ? WHERE id = ?", (customer_id, user_id))
+            conn.commit()
+
+        # Create Checkout Session
+        session = _stripe_lib.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="subscription",
+            success_url=f"{FRONTEND_URL}/billing?success=true",
+            cancel_url=f"{FRONTEND_URL}/billing?canceled=true",
+            metadata={"prospectx_user_id": user_id, "tier": req.tier},
+        )
+
+        return {"checkout_url": session.url}
+    finally:
+        conn.close()
+
+
+@app.post("/stripe/create-portal")
+async def stripe_create_portal(token_data: dict = Depends(verify_token)):
+    """Create a Stripe Customer Portal session for billing management."""
+    if not _stripe_available or not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe billing is not configured.")
+
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT stripe_customer_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row or not row["stripe_customer_id"]:
+            raise HTTPException(status_code=400, detail="No billing account found. Subscribe to a plan first.")
+
+        session = _stripe_lib.billing_portal.Session.create(
+            customer=row["stripe_customer_id"],
+            return_url=f"{FRONTEND_URL}/billing",
+        )
+
+        return {"portal_url": session.url}
+    finally:
+        conn.close()
+
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events. Verify signature, process subscription lifecycle."""
+    if not _stripe_available:
+        raise HTTPException(status_code=503, detail="Stripe not available")
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    try:
+        if STRIPE_WEBHOOK_SECRET:
+            event = _stripe_lib.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        else:
+            # Dev mode — parse without signature verification
+            event = _stripe_lib.Event.construct_from(json.loads(payload), _stripe_lib.api_key)
+    except (ValueError, _stripe_lib.error.SignatureVerificationError) as e:
+        logger.warning("Stripe webhook signature verification failed: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    event_type = event["type"]
+    data_obj = event["data"]["object"]
+    logger.info("Stripe webhook: %s", event_type)
+
+    conn = get_db()
+    try:
+        if event_type == "checkout.session.completed":
+            customer_id = data_obj.get("customer")
+            subscription_id = data_obj.get("subscription")
+            tier = data_obj.get("metadata", {}).get("tier", "")
+            user_id = data_obj.get("metadata", {}).get("prospectx_user_id", "")
+
+            if user_id:
+                conn.execute(
+                    "UPDATE users SET stripe_subscription_id = ?, subscription_status = 'active', subscription_tier = ?, subscription_started_at = ? WHERE id = ?",
+                    (subscription_id, tier if tier in SUBSCRIPTION_TIERS else "pro", datetime.now(timezone.utc).isoformat(), user_id),
+                )
+            elif customer_id:
+                conn.execute(
+                    "UPDATE users SET stripe_subscription_id = ?, subscription_status = 'active', subscription_tier = ?, subscription_started_at = ? WHERE stripe_customer_id = ?",
+                    (subscription_id, tier if tier in SUBSCRIPTION_TIERS else "pro", datetime.now(timezone.utc).isoformat(), customer_id),
+                )
+            conn.commit()
+            logger.info("Stripe: checkout completed — user=%s tier=%s", user_id, tier)
+
+        elif event_type == "customer.subscription.updated":
+            subscription_id = data_obj.get("id")
+            status = data_obj.get("status", "active")
+            status_map = {"active": "active", "past_due": "past_due", "canceled": "canceled", "trialing": "trialing", "incomplete": "inactive"}
+            mapped_status = status_map.get(status, "active")
+
+            # Try to determine tier from price
+            items = data_obj.get("items", {}).get("data", [])
+            tier = None
+            for item in items:
+                price_id = item.get("price", {}).get("id", "")
+                if price_id in _STRIPE_PRICE_TO_TIER:
+                    tier = _STRIPE_PRICE_TO_TIER[price_id]
+                    break
+
+            if tier:
+                conn.execute(
+                    "UPDATE users SET subscription_status = ?, subscription_tier = ? WHERE stripe_subscription_id = ?",
+                    (mapped_status, tier, subscription_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET subscription_status = ? WHERE stripe_subscription_id = ?",
+                    (mapped_status, subscription_id),
+                )
+            conn.commit()
+            logger.info("Stripe: subscription updated — sub=%s status=%s tier=%s", subscription_id, mapped_status, tier)
+
+        elif event_type == "customer.subscription.deleted":
+            subscription_id = data_obj.get("id")
+            conn.execute(
+                "UPDATE users SET subscription_status = 'canceled', subscription_tier = 'rookie', stripe_subscription_id = NULL WHERE stripe_subscription_id = ?",
+                (subscription_id,),
+            )
+            conn.commit()
+            logger.info("Stripe: subscription deleted — sub=%s, downgraded to rookie", subscription_id)
+
+        elif event_type == "invoice.payment_failed":
+            subscription_id = data_obj.get("subscription")
+            if subscription_id:
+                conn.execute(
+                    "UPDATE users SET subscription_status = 'past_due' WHERE stripe_subscription_id = ?",
+                    (subscription_id,),
+                )
+                conn.commit()
+                logger.info("Stripe: payment failed — sub=%s, marked past_due", subscription_id)
+
+        return {"received": True}
+    finally:
+        conn.close()
+
+
+@app.get("/billing/status")
+async def get_billing_status(token_data: dict = Depends(verify_token)):
+    """Return current billing info for the authenticated user."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT subscription_tier, subscription_status, stripe_customer_id, stripe_subscription_id, subscription_started_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        tier = row["subscription_tier"] or "rookie"
+        sub_status = row["subscription_status"] or "inactive"
+
+        # If they have an active Stripe subscription, try to get next billing date
+        next_billing_date = None
+        if _stripe_available and STRIPE_SECRET_KEY and row["stripe_subscription_id"] and sub_status == "active":
+            try:
+                sub = _stripe_lib.Subscription.retrieve(row["stripe_subscription_id"])
+                if sub.get("current_period_end"):
+                    next_billing_date = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc).isoformat()
+            except Exception as e:
+                logger.warning("Failed to fetch Stripe subscription details: %s", e)
+
+        return {
+            "tier": tier,
+            "tier_name": SUBSCRIPTION_TIERS.get(tier, {}).get("name", tier),
+            "subscription_status": sub_status,
+            "has_stripe_customer": bool(row["stripe_customer_id"]),
+            "next_billing_date": next_billing_date,
+            "subscription_started_at": row["subscription_started_at"],
+        }
     finally:
         conn.close()
 

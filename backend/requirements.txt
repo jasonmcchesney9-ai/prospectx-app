@@ -36,3 +36,5 @@ APScheduler==3.10.4
 resend==2.5.1
 # Video infrastructure (Mux)
 mux-python==5.1.2
+# Payments
+stripe==11.4.1
