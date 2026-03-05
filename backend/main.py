@@ -40634,22 +40634,30 @@ No AI analysis available in demo mode."""
 # ── Film Event Data Import ────────────────────────────────────
 
 
-def _parse_event_xml(file_content: bytes) -> list:
+def _parse_event_xml(file_content: bytes, team_names: list[str] | None = None) -> list:
     """Parse event data XML and return a list of normalised event dicts.
 
     Tries multiple common root / container patterns:
-      <AllInstances>, <file><AllInstances>, <instances>, root-level <Instance> elements.
+      <AllInstances>, <file><AllInstances>, <instances>, root-level <Instance> elements,
+      plus lowercase variants like <ALL_INSTANCES>/<instance>.
+    If *team_names* is provided, strips leading team name prefixes from codes
+    (e.g. "Chatham Maroons Faceoffs in NZ" → "Faceoffs in NZ").
     """
     try:
         root = ET.fromstring(file_content)
     except ET.ParseError:
         raise HTTPException(status_code=400, detail="Could not parse event data file")
 
-    # Collect <Instance> elements — try several common container paths
+    # Collect <Instance>/<instance> elements — try several common container paths
     instances: list = []
     for xpath in ("AllInstances/Instance", ".//AllInstances/Instance",
+                  "ALL_INSTANCES/Instance", ".//ALL_INSTANCES/Instance",
+                  "ALL_INSTANCES/instance", ".//ALL_INSTANCES/instance",
+                  "all_instances/instance", ".//all_instances/instance",
                   "instances/Instance", ".//instances/Instance",
-                  "Instance", ".//Instance"):
+                  "instances/instance", ".//instances/instance",
+                  "Instance", ".//Instance",
+                  "instance", ".//instance"):
         instances = root.findall(xpath)
         if instances:
             break
@@ -40657,19 +40665,42 @@ def _parse_event_xml(file_content: bytes) -> list:
     if not instances:
         raise HTTPException(status_code=400, detail="No events found in file")
 
+    # Helper: case-insensitive field extraction — try lowercase first, then TitleCase
+    def _field(inst, *names) -> str:
+        for name in names:
+            val = inst.findtext(name)
+            if val is not None:
+                return val.strip()
+        return ""
+
+    # Sort team_names longest-first so "Chatham Maroons" matches before "Chatham"
+    sorted_team_names = sorted(team_names or [], key=len, reverse=True)
+
     jersey_re = re.compile(r"#(\d{1,3})\s*(.*)")
     parsed: list = []
     for inst in instances:
-        code = (inst.findtext("code") or "").strip()
-        start_raw = (inst.findtext("start") or "").strip()
-        end_raw = (inst.findtext("end") or "").strip()
-        label1 = (inst.findtext("label1") or "").strip()
-        label2 = (inst.findtext("label2") or "").strip()
-        group = (inst.findtext("group") or "").strip()
-        sort_order_raw = (inst.findtext("sort_order") or "").strip()
+        code = _field(inst, "code", "Code")
+        start_raw = _field(inst, "start", "Start")
+        end_raw = _field(inst, "end", "End")
+        label1 = _field(inst, "label1", "Label1")
+        label2 = _field(inst, "label2", "Label2")
+        group = _field(inst, "group", "Group")
+        sort_order_raw = _field(inst, "sort_order", "Sort_Order", "sort_Order", "SortOrder")
+
+        # Strip team name prefix from code (e.g. "Chatham Maroons Faceoffs in NZ" → "Faceoffs in NZ")
+        clean_code = code
+        if sorted_team_names and code:
+            code_lower = code.lower()
+            for tn in sorted_team_names:
+                tn_lower = tn.lower()
+                if code_lower.startswith(tn_lower):
+                    remainder = code[len(tn):].strip()
+                    if remainder:  # only strip if there's something left
+                        clean_code = remainder
+                    break
 
         # Normalise event_type: lowercase, strip, spaces → underscores
-        event_type = re.sub(r"\s+", "_", code.lower().strip()) if code else "unknown"
+        event_type = re.sub(r"\s+", "_", clean_code.lower().strip()) if clean_code else "unknown"
 
         # Parse start / end as floats (seconds)
         try:
@@ -40701,7 +40732,7 @@ def _parse_event_xml(file_content: bytes) -> list:
             "event_type": event_type,
             "start_seconds": start_seconds,
             "end_seconds": end_seconds,
-            "label": label1 or code,
+            "label": label1 or clean_code,
             "player_number": player_number,
             "player_name_raw": player_name_raw,
             "group": group,
@@ -40732,9 +40763,6 @@ async def import_film_session_events(
     if not file_content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    # Parse the XML (raises 400 on failure)
-    parsed_events = _parse_event_xml(file_content)
-
     conn = get_db()
     try:
         # 1. Verify session exists and belongs to this org
@@ -40745,6 +40773,18 @@ async def import_film_session_events(
         if not session_row:
             raise HTTPException(status_code=404, detail="Film session not found")
         session = dict(session_row) if hasattr(session_row, "keys") else session_row
+
+        # Collect team names for code-prefix stripping (e.g. "Chatham Maroons Faceoffs in NZ" → "Faceoffs in NZ")
+        _team_names: list[str] = []
+        _sess_team_id = session.get("team_id")
+        if _sess_team_id:
+            _tn_rows = conn.execute(
+                "SELECT name FROM teams WHERE org_id = ?", (org_id,)
+            ).fetchall()
+            _team_names = [r["name"] if hasattr(r, "keys") else r[0] for r in _tn_rows if (r["name"] if hasattr(r, "keys") else r[0])]
+
+        # Parse the XML (raises 400 on failure)
+        parsed_events = _parse_event_xml(file_content, team_names=_team_names)
 
         # 2. Check for existing imports — conflict guard
         if session.get("event_data_source") and not replace:
