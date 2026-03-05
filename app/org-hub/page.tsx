@@ -225,7 +225,7 @@ export default function OrgHubPage() {
             </div>
             <div className="bg-white px-5 py-4 flex flex-wrap items-center gap-3">
               {[
-                { label: "New Whiteboard", icon: PenTool, href: "/chalk-talk/new?type=free_board" },
+                { label: "New Board", icon: PenTool, href: "/org-hub/playbook" },
                 { label: "Upload Film", icon: Upload, href: "/film/upload" },
                 { label: "Generate Report", icon: FileText, href: "/reports/generate" },
               ].map((action) => {
