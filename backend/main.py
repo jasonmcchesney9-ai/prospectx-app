@@ -1974,6 +1974,26 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_whiteboards_org ON whiteboards(org_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_whiteboards_user ON whiteboards(created_by_user_id)")
 
+    # ── Org Hub: playbook_boards table ──────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS playbook_boards (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            created_by TEXT,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'other',
+            description TEXT,
+            board_layout TEXT NOT NULL DEFAULT '{}',
+            visibility TEXT DEFAULT 'staff_only',
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_playbook_org ON playbook_boards(org_id)")
+
     # ── Org Foundation: film_clips table ─────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS film_clips (
@@ -14940,6 +14960,221 @@ Keep each section to 2-3 sentences. Be specific about players by name."""}],
         )
         analysis_text = msg.content[0].text if msg.content else "Analysis failed."
         return {"analysis": analysis_text}
+    finally:
+        conn.close()
+
+
+# ── Org Hub: System Playbook ───────────────────────────────────
+
+PLAYBOOK_CATEGORIES = [
+    "forecheck", "breakout", "powerplay", "penaltykill",
+    "defensive_zone", "offensive_zone", "neutral_zone", "faceoff", "other",
+]
+
+def _playbook_row_to_dict(row) -> dict:
+    d = dict(row)
+    if d.get("board_layout"):
+        try:
+            d["board_layout"] = json.loads(d["board_layout"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return d
+
+
+@app.get("/org-hub/playbook")
+async def list_playbook_boards(token_data: dict = Depends(verify_token)):
+    """List all playbook boards for the org, grouped by category."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM playbook_boards WHERE org_id = ? ORDER BY category, sort_order, title",
+            (org_id,),
+        ).fetchall()
+        boards = [_playbook_row_to_dict(r) for r in rows]
+        # Group by category
+        grouped = {}
+        for cat in PLAYBOOK_CATEGORIES:
+            grouped[cat] = [b for b in boards if b.get("category") == cat]
+        return {"boards": boards, "grouped": grouped}
+    finally:
+        conn.close()
+
+
+@app.get("/org-hub/playbook/{board_id}")
+async def get_playbook_board(board_id: str, token_data: dict = Depends(verify_token)):
+    """Get a single playbook board with full board_layout."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM playbook_boards WHERE id = ? AND org_id = ?",
+            (board_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Board not found")
+        return _playbook_row_to_dict(row)
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/playbook", status_code=201)
+async def create_playbook_board(body: dict, token_data: dict = Depends(verify_token)):
+    """Create a new playbook board."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+    category = body.get("category", "other")
+    if category not in PLAYBOOK_CATEGORIES:
+        category = "other"
+    description = (body.get("description") or "").strip()
+    board_layout = body.get("board_layout", {})
+    visibility = body.get("visibility", "staff_only")
+    sort_order = body.get("sort_order", 0)
+    now = datetime.utcnow().isoformat()
+    board_id = str(uuid.uuid4())
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO playbook_boards (id, org_id, created_by, title, category, description, board_layout, visibility, sort_order, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (board_id, org_id, user_id, title, category, description,
+              json.dumps(board_layout) if isinstance(board_layout, dict) else str(board_layout),
+              visibility, sort_order, now, now))
+        conn.commit()
+        return {"id": board_id, "title": title, "category": category, "detail": "Board created"}
+    finally:
+        conn.close()
+
+
+@app.patch("/org-hub/playbook/{board_id}")
+async def update_playbook_board(board_id: str, body: dict, token_data: dict = Depends(verify_token)):
+    """Update a playbook board (title, description, category, board_layout, visibility, sort_order)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT id FROM playbook_boards WHERE id = ? AND org_id = ?", (board_id, org_id)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Board not found")
+        updates = []
+        params = []
+        for field in ("title", "description", "category", "visibility"):
+            if field in body:
+                updates.append(f"{field} = ?")
+                params.append(body[field])
+        if "board_layout" in body:
+            updates.append("board_layout = ?")
+            bl = body["board_layout"]
+            params.append(json.dumps(bl) if isinstance(bl, (dict, list)) else str(bl))
+        if "sort_order" in body:
+            updates.append("sort_order = ?")
+            params.append(body["sort_order"])
+        if not updates:
+            return {"detail": "Nothing to update"}
+        updates.append("updated_at = ?")
+        params.append(datetime.utcnow().isoformat())
+        params.append(board_id)
+        conn.execute(f"UPDATE playbook_boards SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"detail": "Board updated", "id": board_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/org-hub/playbook/{board_id}")
+async def delete_playbook_board(board_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a playbook board."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        deleted = conn.execute(
+            "DELETE FROM playbook_boards WHERE id = ? AND org_id = ?",
+            (board_id, org_id),
+        ).rowcount
+        conn.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Board not found")
+        return {"detail": "Board deleted"}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/playbook/generate-from-identity")
+async def generate_playbook_from_identity(body: dict, token_data: dict = Depends(verify_token)):
+    """PXI generates playbook recommendations based on team identity report."""
+    org_id = token_data["org_id"]
+    team_name = (body.get("team_name") or "").strip()
+    if not team_name:
+        raise HTTPException(status_code=400, detail="team_name is required")
+    conn = get_db()
+    try:
+        # Look for most recent team_identity report
+        identity_row = conn.execute("""
+            SELECT id, content FROM reports
+            WHERE org_id = ? AND report_type = 'team_identity'
+            ORDER BY created_at DESC LIMIT 1
+        """, (org_id,)).fetchone()
+
+        identity_context = ""
+        if identity_row and identity_row["content"]:
+            try:
+                content = json.loads(identity_row["content"]) if isinstance(identity_row["content"], str) else identity_row["content"]
+                if isinstance(content, dict):
+                    identity_context = "\n".join(f"{k}: {v}" for k, v in content.items() if isinstance(v, str))
+                elif isinstance(content, str):
+                    identity_context = content
+            except (json.JSONDecodeError, TypeError):
+                identity_context = str(identity_row["content"])[:3000]
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return {"recommendations": [
+                {"system_name": "1-2-2 Forecheck", "category": "forecheck", "description": "Standard 1-2-2 aggressive forecheck — F1 pressures puck carrier, F2/F3 seal the boards."},
+                {"system_name": "Quick Up Breakout", "category": "breakout", "description": "D-to-D or quick up the boards breakout — speed through the neutral zone."},
+                {"system_name": "1-3-1 Power Play", "category": "powerplay", "description": "Umbrella formation with high slot threat and cross-ice passing options."},
+                {"system_name": "Box Penalty Kill", "category": "penaltykill", "description": "Aggressive box PK — pressure the half-wall, deny cross-ice lanes."},
+                {"system_name": "Tight DZ Coverage", "category": "defensive_zone", "description": "Man-on-man in the defensive zone with strong-side overload and net-front presence."},
+                {"system_name": "Cycle Offense", "category": "offensive_zone", "description": "Puck possession cycle game — low to high, create shooting lanes from the point."},
+            ], "source": "demo"}
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        prompt = f"""You are PXI, a professional hockey systems analyst. Generate a complete system playbook for {team_name}.
+
+{f"TEAM IDENTITY CONTEXT:{chr(10)}{identity_context}" if identity_context else "No team identity report available — use general best practices."}
+
+Output a JSON array of 6-8 systems. Each entry must have:
+- "system_name": short name (e.g., "1-2-2 Forecheck")
+- "category": one of: forecheck, breakout, powerplay, penaltykill, defensive_zone, offensive_zone, neutral_zone, faceoff
+- "description": 2-3 sentence description of formation, key principles, and personnel deployment
+
+Return ONLY the JSON array, no markdown fences."""
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text if msg.content else "[]"
+        # Parse JSON from response
+        try:
+            # Strip markdown fences if present
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+            recommendations = json.loads(cleaned)
+            if not isinstance(recommendations, list):
+                recommendations = []
+        except (json.JSONDecodeError, TypeError):
+            recommendations = []
+
+        return {"recommendations": recommendations, "source": "pxi"}
     finally:
         conn.close()
 

@@ -92,6 +92,41 @@ function RinkBuilderInner() {
     modeParam === "chalk_talk" ? "chalk_talk" : "custom_drill"
   );
 
+  // ── Playbook context (when editing a playbook board) ──
+  const playbookIdParam = searchParams.get("playbook_id");
+  const [playbookBoard, setPlaybookBoard] = useState<{ id: string; title: string; category: string } | null>(null);
+  const [playbookSaving, setPlaybookSaving] = useState(false);
+  const [playbookSuccess, setPlaybookSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!playbookIdParam) return;
+    api.get(`/org-hub/playbook/${playbookIdParam}`).then(({ data }) => {
+      setPlaybookBoard({ id: data.id, title: data.title, category: data.category });
+      if (data.board_layout) {
+        const layout = typeof data.board_layout === "string" ? JSON.parse(data.board_layout) : data.board_layout;
+        if (layout.background && ["full_rink", "half_rink", "blank"].includes(layout.background)) {
+          setBackgroundMode(layout.background);
+        }
+        setLoadedBoardData(layout);
+        setCanvasKey((k: number) => k + 1);
+      }
+    }).catch(() => {});
+  }, [playbookIdParam]);
+
+  async function handleSavePlaybook() {
+    if (!playbookBoard || !canvasRef.current) return;
+    setPlaybookSaving(true);
+    try {
+      const diagramData = canvasRef.current.getDiagramData();
+      await api.patch(`/org-hub/playbook/${playbookBoard.id}`, {
+        board_layout: JSON.stringify({ ...diagramData, background: backgroundMode }),
+      });
+      setPlaybookSuccess("Saved to Playbook");
+      setTimeout(() => setPlaybookSuccess(null), 5000);
+    } catch { /* ignore */ }
+    setPlaybookSaving(false);
+  }
+
   // ── Session context (when loaded from a chalk talk session) ──
   const sessionIdParam = searchParams.get("session_id");
   const [sessionCtx, setSessionCtx] = useState<ChalkTalkSession | null>(null);
@@ -588,6 +623,35 @@ function RinkBuilderInner() {
           backgroundMode={backgroundMode}
           onBackgroundModeChange={setBackgroundMode}
         />
+
+        {/* ── Playbook Save Button (when editing a playbook board) ── */}
+        {playbookBoard && (
+          <div className="mt-6">
+            {playbookSuccess && (
+              <div className="mb-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2 text-green-700 text-sm">
+                <CheckCircle2 size={16} />
+                <span>{playbookSuccess}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-center gap-3">
+              <Link
+                href={`/org-hub/playbook/${playbookBoard.id}`}
+                className="flex items-center gap-2 px-4 py-3 border border-teal/30 text-teal text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/5 transition-colors"
+              >
+                <ArrowLeft size={14} />
+                Back to Board
+              </Link>
+              <button
+                onClick={handleSavePlaybook}
+                disabled={playbookSaving}
+                className="flex items-center gap-2 px-6 py-3 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save size={14} />
+                {playbookSaving ? "Saving..." : `Save to Playbook`}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Chalk Talk Save Button + My Boards toggle (only in chalk_talk mode) ── */}
         {mode === "chalk_talk" && (
