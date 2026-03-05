@@ -16098,6 +16098,121 @@ Keep each section to 2-4 sentences. Be specific about players by name. Reference
 
 
 # ============================================================
+# ORG HUB — DEVELOPMENT DASHBOARD
+# ============================================================
+
+@app.get("/org-hub/development-dashboard")
+async def org_hub_development_dashboard(
+    token_data: dict = Depends(verify_token),
+):
+    """Return all org players with their current dev plan status and traffic-light classification."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT
+                p.id            AS player_id,
+                p.first_name,
+                p.last_name,
+                p.position,
+                p.current_team,
+                dp.id           AS plan_id,
+                dp.version      AS plan_version,
+                dp.status       AS plan_status,
+                dp.updated_at   AS plan_updated_at,
+                dp.created_at   AS plan_created_at,
+                dp.section_1_snapshot,
+                dp.section_2_context,
+                dp.section_3_strengths,
+                dp.section_4_development,
+                dp.section_5_phase_plan,
+                dp.section_6_integration,
+                dp.section_7_metrics,
+                dp.section_8_staff_notes,
+                dp.section_9_raw
+            FROM players p
+            LEFT JOIN development_plans dp
+                ON dp.player_id = p.id
+                AND dp.org_id = p.org_id
+                AND dp.is_current = 1
+            WHERE p.org_id = ?
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY p.last_name, p.first_name
+        """, (org_id,)).fetchall()
+
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        thirty_days = timedelta(days=30)
+        sixty_days = timedelta(days=60)
+
+        results = []
+        counts = {"on_track": 0, "needs_attention": 0, "behind": 0}
+        for r in rows:
+            has_plan = r["plan_id"] is not None
+            plan_status = r["plan_status"] if has_plan else "none"
+            updated_at = r["plan_updated_at"] if has_plan else None
+
+            # Traffic light classification
+            if not has_plan:
+                overall = "behind"
+            else:
+                try:
+                    updated_dt = datetime.fromisoformat(updated_at) if updated_at else None
+                except (ValueError, TypeError):
+                    updated_dt = None
+
+                if updated_dt is None:
+                    overall = "behind"
+                else:
+                    age = now - updated_dt
+                    if plan_status == "active" and age <= thirty_days:
+                        overall = "on_track"
+                    elif plan_status == "draft" or (thirty_days < age <= sixty_days):
+                        overall = "needs_attention"
+                    else:
+                        overall = "behind" if age > sixty_days else "needs_attention"
+
+            counts[overall] += 1
+
+            # Section summaries — first 100 chars of each non-empty section
+            sections = {}
+            for i in range(1, 10):
+                col = f"section_{i}_snapshot" if i == 1 else f"section_{i}_{'context' if i==2 else 'strengths' if i==3 else 'development' if i==4 else 'phase_plan' if i==5 else 'integration' if i==6 else 'metrics' if i==7 else 'staff_notes' if i==8 else 'raw'}"
+                val = r[col] if has_plan else None
+                sections[f"section_{i}"] = (val[:100] + "…") if val and len(val) > 100 else (val or "")
+
+            # Derive key focus from section_4_development (development areas)
+            key_focus = ""
+            if has_plan and r["section_4_development"]:
+                raw = r["section_4_development"]
+                key_focus = (raw[:80] + "…") if len(raw) > 80 else raw
+
+            results.append({
+                "player_id": r["player_id"],
+                "first_name": r["first_name"],
+                "last_name": r["last_name"],
+                "position": r["position"],
+                "current_team": r["current_team"],
+                "has_dev_plan": has_plan,
+                "plan_id": r["plan_id"],
+                "plan_status": plan_status,
+                "plan_version": r["plan_version"],
+                "last_updated": updated_at,
+                "key_focus": key_focus,
+                "overall_status": overall,
+                "sections": sections,
+            })
+
+        return {
+            "players": results,
+            "summary": counts,
+            "total": len(results),
+        }
+    finally:
+        conn.close()
+
+
+# ============================================================
 # DRILL LIBRARY — CRUD
 # ============================================================
 
