@@ -27,6 +27,7 @@ export interface UploadState {
   compressionProgress: number;  // 0-100
   originalSize: number;         // bytes (pre-compression)
   compressedSize: number;       // bytes (post-compression, 0 if not compressed)
+  compressionSkipped: boolean;  // true if FFmpeg failed and we fell back to raw upload
 }
 
 interface SpeedSample {
@@ -61,6 +62,7 @@ const INITIAL_STATE: UploadState = {
   compressionProgress: 0,
   originalSize: 0,
   compressedSize: 0,
+  compressionSkipped: false,
 };
 
 const UploadContext = createContext<UploadContextValue | null>(null);
@@ -198,9 +200,10 @@ export default function UploadProvider({ children }: { children: React.ReactNode
 
         console.info(`[FFmpeg] Compressed ${(file.size / 1024 / 1024).toFixed(1)} MB → ${(compressedFile.size / 1024 / 1024).toFixed(1)} MB (${Math.round((1 - compressedFile.size / file.size) * 100)}% reduction)`);
       } catch (compErr) {
-        // Graceful fallback — upload original file
+        // Graceful fallback — upload original file, but tell the user
         console.warn("[FFmpeg] Compression failed, uploading original file:", compErr);
         fileToUpload = file;
+        setState((prev) => ({ ...prev, compressionSkipped: true }));
       }
     }
 

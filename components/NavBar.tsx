@@ -1094,6 +1094,16 @@ function UploadIndicator() {
               </div>
             )}
 
+            {/* Compression skipped warning */}
+            {upload.compressionSkipped && (isUploading || isPaused) && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+                <AlertTriangle size={12} style={{ color: "#F59E0B" }} className="shrink-0" />
+                <p className="text-[10px] leading-tight" style={{ color: "#92400E" }}>
+                  Video optimization was skipped — uploading original file. This may take longer.
+                </p>
+              </div>
+            )}
+
             {/* Paused message */}
             {isPaused && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(234,88,12,0.06)", border: "1px solid rgba(234,88,12,0.15)" }}>

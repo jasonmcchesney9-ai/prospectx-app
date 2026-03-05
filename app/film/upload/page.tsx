@@ -8,6 +8,7 @@ import {
   Upload,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   Film,
   RefreshCw,
@@ -21,6 +22,8 @@ import VideoUploader from "@/components/film/VideoUploader";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { useUpload } from "@/contexts/UploadContext";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL } from "@ffmpeg/util";
 
 type Step = "details" | "file" | "uploading";
 type UploadStatus = "idle" | "uploading" | "processing" | "ready" | "error";
@@ -87,6 +90,9 @@ export default function FilmUploadPage() {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkSubmitting, setLinkSubmitting] = useState(false);
 
+  // FFmpeg capability check
+  const [ffmpegAvailable, setFfmpegAvailable] = useState<boolean | null>(null); // null = testing
+
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -120,6 +126,27 @@ export default function FilmUploadPage() {
     },
     [stopPolling]
   );
+
+  // Test whether FFmpeg WASM can load in this browser (SharedArrayBuffer, COOP/COEP)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ffmpeg = new FFmpeg();
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+        ffmpeg.terminate();
+        if (!cancelled) setFfmpegAvailable(true);
+      } catch (err) {
+        console.warn("[FFmpeg] Capability test failed:", err);
+        if (!cancelled) setFfmpegAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleUpload = useCallback(async () => {
     if (!file || !title.trim()) return;
@@ -292,6 +319,16 @@ export default function FilmUploadPage() {
             Upload Video
           </h1>
         </div>
+
+        {/* FFmpeg unavailable warning */}
+        {ffmpegAvailable === false && (
+          <div className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 mb-4" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+            <AlertTriangle size={16} style={{ color: "#F59E0B" }} className="shrink-0" />
+            <p className="text-[11px]" style={{ color: "#92400E" }}>
+              Video optimization is not available in this browser. Large files will upload at original size.
+            </p>
+          </div>
+        )}
 
         {/* Step indicator */}
         <div className="flex items-center gap-2 mb-8">
@@ -552,6 +589,16 @@ export default function FilmUploadPage() {
                   <div className="mt-3 rounded-lg px-3 py-2 text-center" style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}>
                     <p className="text-[10px] font-medium" style={{ color: "#3B82F6" }}>
                       Compressed: {formatBytes(globalUpload.originalSize)} → {formatBytes(globalUpload.compressedSize)} ({Math.round((1 - globalUpload.compressedSize / globalUpload.originalSize) * 100)}% smaller)
+                    </p>
+                  </div>
+                )}
+
+                {/* Compression skipped warning */}
+                {globalUpload.compressionSkipped && (
+                  <div className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
+                    <AlertTriangle size={14} style={{ color: "#F59E0B" }} className="shrink-0" />
+                    <p className="text-[11px]" style={{ color: "#92400E" }}>
+                      Video optimization was skipped — uploading original file. This may take longer.
                     </p>
                   </div>
                 )}
