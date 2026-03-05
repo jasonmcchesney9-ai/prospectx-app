@@ -5,6 +5,7 @@ import BenchTalkProvider from "@/components/BenchTalkProvider";
 import BenchTalkDrawer from "@/components/BenchTalkDrawer";
 import ContentWrapper from "@/components/ContentWrapper";
 import ImpersonateBanner from "@/components/admin/ImpersonateBanner";
+import UploadProvider from "@/contexts/UploadContext";
 
 export const metadata: Metadata = {
   title: "ProspectX Intelligence",
@@ -41,10 +42,12 @@ export default function RootLayout({
           }}
         />
         <ImpersonateBanner />
-        <BenchTalkProvider>
-          <ContentWrapper>{children}</ContentWrapper>
-          <BenchTalkDrawer />
-        </BenchTalkProvider>
+        <UploadProvider>
+          <BenchTalkProvider>
+            <ContentWrapper>{children}</ContentWrapper>
+            <BenchTalkDrawer />
+          </BenchTalkProvider>
+        </UploadProvider>
       </body>
     </html>
   );

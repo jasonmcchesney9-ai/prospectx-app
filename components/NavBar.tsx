@@ -39,12 +39,17 @@ import {
   AlertTriangle,
   Video,
   Star,
+  Loader2,
+  CheckCircle2,
+  RefreshCw,
+  Film,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
 import PlayerSearchDropdown from "./PlayerSearchDropdown";
+import { useUpload } from "@/contexts/UploadContext";
 
 // ── Role Group Mapping ─────────────────────────────────────────
 // Maps hockey_role to a nav group. Each group is an isolated environment.
@@ -564,8 +569,9 @@ export default function NavBar() {
           </button>
         </div>
 
-        {/* Right: Quick Actions */}
-        <div className="flex-1 flex justify-end">
+        {/* Right: Quick Actions + Upload Indicator */}
+        <div className="flex-1 flex justify-end items-center gap-2">
+          <UploadIndicator />
           <Link
             href="/scout-notes"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-oswald font-bold uppercase tracking-wider text-teal/70 hover:text-teal hover:bg-teal/10 transition-colors"
@@ -849,6 +855,219 @@ export default function NavBar() {
         </div>
       )}
     </nav>
+  );
+}
+
+// ── Upload Indicator (nav bar pill + dropdown) ────────────────
+
+function formatUploadBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatUploadEta(seconds: number): string {
+  if (seconds < 1) return "finishing...";
+  if (seconds < 60) return `~${Math.ceil(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.ceil(seconds % 60);
+  return `~${m}m ${s}s`;
+}
+
+function UploadIndicator() {
+  const { upload, actions } = useUpload();
+  const [expanded, setExpanded] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Auto-clear "ready" after 15 seconds
+  useEffect(() => {
+    if (upload.phase !== "ready" || !upload.completedAt) return;
+    const timeout = setTimeout(() => {
+      // Don't auto-clear — keep the "Create Session" link visible
+      // User must click it or dismiss manually
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [upload.phase, upload.completedAt]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setExpanded(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  if (upload.phase === "idle") return null;
+
+  const isUploading = upload.phase === "uploading";
+  const isProcessing = upload.phase === "processing";
+  const isReady = upload.phase === "ready";
+  const isError = upload.phase === "error";
+
+  // Pill colors
+  const pillBg = isReady
+    ? "rgba(13,148,136,0.25)"
+    : isError
+    ? "rgba(239,68,68,0.25)"
+    : "rgba(13,148,136,0.15)";
+  const pillColor = isReady ? "#10B981" : isError ? "#EF4444" : "#14B8A6";
+  const pillBorder = isReady
+    ? "1.5px solid rgba(16,185,129,0.4)"
+    : isError
+    ? "1.5px solid rgba(239,68,68,0.4)"
+    : "1.5px solid rgba(13,148,136,0.3)";
+
+  // Truncate filename
+  const shortName = upload.fileName.length > 20
+    ? upload.fileName.slice(0, 17) + "..."
+    : upload.fileName;
+
+  return (
+    <div ref={ref} className="relative">
+      {/* ── Pill ── */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase transition-colors"
+        style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: pillBg, color: pillColor, border: pillBorder }}
+      >
+        {isUploading && (
+          <>
+            <Upload size={10} />
+            <span>{upload.progress}%</span>
+            <span className="hidden lg:inline max-w-[100px] truncate">{shortName}</span>
+          </>
+        )}
+        {isProcessing && (
+          <>
+            <Loader2 size={10} className="animate-spin" />
+            <span>Processing</span>
+          </>
+        )}
+        {isReady && (
+          <>
+            <CheckCircle2 size={10} />
+            <span>Upload Complete</span>
+          </>
+        )}
+        {isError && (
+          <>
+            <AlertTriangle size={10} />
+            <span>Upload Failed</span>
+          </>
+        )}
+      </button>
+
+      {/* ── Expanded Dropdown ── */}
+      {expanded && (
+        <div
+          className="absolute right-0 top-full mt-2 w-72 rounded-xl shadow-xl z-50 overflow-hidden"
+          style={{ border: "1.5px solid #DDE6EF", background: "#FFFFFF" }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-2.5" style={{ background: "#0F2942" }}>
+            <span className="font-bold uppercase text-white" style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}>
+              Video Upload
+            </span>
+            <button onClick={() => setExpanded(false)} className="text-white/50 hover:text-white transition-colors">
+              <X size={12} />
+            </button>
+          </div>
+
+          <div className="px-4 py-3 space-y-3">
+            {/* File name */}
+            <div>
+              <p className="text-[10px] font-bold uppercase mb-0.5" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}>File</p>
+              <p className="text-xs truncate" style={{ color: "#0F2942" }}>{upload.fileName}</p>
+            </div>
+
+            {/* Progress bar (uploading / processing) */}
+            {(isUploading || isProcessing) && (
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-sm font-bold font-oswald" style={{ color: "#0F2942" }}>{upload.progress}%</span>
+                  <span className="text-[10px] uppercase" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: isProcessing ? "#EA580C" : "#0D9488" }}>
+                    {isProcessing ? "Processing with Mux" : "Uploading"}
+                  </span>
+                </div>
+                <div className="w-full rounded-full h-2" style={{ background: "#DDE6EF" }}>
+                  <div
+                    className="h-2 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${upload.progress}%`, background: isProcessing ? "#EA580C" : "#0D9488" }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Speed + ETA + Bytes (uploading only) */}
+            {isUploading && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px]" style={{ fontFamily: "ui-monospace, monospace", color: "#8BA4BB" }}>
+                  {formatUploadBytes(upload.bytesUploaded)} / {formatUploadBytes(upload.bytesTotal)}
+                </span>
+                <span className="text-[10px]" style={{ fontFamily: "ui-monospace, monospace", color: "#0D9488" }}>
+                  {upload.speed > 0 ? `${formatUploadBytes(upload.speed)}/s` : ""}
+                  {upload.speed > 0 && upload.eta > 0 ? ` · ${formatUploadEta(upload.eta)}` : ""}
+                </span>
+              </div>
+            )}
+
+            {/* Ready state */}
+            {isReady && (
+              <div className="text-center py-1">
+                <p className="text-xs font-medium" style={{ color: "#10B981" }}>Video is ready!</p>
+                <Link
+                  href={`/film/sessions/new?upload=${upload.uploadId}`}
+                  onClick={() => { setExpanded(false); actions.clearUpload(); }}
+                  className="inline-flex items-center gap-1.5 mt-2 px-4 py-1.5 rounded-lg text-xs font-bold uppercase text-white transition-colors hover:opacity-90"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
+                >
+                  <Film size={11} />
+                  Create Session
+                </Link>
+              </div>
+            )}
+
+            {/* Error state */}
+            {isError && (
+              <div className="text-center py-1">
+                <p className="text-[11px]" style={{ color: "#EF4444" }}>{upload.error}</p>
+                <button
+                  onClick={() => { setExpanded(false); actions.retryUpload(); }}
+                  className="inline-flex items-center gap-1.5 mt-2 px-4 py-1.5 rounded-lg text-xs font-bold uppercase text-white transition-colors hover:opacity-90"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#EA580C" }}
+                >
+                  <RefreshCw size={11} />
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Cancel / Dismiss */}
+            <div className="flex justify-end pt-1 border-t" style={{ borderColor: "#DDE6EF" }}>
+              {(isUploading || isProcessing) ? (
+                <button
+                  onClick={() => { setExpanded(false); actions.cancelUpload(); }}
+                  className="text-[10px] font-bold uppercase transition-colors hover:opacity-70"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#EF4444" }}
+                >
+                  Cancel Upload
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setExpanded(false); actions.clearUpload(); }}
+                  className="text-[10px] font-bold uppercase transition-colors hover:opacity-70"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}
+                >
+                  Dismiss
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

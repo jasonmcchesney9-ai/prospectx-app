@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import VideoUploader from "@/components/film/VideoUploader";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
+import { useUpload } from "@/contexts/UploadContext";
 
 type Step = "details" | "file" | "uploading";
 type UploadStatus = "idle" | "uploading" | "processing" | "ready" | "error";
@@ -53,6 +54,7 @@ const UPLOAD_SOURCES = [
 
 export default function FilmUploadPage() {
   const router = useRouter();
+  const { upload: globalUpload, actions: uploadActions } = useUpload();
 
   // Step 1 — Details
   const [title, setTitle] = useState("");
@@ -127,90 +129,41 @@ export default function FilmUploadPage() {
     setProgress(0);
     setErrorMessage("");
 
-    try {
-      // 1. Create Mux direct upload URL
-      const createRes = await api.post("/film/uploads/create-url", {
-        title: title.trim(),
-        description: description.trim() || null,
-        upload_source: uploadSource,
-      });
+    // Delegate to global context — upload persists across page navigations
+    uploadActions.startUpload(file, {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      uploadSource,
+    });
+  }, [file, title, description, uploadSource, uploadActions]);
 
-      const { upload_url, id: newUploadId } = createRes.data;
-      setUploadId(newUploadId);
-
-      // 2. PUT file directly to Mux
-      speedSamplesRef.current = [{ time: performance.now(), bytes: 0 }];
-      setBytesTotal(file.size);
-      setBytesUploaded(0);
-      setUploadSpeed(0);
-      setUploadEta(0);
-
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", upload_url);
-
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100);
-            setProgress(pct);
-            setBytesUploaded(e.loaded);
-            setBytesTotal(e.total);
-
-            // Speed calculation with rolling 3-sample average
-            const now = performance.now();
-            const samples = speedSamplesRef.current;
-            samples.push({ time: now, bytes: e.loaded });
-
-            // Keep last 4 samples (to compute 3 deltas)
-            if (samples.length > 4) {
-              samples.shift();
-            }
-
-            if (samples.length >= 2) {
-              const oldest = samples[0];
-              const elapsed = (now - oldest.time) / 1000; // seconds
-              if (elapsed > 0) {
-                const bytesDelta = e.loaded - oldest.bytes;
-                const speed = bytesDelta / elapsed;
-                setUploadSpeed(speed);
-
-                const remaining = e.total - e.loaded;
-                const eta = speed > 0 ? remaining / speed : 0;
-                setUploadEta(eta);
-              }
-            }
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error("Upload network error"));
-        xhr.send(file);
-      });
-
-      // 3. Notify backend upload is complete
-      setUploadStatus("processing");
-      await api.patch(`/film/uploads/${newUploadId}/complete`);
-
-      // 4. Start polling for readiness
-      pollStatus(newUploadId);
-    } catch (e: unknown) {
-      stopPolling();
-      setUploadStatus("error");
-      const msg = e instanceof Error ? e.message : "Upload failed";
-      setErrorMessage(msg);
-      toast.error(msg);
+  // Sync local UI state from global context when on the uploading step
+  useEffect(() => {
+    if (step !== "uploading" || globalUpload.phase === "idle") return;
+    setProgress(globalUpload.progress);
+    setBytesUploaded(globalUpload.bytesUploaded);
+    setBytesTotal(globalUpload.bytesTotal);
+    setUploadSpeed(globalUpload.speed);
+    setUploadEta(globalUpload.eta);
+    if (globalUpload.uploadId) setUploadId(globalUpload.uploadId);
+    // Map context phase → local uploadStatus
+    const phaseMap: Record<string, UploadStatus> = {
+      uploading: "uploading",
+      processing: "processing",
+      ready: "ready",
+      error: "error",
+    };
+    const mapped = phaseMap[globalUpload.phase];
+    if (mapped && mapped !== uploadStatus) {
+      setUploadStatus(mapped);
+      if (mapped === "error" && globalUpload.error) setErrorMessage(globalUpload.error);
+      if (mapped === "ready") toast.success("Video is ready!");
     }
-  }, [file, title, description, uploadSource, pollStatus, stopPolling]);
+  }, [step, globalUpload, uploadStatus]);
 
   const handleReset = useCallback(() => {
     stopPolling();
+    uploadActions.clearUpload();
     setStep("details");
     setTitle("");
     setDescription("");
@@ -227,7 +180,7 @@ export default function FilmUploadPage() {
     setUploadEta(0);
     speedSamplesRef.current = [];
     setEventDataFile(null);
-  }, [stopPolling]);
+  }, [stopPolling, uploadActions]);
 
   const handleCreateSessionWithEvents = useCallback(async () => {
     setCreatingSession(true);
@@ -549,6 +502,29 @@ export default function FilmUploadPage() {
                     {formatEta(uploadEta)}
                   </p>
                 )}
+
+                {/* Background navigation banner */}
+                <div className="mt-5 rounded-lg px-4 py-3 text-center" style={{ background: "rgba(13,148,136,0.06)", border: "1.5px solid rgba(13,148,136,0.15)" }}>
+                  <p className="text-xs font-medium" style={{ color: "#0F2942" }}>
+                    Your video is uploading in the background.
+                  </p>
+                  <p className="text-[11px] mt-0.5" style={{ color: "#5A7291" }}>
+                    You can continue working — check the upload status in the nav bar.
+                  </p>
+                  <div className="flex items-center justify-center gap-3 mt-3">
+                    <Link
+                      href="/film"
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase text-white transition-colors hover:opacity-90"
+                      style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
+                    >
+                      <Film size={11} />
+                      Continue to Film Room
+                    </Link>
+                    <span className="text-[10px]" style={{ color: "#8BA4BB" }}>
+                      or stay on this page
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
 
