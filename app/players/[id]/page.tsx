@@ -50,6 +50,8 @@ import {
   ListPlus,
   Clock,
   Scissors,
+  Phone,
+  Mail,
 } from "lucide-react";
 import {
   RadarChart,
@@ -262,6 +264,13 @@ export default function PlayerDetailPage() {
   const [editRefTeams, setEditRefTeams] = useState<TeamReference[]>([]);
   const [customLeague, setCustomLeague] = useState(false);
   const [customTeam, setCustomTeam] = useState(false);
+
+  // Contact info editing
+  const [editingContact, setEditingContact] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactFields, setContactFields] = useState({
+    email: "", phone: "", parent_email: "", parent_phone: "", agent_email: "", agent_phone: "",
+  });
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -613,6 +622,30 @@ export default function PlayerDetailPage() {
       setEditError(msg);
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleSaveContact = async () => {
+    if (!player) return;
+    setSavingContact(true);
+    try {
+      const updates: Record<string, string | null> = {};
+      const fields = ["email", "phone", "parent_email", "parent_phone", "agent_email", "agent_phone"] as const;
+      for (const f of fields) {
+        const newVal = contactFields[f].trim() || null;
+        const oldVal = (player as unknown as Record<string, unknown>)[f] as string | null | undefined;
+        if (newVal !== (oldVal || null)) updates[f] = newVal;
+      }
+      if (Object.keys(updates).length > 0) {
+        await api.patch(`/players/${playerId}`, updates);
+        const { data } = await api.get<Player>(`/players/${playerId}`);
+        setPlayer(data);
+      }
+      setEditingContact(false);
+    } catch {
+      toast.error("Failed to save contact info");
+    } finally {
+      setSavingContact(false);
     }
   };
 
@@ -1637,6 +1670,134 @@ export default function PlayerDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Contact Info Card — role-gated */}
+          {(() => {
+            const isStaff = COACH_ROLES.has(userRole);
+            const isAgent = userRole === "agent";
+            const isParent = userRole === "parent";
+            const isPlayerRole = userRole === "player";
+            const isBroadcaster = userRole === "broadcaster" || userRole === "media";
+            // Broadcasters/media see nothing
+            if (isBroadcaster) return null;
+            // Build visible field list based on role
+            type CField = { key: string; label: string; icon: React.ReactNode; editable: boolean };
+            const allFields: CField[] = [
+              { key: "email", label: "Player Email", icon: <Mail size={13} className="text-teal" />, editable: true },
+              { key: "phone", label: "Player Phone", icon: <Phone size={13} className="text-teal" />, editable: true },
+              { key: "parent_email", label: "Parent Email", icon: <Mail size={13} className="text-orange" />, editable: true },
+              { key: "parent_phone", label: "Parent Phone", icon: <Phone size={13} className="text-orange" />, editable: true },
+              { key: "agent_email", label: "Agent Email", icon: <Mail size={13} className="text-navy/60" />, editable: true },
+              { key: "agent_phone", label: "Agent Phone", icon: <Phone size={13} className="text-navy/60" />, editable: true },
+            ];
+            let visibleFields: CField[];
+            let canEdit: Set<string>;
+            if (isStaff) {
+              visibleFields = allFields;
+              canEdit = new Set(allFields.map(f => f.key));
+            } else if (isAgent) {
+              visibleFields = allFields.filter(f => ["email", "phone", "parent_email", "parent_phone"].includes(f.key));
+              canEdit = new Set<string>();
+            } else if (isParent) {
+              visibleFields = allFields.filter(f => ["email", "phone", "parent_email", "parent_phone"].includes(f.key));
+              canEdit = new Set(["parent_email", "parent_phone"]);
+            } else if (isPlayerRole) {
+              visibleFields = allFields.filter(f => ["email", "phone"].includes(f.key));
+              canEdit = new Set(["email", "phone"]);
+            } else {
+              return null;
+            }
+            const hasAnyData = visibleFields.some(f => (player as unknown as Record<string, unknown>)[f.key]);
+            return (
+              <div className="bg-white rounded-xl border border-teal/20 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
+                    <Phone size={14} className="text-teal" /> Contact Info
+                  </h3>
+                  {canEdit.size > 0 && (
+                    <button
+                      onClick={() => {
+                        if (editingContact) {
+                          setEditingContact(false);
+                        } else {
+                          setContactFields({
+                            email: player.email || "",
+                            phone: player.phone || "",
+                            parent_email: player.parent_email || "",
+                            parent_phone: player.parent_phone || "",
+                            agent_email: player.agent_email || "",
+                            agent_phone: player.agent_phone || "",
+                          });
+                          setEditingContact(true);
+                        }
+                      }}
+                      className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+                    >
+                      {editingContact ? <X size={12} /> : <Edit3 size={12} />}
+                      {editingContact ? "Cancel" : "Edit"}
+                    </button>
+                  )}
+                </div>
+                {editingContact ? (
+                  <div className="space-y-2.5">
+                    {visibleFields.filter(f => canEdit.has(f.key)).map((f) => (
+                      <div key={f.key}>
+                        <label className="flex items-center gap-1.5 text-xs text-muted mb-1">
+                          {f.icon} {f.label}
+                        </label>
+                        <input
+                          type={f.key.includes("email") ? "email" : "tel"}
+                          value={contactFields[f.key as keyof typeof contactFields]}
+                          onChange={(e) => setContactFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                          placeholder={f.key.includes("email") ? "email@example.com" : "(555) 123-4567"}
+                          className="w-full px-3 py-1.5 border border-teal/20 rounded-lg text-sm"
+                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveContact(); }}
+                        />
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleSaveContact}
+                        disabled={savingContact}
+                        className="px-3 py-1.5 bg-teal text-white text-xs rounded-lg hover:bg-teal/90 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {savingContact ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingContact(false)}
+                        className="px-3 py-1.5 text-xs text-muted hover:text-navy transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : hasAnyData ? (
+                  <div className="space-y-2 text-sm">
+                    {visibleFields.map((f) => {
+                      const val = (player as unknown as Record<string, unknown>)[f.key] as string | null | undefined;
+                      if (!val) return null;
+                      return (
+                        <div key={f.key} className="flex items-center justify-between">
+                          <span className="text-muted flex items-center gap-1.5">{f.icon} {f.label}</span>
+                          {f.key.includes("email") ? (
+                            <a href={`mailto:${val}`} className="font-semibold text-teal hover:text-teal/80 transition-colors">{val}</a>
+                          ) : (
+                            <a href={`tel:${val}`} className="font-semibold text-navy hover:text-teal transition-colors">{val}</a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted/60 italic">
+                    No contact information on file.
+                    {canEdit.size > 0 && " Click Edit to add."}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Archetype Card */}
           <div className="bg-white rounded-xl border border-teal/20 p-5">

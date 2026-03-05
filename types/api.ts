@@ -71,6 +71,13 @@ export interface Player {
   roster_status: string;
   jersey_number: string | null;
   created_at: string;
+  // Contact fields
+  email?: string | null;
+  phone?: string | null;
+  parent_email?: string | null;
+  parent_phone?: string | null;
+  agent_email?: string | null;
+  agent_phone?: string | null;
   // PXR v1 fields
   role_tags?: RoleTag[];
   health_status?: string;

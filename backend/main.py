@@ -4635,6 +4635,14 @@ def init_db():
     conn.commit()
     logger.info("Migration: highlight_reels table ready")
 
+    # ── Migration: contact fields on players ──
+    contact_cols = _get_table_columns(conn, "players")
+    for col_name in ["email", "phone", "parent_email", "parent_phone", "agent_email", "agent_phone"]:
+        if col_name not in contact_cols:
+            conn.execute(f"ALTER TABLE players ADD COLUMN {col_name} TEXT")
+            logger.info("Migration: added %s column to players (contact fields)", col_name)
+    conn.commit()
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -13845,7 +13853,8 @@ async def patch_player(
 
     allowed = {"first_name", "last_name", "dob", "position", "shoots", "height_cm", "weight_kg",
                "current_team", "current_league", "notes", "archetype", "image_url", "commitment_status",
-               "roster_status", "jersey_number", "manual_override"}
+               "roster_status", "jersey_number", "manual_override",
+               "email", "phone", "parent_email", "parent_phone", "agent_email", "agent_phone"}
     sets = []
     params = []
     for field, value in updates.items():
