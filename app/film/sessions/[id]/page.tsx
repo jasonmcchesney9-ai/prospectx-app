@@ -162,12 +162,58 @@ function formatDate(iso: string): string {
   }
 }
 
-const FILM_REPORT_TYPES = [
-  { value: "film_post_game_review", label: "Post-Game Review", desc: "Breakdown of game footage — personnel, tactics, adjustments", needsPlayer: false, needsOpponent: false },
-  { value: "film_player_analysis", label: "Player Film Analysis", desc: "Clip-by-clip assessment of a specific player", needsPlayer: true, needsOpponent: false },
-  { value: "film_opponent_prep", label: "Opponent Prep", desc: "Tactical breakdown for game preparation", needsPlayer: false, needsOpponent: true },
-  { value: "film_practice_review", label: "Practice Review", desc: "Drill execution, standouts, system concepts", needsPlayer: false, needsOpponent: false },
+interface FilmReportType {
+  value: string;
+  label: string;
+  desc: string;
+  needsPlayer: boolean;
+  needsOpponent: boolean;
+}
+
+interface FilmReportGroup {
+  group: string;
+  types: FilmReportType[];
+}
+
+const FILM_REPORT_GROUPS: FilmReportGroup[] = [
+  {
+    group: "Game Analysis",
+    types: [
+      { value: "film_post_game_review", label: "Post-Game Review", desc: "Breakdown of game footage — personnel, tactics, adjustments", needsPlayer: false, needsOpponent: false },
+      { value: "film_period_comparison", label: "Period Comparison", desc: "Period-by-period momentum, adjustments, and coaching takeaways", needsPlayer: false, needsOpponent: false },
+      { value: "film_system_execution", label: "System Execution", desc: "Audit how well the team ran its tactical systems", needsPlayer: false, needsOpponent: false },
+    ],
+  },
+  {
+    group: "Player Analysis",
+    types: [
+      { value: "film_player_analysis", label: "Player Film Analysis", desc: "Clip-by-clip assessment of a specific player", needsPlayer: true, needsOpponent: false },
+      { value: "film_shift_review", label: "Shift-by-Shift Review", desc: "Development-focused shift breakdown for one player", needsPlayer: true, needsOpponent: false },
+      { value: "film_goalie_review", label: "Goaltender Review", desc: "Goalie coach film review — positioning, movement, saves", needsPlayer: true, needsOpponent: false },
+    ],
+  },
+  {
+    group: "Recruiting",
+    types: [
+      { value: "film_recruitment_brief", label: "Recruitment Film Brief", desc: "Professional brief to accompany a highlight reel for scouts", needsPlayer: true, needsOpponent: false },
+    ],
+  },
+  {
+    group: "Opponent",
+    types: [
+      { value: "film_opponent_prep", label: "Opponent Prep", desc: "Tactical breakdown for game preparation", needsPlayer: false, needsOpponent: true },
+    ],
+  },
+  {
+    group: "Practice",
+    types: [
+      { value: "film_practice_review", label: "Practice Review", desc: "Drill execution, standouts, system concepts", needsPlayer: false, needsOpponent: false },
+    ],
+  },
 ];
+
+// Flat list for lookups (used by handleSelectReportType)
+const FILM_REPORT_TYPES = FILM_REPORT_GROUPS.flatMap((g) => g.types);
 
 export default function FilmSessionViewerPage() {
   const params = useParams();
@@ -378,7 +424,7 @@ export default function FilmSessionViewerPage() {
       const config = FILM_REPORT_TYPES.find((rt) => rt.value === type);
       if (!config) return;
 
-      // Player Film Analysis — needs a player selector
+      // Player-focused reports — need a player selector
       if (config.needsPlayer) {
         setPendingReportType(type);
         setSelectedPlayerId("");
@@ -640,18 +686,26 @@ export default function FilmSessionViewerPage() {
               {generating ? "Generating..." : generatedReport ? "Regenerate" : "Generate Analysis"}
             </button>
 
-            {/* Report type dropdown */}
+            {/* Report type dropdown — grouped */}
             {showTypeSelector && !generating && (
-              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-20 py-1">
-                {FILM_REPORT_TYPES.map((rt) => (
-                  <button
-                    key={rt.value}
-                    onClick={() => handleSelectReportType(rt.value)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-navy/[0.03] transition-colors group"
-                  >
-                    <span className="text-sm text-navy font-oswald tracking-wider">{rt.label}</span>
-                    <span className="block text-[10px] text-muted/60 mt-0.5 leading-tight">{rt.desc}</span>
-                  </button>
+              <div className="absolute right-0 top-full mt-1 w-80 bg-white rounded-xl border border-border shadow-lg z-20 py-1 max-h-[420px] overflow-y-auto">
+                {FILM_REPORT_GROUPS.map((group, gi) => (
+                  <div key={group.group}>
+                    {gi > 0 && <div className="border-t border-border mx-3 my-1" />}
+                    <div className="px-4 pt-2.5 pb-1">
+                      <span className="text-[9px] font-oswald uppercase tracking-[0.15em] text-muted/50">{group.group}</span>
+                    </div>
+                    {group.types.map((rt) => (
+                      <button
+                        key={rt.value}
+                        onClick={() => handleSelectReportType(rt.value)}
+                        className="w-full text-left px-4 py-2 hover:bg-navy/[0.03] transition-colors group"
+                      >
+                        <span className="text-sm text-navy font-oswald tracking-wider">{rt.label}</span>
+                        <span className="block text-[10px] text-muted/60 mt-0.5 leading-tight">{rt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
                 <div className="border-t border-border mt-1 pt-1">
                   <button
@@ -665,8 +719,8 @@ export default function FilmSessionViewerPage() {
               </div>
             )}
 
-            {/* Player selector (for Player Film Analysis) */}
-            {pendingReportType === "film_player_analysis" && !generating && (
+            {/* Player selector (for any report type that needs a player) */}
+            {pendingReportType && FILM_REPORT_TYPES.find((rt) => rt.value === pendingReportType)?.needsPlayer && !generating && (
               <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-20 p-4">
                 <h4 className="text-xs font-oswald uppercase tracking-wider text-navy mb-2 flex items-center gap-1.5">
                   <Users size={12} />
@@ -721,7 +775,7 @@ export default function FilmSessionViewerPage() {
                     )}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => executeGeneration("film_player_analysis", selectedPlayerId || undefined)}
+                        onClick={() => executeGeneration(pendingReportType!, selectedPlayerId || undefined)}
                         disabled={!selectedPlayerId}
                         className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
                           selectedPlayerId
@@ -755,7 +809,7 @@ export default function FilmSessionViewerPage() {
                     </select>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => executeGeneration("film_player_analysis", selectedPlayerId || undefined)}
+                        onClick={() => executeGeneration(pendingReportType!, selectedPlayerId || undefined)}
                         disabled={!selectedPlayerId}
                         className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
                           selectedPlayerId

@@ -1454,6 +1454,12 @@ MODE_TEMPLATE_WIRING = {
     "special_teams_audit":       {"primary": "analyst", "secondary": "scout"},
     # Addendum 13 — Highlight Reel Builder
     "recruiting_highlight_builder": {"primary": "coach", "secondary": "scout"},
+    # Addendum 14 — 5 New General Report Types
+    "game_day_one_pager":        {"primary": "coach",   "secondary": None},
+    "weekly_coaching_summary":   {"primary": "analyst",  "secondary": "coach"},
+    "parent_season_update":      {"primary": "parent",   "secondary": "coach"},
+    "trade_impact_simulation":   {"primary": "gm",       "secondary": "analyst"},
+    "draft_class_summary":       {"primary": "scout",    "secondary": "gm"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -1721,6 +1727,27 @@ REQUIRED_SECTIONS_BY_TYPE = {
     ],
     "recruiting_highlight_builder": [
         "SUGGESTED_ORDER", "SECTION_BREAKS", "OPENING_NOTE", "CLOSING_NOTE",
+    ],
+    # Addendum 14 — 5 New General Report Types
+    "game_day_one_pager": [
+        "OPPONENT_IDENTITY", "KEYS_TO_THE_GAME", "OUR_LINEUP",
+        "PP_NOTES", "PK_NOTES", "BENCH_CUES",
+    ],
+    "weekly_coaching_summary": [
+        "RESULTS_SUMMARY", "PROCESS_SUMMARY", "STANDOUTS",
+        "CONCERNS", "PRACTICE_PRIORITIES", "STRATEGIC_NOTES",
+    ],
+    "parent_season_update": [
+        "HOW_WERE_DOING", "WHAT_WERE_WORKING_ON", "HOW_THE_GROUP_IS_GROWING",
+        "HOW_PARENTS_CAN_SUPPORT", "UPCOMING",
+    ],
+    "trade_impact_simulation": [
+        "TRADE_SCENARIO", "IDENTITY_IMPACT", "LINE_AND_PAIR_IMPACT",
+        "PXR_IMPACT", "SPECIAL_TEAMS_IMPACT", "RISKS", "RECOMMENDATION",
+    ],
+    "draft_class_summary": [
+        "CLASS_OVERVIEW", "OUR_PHILOSOPHY", "TIER_BREAKDOWN",
+        "BEST_FITS", "OVERDRAFT_RISKS", "POTENTIAL_STEALS", "RECOMMENDED_STRATEGY",
     ],
 }
 
@@ -4437,6 +4464,17 @@ Perspective: {resolved_perspective}
     # Addendum 13 — Highlight Reel Builder
     elif report_type == "recruiting_highlight_builder":
         parts.append(RECRUITING_HIGHLIGHT_BUILDER)
+    # Addendum 14 — 5 New General Report Types
+    elif report_type == "game_day_one_pager":
+        parts.append(GAME_DAY_ONE_PAGER)
+    elif report_type == "weekly_coaching_summary":
+        parts.append(WEEKLY_COACHING_SUMMARY)
+    elif report_type == "parent_season_update":
+        parts.append(PARENT_SEASON_UPDATE)
+    elif report_type == "trade_impact_simulation":
+        parts.append(TRADE_IMPACT_SIMULATION)
+    elif report_type == "draft_class_summary":
+        parts.append(DRAFT_CLASS_SUMMARY)
 
     return "\n\n".join(parts)
 
@@ -6594,6 +6632,191 @@ RULES:
 
 
 # ─────────────────────────────────────────────────────────
+# Addendum 14 — 5 New General Report Prompts
+# ─────────────────────────────────────────────────────────
+
+GAME_DAY_ONE_PAGER = '''
+GAME DAY ONE-PAGER — BENCH CARD
+================================
+Audience: Head coach, assistant coaches. Bench-ready.
+Purpose: Compilation and condensation of existing intelligence for tonight's game.
+Tokens: 2000 max. Every word must fit on one printed page.
+
+This is NOT new analysis. This is a compilation of existing intel — compressed for the bench.
+
+OPPONENT_IDENTITY
+3-4 sentences. Who they are, how they play, recent form. Compressed from opponent game plan data.
+
+KEYS_TO_THE_GAME
+6-8 short bullet points. Each starts with an action verb. Each is one line that fits on an index card.
+"Win the F1 race to force their D into quick decisions." Not "play hard."
+
+OUR_LINEUP
+Lines, D pairs, PP1/PP2, PK1/PK2. One line per unit. Key role notes in parentheses.
+
+PP_NOTES
+2-3 bullets on their PK tendencies and our PP approach.
+
+PK_NOTES
+2-3 bullets on their PP threats and our PK assignments.
+
+BENCH_CUES
+6-8 card-length reminder lines for between periods.
+"If down after 1: shorten bench, ride top 9."
+"If up after 2: protect, dont chase."
+
+RULES:
+- Zero filler. This is designed to be printed on one page and laminated for the bench.
+- Every key must be specific to this opponent — never generic.
+- If lineup data is missing, state DATA NOT AVAILABLE for that section.
+- Use COACH lens only. Direct, actionable, no hedging.
+'''
+
+WEEKLY_COACHING_SUMMARY = '''
+WEEKLY COACHING SUMMARY — STAFF BRIEFING
+==========================================
+Audience: Assistant GM, coaching staff, front office. Staff meeting document.
+Purpose: Summarize the week for the coaching staff and front office.
+Tokens: 3000 max. Analytical and direct.
+
+RESULTS_SUMMARY
+Record this week, goal differential, standings movement. Key games and outcomes in 2-3 sentences.
+
+PROCESS_SUMMARY
+Beyond results — chance share trends, system execution quality, special teams trends, territorial play.
+Are we winning the right way or getting lucky/unlucky?
+
+STANDOUTS
+3-5 players trending up this week with specific evidence (stat jumps, film observations, coach notes).
+
+CONCERNS
+2-3 players or patterns trending down with specific evidence.
+
+PRACTICE_PRIORITIES
+3-5 focus areas for next week's practices based on this week's games and film.
+
+STRATEGIC_NOTES
+Any line changes, role adjustments, or roster moves to consider. Forward-looking.
+
+RULES:
+- This is a staff meeting document, not a public report.
+- Be honest about what is not working. The front office needs truth, not spin.
+- If data is thin for any section, say so.
+- Use ANALYST + COACH lens. Numbers support the narrative.
+'''
+
+PARENT_SEASON_UPDATE = '''
+PARENT SEASON UPDATE — TEAM LETTER
+====================================
+Audience: Parents of players. Warm, transparent, reassuring.
+Purpose: Head coach writing a letter to parents about the team's season.
+Tokens: 2500 max.
+
+HOW_WERE_DOING
+2-3 paragraphs. Big picture — record, recent results, where the team stands.
+Plain language, no jargon. Frame challenges as growth opportunities.
+
+WHAT_WERE_WORKING_ON
+What the coaching staff is focused on in practices. What systems or habits the team is developing.
+Help parents understand there is a plan.
+
+HOW_THE_GROUP_IS_GROWING
+Character development, leadership, team culture observations.
+This is what parents really want to hear — that their kids are becoming better people and players.
+
+HOW_PARENTS_CAN_SUPPORT
+3-4 specific, positive suggestions. Focus on process not politics.
+"Encourage your player to get 8+ hours of sleep before game days" not "stop yelling at refs."
+
+UPCOMING
+Key dates, schedule highlights, any special events.
+
+RULES:
+- No tactics detail. No individual player callouts (positive or negative). This is a team letter.
+- Write like a real coach — warm but professional. Not corporate, not casual.
+- Never mention specific player struggles or disciplinary issues.
+- Use PARENT lens. Plain language throughout.
+'''
+
+TRADE_IMPACT_SIMULATION = '''
+TRADE IMPACT SIMULATION — FRONT OFFICE EVALUATION
+===================================================
+Audience: GM, assistant GM, scouting director. Front office only.
+Purpose: Evaluate a potential acquisition for the front office.
+Tokens: 3500 max.
+
+TRADE_SCENARIO
+Describe the proposed move — who comes in, who goes out, who loses minutes. State the context clearly.
+
+IDENTITY_IMPACT
+How does this trade change our team identity? Does the new player fit our system?
+Does losing the outgoing player hurt our identity?
+
+LINE_AND_PAIR_IMPACT
+How do our line combinations and D pairs change? New projected lines with the acquisition.
+Where does the new player slot? Who moves?
+
+PXR_IMPACT
+Compare PXR composite and pillar scores — incoming vs outgoing. Net change to the position group's
+overall strength. If PXR data is unavailable, state DATA NOT AVAILABLE and use statistical comparison instead.
+
+SPECIAL_TEAMS_IMPACT
+How do PP and PK units change? Does the new player add or remove special teams value?
+
+RISKS
+Age curve, adaptation to new system, opportunity cost of assets sent out, locker room impact.
+
+RECOMMENDATION
+Pursue aggressively / pursue at the right price / monitor / pass.
+State confidence level and what additional information would change the recommendation.
+
+RULES:
+- This is a decision document. Be clear about what you recommend and why.
+- If data is insufficient for a confident recommendation, say so explicitly.
+- Never speculate on character or locker room fit without evidence.
+- Use GM + ANALYST lens. Numbers matter, but so does system fit and identity.
+'''
+
+DRAFT_CLASS_SUMMARY = '''
+DRAFT CLASS SUMMARY — SCOUTING DIRECTOR BRIEFING
+==================================================
+Audience: GM, scouting staff. Pre-draft strategy document.
+Purpose: Summarize the organization's draft board for the GM before draft day.
+Tokens: 4000 max.
+
+CLASS_OVERVIEW
+Overall strength of this draft class by position and by round. How deep is this class? Where are the gaps?
+
+OUR_PHILOSOPHY
+What do we value? Speed, compete, hockey IQ, size? State the organizational scouting anchor
+that drives our rankings.
+
+TIER_BREAKDOWN
+Summarize each tier on our board — how many players, what positions, key names.
+Targets, Watch list, Sleepers, and Passes.
+
+BEST_FITS
+By pick range — who fits us best at each stage of the draft? Strategic targets with reasoning.
+
+OVERDRAFT_RISKS
+Players whose draft stock may not match their production or projection. Who might be overvalued?
+
+POTENTIAL_STEALS
+Players ranked lower than they should be. Late-round gems with reasoning.
+
+RECOMMENDED_STRATEGY
+Trade up/down recommendations, positional focus by round, risk posture (safe picks vs swing picks).
+The actionable strategy for draft day.
+
+RULES:
+- This is the board companion document. It drives draft day decisions.
+- Every player mentioned must have PXR or statistical backing.
+- If scouting data is thin, caveat findings with CONFIDENCE: LOW.
+- Use SCOUT + GM lens. Strategy over speculation.
+'''
+
+
+# ─────────────────────────────────────────────────────────
 # Addendum 12 — PLAYER_SEASON_ROADMAP_V2 (upgraded dev plan)
 # ─────────────────────────────────────────────────────────
 PLAYER_SEASON_ROADMAP_V2 = '''
@@ -7100,5 +7323,16 @@ def build_system_prompt(
     # Addendum 13 — Highlight Reel Builder
     elif report_type == "recruiting_highlight_builder":
         parts.append(RECRUITING_HIGHLIGHT_BUILDER)
+    # Addendum 14 — 5 New General Report Types
+    elif report_type == "game_day_one_pager":
+        parts.append(GAME_DAY_ONE_PAGER)
+    elif report_type == "weekly_coaching_summary":
+        parts.append(WEEKLY_COACHING_SUMMARY)
+    elif report_type == "parent_season_update":
+        parts.append(PARENT_SEASON_UPDATE)
+    elif report_type == "trade_impact_simulation":
+        parts.append(TRADE_IMPACT_SIMULATION)
+    elif report_type == "draft_class_summary":
+        parts.append(DRAFT_CLASS_SUMMARY)
 
     return "\n\n".join(parts)

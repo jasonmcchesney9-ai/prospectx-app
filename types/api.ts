@@ -966,6 +966,12 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   player_season_roadmap: "Player Season Roadmap",
   playoff_series_prep: "Playoff Series Prep (V2)",
   special_teams_audit: "Special Teams Audit",
+  // Addendum 14 — 5 New General Report Types
+  game_day_one_pager: "Game Day One-Pager",
+  weekly_coaching_summary: "Weekly Coaching Summary",
+  parent_season_update: "Parent Season Update",
+  trade_impact_simulation: "Trade Impact Simulation",
+  draft_class_summary: "Draft Class Summary",
 };
 
 // ── Report Categories: Player vs Team ──────────────────────────
@@ -1015,6 +1021,11 @@ export const TEAM_REPORT_TYPES = [
   "full_team_coaching",
   "personnel_suggestion",
   "special_teams_audit",
+  "game_day_one_pager",
+  "weekly_coaching_summary",
+  "parent_season_update",
+  "trade_impact_simulation",
+  "draft_class_summary",
 ] as const;
 
 // ── Report Categories (6 groups for report type selector) ──────
@@ -1024,14 +1035,14 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     label: "Scouting & Advancement",
     description: "Player evaluation, draft analysis, and projection reports.",
     accent: "teal",
-    types: ["pro_skater", "unified_prospect", "goalie", "draft_comparative", "elite_profile", "bias_controlled_eval", "agent_projection"],
+    types: ["pro_skater", "unified_prospect", "goalie", "draft_comparative", "elite_profile", "bias_controlled_eval", "agent_projection", "draft_class_summary"],
   },
   {
     key: "gameday",
     label: "Game-Day Operations",
     description: "Pre-game intel, opponent scouting, and in-game deployment tools.",
     accent: "orange",
-    types: ["game_decision", "opponent_gameplan", "pre_game_intel", "forward_operating_profile", "defense_operating_profile", "bench_card"],
+    types: ["game_decision", "opponent_gameplan", "pre_game_intel", "forward_operating_profile", "defense_operating_profile", "bench_card", "game_day_one_pager"],
   },
   {
     key: "development",
@@ -1045,21 +1056,21 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     label: "Team Strategy",
     description: "Team systems, line optimization, special teams, and series planning.",
     accent: "orange",
-    types: ["team_identity", "practice_plan", "line_chemistry", "st_optimization", "playoff_series", "playoff_series_prep", "goalie_tandem", "full_team_coaching", "personnel_suggestion", "special_teams_audit"],
+    types: ["team_identity", "practice_plan", "line_chemistry", "st_optimization", "playoff_series", "playoff_series_prep", "goalie_tandem", "full_team_coaching", "personnel_suggestion", "special_teams_audit", "weekly_coaching_summary"],
   },
   {
     key: "communication",
     label: "Communication",
     description: "Reports for families, agents, and external stakeholders.",
     accent: "teal",
-    types: ["family_card", "agent_pack"],
+    types: ["family_card", "agent_pack", "parent_season_update"],
   },
   {
     key: "risk",
     label: "Risk Management",
     description: "Trade analysis, market intelligence, and organizational planning.",
     accent: "orange",
-    types: ["trade_target", "operations", "free_agent_market", "free_agent_target", "season_intelligence", "league_benchmarks", "season_projection"],
+    types: ["trade_target", "operations", "free_agent_market", "free_agent_target", "season_intelligence", "league_benchmarks", "season_projection", "trade_impact_simulation"],
   },
 ];
 
@@ -1113,6 +1124,12 @@ export const REPORT_AUDIENCE_MAP: Record<string, string[]> = {
   season_intelligence: ["gm", "coach", "scout"],
   league_benchmarks: ["coach", "gm", "scout"],
   season_projection: ["gm", "coach"],
+  // Addendum 14 — 5 New General Report Types
+  game_day_one_pager: ["coach"],
+  weekly_coaching_summary: ["coach", "gm"],
+  parent_season_update: ["coach", "parent"],
+  trade_impact_simulation: ["gm", "scout"],
+  draft_class_summary: ["scout", "gm"],
 };
 
 // ── Wired Report Types — types with full prompt specs in pxi_prompt_core.py ──
@@ -1134,6 +1151,9 @@ export const WIRED_REPORT_TYPES: Set<string> = new Set([
   // V1 Polish — ReportSpecs_v1
   "next_season_projection", "metrics_dashboard", "free_agent_market",
   "free_agent_target", "league_benchmarks", "season_projection",
+  // Addendum 14 — 5 New General Report Types
+  "game_day_one_pager", "weekly_coaching_summary", "parent_season_update",
+  "trade_impact_simulation", "draft_class_summary",
 ]);
 
 // ── Prospect Grading Scale ─────────────────────────────────────
