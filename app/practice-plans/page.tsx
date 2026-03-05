@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, ChevronUp, AlertTriangle, PenTool } from "lucide-react";
+import { Search, Zap, Clock, Users, Calendar, ClipboardList, ChevronDown, ChevronUp, AlertTriangle, PenTool, Sparkles } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -79,6 +79,15 @@ export default function PracticePlansPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/practice-plans/generate"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+              title="PXI Generate Plan — AI-powered practice plan generator"
+            >
+              <Sparkles size={12} />
+              PXI Generate Plan
+            </Link>
             <Link
               href="/rink-builder?mode=chalk_talk"
               className="flex items-center gap-2 px-4 py-2 border border-navy/20 text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.04] transition-colors"

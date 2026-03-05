@@ -1091,6 +1091,15 @@ export default function PlayerDetailPage() {
               )}
               {/* Action Buttons */}
               <div className="flex items-center gap-2 no-print">
+                <Link
+                  href={`/reports/generate?player=${playerId}&type=pro_skater`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors hover:opacity-90"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+                  title="Generate PXI Scout Report for this player"
+                >
+                  <Sparkles size={11} />
+                  PXI Scout Report
+                </Link>
                 <button
                   onClick={handleDownloadPDF}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors"

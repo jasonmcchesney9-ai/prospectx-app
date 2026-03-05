@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, PlusCircle, ChevronDown, ChevronUp, Clock, Users, Flame, Snowflake, Upload, Zap } from "lucide-react";
+import { Search, PlusCircle, ChevronDown, ChevronUp, Clock, Users, Flame, Snowflake, Upload, Zap, Sparkles } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -14,7 +14,7 @@ import { DRILL_CATEGORIES, DRILL_AGE_LEVELS, DRILL_AGE_LEVEL_LABELS, ICE_SURFACE
 
 export default function DrillsPage() {
   const currentUser = getUser();
-  const { setActivePxiContext } = useBenchTalk();
+  const { setActivePxiContext, openBenchTalk } = useBenchTalk();
 
   useEffect(() => {
     const u = getUser();
@@ -96,13 +96,24 @@ export default function DrillsPage() {
               <p className="text-xs text-muted mt-0.5">{drills.length} drill{drills.length !== 1 ? "s" : ""}</p>
             )}
           </div>
-          <Link
-            href="/practice-plans/generate"
-            className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-xs font-oswald uppercase tracking-wider rounded-full hover:bg-orange/90 transition-colors whitespace-nowrap"
-          >
-            <Zap size={14} />
-            Generate Practice Plan
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openBenchTalk("Suggest drills for my team based on our recent game performance and areas needing improvement. Focus on skating, passing, shooting, and defensive positioning drills appropriate for competitive junior hockey.")}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 whitespace-nowrap"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+              title="PXI Suggest Drills — get AI drill recommendations"
+            >
+              <Sparkles size={12} />
+              PXI Suggest Drills
+            </button>
+            <Link
+              href="/practice-plans/generate"
+              className="flex items-center gap-2 px-4 py-2 bg-orange text-white text-xs font-oswald uppercase tracking-wider rounded-full hover:bg-orange/90 transition-colors whitespace-nowrap"
+            >
+              <Zap size={14} />
+              Generate Practice Plan
+            </Link>
+          </div>
         </div>
 
         {/* Filters */}

@@ -18,10 +18,12 @@ import {
   Clock,
   Ban,
   FileText,
+  Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { getUser } from "@/lib/auth";
 import MicButton from "@/components/MicButton";
 
@@ -127,6 +129,7 @@ export default function ScoutingPipeline() {
   const [dragId, setDragId] = useState<string | null>(null);
 
   const user = getUser();
+  const { openBenchTalk } = useBenchTalk();
 
   const fetchPipeline = useCallback(async () => {
     setLoading(true);
@@ -260,6 +263,15 @@ export default function ScoutingPipeline() {
                   {user.org_name || "My Org"}
                 </span>
               )}
+              <button
+                onClick={() => openBenchTalk("Analyse my current scouting pipeline. What are my coverage gaps? Which upcoming games should I prioritize? Suggest scout assignments to maximize coverage.")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold uppercase transition-colors hover:opacity-90"
+                style={{ fontSize: 10, fontFamily: MONO, letterSpacing: 1, color: "#FFFFFF", background: "rgba(13,148,136,0.8)", border: "1px solid rgba(255,255,255,0.15)" }}
+                title="PXI Scout Priorities — analyse coverage gaps and priorities"
+              >
+                <Sparkles size={11} />
+                PXI Priorities
+              </button>
               <button
                 onClick={() => setShowModal(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold uppercase transition-colors hover:opacity-90"

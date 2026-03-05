@@ -31,6 +31,7 @@ import {
   Star,
   AlertTriangle,
   TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -537,8 +538,15 @@ export default function TeamDetailPage() {
                 );
               })()}
               <div className="flex gap-2">
+                <Link href={`/reports/generate?team=${encodeURIComponent(teamName)}&type=team_identity`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors hover:opacity-90"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+                  title="Generate PXI Team Identity report"
+                >
+                  <Sparkles size={11} /> PXI Team Identity
+                </Link>
                 <Link href={`/reports/generate?team=${encodeURIComponent(teamName)}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-teal text-white hover:opacity-90 transition-opacity">
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-white/[0.08] text-white/70 border border-white/10 hover:bg-white/[0.12] hover:text-white transition-colors">
                   <FileText size={11} /> Generate Report
                 </Link>
                 <Link href={`/game-plans/new?team=${encodeURIComponent(teamName)}`}

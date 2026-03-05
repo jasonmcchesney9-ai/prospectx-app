@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Search, PlusCircle, Filter, ChevronDown, ChevronUp, X, Settings,
   LayoutGrid, List, Save, Bookmark, Download, ArrowUpDown,
-  Activity, Brain, Ruler, Pin, PinOff, UserPlus, Loader2,
+  Activity, Brain, Ruler, Pin, PinOff, UserPlus, Loader2, Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -301,7 +301,7 @@ function LeaguePlayerSearch() {
 
 export default function PlayersPage() {
   const currentUser = getUser();
-  const { setActivePxiContext } = useBenchTalk();
+  const { setActivePxiContext, openBenchTalk } = useBenchTalk();
 
   useEffect(() => {
     const u = getUser();
@@ -662,6 +662,16 @@ export default function PlayersPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* PXI Analyse Roster */}
+              <button
+                onClick={() => openBenchTalk("Analyse my player roster. Identify strengths, weaknesses, depth at each position, and suggest areas where we should be looking to add talent.")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors hover:opacity-90"
+                style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "rgba(13,148,136,0.8)", border: "1px solid rgba(255,255,255,0.15)" }}
+                title="PXI Analyse Roster — get AI roster analysis"
+              >
+                <Sparkles size={11} />
+                PXI Analyse Roster
+              </button>
               {/* Export */}
               {!loading && displayCount > 0 && (
                 <button

@@ -20,6 +20,7 @@ import {
   ArrowRightLeft,
   Search,
   X,
+  Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -66,7 +67,7 @@ const LEAGUE_OPTIONS: { code: string; label: string; full: string; logo?: string
 
 export default function LeagueHubPage() {
   const currentUser = getUser();
-  const { setActivePxiContext } = useBenchTalk();
+  const { setActivePxiContext, openBenchTalk } = useBenchTalk();
 
   useEffect(() => {
     const u = getUser();
@@ -209,7 +210,16 @@ export default function LeagueHubPage() {
               {standings.length} teams &middot; Data from league sync
             </p>
           </div>
-          <div className="flex items-center justify-end">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => openBenchTalk(`Give me a benchmarks analysis for the ${leagueInfo.full} this season. Include top scorers, standout teams, emerging prospects, and key trends.`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors hover:opacity-90 shrink-0"
+              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+              title="PXI League Benchmarks — open Bench Talk with league analysis"
+            >
+              <Sparkles size={11} />
+              PXI Benchmarks
+            </button>
             {leagueInfo.logo ? (
               <img src={leagueInfo.logo} alt={`${leagueInfo.label} logo`} className="h-10 w-auto object-contain opacity-80" />
             ) : (
