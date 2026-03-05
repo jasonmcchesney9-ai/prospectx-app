@@ -117,7 +117,7 @@ const BROADCAST_ALLOWED_ROLES = ["broadcaster", "producer", "scout", "coach", "g
 
 export default function BroadcastPage() {
   const currentUser = getUser();
-  const { setActivePxiContext } = useBenchTalk();
+  const { setActivePxiContext, roleOverride } = useBenchTalk();
 
   useEffect(() => {
     const u = getUser();
@@ -673,7 +673,7 @@ export default function BroadcastPage() {
   };
 
   const _user = getUser();
-  const _role = _user?.hockey_role || "";
+  const _role = roleOverride || _user?.hockey_role || "";
   const _roleAllowed = BROADCAST_ALLOWED_ROLES.includes(_role);
 
   if (!_roleAllowed) {

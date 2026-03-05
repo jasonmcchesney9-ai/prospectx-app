@@ -115,9 +115,6 @@ const MEDIA_NAV_RIGHT: NavItem[] = [
 ];
 
 // PLAYER nav — athlete's isolated environment (Table 13 in spec)
-// TODO: When linked_player_id is added to User type + login response,
-// update Dev Plan hrefs to `/players/${user.linked_player_id}?tab=player`
-// for direct dev plan access.
 const PLAYER_NAV_LEFT: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/my-profile", label: "My Profile", icon: UserCheck },
@@ -353,6 +350,15 @@ export default function NavBar() {
   if (isAgent && agentClientCount > 0) {
     navConfig.left = navConfig.left.map((item) =>
       item.href === "/my-clients" ? { ...item, badge: agentClientCount } : item
+    );
+  }
+
+  // Fix Dev Plan link for FAMILY/PLAYER — use linked player if available
+  if (roleGroup === "FAMILY" || roleGroup === "PLAYER") {
+    const linkedId = user?.linked_player_id;
+    const devPlanHref = linkedId ? `/players/${linkedId}?tab=devplan` : "/my-player";
+    navConfig.left = navConfig.left.map((item) =>
+      item.label === "Dev Plan" ? { ...item, href: devPlanHref } : item
     );
   }
 

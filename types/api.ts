@@ -19,6 +19,7 @@ export interface User {
   preferred_league: string | null;
   preferred_team_id: string | null;
   covered_teams: string[] | null;
+  linked_player_id?: string | null;
   // Org branding
   org_name?: string | null;
   org_short_name?: string | null;

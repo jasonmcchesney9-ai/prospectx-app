@@ -21,6 +21,13 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Send admin role preview header if active
+  if (typeof localStorage !== "undefined") {
+    const previewRole = localStorage.getItem("prospectx_preview_role");
+    if (previewRole) {
+      config.headers["X-Preview-Role"] = previewRole;
+    }
+  }
   // Only set JSON content-type for non-FormData requests
   // FormData needs Axios to auto-set multipart/form-data with boundary
   const isFormData = typeof FormData !== "undefined" && config.data instanceof FormData;

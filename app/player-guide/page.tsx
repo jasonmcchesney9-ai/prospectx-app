@@ -115,8 +115,8 @@ const GUIDE_SECTIONS: GuideSection[] = [
 export default function PlayerGuidePage() {
   const [activeTab, setActiveTab] = useState("nutrition");
   const _user = getUser();
-  const { setActivePxiContext } = useBenchTalk();
-  const _role = _user?.hockey_role || "";
+  const { setActivePxiContext, roleOverride } = useBenchTalk();
+  const _role = roleOverride || _user?.hockey_role || "";
   const _roleAllowed = _role === "parent" || _role === "player";
 
   useEffect(() => {

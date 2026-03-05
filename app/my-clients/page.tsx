@@ -20,6 +20,7 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { formatLeague } from "@/lib/leagues";
 import HockeyRink from "@/components/HockeyRink";
 import type { AgentClient, AgentClientStatus } from "@/types/api";
@@ -54,8 +55,9 @@ function calcAge(dob: string | null): number | null {
 // ══════════════════════════════════════════════════════════════
 
 export default function MyClientsPage() {
+  const { roleOverride } = useBenchTalk();
   const _user = getUser();
-  const _role = _user?.hockey_role || "";
+  const _role = roleOverride || _user?.hockey_role || "";
   const _allowed = _role === "agent";
   if (!_allowed) {
     return (

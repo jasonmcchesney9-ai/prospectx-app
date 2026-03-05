@@ -49,7 +49,19 @@ export default function BenchTalkProvider({ children }: { children: React.ReactN
   const [pendingRole, setPendingRole] = useState<string | null>(null);
   const [pendingPxiContext, setPendingPxiContext] = useState<PxiContext | null>(null);
   const [activePxiContext, setActivePxiContext] = useState<PxiContext | null>(null);
-  const [roleOverride, setRoleOverride] = useState<string | null>(null);
+  const [roleOverride, _setRoleOverride] = useState<string | null>(null);
+
+  // Wrap setter to sync to localStorage so axios interceptor can read it
+  const setRoleOverride = useCallback((role: string | null) => {
+    _setRoleOverride(role);
+    try {
+      if (role) {
+        localStorage.setItem("prospectx_preview_role", role);
+      } else {
+        localStorage.removeItem("prospectx_preview_role");
+      }
+    } catch { /* SSR / private browsing */ }
+  }, []);
 
   const toggleBenchTalk = useCallback(() => {
     setIsOpen((prev) => !prev);

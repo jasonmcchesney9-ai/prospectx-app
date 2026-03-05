@@ -10107,6 +10107,7 @@ class UserOut(BaseModel):
     org_logo_url: Optional[str] = None
     org_primary_color: Optional[str] = None
     org_secondary_color: Optional[str] = None
+    linked_player_id: Optional[str] = None
 
 def _get_org_branding(conn, org_id: str) -> dict:
     """Fetch org branding fields for UserOut. Returns empty dict if org not found."""
@@ -10456,6 +10457,32 @@ def get_current_org(token_data: dict = Depends(verify_token)) -> str:
     return token_data["org_id"]
 
 
+def _get_effective_hockey_role(request: Request, token_data: dict) -> str:
+    """Return the effective hockey_role, respecting admin role preview.
+
+    If the request includes an X-Preview-Role header AND the user is admin/superadmin,
+    return the preview role. Otherwise return the user's real hockey_role from the DB.
+    Only admin/superadmin can use role preview — the header is ignored for regular users.
+    """
+    VALID_PREVIEW_ROLES = {"scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent"}
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT role, hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            return "scout"
+        real_role = row["hockey_role"] or "scout"
+        system_role = row["role"] or ""
+
+        # Check for preview header — only honour for admin/superadmin
+        preview_role = request.headers.get("x-preview-role")
+        if preview_role and system_role in ("admin", "superadmin") and preview_role in VALID_PREVIEW_ROLES:
+            return preview_role
+        return real_role
+    finally:
+        conn.close()
+
+
 def _org_guard(token_data: dict) -> str:
     """Validate org exists and is active. Returns org_id or raises 403.
 
@@ -10569,6 +10596,7 @@ async def login(request: Request, req: LoginRequest):
         preferred_league=row["preferred_league"],
         preferred_team_id=row["preferred_team_id"],
         covered_teams=covered,
+        linked_player_id=row["linked_player_id"] if row["linked_player_id"] else None,
         **org_brand,
     )
     token = create_token(row["id"], row["org_id"], row["role"])
@@ -10606,6 +10634,7 @@ async def get_me(token_data: dict = Depends(verify_token)):
         preferred_league=row["preferred_league"],
         preferred_team_id=row["preferred_team_id"],
         covered_teams=covered,
+        linked_player_id=row["linked_player_id"] if row["linked_player_id"] else None,
         **org_brand,
     )
 
@@ -10712,6 +10741,7 @@ async def refresh_access_token(request: Request, req: RefreshTokenRequest):
             preferred_league=user_row["preferred_league"],
             preferred_team_id=user_row["preferred_team_id"],
             covered_teams=covered,
+            linked_player_id=user_row["linked_player_id"] if user_row["linked_player_id"] else None,
             **org_brand,
         )
 

@@ -84,7 +84,7 @@ const AFTER_GAME_SCRIPTS: Record<string, { trySaying: string; spaceCue: string; 
 
 export default function MyPlayerPage() {
   const router = useRouter();
-  const { openBenchTalk } = useBenchTalk();
+  const { openBenchTalk, roleOverride } = useBenchTalk();
   // Player selection
   const [players, setPlayers] = useState<Player[]>([]);
   const [playersLoading, setPlayersLoading] = useState(true);
@@ -248,7 +248,7 @@ export default function MyPlayerPage() {
   }
 
   const _user = getUser();
-  const _role = _user?.hockey_role || "";
+  const _role = roleOverride || _user?.hockey_role || "";
   const _roleAllowed = _role === "parent" || _role === "player";
   if (!_roleAllowed) {
     return (
