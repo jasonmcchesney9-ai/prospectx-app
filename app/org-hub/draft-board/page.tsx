@@ -434,15 +434,20 @@ export default function DraftBoardPage() {
               </Link>
               <span className="w-2 h-2 rounded-full" style={{ background: "#14B8A6" }} />
               <Trophy size={16} className="text-white/80" />
-              <h1
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-              >
-                Draft Board
-              </h1>
-              <span className="text-xs text-white/40" style={{ fontFamily: "ui-monospace, monospace" }}>
-                {orgName}
-              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1
+                    className="font-bold uppercase text-white"
+                    style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  >
+                    Draft Board
+                  </h1>
+                  <span className="text-xs text-white/40" style={{ fontFamily: "ui-monospace, monospace" }}>
+                    {orgName}
+                  </span>
+                </div>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>Rank prospects, assign tiers, and build your draft strategy.</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -648,7 +653,7 @@ export default function DraftBoardPage() {
                     </div>
                     {tierEntries.length === 0 ? (
                       <div className="bg-white px-5 py-6 text-center">
-                        <p className="text-[11px]" style={{ color: "#8BA4BB" }}>No prospects in this tier.</p>
+                        <p className="text-[11px]" style={{ color: "#8BA4BB" }}>No prospects in this tier. Click &ldquo;Add Player&rdquo; to start building your board.</p>
                       </div>
                     ) : (
                       <div>

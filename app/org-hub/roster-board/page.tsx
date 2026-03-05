@@ -293,12 +293,15 @@ export default function RosterBoardPage() {
               <Link href="/org-hub" className="hover:opacity-70 transition-opacity" style={{ color: "rgba(255,255,255,0.6)" }}>
                 <ArrowLeft size={20} />
               </Link>
-              <span
-                className="px-2.5 py-1 rounded-md text-white font-bold uppercase"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
-              >
-                Roster Board
-              </span>
+              <div>
+                <span
+                  className="px-2.5 py-1 rounded-md text-white font-bold uppercase inline-block"
+                  style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
+                >
+                  Roster Board
+                </span>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>Drag and drop players between lines. Save your lineup and get PXI roster analysis.</p>
+              </div>
               {/* Team selector */}
               {teams.length > 1 && (
                 <select
@@ -375,7 +378,7 @@ export default function RosterBoardPage() {
           {loading && (
             <div className="text-center py-16">
               <Loader2 size={24} className="animate-spin mx-auto" style={{ color: "#0D9488" }} />
-              <p className="text-sm mt-2" style={{ color: "#5A7291" }}>Loading roster...</p>
+              <p className="text-sm mt-2" style={{ color: "#5A7291" }}>Loading roster... If no players appear, sync your roster from the dashboard.</p>
             </div>
           )}
 

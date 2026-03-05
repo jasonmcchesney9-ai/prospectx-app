@@ -391,7 +391,7 @@ function Dashboard() {
                 DASHBOARD
               </h1>
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
-                {user?.first_name ? `Welcome back, ${user.first_name}` : "Hockey Operations Command Center"}
+                {user?.first_name ? `Welcome back, ${user.first_name}. Your personalized hockey operations overview.` : "Your personalized hockey operations overview. Widgets update automatically."}
               </p>
             </div>
           </div>

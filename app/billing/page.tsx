@@ -157,9 +157,12 @@ function BillingContent() {
       <div className="bg-navy px-6 py-5">
         <div className="max-w-6xl mx-auto flex items-center gap-3">
           <CreditCard size={22} className="text-teal" />
-          <h1 className="font-oswald text-xl font-bold text-white tracking-wider uppercase">
-            Billing & Subscription
-          </h1>
+          <div>
+            <h1 className="font-oswald text-xl font-bold text-white tracking-wider uppercase">
+              Billing & Subscription
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>Manage your subscription and view usage.</p>
+          </div>
         </div>
       </div>
 

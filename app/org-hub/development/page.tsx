@@ -231,12 +231,15 @@ export default function DevelopmentDashboard() {
               </Link>
               <span className="w-2 h-2 rounded-full" style={{ background: "#14B8A6" }} />
               <TrendingUp size={16} className="text-white/80" />
-              <h1
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 14, fontFamily: MONO, letterSpacing: 2 }}
-              >
-                Development Dashboard
-              </h1>
+              <div>
+                <h1
+                  className="font-bold uppercase text-white"
+                  style={{ fontSize: 14, fontFamily: MONO, letterSpacing: 2 }}
+                >
+                  Development Dashboard
+                </h1>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>See every player&apos;s development status at a glance.</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {user && (
@@ -469,7 +472,7 @@ export default function DevelopmentDashboard() {
                   <div className="bg-white px-5 py-12 text-center">
                     <CircleDot size={28} style={{ color: "#DDE6EF" }} className="mx-auto mb-3" />
                     <p className="text-xs" style={{ color: "#8BA4BB" }}>
-                      No players match your filters.
+                      {(data?.players || []).length === 0 ? 'No players found. Click "Add Player" or sync your roster from the dashboard.' : "No players match your filters."}
                     </p>
                   </div>
                 ) : (

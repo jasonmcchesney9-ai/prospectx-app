@@ -660,6 +660,9 @@ export default function FilmSessionViewerPage() {
                 <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
                   {formatDate(session.created_at)}
                 </span>
+                <span className="text-xs hidden sm:inline" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  — Watch, tag, clip, and analyse game footage.
+                </span>
               </div>
             </div>
           </div>
@@ -1129,7 +1132,7 @@ export default function FilmSessionViewerPage() {
                     <div className="max-h-[300px] overflow-y-auto space-y-1">
                       {filteredEvents.length === 0 ? (
                         <p className="text-[11px] text-center py-4" style={{ color: "#8BA4BB" }}>
-                          No events match this filter.
+                          No events match this filter. Try selecting a different category above.
                         </p>
                       ) : (
                         filteredEvents.map((ev) => {
@@ -1284,7 +1287,7 @@ export default function FilmSessionViewerPage() {
                   {/* Comment list */}
                   {comments.length === 0 ? (
                     <p className="text-[11px] text-center py-4" style={{ color: "#8BA4BB" }}>
-                      No comments yet.
+                      No comments yet. Type a note above and click the send button.
                     </p>
                   ) : (
                     <div className="space-y-2 max-h-[300px] overflow-y-auto">

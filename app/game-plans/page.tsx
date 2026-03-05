@@ -113,7 +113,7 @@ function ChalkTalkList() {
             Chalk Talk
           </h1>
           <p className="text-muted text-sm mt-1">
-            Pre-game plans, post-game reviews, practice notes, and season strategy — your tactical playbook
+            Create pre-game, post-game, and practice sessions. Each plan opens in the war room.
           </p>
         </div>
         <div className="flex items-center gap-2">

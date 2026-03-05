@@ -354,7 +354,7 @@ export default function FilmRoomPage() {
             ) : uploads.length === 0 ? (
               <div className="text-center py-12">
                 <Video size={36} className="mx-auto text-muted/30 mb-3" />
-                <p className="text-sm text-muted">No uploads yet.</p>
+                <p className="text-sm text-muted">No uploads yet. Click &ldquo;Upload Video&rdquo; to add game footage.</p>
               </div>
             ) : (
               <>

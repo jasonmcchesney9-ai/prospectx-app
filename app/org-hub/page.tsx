@@ -120,9 +120,12 @@ export default function OrgHubPage() {
               >
                 ORG HUB
               </span>
-              <h1 className="text-lg font-bold text-white font-oswald uppercase tracking-wider">
-                Digital Front Office
-              </h1>
+              <div>
+                <h1 className="text-lg font-bold text-white font-oswald uppercase tracking-wider">
+                  Digital Front Office
+                </h1>
+                <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>Manage your roster, draft board, playbook, scouting pipeline, and more.</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <span

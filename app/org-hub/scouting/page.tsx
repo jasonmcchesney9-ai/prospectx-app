@@ -247,12 +247,15 @@ export default function ScoutingPipeline() {
               </Link>
               <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
               <Eye size={16} className="text-white/80" />
-              <h1
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 14, fontFamily: MONO, letterSpacing: 2 }}
-              >
-                Scouting Pipeline
-              </h1>
+              <div>
+                <h1
+                  className="font-bold uppercase text-white"
+                  style={{ fontSize: 14, fontFamily: MONO, letterSpacing: 2 }}
+                >
+                  Scouting Pipeline
+                </h1>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>Assign scouts to games, track reports, and monitor coverage.</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {user && (
@@ -404,7 +407,7 @@ export default function ScoutingPipeline() {
                         <div className="flex flex-col gap-2 flex-1">
                           {items.length === 0 && (
                             <div className="py-6 text-center" style={{ borderRadius: 8, border: "1px dashed #DDE6EF" }}>
-                              <span className="text-xs" style={{ color: "#CCD6E0" }}>No assignments</span>
+                              <span className="text-xs" style={{ color: "#8BA4BB" }}>No assignments yet. Click &ldquo;New Assignment&rdquo; to assign a scout to a game.</span>
                             </div>
                           )}
                           {items.map((a) => {

@@ -92,9 +92,9 @@ export default function DrillsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-navy">Drill Library</h1>
-            {!loading && (
-              <p className="text-xs text-muted mt-0.5">{drills.length} drill{drills.length !== 1 ? "s" : ""}</p>
-            )}
+            <p className="text-xs text-muted mt-0.5">
+              {!loading ? `${drills.length} drill${drills.length !== 1 ? "s" : ""} — browse by category, age, and skill level.` : "Loading drills..."}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button

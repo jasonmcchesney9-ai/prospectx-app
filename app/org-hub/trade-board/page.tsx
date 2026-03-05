@@ -396,15 +396,20 @@ export default function TradeBoardPage() {
               </Link>
               <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
               <ArrowLeftRight size={16} className="text-white/80" />
-              <h1
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-              >
-                Trade Board
-              </h1>
-              <span className="text-xs text-white/40" style={{ fontFamily: "ui-monospace, monospace" }}>
-                {orgName}
-              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1
+                    className="font-bold uppercase text-white"
+                    style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  >
+                    Trade Board
+                  </h1>
+                  <span className="text-xs text-white/40" style={{ fontFamily: "ui-monospace, monospace" }}>
+                    {orgName}
+                  </span>
+                </div>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>Track acquisition targets, available players, and trade priorities.</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -507,9 +512,9 @@ export default function TradeBoardPage() {
                       <div className="bg-white px-4 py-10 text-center">
                         <Icon size={28} style={{ color: "#DDE6EF" }} className="mx-auto mb-2" />
                         <p className="text-[11px]" style={{ color: "#8BA4BB" }}>
-                          {col.key === "target" && "No trade targets. Add players you want to acquire."}
-                          {col.key === "watching" && "No players being watched. Add players to monitor."}
-                          {col.key === "available" && "No available players. Add players you'd trade."}
+                          {col.key === "target" && 'No trade targets yet. Click "Add Player" to track acquisition targets.'}
+                          {col.key === "watching" && 'No players being watched. Click "Add Player" to monitor players.'}
+                          {col.key === "available" && 'No available players. Click "Add Player" to list players you\'d trade.'}
                         </p>
                       </div>
                     ) : (

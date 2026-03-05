@@ -254,15 +254,20 @@ export default function PlaybookPage() {
               </Link>
               <span className="w-2 h-2 rounded-full" style={{ background: "#5A7291" }} />
               <BookOpen size={16} className="text-white/80" />
-              <h1
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-              >
-                System Playbook
-              </h1>
-              <span className="text-xs text-white/40" style={{ fontFamily: "ui-monospace, monospace" }}>
-                {orgName}
-              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1
+                    className="font-bold uppercase text-white"
+                    style={{ fontSize: 14, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  >
+                    System Playbook
+                  </h1>
+                  <span className="text-xs text-white/40" style={{ fontFamily: "ui-monospace, monospace" }}>
+                    {orgName}
+                  </span>
+                </div>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>Save your tactical systems as diagrams. Quick scratchpad at the top.</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button

@@ -657,7 +657,7 @@ export default function PlayersPage() {
                   <span className="text-[9px] font-oswald uppercase tracking-widest bg-teal/20 text-teal px-2 py-0.5 rounded">PXI</span>
                 </div>
                 <p className="text-xs text-white/50 mt-0.5">
-                  {!loading ? `${displayCount} player${displayCount !== 1 ? "s" : ""} in your system` : "Loading players..."}
+                  {!loading ? `${displayCount} player${displayCount !== 1 ? "s" : ""} — search, filter, and click any player for their full profile.` : "Loading players..."}
                 </p>
               </div>
             </div>
