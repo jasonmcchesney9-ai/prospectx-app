@@ -25,10 +25,15 @@ import {
   Filter,
   Maximize2,
   Minimize2,
+  Rewind,
+  FastForward,
+  SkipBack,
+  SkipForward,
+  Gauge,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import VideoPlayer from "@/components/film/VideoPlayer";
+import VideoPlayer, { VideoPlayerHandle } from "@/components/film/VideoPlayer";
 import ClipPanel from "@/components/film/ClipPanel";
 import EventTagger from "@/components/film/EventTagger";
 import api from "@/lib/api";
@@ -221,8 +226,10 @@ export default function FilmSessionViewerPage() {
 
   // Cinema mode
   const [cinemaMode, setCinemaMode] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  // Video player ref for getting current time
+  // Video player ref for getting current time + playback control
+  const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
 
   const getCurrentTime = useCallback(() => currentTimeRef.current, []);
@@ -455,6 +462,11 @@ export default function FilmSessionViewerPage() {
     },
     [sessionId, session]
   );
+
+  const handleSpeedChange = useCallback((rate: number) => {
+    setPlaybackSpeed(rate);
+    videoPlayerRef.current?.setPlaybackRate(rate);
+  }, []);
 
   const handleSaveClip = useCallback(async () => {
     if (clipStart === null || clipEnd === null) return;
@@ -773,22 +785,33 @@ export default function FilmSessionViewerPage() {
         {/* Split layout — 65/35 on desktop, stacked on mobile */}
         <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
           {/* LEFT TOP — Video + Event Tagger (order-1 on mobile) */}
-          <div className={`w-full flex flex-col gap-4 order-1 ${cinemaMode ? "lg:w-full" : "lg:w-[65%]"}`}>
+          <div className={`w-full flex flex-col gap-3 order-1 ${cinemaMode ? "lg:w-full" : "lg:w-[70%]"}`}>
             {/* Video Player with Cinema Mode toggle */}
             <div className="relative">
               <VideoPlayer
+                ref={videoPlayerRef}
                 playbackId={upload?.playback_id || null}
                 onTimeUpdate={handleTimeUpdate}
                 startTime={startTime}
               />
               {upload?.playback_id && (
-                <button
-                  onClick={() => setCinemaMode(!cinemaMode)}
-                  className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-lg transition-colors"
-                  title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
-                >
-                  {cinemaMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                </button>
+                <>
+                  <button
+                    onClick={() => setCinemaMode(!cinemaMode)}
+                    className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-lg transition-colors"
+                    title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
+                  >
+                    {cinemaMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  </button>
+                  {playbackSpeed !== 1 && (
+                    <span
+                      className="absolute top-3 left-3 z-10 px-2 py-1 rounded-md text-white font-bold"
+                      style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", background: "#0D9488" }}
+                    >
+                      {playbackSpeed}x
+                    </span>
+                  )}
+                </>
               )}
             </div>
 
@@ -858,6 +881,67 @@ export default function FilmSessionViewerPage() {
                     )}
                     Save Clip
                   </button>
+                </div>
+
+                {/* Speed selector + Frame stepping row */}
+                <div className="flex flex-wrap items-center gap-2 mt-2 pt-2" style={{ borderTop: "1px solid #DDE6EF" }}>
+                  {/* Frame stepping */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => videoPlayerRef.current?.seekBy(-5)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      title="Back 5s"
+                    >
+                      <Rewind size={12} />
+                    </button>
+                    <button
+                      onClick={() => videoPlayerRef.current?.seekBy(-0.033)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      title="Back 1 frame"
+                    >
+                      <SkipBack size={12} />
+                    </button>
+                    <button
+                      onClick={() => videoPlayerRef.current?.seekBy(0.033)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      title="Forward 1 frame"
+                    >
+                      <SkipForward size={12} />
+                    </button>
+                    <button
+                      onClick={() => videoPlayerRef.current?.seekBy(5)}
+                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                      style={{ border: "1px solid #DDE6EF", color: "#0F2942" }}
+                      title="Forward 5s"
+                    >
+                      <FastForward size={12} />
+                    </button>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="w-px h-5 hidden sm:block" style={{ background: "#DDE6EF" }} />
+
+                  {/* Playback speed */}
+                  <div className="flex items-center gap-1">
+                    <Gauge size={12} style={{ color: "#5A7291" }} />
+                    {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                      <button
+                        key={rate}
+                        onClick={() => handleSpeedChange(rate)}
+                        className="px-1.5 py-1 rounded text-[10px] font-bold transition-colors"
+                        style={playbackSpeed === rate
+                          ? { fontFamily: "ui-monospace, monospace", background: "#0D9488", color: "#FFFFFF" }
+                          : { fontFamily: "ui-monospace, monospace", color: "#5A7291", border: "1px solid #DDE6EF" }
+                        }
+                        title={`${rate}x speed`}
+                      >
+                        {rate}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -1103,7 +1187,7 @@ export default function FilmSessionViewerPage() {
           </div>
 
           {/* RIGHT PANEL — 35% (order-2 on mobile — between video and comments) */}
-          <div className={`w-full lg:w-[35%] flex flex-col gap-4 order-2 ${cinemaMode ? "hidden" : ""}`}>
+          <div className={`w-full lg:w-[30%] flex flex-col gap-4 order-2 ${cinemaMode ? "hidden" : ""}`}>
             {/* Session info */}
             <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
               <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>

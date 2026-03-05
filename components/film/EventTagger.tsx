@@ -7,7 +7,6 @@ import {
   Loader2,
   Clock,
   X,
-  ChevronDown,
 } from "lucide-react";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
@@ -73,12 +72,12 @@ const CATEGORY_DOT_COLOR: Record<string, string> = {
   other: "bg-gray-400",
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  offensive: "Offensive",
-  defensive: "Defensive",
-  special_teams: "Special Teams",
-  other: "Other",
-};
+const CATEGORY_GROUPS: { key: string; label: string }[] = [
+  { key: "offensive", label: "Offensive" },
+  { key: "defensive", label: "Defensive" },
+  { key: "special_teams", label: "Special Teams" },
+  { key: "other", label: "Other" },
+];
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -97,20 +96,14 @@ export default function EventTagger({
   const [customLabel, setCustomLabel] = useState("");
   const [taggingType, setTaggingType] = useState<string | null>(null);
   const [flashType, setFlashType] = useState<string | null>(null);
-  const [showMore, setShowMore] = useState(false);
   const [miniToast, setMiniToast] = useState<string | null>(null);
   const miniToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const moreRef = useRef<HTMLDivElement>(null);
 
-  const favouriteButtons = ALL_EVENT_BUTTONS.filter((b) => FAVOURITE_TYPES.includes(b.type));
-  const moreButtons = ALL_EVENT_BUTTONS.filter((b) => !FAVOURITE_TYPES.includes(b.type));
-
-  // Group "more" buttons by category for the popover
-  const moreByCategory = moreButtons.reduce<Record<string, EventButtonDef[]>>((acc, btn) => {
-    if (!acc[btn.category]) acc[btn.category] = [];
-    acc[btn.category].push(btn);
-    return acc;
-  }, {});
+  // Group buttons by category
+  const buttonsByCategory = CATEGORY_GROUPS.map((g) => ({
+    ...g,
+    buttons: ALL_EVENT_BUTTONS.filter((b) => b.category === g.key),
+  }));
 
   const loadEvents = useCallback(async () => {
     try {
@@ -186,6 +179,7 @@ export default function EventTagger({
   );
 
   // Keyboard shortcuts (1-9 for favourite buttons)
+  const favouriteButtons = ALL_EVENT_BUTTONS.filter((b) => FAVOURITE_TYPES.includes(b.type));
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Don't fire when typing in an input
@@ -202,90 +196,87 @@ export default function EventTagger({
     return () => window.removeEventListener("keydown", handler);
   }, [favouriteButtons, tagEvent]);
 
-  // Close "More" popover on click outside
-  useEffect(() => {
-    if (!showMore) return;
-    const handler = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
-        setShowMore(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showMore]);
-
   // Show most recent 5 events
   const recentEvents = events.slice(0, 5);
 
-  const renderButton = (btn: EventButtonDef, index?: number) => {
-    const isFlashing = flashType === btn.type;
-    const isTagging = taggingType === btn.type;
-    const dotColor = CATEGORY_DOT_COLOR[btn.category];
-
-    return (
-      <button
-        key={btn.type}
-        onClick={() => tagEvent(btn.type)}
-        disabled={isTagging}
-        className={`relative flex items-center gap-1.5 rounded-lg px-3 py-2 font-medium text-sm transition-all duration-150 ${
-          isFlashing
-            ? "bg-[#14B8A6] text-white"
-            : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-        } ${isTagging ? "opacity-50" : ""}`}
-        title={btn.tooltip}
-      >
-        <span className={`w-2 h-2 rounded-full shrink-0 ${isFlashing ? "bg-white" : dotColor}`} />
-        {isTagging ? (
-          <Loader2 size={13} className="animate-spin" />
-        ) : (
-          btn.label
-        )}
-        {index !== undefined && (
-          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded bg-navy/10 text-navy text-[9px] flex items-center justify-center font-mono font-bold">
-            {index + 1}
-          </span>
-        )}
-      </button>
-    );
+  // Get keyboard shortcut index for a button (1-9 for favourites, undefined otherwise)
+  const getShortcutIndex = (type: string): number | undefined => {
+    const idx = FAVOURITE_TYPES.indexOf(type);
+    return idx >= 0 ? idx : undefined;
   };
 
   return (
-    <div className="bg-white rounded-xl border border-border p-4">
-      {/* Favourite buttons row with keyboard shortcut badges */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {favouriteButtons.map((btn, i) => renderButton(btn, i))}
+    <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
+      {/* Navy header */}
+      <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
+        <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
+        <span
+          className="font-bold uppercase text-white"
+          style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+        >
+          EVENT TAGGER
+        </span>
+      </div>
 
-        {/* More button */}
-        <div className="relative" ref={moreRef}>
-          <button
-            onClick={() => setShowMore(!showMore)}
-            className="flex items-center gap-1 rounded-lg px-3 py-2 font-medium text-sm bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
-            title="Show more event types"
-          >
-            More
-            <ChevronDown size={14} className={`transition-transform ${showMore ? "rotate-180" : ""}`} />
-          </button>
+      <div className="bg-white px-4 py-3">
+        {/* All 22 buttons grouped by category */}
+        <div className="space-y-2">
+          {buttonsByCategory.map((group) => (
+            <div key={group.key}>
+              <p
+                className="font-bold uppercase mb-1"
+                style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}
+              >
+                {group.label}
+              </p>
+              <div className="flex items-center gap-1 flex-wrap">
+                {group.buttons.map((btn) => {
+                  const isFlashing = flashType === btn.type;
+                  const isTagging = taggingType === btn.type;
+                  const dotColor = CATEGORY_DOT_COLOR[btn.category];
+                  const shortcutIdx = getShortcutIndex(btn.type);
 
-          {/* More popover */}
-          {showMore && (
-            <div className="absolute left-0 top-full mt-1 w-72 bg-white rounded-xl border border-border shadow-lg z-30 p-3 space-y-3">
-              {Object.entries(moreByCategory).map(([category, buttons]) => (
-                <div key={category}>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">
-                    {CATEGORY_LABELS[category] || category}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {buttons.map((btn) => renderButton(btn))}
-                  </div>
-                </div>
-              ))}
+                  return (
+                    <button
+                      key={btn.type}
+                      onClick={() => tagEvent(btn.type)}
+                      disabled={isTagging}
+                      className={`relative flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-medium text-xs transition-all duration-150 ${
+                        isFlashing
+                          ? "text-white"
+                          : "bg-white text-slate-700 hover:bg-slate-50"
+                      } ${isTagging ? "opacity-50" : ""}`}
+                      style={isFlashing
+                        ? { background: "#14B8A6" }
+                        : { border: "1px solid #DDE6EF" }
+                      }
+                      title={btn.tooltip}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFlashing ? "bg-white" : dotColor}`} />
+                      {isTagging ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        btn.label
+                      )}
+                      {shortcutIdx !== undefined && (
+                        <span
+                          className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded flex items-center justify-center font-bold"
+                          style={{ fontSize: 8, fontFamily: "ui-monospace, monospace", background: "rgba(15,41,66,0.08)", color: "#0F2942" }}
+                        >
+                          {shortcutIdx + 1}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
+          ))}
         </div>
 
         {/* Custom inline input */}
         {showCustom && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 mt-2">
             <input
               type="text"
               value={customLabel}
@@ -298,77 +289,84 @@ export default function EventTagger({
                 }
               }}
               placeholder="Event name..."
-              className="border border-border rounded-lg px-2.5 py-1.5 text-sm text-navy w-28 focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+              className="rounded-lg px-2.5 py-1.5 text-xs w-28 focus:outline-none focus:ring-2 focus:ring-teal/30"
+              style={{ color: "#0F2942", border: "1.5px solid #DDE6EF" }}
               autoFocus
             />
             <button
               onClick={handleCustomSubmit}
-              className="text-teal hover:text-teal/80 transition-colors"
+              className="transition-colors" style={{ color: "#0D9488" }}
             >
-              <Plus size={16} />
+              <Plus size={14} />
             </button>
             <button
               onClick={() => {
                 setShowCustom(false);
                 setCustomLabel("");
               }}
-              className="text-muted hover:text-navy transition-colors"
+              className="transition-colors" style={{ color: "#5A7291" }}
             >
-              <X size={16} />
+              <X size={14} />
             </button>
           </div>
         )}
-      </div>
 
-      {/* Mini toast pill */}
-      {miniToast && (
-        <div className="mt-2 inline-flex items-center gap-1.5 bg-teal text-white text-xs font-medium px-3 py-1 rounded-full animate-pulse">
-          {miniToast}
-        </div>
-      )}
+        {/* Mini toast pill */}
+        {miniToast && (
+          <div
+            className="mt-2 inline-flex items-center gap-1.5 text-white text-xs font-medium px-3 py-1 rounded-full animate-pulse"
+            style={{ background: "#0D9488" }}
+          >
+            {miniToast}
+          </div>
+        )}
 
-      {/* Keyboard shortcuts legend */}
-      <p className="mt-2 text-[10px] text-muted/40 leading-tight">
-        Keyboard shortcuts:{" "}
-        {favouriteButtons.map((btn, i) => (
-          <span key={btn.type}>
-            {i > 0 && ", "}
-            <span className="font-mono font-bold text-muted/60">{i + 1}</span>={btn.label}
-          </span>
-        ))}
-      </p>
-
-      {/* Recent events */}
-      {!loading && recentEvents.length > 0 && (
-        <div className="mt-3 space-y-1">
-          <p className="text-[10px] font-oswald uppercase tracking-wider text-muted/60 mb-1">
-            Recent Events
-          </p>
-          {recentEvents.map((evt) => (
-            <div
-              key={evt.id}
-              className="flex items-center justify-between py-1 group"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-teal font-mono flex items-center gap-0.5">
-                  <Clock size={9} />
-                  {formatTime(evt.time_seconds)}
-                </span>
-                <span className="text-[11px] text-navy capitalize">
-                  {evt.event_label || evt.event_type.replace(/_/g, " ")}
-                </span>
-              </div>
-              <button
-                onClick={() => handleDeleteEvent(evt.id)}
-                className="text-muted/0 group-hover:text-muted/50 hover:!text-red-500 transition-all p-0.5"
-                title="Delete event"
-              >
-                <Trash2 size={11} />
-              </button>
-            </div>
+        {/* Keyboard shortcuts legend */}
+        <p className="mt-2 text-[9px] leading-tight" style={{ color: "#8BA4BB" }}>
+          Keys:{" "}
+          {favouriteButtons.map((btn, i) => (
+            <span key={btn.type}>
+              {i > 0 && "  "}
+              <span className="font-bold" style={{ fontFamily: "ui-monospace, monospace", color: "#5A7291" }}>{i + 1}</span>={btn.label}
+            </span>
           ))}
-        </div>
-      )}
+        </p>
+
+        {/* Recent events */}
+        {!loading && recentEvents.length > 0 && (
+          <div className="mt-3 space-y-1" style={{ borderTop: "1px solid #DDE6EF", paddingTop: 8 }}>
+            <p
+              className="font-bold uppercase mb-1"
+              style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}
+            >
+              Recent Events
+            </p>
+            {recentEvents.map((evt) => (
+              <div
+                key={evt.id}
+                className="flex items-center justify-between py-1 group"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-0.5 text-[10px]" style={{ fontFamily: "ui-monospace, monospace", color: "#0D9488" }}>
+                    <Clock size={9} />
+                    {formatTime(evt.time_seconds)}
+                  </span>
+                  <span className="text-[11px] capitalize" style={{ color: "#0F2942" }}>
+                    {evt.event_label || evt.event_type.replace(/_/g, " ")}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleDeleteEvent(evt.id)}
+                  className="text-muted/0 group-hover:text-muted/50 hover:!text-red-500 transition-all p-0.5"
+                  title="Delete event"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
