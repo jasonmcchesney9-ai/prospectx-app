@@ -2058,6 +2058,28 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_board_org ON draft_board_entries(org_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_draft_board_player ON draft_board_entries(player_id)")
 
+    # ── Trade Board table ────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trade_board_entries (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            added_by TEXT,
+            board_type TEXT NOT NULL DEFAULT 'target',
+            priority INTEGER DEFAULT 0,
+            asking_price TEXT,
+            notes TEXT,
+            tags TEXT DEFAULT '[]',
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+            FOREIGN KEY (added_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_trade_board_org ON trade_board_entries(org_id)")
+
     # ── Org Foundation: film_clips table ─────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS film_clips (
@@ -15843,6 +15865,231 @@ SYSTEM FIT — How these prospects fit a team's needs
 DRAFT STRATEGY — Recommended priorities and approach
 
 Keep each section to 2-3 sentences. Be specific about players by name."""}],
+        )
+        analysis_text = msg.content[0].text if msg.content else "Analysis failed."
+        return {"analysis": analysis_text}
+    finally:
+        conn.close()
+
+
+# ============================================================
+# TRADE BOARD — CRUD + PXI Analysis
+# ============================================================
+
+TRADE_BOARD_TYPES = ["target", "available", "watching"]
+
+
+@app.get("/org-hub/trade-board")
+async def list_trade_board(token_data: dict = Depends(verify_token)):
+    """List all trade board entries joined with player data and PXR scores, grouped by board_type."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT tb.*,
+                   p.first_name, p.last_name, p.position, p.current_team,
+                   p.current_league, p.birth_year, p.jersey_number, p.image_url,
+                   ps.gp, ps.g, ps.a, ps.p AS pts, ps.season,
+                   pxr.pxr_score, pxr.confidence_tier AS pxr_confidence
+            FROM trade_board_entries tb
+            JOIN players p ON tb.player_id = p.id
+            LEFT JOIN (
+                SELECT player_id, gp, g, a, p, season,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM player_stats
+            ) ps ON p.id = ps.player_id AND ps.rn = 1
+            LEFT JOIN (
+                SELECT player_id, pxr_score, confidence_tier,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM pxr_scores
+            ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
+            WHERE tb.org_id = ?
+              AND tb.status = 'active'
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY tb.priority, tb.created_at DESC
+        """, (org_id,)).fetchall()
+        entries = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = json.loads(d.get("tags") or "[]") if isinstance(d.get("tags"), str) else d.get("tags", [])
+            if d.get("gp") and d.get("pts"):
+                d["ppg"] = round(d["pts"] / d["gp"], 2) if d["gp"] > 0 else 0
+            else:
+                d["ppg"] = None
+            entries.append(d)
+        grouped = {
+            "target": [e for e in entries if e.get("board_type") == "target"],
+            "watching": [e for e in entries if e.get("board_type") == "watching"],
+            "available": [e for e in entries if e.get("board_type") == "available"],
+        }
+        return {"entries": entries, "grouped": grouped, "total": len(entries)}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/trade-board", status_code=201)
+async def add_to_trade_board(body: dict, token_data: dict = Depends(verify_token)):
+    """Add a player to the trade board."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    player_id = body.get("player_id", "").strip()
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+    board_type = body.get("board_type", "target")
+    if board_type not in TRADE_BOARD_TYPES:
+        board_type = "target"
+    asking_price = (body.get("asking_price") or "").strip() or None
+    notes = (body.get("notes") or "").strip() or None
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM trade_board_entries WHERE org_id = ? AND player_id = ? AND status = 'active'",
+            (org_id, player_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player already on trade board")
+        entry_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO trade_board_entries (id, org_id, player_id, added_by, board_type, asking_price, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (entry_id, org_id, player_id, user_id, board_type, asking_price, notes, now, now))
+        conn.commit()
+        return {"id": entry_id, "detail": "Added to trade board"}
+    finally:
+        conn.close()
+
+
+@app.patch("/org-hub/trade-board/{entry_id}")
+async def update_trade_board_entry(entry_id: str, body: dict, token_data: dict = Depends(verify_token)):
+    """Update a trade board entry (priority, board_type, asking_price, notes, status)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM trade_board_entries WHERE id = ? AND org_id = ?",
+            (entry_id, org_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        updates = []
+        params = []
+        for field in ("board_type", "asking_price", "notes", "status"):
+            if field in body:
+                val = body[field]
+                if field == "board_type" and val not in TRADE_BOARD_TYPES:
+                    continue
+                updates.append(f"{field} = ?")
+                params.append(val)
+        if "priority" in body:
+            updates.append("priority = ?")
+            params.append(int(body["priority"]))
+        if "tags" in body:
+            updates.append("tags = ?")
+            params.append(json.dumps(body["tags"]) if isinstance(body["tags"], list) else str(body["tags"]))
+        if not updates:
+            return {"detail": "Nothing to update"}
+        updates.append("updated_at = ?")
+        params.append(datetime.utcnow().isoformat())
+        params.append(entry_id)
+        conn.execute(f"UPDATE trade_board_entries SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"detail": "Updated"}
+    finally:
+        conn.close()
+
+
+@app.delete("/org-hub/trade-board/{entry_id}")
+async def remove_from_trade_board(entry_id: str, token_data: dict = Depends(verify_token)):
+    """Remove a player from the trade board."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        deleted = conn.execute(
+            "DELETE FROM trade_board_entries WHERE id = ? AND org_id = ?",
+            (entry_id, org_id),
+        ).rowcount
+        conn.commit()
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        return {"detail": "Removed from trade board"}
+    finally:
+        conn.close()
+
+
+@app.post("/org-hub/trade-board/analyse")
+async def analyse_trade_board(body: dict, token_data: dict = Depends(verify_token)):
+    """PXI trade board analysis — target fit, value comparison, recommended moves."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT tb.board_type, tb.asking_price, tb.notes, tb.priority,
+                   p.first_name, p.last_name, p.position, p.current_team,
+                   p.current_league, p.birth_year,
+                   ps.gp, ps.g, ps.a, ps.p AS pts,
+                   pxr.pxr_score, pxr.confidence_tier
+            FROM trade_board_entries tb
+            JOIN players p ON tb.player_id = p.id
+            LEFT JOIN (
+                SELECT player_id, gp, g, a, p,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM player_stats
+            ) ps ON p.id = ps.player_id AND ps.rn = 1
+            LEFT JOIN (
+                SELECT player_id, pxr_score, confidence_tier,
+                       ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
+                FROM pxr_scores
+            ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
+            WHERE tb.org_id = ?
+              AND tb.status = 'active'
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY tb.board_type, tb.priority
+        """, (org_id,)).fetchall()
+
+        if not rows:
+            return {"analysis": "Trade board is empty. Add players to get an analysis."}
+
+        board_text = ""
+        for btype in ("target", "watching", "available"):
+            section_rows = [r for r in rows if r["board_type"] == btype]
+            if section_rows:
+                board_text += f"\n{btype.upper()} ({len(section_rows)} players):\n"
+                for r in section_rows:
+                    name = f"{r['first_name']} {r['last_name']}"
+                    pos = r["position"] or "?"
+                    team = r["current_team"] or "?"
+                    league = r["current_league"] or "?"
+                    age = f"Age {2026 - r['birth_year']}" if r["birth_year"] else ""
+                    stats = f"{r['gp'] or 0}GP {r['g'] or 0}G {r['a'] or 0}A {r['pts'] or 0}P" if r["gp"] else "No stats"
+                    pxr = f"PXR:{r['pxr_score']:.1f}" if r["pxr_score"] else ""
+                    price = f"Asking:{r['asking_price']}" if r["asking_price"] else ""
+                    notes = f"Notes:{r['notes']}" if r["notes"] else ""
+                    board_text += f"  {name} ({pos}) {team}/{league} {age} | {stats} {pxr} {price} {notes}\n"
+
+        team_name = body.get("team_name", "our team")
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return {"analysis": f"**Trade Board Analysis**\n\n{len(rows)} players on board. Connect an API key to generate full PXI trade analysis with target fit assessment, value comparisons, and recommended moves."}
+
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": f"""You are PXI, a professional hockey trade analyst for {team_name}. Analyse this trade board and provide strategic recommendations.
+
+{board_text}
+
+Provide a structured analysis with these sections (use ALL CAPS headers):
+TARGET FIT ASSESSMENT — Evaluate each target's fit with {team_name}'s needs. System compatibility, roster gaps they fill.
+VALUE COMPARISON — Compare asking prices to player value. Identify overpays and bargains.
+AVAILABLE PLAYERS LEVERAGE — Assess the trade value of our available players. What could they realistically return?
+WATCHING LIST NOTES — Players to continue monitoring. When to move on them.
+RECOMMENDED MOVES — Priority-ordered trade recommendations. Specific suggested deals.
+
+Keep each section to 2-4 sentences. Be specific about players by name. Reference stats and PXR scores."""}],
         )
         analysis_text = msg.content[0].text if msg.content else "Analysis failed."
         return {"analysis": analysis_text}
