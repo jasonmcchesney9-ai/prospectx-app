@@ -18517,8 +18517,8 @@ async def generate_team_intelligence(team_name: str, token_data: dict = Depends(
         demo = {
             "id": intel_id, "team_name": decoded_name, "org_id": org_id,
             "playing_style": "Analysis Pending",
-            "system_summary": f"Connect your Anthropic API key to generate AI-powered team intelligence for {decoded_name}.",
-            "identity": f"Team identity analysis requires an API key. Add ANTHROPIC_API_KEY to your backend .env file and regenerate.",
+            "system_summary": f"Connect your API key to generate AI-powered team intelligence for {decoded_name}.",
+            "identity": f"Team identity analysis requires an API key. Add your API key to backend/.env and regenerate.",
             "strengths": json.dumps(["Add API key to unlock AI analysis"]),
             "vulnerabilities": json.dumps(["Add API key to unlock AI analysis"]),
             "key_personnel": json.dumps([]),
@@ -19101,7 +19101,7 @@ def _generate_mock_report(player: dict, report_type: str) -> str:
     return f"""EXECUTIVE_SUMMARY
 {name} is a {height}cm, {weight}kg {pos} who shoots {shoots}, currently playing for {team}{f' in the {league}' if league else ''}. No game statistics are available in the current dataset — this assessment is based on profile data only.
 
-This report was generated in demo mode. Connect your Anthropic API key in backend/.env to generate full AI-powered scouting intelligence.
+This report was generated in demo mode. Connect your API key in backend/.env to generate full AI-powered scouting intelligence.
 
 KEY_NUMBERS
 - Position: {pos}
@@ -19138,7 +19138,7 @@ Without deployment data (TOI, PP/PK minutes, line combinations), specific role-f
 BOTTOM_LINE
 {name} ({team}{f', {league}' if league else ''}) is an active {pos} whose full projection requires richer data input. The ProspectX platform is designed to turn structured stats and scouting notes into actionable intelligence — import CSV stats, add observation notes, and re-generate this report for a comprehensive AI-powered assessment.
 
-**To unlock full report intelligence:** Add your Anthropic API key to backend/.env and re-generate this report.
+**To unlock full report intelligence:** Add your API key to backend/.env and re-generate this report.
 """
 
 
@@ -19495,7 +19495,7 @@ Today's date is {datetime.now().date().isoformat()}."""
             else:
                 llm_model = "mock-demo"
                 total_tokens = 0
-                output_text = f"""EXECUTIVE_SUMMARY\nCustom team report for {team_name}. Focus: {', '.join(focus_areas)}. Audience: {audience}.\n\nOverall Grade: NR\n\nBOTTOM_LINE\nThis is a mock custom report. Set your Anthropic API key to generate real analysis."""
+                output_text = f"""EXECUTIVE_SUMMARY\nCustom team report for {team_name}. Focus: {', '.join(focus_areas)}. Audience: {audience}.\n\nOverall Grade: NR\n\nBOTTOM_LINE\nThis is a mock custom report. Set your API key to generate real analysis."""
 
             generation_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -19785,7 +19785,7 @@ If data is limited for any focus area, note what additional data would strengthe
         else:
             llm_model = "mock-demo"
             total_tokens = 0
-            output_text = f"""EXECUTIVE_SUMMARY\nCustom scouting report for {player_name}. Focus: {', '.join(focus_areas)}. Audience: {audience}.\n\nOverall Grade: NR\n\nBOTTOM_LINE\nThis is a mock custom report. Set your Anthropic API key to generate real analysis."""
+            output_text = f"""EXECUTIVE_SUMMARY\nCustom scouting report for {player_name}. Focus: {', '.join(focus_areas)}. Audience: {audience}.\n\nOverall Grade: NR\n\nBOTTOM_LINE\nThis is a mock custom report. Set your API key to generate real analysis."""
 
         generation_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -20122,7 +20122,7 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
             total_tokens = 0
             roster_summary = ", ".join([f"{p['name']} ({p['position']})" for p in roster_with_stats[:10]])
             output_text = f"""EXECUTIVE_SUMMARY
-{team_name} — {report_type_name}. This is a demo-mode team report. Roster: {len(roster_with_stats)} players. Connect your Anthropic API key in backend/.env to generate full AI-powered team intelligence.
+{team_name} — {report_type_name}. This is a demo-mode team report. Roster: {len(roster_with_stats)} players. Connect your API key in backend/.env to generate full AI-powered team intelligence.
 
 ROSTER_ANALYSIS
 Players on file: {roster_summary or 'No players found for this team.'}
@@ -20132,9 +20132,9 @@ TACTICAL_SYSTEMS
 {'Team system profile is configured.' if team_system else 'No team system profile found. Configure one in the Systems tab to unlock full tactical analysis.'}
 
 BOTTOM_LINE
-This report was generated in demo mode. Add your Anthropic API key to backend/.env and re-generate for full team intelligence.
+This report was generated in demo mode. Add your API key to backend/.env and re-generate for full team intelligence.
 
-**To unlock full report intelligence:** Add your Anthropic API key to backend/.env and re-generate this report.
+**To unlock full report intelligence:** Add your API key to backend/.env and re-generate this report.
 """
             logger.info("No Anthropic API key — generated mock team report for %s", team_name)
 
@@ -26810,7 +26810,7 @@ TEAM: {team} ({league})
         try:
             client = get_anthropic_client()
             if not client:
-                raise Exception("No Anthropic client available")
+                raise Exception("No API client available")
 
             message = client.messages.create(
                 model="claude-sonnet-4-20250514",
@@ -31050,7 +31050,7 @@ def _pt_background_generate_report(report_id: str, org_id: str, user_id: str, pl
         if not client:
             conn.execute(
                 "UPDATE reports SET status = 'failed', error_message = ?, generated_at = ? WHERE id = ?",
-                ("No Anthropic API key configured.", now_iso(), report_id),
+                ("No API key configured. Add your API key to backend/.env.", now_iso(), report_id),
             )
             conn.commit()
             return
@@ -32571,14 +32571,14 @@ async def send_bench_talk_message(
             # Mock mode — no API key
             mock_response = (
                 "Hey! I'm Bench Talk, your ProspectX hockey conversation engine. I'm currently running in demo mode "
-                "because no Anthropic API key is configured.\n\n"
+                "because no API key is configured.\n\n"
                 "Once connected, I can help you:\n"
                 "- **Search players** by position, league, team, or stats\n"
                 "- **Get ProspectX Intelligence** grades and archetypes\n"
                 "- **Compare players** side-by-side\n"
                 "- **Generate reports** (19 professional templates)\n"
                 "- **Find league leaders** in any stat category\n\n"
-                "To enable full Bench Talk intelligence, add your Anthropic API key to `backend/.env`."
+                "To enable full Bench Talk intelligence, add your API key to `backend/.env`."
             )
             asst_msg_id = gen_id()
             conn.execute("""
@@ -35539,7 +35539,7 @@ async def broadcast_generate_all(
 
     client = get_anthropic_client()
     if not client:
-        raise HTTPException(status_code=503, detail="Anthropic API key not configured. Broadcast generation requires an API key.")
+        raise HTTPException(status_code=503, detail="API key not configured. Broadcast generation requires an API key.")
 
     # Build system prompt
     system_parts = [
@@ -35714,7 +35714,7 @@ async def broadcast_generate_tool(
 
     client = get_anthropic_client()
     if not client:
-        raise HTTPException(status_code=503, detail="Anthropic API key not configured.")
+        raise HTTPException(status_code=503, detail="API key not configured.")
 
     tool_cfg = BROADCAST_TOOL_SCHEMAS[body.tool_name]
 
@@ -35815,7 +35815,7 @@ async def broadcast_post_game(
 
     client = get_anthropic_client()
     if not client:
-        raise HTTPException(status_code=503, detail="Anthropic API key not configured.")
+        raise HTTPException(status_code=503, detail="API key not configured.")
 
     # Determine winner
     if body.home_score > body.away_score:
@@ -40592,7 +40592,7 @@ TAGGED EVENTS ({len(events)} total):
                 # No API key — mock mode
                 mock_text = f"""GAME_SUMMARY
 This is a demo film report for session "{session_name}". {len(clips)} clips and {len(events)} events were tagged.
-Connect your Anthropic API key in backend/.env to generate full AI-powered film analysis.
+Connect your API key in backend/.env to generate full AI-powered film analysis.
 
 PERSONNEL_OBSERVATIONS
 No AI analysis available in demo mode.

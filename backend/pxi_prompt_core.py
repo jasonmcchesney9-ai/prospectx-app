@@ -1041,17 +1041,23 @@ Anchor projection in role and path: 'projects as a middle-six play-driver if str
 and pace improve,' 'profiles as a depth energy winger with PK value.'
 
 7. COMPARABLES
-Never compare players across leagues without explicitly stating the competition gap.
+When selecting comparable players, weight league strength as the PRIMARY factor.
+Never compare players across leagues without explicitly stating the league strength gap.
+A GOJHL player should be compared to other GOJHL or similar-tier players first.
+Cross-league comparisons (e.g., GOJHL to OHL) must include a clear disclaimer about
+the league level difference — e.g., 'Note: OHL is a higher-competition league than GOJHL;
+this comparison reflects style, not production equivalence.'
 A GOJHL comparable must come from GOJHL or an adjacent tier — never use OHL/WHL/QMJHL
-draft picks as comparables for junior B or tier 2 players. Weight league strength before
-offering any comparable. If no valid same-league comparable exists, say so rather than
-forcing a cross-league comp.
+draft picks as comparables for junior B or tier 2 players. If no valid same-league
+comparable exists, say so rather than forcing a cross-league comp.
 
 8. PROJECTION GUARDRAIL
-Never produce speculative negative ceiling/floor projections for minor players (under 18)
+Never produce speculative negative ceiling/floor projections for developing players (under 20)
 without sufficient data (minimum 40 GP current season or 2+ seasons of history). Avoid
 language like 'likely stays in GOJHL' or 'floor is tier 2' when based on a single partial
-season. Anchor all projections in observable data and role — not assumptions about ceiling."""
+season. Anchor all projections in observable data and role — not assumptions about ceiling.
+If data is limited, state the data limitation rather than projecting a negative outcome.
+Projections for minors should lean toward development potential, not pessimistic ceilings."""
 
 # ─────────────────────────────────────────────────────────
 # A4) SCOUT_SUMMARY_STRUCTURE — enforced 3-line format for PXI Scout Summary
