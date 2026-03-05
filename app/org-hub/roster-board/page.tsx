@@ -17,6 +17,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import ListenButton from "@/components/ListenButton";
 
 /* ── Types ────────────────────────────────────────────────── */
 interface RosterPlayer {
@@ -513,9 +514,14 @@ export default function RosterBoardPage() {
                       <p className="text-xs mt-2" style={{ color: "#5A7291" }}>Generating analysis...</p>
                     </div>
                   ) : (
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#0F2942" }}>
-                      {analysis}
-                    </div>
+                    <>
+                      <div className="flex justify-end mb-2">
+                        <ListenButton text={analysis} label="Listen" />
+                      </div>
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#0F2942" }}>
+                        {analysis}
+                      </div>
+                    </>
                   )}
                 </div>
               )}

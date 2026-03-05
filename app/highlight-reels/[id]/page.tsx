@@ -19,6 +19,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import ListenButton from "@/components/ListenButton";
 import toast from "react-hot-toast";
 
 interface ClipData {
@@ -420,6 +421,9 @@ export default function HighlightReelViewerPage() {
                   </span>
                 </div>
                 <div className="bg-white px-5 py-4 space-y-3">
+                  <div className="flex justify-end">
+                    <ListenButton text={[pxi.opening_note, pxi.closing_note, pxi.notes].filter(Boolean).join(". ")} label="Listen" />
+                  </div>
                   {pxi.opening_note && (
                     <div>
                       <p className="font-bold uppercase mb-0.5" style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}>

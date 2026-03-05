@@ -21,6 +21,7 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import MicButton from "@/components/MicButton";
 
 /* ── Types ────────────────────────────────────────────────── */
 interface TradeEntry {
@@ -642,14 +643,17 @@ export default function TradeBoardPage() {
                 <label className="block text-[10px] font-bold uppercase mb-1" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}>
                   Notes (optional)
                 </label>
-                <textarea
-                  value={addNotes}
-                  onChange={(e) => setAddNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm resize-none"
-                  style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", outline: "none" }}
-                  rows={2}
-                  placeholder="Trade notes, concerns, leverage..."
-                />
+                <div className="flex items-center gap-1">
+                  <textarea
+                    value={addNotes}
+                    onChange={(e) => setAddNotes(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm resize-none"
+                    style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", outline: "none" }}
+                    rows={2}
+                    placeholder="Trade notes, concerns, leverage..."
+                  />
+                  <MicButton onTranscript={(t) => setAddNotes((p) => (p ? p + " " + t : t))} />
+                </div>
               </div>
 
               {/* Actions */}

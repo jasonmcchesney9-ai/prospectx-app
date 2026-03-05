@@ -24,6 +24,7 @@ import ReportSection from "@/components/ReportSection";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
+import ListenButton from "@/components/ListenButton";
 import type { Report, Player } from "@/types/api";
 import { REPORT_TYPE_LABELS, SECTION_LABELS, PROSPECT_GRADES } from "@/types/api";
 import HockeyRink from "@/components/HockeyRink";
@@ -526,6 +527,13 @@ export default function ReportViewerPage() {
                   <Mail size={14} />
                   Email
                 </button>
+                {report?.output_text && (
+                  <ListenButton
+                    text={report.output_text}
+                    label="Listen"
+                    className="!text-white/60 !border-white/10 hover:!bg-white/10 hover:!text-white"
+                  />
+                )}
                 <button
                   onClick={() => window.print()}
                   className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"

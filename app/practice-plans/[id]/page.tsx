@@ -19,6 +19,7 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api, { assetUrl } from "@/lib/api";
+import ListenButton from "@/components/ListenButton";
 import type { PracticePlan, PracticePlanDrill } from "@/types/api";
 import {
   PRACTICE_PHASES,
@@ -328,7 +329,10 @@ export default function PracticePlanDetailPage() {
         {/* Coaching Summary */}
         {plan.plan_data?.coaching_summary && (
           <div className="bg-white rounded-xl border border-teal/20 p-5 mb-4">
-            <h3 className="text-xs font-oswald uppercase tracking-wider text-teal mb-2">Practice Overview</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-oswald uppercase tracking-wider text-teal">Practice Overview</h3>
+              <ListenButton text={plan.plan_data.coaching_summary} />
+            </div>
             <p className="text-sm text-navy/80 leading-relaxed">{plan.plan_data.coaching_summary}</p>
           </div>
         )}

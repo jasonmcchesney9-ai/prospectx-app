@@ -23,6 +23,7 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import MicButton from "@/components/MicButton";
 
 /* ── Types ────────────────────────────────────────────────── */
 interface Assignment {
@@ -658,14 +659,17 @@ export default function ScoutingPipeline() {
                     <label className="block font-bold uppercase mb-1" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1.5, color: "#5A7291" }}>
                       Notes
                     </label>
-                    <textarea
-                      value={formNotes}
-                      onChange={(e) => setFormNotes(e.target.value)}
-                      rows={3}
-                      placeholder="Scouting focus, players to watch..."
-                      className="w-full px-3 py-2 rounded-md text-xs resize-none"
-                      style={{ border: "1px solid #DDE6EF", color: "#0F2942", fontFamily: MONO, background: "#F8FAFC" }}
-                    />
+                    <div className="flex items-start gap-1">
+                      <textarea
+                        value={formNotes}
+                        onChange={(e) => setFormNotes(e.target.value)}
+                        rows={3}
+                        placeholder="Scouting focus, players to watch..."
+                        className="flex-1 px-3 py-2 rounded-md text-xs resize-none"
+                        style={{ border: "1px solid #DDE6EF", color: "#0F2942", fontFamily: MONO, background: "#F8FAFC" }}
+                      />
+                      <MicButton onTranscript={(t) => setFormNotes((p) => (p ? p + " " + t : t))} />
+                    </div>
                   </div>
 
                   {/* Actions */}

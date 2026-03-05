@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Save, Loader2, Lock, Unlock, X } from "lucide-react";
 import api from "@/lib/api";
 import RatingSlider from "./RatingSlider";
+import MicButton from "./MicButton";
 import type { Player, ScoutNote, NoteCreate } from "@/types/api";
 import { COMPETITION_LEVEL_LABELS, PROSPECT_STATUS_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS } from "@/types/api";
 
@@ -234,25 +235,37 @@ export default function ScoutNoteForm({ initialPlayerId, existingNote }: ScoutNo
 
       {/* Text Notes */}
       <div>
-        <label className="block text-xs font-oswald uppercase tracking-wider text-navy/70 mb-1.5">Strengths</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-oswald uppercase tracking-wider text-navy/70">Strengths</label>
+          <MicButton onTranscript={(t) => setStrengthsNotes((p) => (p ? p + " " + t : t))} />
+        </div>
         <textarea rows={3} value={strengthsNotes} onChange={(e) => setStrengthsNotes(e.target.value)}
           placeholder="Elite compete. First on puck. Hard on the boards."
           className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm resize-none" />
       </div>
       <div>
-        <label className="block text-xs font-oswald uppercase tracking-wider text-navy/70 mb-1.5">Areas to Improve</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-oswald uppercase tracking-wider text-navy/70">Areas to Improve</label>
+          <MicButton onTranscript={(t) => setImprovementsNotes((p) => (p ? p + " " + t : t))} />
+        </div>
         <textarea rows={3} value={improvementsNotes} onChange={(e) => setImprovementsNotes(e.target.value)}
           placeholder="Lateral mobility needs work. Puck decisions under pressure."
           className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm resize-none" />
       </div>
       <div>
-        <label className="block text-xs font-oswald uppercase tracking-wider text-navy/70 mb-1.5">One-Line Summary</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-oswald uppercase tracking-wider text-navy/70">One-Line Summary</label>
+          <MicButton onTranscript={(t) => setOneLineSummary((p) => (p ? p + " " + t : t))} />
+        </div>
         <input type="text" value={oneLineSummary} onChange={(e) => setOneLineSummary(e.target.value)}
           placeholder="Power forward, elite motor, projects as top-6 role"
           className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm" maxLength={200} />
       </div>
       <div>
-        <label className="block text-xs font-oswald uppercase tracking-wider text-navy/70 mb-1.5">Additional Notes</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-oswald uppercase tracking-wider text-navy/70">Additional Notes</label>
+          <MicButton onTranscript={(t) => setNoteText((p) => (p ? p + " " + t : t))} />
+        </div>
         <textarea rows={3} value={noteText} onChange={(e) => setNoteText(e.target.value)}
           placeholder="Any other observations..."
           className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm resize-none" />

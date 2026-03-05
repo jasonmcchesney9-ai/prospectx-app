@@ -20,6 +20,8 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import MicButton from "@/components/MicButton";
+import ListenButton from "@/components/ListenButton";
 
 /* ── Types ────────────────────────────────────────────────── */
 interface DraftEntry {
@@ -486,9 +488,14 @@ export default function DraftBoardPage() {
                     <span className="text-xs" style={{ color: "#5A7291" }}>Analysing draft board...</span>
                   </div>
                 ) : (
-                  <pre className="text-xs whitespace-pre-wrap" style={{ color: "#0F2942", lineHeight: 1.6, fontFamily: "inherit" }}>
-                    {analysis}
-                  </pre>
+                  <>
+                    <div className="flex justify-end mb-2">
+                      <ListenButton text={analysis} label="Listen" />
+                    </div>
+                    <pre className="text-xs whitespace-pre-wrap" style={{ color: "#0F2942", lineHeight: 1.6, fontFamily: "inherit" }}>
+                      {analysis}
+                    </pre>
+                  </>
                 )}
               </div>
             </div>
@@ -760,14 +767,17 @@ export default function DraftBoardPage() {
                 <label className="block text-[10px] font-bold uppercase mb-1" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}>
                   Notes (optional)
                 </label>
-                <textarea
-                  value={addNotes}
-                  onChange={(e) => setAddNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm resize-none"
-                  style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", outline: "none" }}
-                  rows={2}
-                  placeholder="Initial scouting notes..."
-                />
+                <div className="flex items-center gap-1">
+                  <textarea
+                    value={addNotes}
+                    onChange={(e) => setAddNotes(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm resize-none"
+                    style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", outline: "none" }}
+                    rows={2}
+                    placeholder="Initial scouting notes..."
+                  />
+                  <MicButton onTranscript={(t) => setAddNotes((p) => (p ? p + " " + t : t))} />
+                </div>
               </div>
 
               {/* Actions */}

@@ -41,6 +41,8 @@ import EventTagger from "@/components/film/EventTagger";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import toast from "react-hot-toast";
+import MicButton from "@/components/MicButton";
+import ListenButton from "@/components/ListenButton";
 
 interface SessionData {
   id: string;
@@ -1214,6 +1216,9 @@ export default function FilmSessionViewerPage() {
                 </button>
                 {reportExpanded && (
                   <div className="bg-white px-5 py-4" style={{ borderTop: "1px solid #DDE6EF" }}>
+                    <div className="flex justify-end mb-2">
+                      <ListenButton text={generatedReport.output_text || ""} label="Listen" />
+                    </div>
                     <div className="pl-4 text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#0F2942", borderLeft: "3px solid #0D9488" }}>
                       {generatedReport.output_text}
                     </div>
@@ -1261,6 +1266,7 @@ export default function FilmSessionViewerPage() {
                       className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                       style={{ color: "#0F2942", border: "1.5px solid #DDE6EF" }}
                     />
+                    <MicButton onTranscript={(t) => setCommentText((p) => (p ? p + " " + t : t))} />
                     <button
                       onClick={handleSubmitComment}
                       disabled={submittingComment || !commentText.trim()}

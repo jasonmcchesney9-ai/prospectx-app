@@ -1,6 +1,7 @@
 import { SECTION_LABELS } from "@/types/api";
 import { assetUrl } from "@/lib/api";
 import { Shield, Star, TrendingUp, Target, Zap, ClipboardList } from "lucide-react";
+import ListenButton from "./ListenButton";
 
 interface Props {
   sectionKey: string;
@@ -245,9 +246,10 @@ export default function ReportSection({ sectionKey, content }: Props) {
           <div className="flex items-center gap-2 mb-3">
             <div className={`w-1 h-5 ${highlight.accent} rounded-full`} />
             <Icon size={14} className="text-navy/60" />
-            <h3 className="font-oswald text-sm font-semibold uppercase tracking-wider text-navy">
+            <h3 className="font-oswald text-sm font-semibold uppercase tracking-wider text-navy flex-1">
               {label}
             </h3>
+            <ListenButton text={content} />
           </div>
           <div className="text-sm leading-relaxed text-body whitespace-pre-wrap pl-3">
             {contentHasImages ? <RichContent text={content} /> : content}
@@ -262,9 +264,10 @@ export default function ReportSection({ sectionKey, content }: Props) {
     <section className="mb-6">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-1 h-5 bg-teal rounded-full" />
-        <h3 className="font-oswald text-sm font-semibold uppercase tracking-wider text-navy">
+        <h3 className="font-oswald text-sm font-semibold uppercase tracking-wider text-navy flex-1">
           {label}
         </h3>
+        <ListenButton text={content} />
       </div>
       <div className="text-sm leading-relaxed text-body whitespace-pre-wrap pl-3">
         {contentHasImages ? <RichContent text={content} /> : content}

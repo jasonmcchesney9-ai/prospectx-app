@@ -35,6 +35,8 @@ import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
 import PXIBadge from "./PXIBadge";
+import MicButton from "./MicButton";
+import ListenButton from "./ListenButton";
 import type {
   BenchTalkConversation,
   BenchTalkMessage,
@@ -1280,6 +1282,7 @@ export default function BenchTalkDrawer() {
                           >
                             <ThumbsDown size={11} />
                           </button>
+                          <ListenButton text={msg.content} className="!p-0.5" />
                           {process.env.NODE_ENV === 'development' && msg.tokens_used > 0 && (
                             <span className="text-[8px] text-muted/30 ml-0.5">
                               {msg.tokens_used.toLocaleString()} tokens
@@ -1375,6 +1378,11 @@ export default function BenchTalkDrawer() {
                 }}
               />
             </div>
+            <MicButton
+              onTranscript={(text) => setInput((prev) => (prev ? prev + " " + text : text))}
+              disabled={loading}
+              className="shrink-0 !text-white/50 hover:!text-white !border-white/20 hover:!bg-white/10"
+            />
             <button
               onClick={() => sendMessage()}
               disabled={loading || !input.trim()}

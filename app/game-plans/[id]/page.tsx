@@ -26,6 +26,8 @@ import {
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import MicButton from "@/components/MicButton";
+import ListenButton from "@/components/ListenButton";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { GamePlan, SessionType, Report } from "@/types/api";
@@ -385,17 +387,23 @@ function GamePlanDetail() {
       <div className="space-y-4">
         {/* Opponent Analysis */}
         <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
-            <Target size={14} className="text-orange" />
-            Opponent Analysis
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
+              <Target size={14} className="text-orange" />
+              Opponent Analysis
+            </h3>
+            {!editing && plan.opponent_analysis && <ListenButton text={plan.opponent_analysis} />}
+          </div>
           {editing ? (
-            <textarea
-              value={editData.opponent_analysis}
-              onChange={(e) => setEditData({ ...editData, opponent_analysis: e.target.value })}
-              rows={5}
-              className={textareaClasses}
-            />
+            <div className="flex items-start gap-1">
+              <textarea
+                value={editData.opponent_analysis}
+                onChange={(e) => setEditData({ ...editData, opponent_analysis: e.target.value })}
+                rows={5}
+                className={textareaClasses + " flex-1"}
+              />
+              <MicButton onTranscript={(t) => setEditData((d) => ({ ...d, opponent_analysis: d.opponent_analysis ? d.opponent_analysis + " " + t : t }))} />
+            </div>
           ) : (
             <p className="text-sm text-navy/80 whitespace-pre-wrap">
               {plan.opponent_analysis || "No opponent analysis yet."}
@@ -405,17 +413,23 @@ function GamePlanDetail() {
 
         {/* Our Strategy */}
         <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
-            <Shield size={14} className="text-teal" />
-            Our Strategy
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
+              <Shield size={14} className="text-teal" />
+              Our Strategy
+            </h3>
+            {!editing && plan.our_strategy && <ListenButton text={plan.our_strategy} />}
+          </div>
           {editing ? (
-            <textarea
-              value={editData.our_strategy}
-              onChange={(e) => setEditData({ ...editData, our_strategy: e.target.value })}
-              rows={5}
-              className={textareaClasses}
-            />
+            <div className="flex items-start gap-1">
+              <textarea
+                value={editData.our_strategy}
+                onChange={(e) => setEditData({ ...editData, our_strategy: e.target.value })}
+                rows={5}
+                className={textareaClasses + " flex-1"}
+              />
+              <MicButton onTranscript={(t) => setEditData((d) => ({ ...d, our_strategy: d.our_strategy ? d.our_strategy + " " + t : t }))} />
+            </div>
           ) : (
             <p className="text-sm text-navy/80 whitespace-pre-wrap">
               {plan.our_strategy || "No strategy defined yet."}
@@ -511,17 +525,23 @@ function GamePlanDetail() {
 
         {/* Keys to Game */}
         <div className="bg-white rounded-xl border border-teal/20 p-5">
-          <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
-            <Swords size={14} className="text-navy" />
-            Keys to the Game
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
+              <Swords size={14} className="text-navy" />
+              Keys to the Game
+            </h3>
+            {!editing && plan.keys_to_game && <ListenButton text={plan.keys_to_game} />}
+          </div>
           {editing ? (
-            <textarea
-              value={editData.keys_to_game}
-              onChange={(e) => setEditData({ ...editData, keys_to_game: e.target.value })}
-              rows={4}
-              className={textareaClasses}
-            />
+            <div className="flex items-start gap-1">
+              <textarea
+                value={editData.keys_to_game}
+                onChange={(e) => setEditData({ ...editData, keys_to_game: e.target.value })}
+                rows={4}
+                className={textareaClasses + " flex-1"}
+              />
+              <MicButton onTranscript={(t) => setEditData((d) => ({ ...d, keys_to_game: d.keys_to_game ? d.keys_to_game + " " + t : t }))} />
+            </div>
           ) : (
             <p className="text-sm text-navy/80 whitespace-pre-wrap">
               {plan.keys_to_game || "No keys to game defined yet."}
