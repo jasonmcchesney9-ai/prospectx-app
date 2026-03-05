@@ -2979,6 +2979,17 @@ def init_db():
             conn.commit()
             logger.info("Migration: added %s column to reports", col_name)
 
+    # ── Migration: Film source tracking columns on reports ──
+    rpt_cols2 = _get_table_columns(conn, "reports")
+    for col_name, col_type in [
+        ("source_type", "TEXT DEFAULT 'standard'"),
+        ("source_film_session_id", "TEXT DEFAULT NULL"),
+    ]:
+        if col_name not in rpt_cols2:
+            conn.execute(f"ALTER TABLE reports ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+            logger.info("Migration: added %s column to reports", col_name)
+
     # ── Migration: roster_status on players ──
     # Values: active (default), ap, inj, susp, scrch
     p_cols_final = _get_table_columns(conn, "players")
@@ -10270,6 +10281,8 @@ class ReportResponse(BaseModel):
     shared_with_org: Optional[int] = 0
     quality_score: Optional[float] = None
     quality_details: Optional[str] = None
+    source_type: Optional[str] = "standard"
+    source_film_session_id: Optional[str] = None
 
 class ReportGenerateResponse(BaseModel):
     report_id: str
@@ -17193,6 +17206,15 @@ AVAILABLE DRILLS:
 HOCKEY TERMINOLOGY:
 {json.dumps([{"term": g["term"], "category": g["category"]} for g in glossary], indent=1)}"""
 
+    # ── Film review findings injection (last 7 days) ──
+    try:
+        film_ctx = _get_recent_film_context(conn, org_id, team_name=body.team_name, days=7, max_reports=3, max_chars=800)
+        if film_ctx:
+            user_prompt += f"\n\nFILM REVIEW FINDINGS (last 7 days):\nRecent film analysis identified these areas — prioritize drills that address them:\n{film_ctx}"
+            logger.info("Film context injected for practice plan: team=%s (%d chars)", body.team_name, len(film_ctx))
+    except Exception as fc_err:
+        logger.warning("Film context injection for practice plan failed (non-fatal): %s", str(fc_err))
+
     # 5. Call Claude (or mock)
     plan_data = None
     client = get_anthropic_client()
@@ -21462,6 +21484,15 @@ If data is limited for any focus area, note what additional data would strengthe
 
         user_prompt = f"Generate a custom scouting report for {player_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
+        # ── Film observations context injection (custom player report) ──
+        try:
+            film_ctx = _get_recent_film_context(conn, org_id, player_id=request.player_id, team_name=player.get("current_team"), days=30, max_reports=3, max_chars=1000)
+            if film_ctx:
+                user_prompt += f"\n\n--- RECENT FILM OBSERVATIONS ---\nRecent film analysis from the Film Room (use to support or challenge findings):\n{film_ctx}\n--- END FILM OBSERVATIONS ---\n"
+                logger.info("Film context injected for custom report: player=%s (%d chars)", request.player_id, len(film_ctx))
+        except Exception as fc_err:
+            logger.warning("Film context injection failed (non-fatal): %s", str(fc_err))
+
         if client:
             llm_model = "claude-sonnet-4-20250514"
             extra_tokens = 2000 if custom_p_drill_list else 0
@@ -21520,6 +21551,42 @@ If data is limited for any focus area, note what additional data would strengthe
             pass
         conn.close()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_recent_film_context(conn, org_id: str, player_id: str = None, team_name: str = None, days: int = 30, max_reports: int = 3, max_chars: int = 1000) -> str:
+    """Fetch recent film analysis reports for context injection into other report types.
+
+    Returns a formatted string of recent film observations, or "" if none found.
+    """
+    if not player_id and not team_name:
+        return ""
+    where_parts = ["org_id = ?", "source_type = 'film_analysis'", "status = 'complete'"]
+    params: list = [org_id]
+    if player_id:
+        where_parts.append("player_id = ?")
+        params.append(player_id)
+    elif team_name:
+        where_parts.append("team_name = ?")
+        params.append(team_name)
+    where_parts.append(f"created_at >= datetime('now', '-{days} days')")
+    query = f"SELECT title, output_text, created_at FROM reports WHERE {' AND '.join(where_parts)} ORDER BY created_at DESC LIMIT ?"
+    params.append(max_reports)
+    try:
+        rows = conn.execute(query, params).fetchall()
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    parts = []
+    total_chars = 0
+    for row in rows:
+        r = dict(row) if hasattr(row, "keys") else {"title": row[0], "output_text": row[1], "created_at": row[2]}
+        text = (r.get("output_text") or "")[:max_chars // max_reports]
+        parts.append(f"• {r.get('title', 'Film Report')} ({r.get('created_at', '')[:10]}): {text}")
+        total_chars += len(parts[-1])
+        if total_chars >= max_chars:
+            break
+    return "\n".join(parts)
 
 
 async def summarize_series_context(series_id: str, current_game_number: int) -> str:
@@ -21779,16 +21846,29 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
 
             user_prompt = f"Generate a {report_type_name} for {team_name}. Here is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
+            # ── Film observations context injection (team reports) ──
+            try:
+                film_ctx = _get_recent_film_context(conn, org_id, team_name=team_name, days=30, max_reports=3, max_chars=1000)
+                if film_ctx:
+                    user_prompt += f"\n\n--- RECENT FILM OBSERVATIONS ---\nRecent film analysis from the Film Room (use to support tactical findings):\n{film_ctx}\n--- END FILM OBSERVATIONS ---\n"
+                    logger.info("Film context injected for team report: team=%s (%d chars)", team_name, len(film_ctx))
+            except Exception as fc_err:
+                logger.warning("Film context injection failed (non-fatal): %s", str(fc_err))
+
             # ── Series context injection ──
             if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
                 try:
                     series_ctx = await summarize_series_context(request.series_id, request.game_number)
                     if series_ctx:
                         n_prior = request.game_number - 1
+                        # Include film observations from the series period
+                        series_film = _get_recent_film_context(conn, org_id, team_name=team_name, days=14, max_reports=3, max_chars=600)
+                        film_block = f"\nFilm Room observations from this series period:\n{series_film}" if series_film else ""
                         context_block = (
                             f"\n\n--- PRIOR SERIES CONTEXT ---\n"
                             f"This series has had {n_prior} prior game(s) analyzed.\n"
                             f"Here is a summary of prior analysis:\n{series_ctx}\n"
+                            f"{film_block}\n"
                             f"Use this context to identify trends, evolving matchups, "
                             f"and carry-over themes. Do not repeat prior analysis verbatim.\n"
                             f"--- END PRIOR CONTEXT ---\n\n"
@@ -22593,16 +22673,29 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
 
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
+            # ── Film observations context injection ──
+            try:
+                film_ctx = _get_recent_film_context(conn, org_id, player_id=request.player_id, team_name=player.get("current_team"), days=30, max_reports=3, max_chars=1000)
+                if film_ctx:
+                    user_prompt += f"\n\n--- RECENT FILM OBSERVATIONS ---\nRecent film analysis from the Film Room (use to support or challenge statistical findings):\n{film_ctx}\n--- END FILM OBSERVATIONS ---\n"
+                    logger.info("Film context injected for player report: player=%s (%d chars)", request.player_id, len(film_ctx))
+            except Exception as fc_err:
+                logger.warning("Film context injection failed (non-fatal): %s", str(fc_err))
+
             # ── Series context injection ──
             if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
                 try:
                     series_ctx = await summarize_series_context(request.series_id, request.game_number)
                     if series_ctx:
                         n_prior = request.game_number - 1
+                        # Include film observations from the series period
+                        series_film = _get_recent_film_context(conn, org_id, player_id=request.player_id, team_name=player.get("current_team"), days=14, max_reports=3, max_chars=600)
+                        film_block = f"\nFilm Room observations from this series period:\n{series_film}" if series_film else ""
                         context_block = (
                             f"\n\n--- PRIOR SERIES CONTEXT ---\n"
                             f"This series has had {n_prior} prior game(s) analyzed.\n"
                             f"Here is a summary of prior analysis:\n{series_ctx}\n"
+                            f"{film_block}\n"
                             f"Use this context to identify trends, evolving matchups, "
                             f"and carry-over themes. Do not repeat prior analysis verbatim.\n"
                             f"--- END PRIOR CONTEXT ---\n\n"
@@ -22801,6 +22894,8 @@ async def list_reports(
     player_id: Optional[str] = None,
     report_type: Optional[str] = None,
     report_status: Optional[str] = None,
+    team_name: Optional[str] = None,
+    source_type: Optional[str] = None,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     token_data: dict = Depends(verify_token),
@@ -22820,6 +22915,12 @@ async def list_reports(
     if report_status:
         query += " AND status = ?"
         params.append(report_status)
+    if team_name:
+        query += " AND team_name = ?"
+        params.append(team_name)
+    if source_type:
+        query += " AND source_type = ?"
+        params.append(source_type)
 
     query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, skip])
@@ -42522,13 +42623,20 @@ KEY EVENTS ({min(len(events), MAX_INDIVIDUAL_EVENTS)} of {len(events)} shown):
         template_id = template["id"] if template else None
         template_name = template["template_name"] if template else report_type.replace("_", " ").title()
 
-        # 6. Create report record
+        # 6. Create report record — link player_id and team_name from session/request
         report_id = gen_id()
         title = f"{template_name} — {session_name}"
+        film_player_id = body.get("player_id") or session.get("player_id") or None
+        film_team_name = None
+        film_team_id = session.get("team_id")
+        if film_team_id:
+            team_row = conn.execute("SELECT name FROM teams WHERE id = ?", (film_team_id,)).fetchone()
+            if team_row:
+                film_team_name = team_row["name"] if hasattr(team_row, "keys") else team_row[0]
         conn.execute("""
-            INSERT INTO reports (id, org_id, player_id, team_name, template_id, report_type, title, status, input_data, created_by, created_at)
-            VALUES (?, ?, NULL, NULL, ?, ?, ?, 'processing', ?, ?, ?)
-        """, (report_id, org_id, template_id, report_type, title, json.dumps({"session_id": session_id, "clips": len(clips), "events": len(events)}), user_id, now_iso()))
+            INSERT INTO reports (id, org_id, player_id, team_name, template_id, report_type, title, status, input_data, created_by, created_at, source_type, source_film_session_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, 'film_analysis', ?)
+        """, (report_id, org_id, film_player_id, film_team_name, template_id, report_type, title, json.dumps({"session_id": session_id, "clips": len(clips), "events": len(events)}), user_id, now_iso(), session_id))
         conn.commit()
 
         start_time = time.perf_counter()

@@ -507,6 +507,8 @@ export interface Report {
   shared_with_org?: boolean;
   quality_score?: number | null;
   quality_details?: string | null;
+  source_type?: string | null;
+  source_film_session_id?: string | null;
 }
 
 export interface ReportTemplate {

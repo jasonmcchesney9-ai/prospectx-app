@@ -28,8 +28,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
-import type { GamePlan, SessionType } from "@/types/api";
-import { SESSION_TYPES, TACTICAL_OPTIONS } from "@/types/api";
+import type { GamePlan, SessionType, Report } from "@/types/api";
+import { SESSION_TYPES, TACTICAL_OPTIONS, REPORT_TYPE_LABELS } from "@/types/api";
 
 // ── Talking-points JSON parser ───────────────────────────────
 const parseTalkingPoints = (val: string | unknown): Record<string, string> => {
@@ -69,6 +69,7 @@ function GamePlanDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [talkingPointsOpen, setTalkingPointsOpen] = useState(false);
+  const [filmReports, setFilmReports] = useState<Report[]>([]);
 
   // Edit fields — includes all original + new fields
   const [editData, setEditData] = useState({
@@ -155,6 +156,24 @@ function GamePlanDetail() {
     }
     if (planId) load();
   }, [planId]);
+
+  // Fetch film reports for the team or opponent
+  useEffect(() => {
+    if (!plan) return;
+    async function loadFilm() {
+      try {
+        const teams = [plan!.team_name, plan!.opponent_team_name].filter(Boolean);
+        const allFilm: Report[] = [];
+        for (const tn of teams) {
+          const { data } = await api.get<Report[]>("/reports", { params: { team_name: tn, source_type: "film_analysis", limit: 5 } });
+          allFilm.push(...data);
+        }
+        allFilm.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+        setFilmReports(allFilm.slice(0, 6));
+      } catch { /* non-fatal */ }
+    }
+    loadFilm();
+  }, [plan]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -509,6 +528,43 @@ function GamePlanDetail() {
             </p>
           )}
         </div>
+
+        {/* ── Film Analysis (from Film Room) ───────────────────── */}
+        {filmReports.length > 0 && (
+          <div className="bg-white rounded-xl border border-purple-200 p-5">
+            <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-3">
+              <Video size={14} className="text-purple-600" />
+              Film Analysis
+              <span className="text-[10px] font-normal text-muted ml-1">({filmReports.length} report{filmReports.length !== 1 ? "s" : ""})</span>
+            </h3>
+            <div className="space-y-2">
+              {filmReports.map((fr) => (
+                <Link
+                  key={fr.id}
+                  href={`/reports/${fr.id}`}
+                  className="flex items-center gap-2.5 py-2 px-3 rounded-lg border border-purple-100 hover:bg-purple-50/50 transition-colors group"
+                >
+                  <Video size={12} className="text-purple-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-navy font-medium truncate group-hover:text-purple-700 transition-colors">
+                      {fr.title || "Film Report"}
+                    </p>
+                    <p className="text-[11px] text-muted truncate">
+                      {REPORT_TYPE_LABELS[fr.report_type] || fr.report_type}
+                      {fr.team_name && ` · ${fr.team_name}`}
+                      {fr.generated_at && ` · ${new Date(fr.generated_at).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                    fr.status === "complete" ? "bg-green-50 text-green-600" : "bg-orange/10 text-orange"
+                  }`}>
+                    {fr.status === "complete" ? "Complete" : fr.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Talking Points (expandable) ───────────────────────── */}
         <div className="bg-white rounded-xl border border-teal/20">

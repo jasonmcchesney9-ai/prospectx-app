@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, Clock, CheckCircle2, AlertCircle, Loader2, Users, User } from "lucide-react";
+import { FileText, Clock, CheckCircle2, AlertCircle, Loader2, Users, User, Video } from "lucide-react";
 import { REPORT_TYPE_LABELS, TEAM_REPORT_TYPES } from "@/types/api";
 import type { Report } from "@/types/api";
 
@@ -14,6 +14,7 @@ export default function ReportCard({ report, compact = false, dark = false }: { 
   const statusInfo = STATUS_CONFIG[report.status] || STATUS_CONFIG.pending;
   const StatusIcon = statusInfo.icon;
   const isTeamReport = (TEAM_REPORT_TYPES as readonly string[]).includes(report.report_type);
+  const isFilm = report.source_type === "film_analysis";
   const CategoryIcon = isTeamReport ? Users : User;
 
   if (compact && dark) {
@@ -34,6 +35,11 @@ export default function ReportCard({ report, compact = false, dark = false }: { 
             {report.generated_at && ` · ${new Date(report.generated_at).toLocaleDateString()}`}
           </p>
         </div>
+        {isFilm && (
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 bg-purple-500/20 text-purple-400">
+            <Video size={10} />Film
+          </span>
+        )}
         <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${
           report.status === "complete" ? "bg-green-500/20 text-green-400" :
           report.status === "processing" ? "bg-teal/20 text-teal" :
@@ -65,6 +71,11 @@ export default function ReportCard({ report, compact = false, dark = false }: { 
             {report.generated_at && ` · ${new Date(report.generated_at).toLocaleDateString()}`}
           </p>
         </div>
+        {isFilm && (
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 bg-purple-100 text-purple-700">
+            <Video size={10} />Film
+          </span>
+        )}
         <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${statusInfo.bg} ${statusInfo.color}`}>
           <StatusIcon size={10} className={report.status === "processing" ? "animate-spin" : ""} />
           {statusInfo.label}
@@ -90,6 +101,11 @@ export default function ReportCard({ report, compact = false, dark = false }: { 
             {REPORT_TYPE_LABELS[report.report_type] || report.report_type}
           </p>
           <div className="flex items-center gap-2 mt-2">
+            {isFilm && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                <Video size={12} />Film
+              </span>
+            )}
             <span
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${statusInfo.bg} ${statusInfo.color}`}
             >
