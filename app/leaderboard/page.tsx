@@ -473,8 +473,12 @@ export default function LeaderboardPage() {
                                     <span className="ml-2 text-[10px] text-amber-600 font-oswald uppercase tracking-wider">Playing Down</span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2.5 text-xs text-muted">{p.current_team || "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted">{p.current_league || "—"}</td>
+                                <td className="px-3 py-2.5 text-xs text-muted">
+                                  {p.current_team ? <Link href={`/teams/${encodeURIComponent(p.current_team)}`} className="hover:text-teal transition-colors">{p.current_team}</Link> : "—"}
+                                </td>
+                                <td className="px-3 py-2.5 text-xs text-muted">
+                                  {p.current_league ? <Link href={`/leagues?league=${encodeURIComponent(p.current_league)}`} className="hover:text-teal transition-colors">{p.current_league}</Link> : "—"}
+                                </td>
                                 <td className="px-3 py-2.5">
                                   <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
                                   {p.gp != null && p.gp < 15 && (

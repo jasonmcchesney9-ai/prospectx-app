@@ -979,7 +979,9 @@ export default function PlayerDetailPage() {
                   {player.current_league && (
                     <>
                       <span className="text-white/30">·</span>
-                      <span className="text-white/50">{formatLeague(player.current_league)}</span>
+                      <Link href={`/leagues?league=${encodeURIComponent(player.current_league)}`} className="text-white/50 hover:text-teal transition-colors">
+                        {formatLeague(player.current_league)}
+                      </Link>
                     </>
                   )}
                   {playerTransfers.length > 0 && playerTransfers[0].from_team_name && (
@@ -1491,8 +1493,14 @@ export default function PlayerDetailPage() {
                 <div className="flex justify-between">
                   <span className="text-muted">Team</span>
                   <span className="font-semibold text-navy">
-                    {player.current_team}
-                    {player.current_league && <span className="text-xs text-muted ml-1">({formatLeague(player.current_league)})</span>}
+                    <Link href={`/teams/${encodeURIComponent(player.current_team)}`} className="hover:text-teal transition-colors">
+                      {player.current_team}
+                    </Link>
+                    {player.current_league && (
+                      <Link href={`/leagues?league=${encodeURIComponent(player.current_league)}`} className="text-xs text-muted ml-1 hover:text-teal transition-colors">
+                        ({formatLeague(player.current_league)})
+                      </Link>
+                    )}
                   </span>
                 </div>
               )}

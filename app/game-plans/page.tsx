@@ -257,7 +257,9 @@ function ChalkTalkList() {
               </div>
 
               <h3 className="font-oswald font-semibold text-navy text-sm uppercase tracking-wider mb-1 group-hover:text-teal transition-colors">
-                {plan.team_name} vs {plan.opponent_team_name}
+                <span className="hover:text-teal transition-colors" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/teams/${encodeURIComponent(plan.team_name)}`; }}>{plan.team_name}</span>
+                {" vs "}
+                <span className="hover:text-teal transition-colors" onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/teams/${encodeURIComponent(plan.opponent_team_name)}`; }}>{plan.opponent_team_name}</span>
               </h3>
 
               {plan.our_strategy && (

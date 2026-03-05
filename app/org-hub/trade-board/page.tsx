@@ -257,9 +257,9 @@ export default function TradeBoardPage() {
                 </span>
               )}
               {entry.current_team && (
-                <span className="text-[10px] truncate" style={{ color: "#5A7291" }}>
+                <Link href={`/teams/${encodeURIComponent(entry.current_team)}`} className="text-[10px] truncate hover:text-teal transition-colors" style={{ color: "#5A7291" }}>
                   {entry.current_team}
-                </span>
+                </Link>
               )}
             </div>
 

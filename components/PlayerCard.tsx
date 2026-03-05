@@ -31,7 +31,10 @@ export default function PlayerCard({ player }: { player: Player }) {
             </h3>
             <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
               {player.current_team && (
-                <span className="flex items-center gap-1">
+                <span
+                  className="flex items-center gap-1 hover:text-teal transition-colors cursor-pointer"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/teams/${encodeURIComponent(player.current_team!)}`; }}
+                >
                   <MapPin size={10} />
                   {player.current_team}
                 </span>
@@ -40,7 +43,12 @@ export default function PlayerCard({ player }: { player: Player }) {
                 <span className="text-navy/40">|</span>
               )}
               {player.current_league && (
-                <span>{formatLeague(player.current_league)}</span>
+                <span
+                  className="hover:text-teal transition-colors cursor-pointer"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/leagues?league=${encodeURIComponent(player.current_league!)}`; }}
+                >
+                  {formatLeague(player.current_league)}
+                </span>
               )}
             </div>
           </div>

@@ -148,7 +148,12 @@ export default function PlayerCardsPage() {
                       {player.position || "—"} {player.shoots ? `• ${player.shoots}` : ""}
                     </p>
                     {player.current_team && (
-                      <p className="text-[10px] text-navy/60 truncate">{player.current_team}</p>
+                      <p
+                        className="text-[10px] text-navy/60 truncate hover:text-teal transition-colors cursor-pointer"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/teams/${encodeURIComponent(player.current_team!)}`; }}
+                      >
+                        {player.current_team}
+                      </p>
                     )}
                   </div>
                   <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors shrink-0" />

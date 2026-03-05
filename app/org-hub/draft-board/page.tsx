@@ -289,14 +289,14 @@ export default function DraftBoardPage() {
               </span>
             )}
             {entry.current_team && (
-              <span className="text-[11px] truncate" style={{ color: "#5A7291" }}>
+              <Link href={`/teams/${encodeURIComponent(entry.current_team)}`} className="text-[11px] truncate hover:text-teal transition-colors" style={{ color: "#5A7291" }}>
                 {entry.current_team}
-              </span>
+              </Link>
             )}
             {entry.current_league && (
-              <span className="text-[10px]" style={{ color: "#8BA4BB" }}>
+              <Link href={`/leagues?league=${encodeURIComponent(entry.current_league)}`} className="text-[10px] hover:text-teal transition-colors" style={{ color: "#8BA4BB" }}>
                 {entry.current_league}
-              </span>
+              </Link>
             )}
             {entry.birth_year && (
               <span className="text-[10px]" style={{ color: "#8BA4BB" }}>

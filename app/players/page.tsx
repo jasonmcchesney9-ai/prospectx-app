@@ -1196,9 +1196,19 @@ export default function PlayersPage() {
                               {p.position}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-muted">{p.current_team || "\u2014"}</td>
                           <td className="px-4 py-3 text-muted">
-                            {formatLeague(p.current_league) || "\u2014"}
+                            {p.current_team ? (
+                              <Link href={`/teams/${encodeURIComponent(p.current_team)}`} className="hover:text-teal transition-colors">
+                                {p.current_team}
+                              </Link>
+                            ) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-muted">
+                            {p.current_league ? (
+                              <Link href={`/leagues?league=${encodeURIComponent(p.current_league)}`} className="hover:text-teal transition-colors">
+                                {formatLeague(p.current_league)}
+                              </Link>
+                            ) : "—"}
                             {p.league_tier && p.league_tier !== "Unknown" && (
                               <span className="ml-1.5 text-[9px] text-muted/50">({p.league_tier})</span>
                             )}

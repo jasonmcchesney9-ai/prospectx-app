@@ -409,9 +409,13 @@ export default function ScoutingPipeline() {
                                   <div className="flex items-start justify-between mb-1.5">
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       <GripVertical size={12} style={{ color: "#CCD6E0" }} className="shrink-0" />
-                                      <span className="font-bold text-xs truncate" style={{ color: "#0F2942" }}>
-                                        {a.team_to_scout || "TBD"}
-                                      </span>
+                                      {a.team_to_scout ? (
+                                        <Link href={`/teams/${encodeURIComponent(a.team_to_scout)}`} className="font-bold text-xs truncate hover:text-teal transition-colors" style={{ color: "#0F2942" }}>
+                                          {a.team_to_scout}
+                                        </Link>
+                                      ) : (
+                                        <span className="font-bold text-xs" style={{ color: "#0F2942" }}>TBD</span>
+                                      )}
                                     </div>
                                     <span
                                       className="shrink-0 px-1.5 py-0.5 rounded font-bold uppercase"
