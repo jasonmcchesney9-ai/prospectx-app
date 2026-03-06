@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import {
   Users,
@@ -29,11 +29,7 @@ import {
   GraduationCap,
   Shield,
   PenTool,
-  Radio,
   Calendar,
-  UserCheck,
-  Heart,
-  Briefcase,
   MessageSquare,
   Eye,
   Search,
@@ -46,7 +42,6 @@ import {
   RefreshCw,
   Film,
   WifiOff,
-  Wifi,
   Zap,
   CreditCard,
 } from "lucide-react";
@@ -91,130 +86,51 @@ function getRoleGroup(hockeyRole?: string): RoleGroup {
 // ── Nav Item Definitions ──────────────────────────────────────
 type NavItem = { href: string; label: string; icon: React.ElementType; badge?: number };
 
-// PRO nav: full access — most items now in dropdowns
-const PRO_NAV_LEFT: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-];
-const PRO_NAV_RIGHT: NavItem[] = [
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-];
-
-// MEDIA nav — isolated broadcaster environment (Table 12 in spec)
-const MEDIA_NAV_LEFT: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/players", label: "Players", icon: Users },
-  { href: "/teams", label: "Teams", icon: Building2 },
-  { href: "/broadcast", label: "Broadcast Hub", icon: Radio },
-];
-const MEDIA_NAV_RIGHT: NavItem[] = [
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-];
-
-// PLAYER nav — athlete's isolated environment (Table 13 in spec)
-const PLAYER_NAV_LEFT: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/my-profile", label: "My Profile", icon: UserCheck },
-  { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/players", label: "Dev Plan", icon: BookOpen },
-  { href: "/film", label: "Film", icon: Video },
-];
-const PLAYER_NAV_RIGHT: NavItem[] = [
-  { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-];
-
-// FAMILY nav — parent/guardian environment (Table 14 in spec)
-const FAMILY_NAV_LEFT: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/my-player", label: "My Player", icon: Heart },
-  { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/players", label: "Dev Plan", icon: BookOpen },
-  { href: "/film", label: "Film", icon: Video },
-];
-const FAMILY_NAV_RIGHT: NavItem[] = [
-  { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-];
-
-// AGENT nav — agent's isolated environment (Table 15 in spec)
-const AGENT_NAV_LEFT: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/leagues", label: "Leagues", icon: Trophy },
-  { href: "/my-clients", label: "My Clients", icon: Briefcase },
-  { href: "/reports", label: "Reports", icon: FileText },
-];
-const AGENT_NAV_RIGHT: NavItem[] = [
-  { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-];
-
-// Players dropdown items (PRO only)
-const PLAYERS_DROPDOWN_ITEMS: NavItem[] = [
+// ── Hub Dropdown Items ──────────────────────────────────────
+// Player Hub — consolidated player, scouting, and reports items
+const PLAYER_HUB_ITEMS: NavItem[] = [
   { href: "/players", label: "All Players", icon: Users },
-  { href: "/players/manage", label: "Manage Players", icon: Settings },
-  { href: "/scouting", label: "Scouting List", icon: Target },
-  { href: "/players/cards", label: "Player Cards", icon: Eye },
   { href: "/leaderboard", label: "PXR Leaderboard", icon: Trophy },
   { href: "/draft-board", label: "Draft Board (PXR)", icon: BarChart3 },
-];
-
-// Scouting dropdown items (PRO only)
-const SCOUTING_DROPDOWN_ITEMS: NavItem[] = [
+  { href: "/scouting", label: "Scouting List", icon: Target },
+  { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/reports/generate", label: "Generate Report", icon: FileText },
+  { href: "/reports/custom", label: "Custom Report", icon: PenTool },
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
   { href: "/watchlist", label: "Watchlist", icon: Eye },
   { href: "/top-prospects", label: "Top Prospects", icon: Star },
+  { href: "/players/cards", label: "Player Cards", icon: Eye },
+  { href: "/players/manage", label: "Manage Players", icon: Settings },
 ];
 
-// Reports dropdown items (PRO only)
-const REPORTS_DROPDOWN_ITEMS: NavItem[] = [
-  { href: "/reports", label: "Generated Reports", icon: FileText },
-  { href: "/reports/library", label: "Report Library", icon: BookOpen },
-  { href: "/reports/custom", label: "Custom Report", icon: PenTool },
-  { href: "/reports/generate", label: "Generate Report", icon: FileText },
+// Coach Hub — coaching tools
+const COACH_HUB_ITEMS: NavItem[] = [
+  { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
+  { href: "/drills", label: "Drill Library", icon: BookOpen },
+  { href: "/skill-development-lab", label: "Skills Lab", icon: Dumbbell },
+  { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
+  { href: "/coach-documents", label: "Coach Documents", icon: FileText },
+  { href: "/glossary", label: "Glossary", icon: GraduationCap },
 ];
 
-// Teams dropdown items (PRO only)
-const TEAMS_DROPDOWN_ITEMS: NavItem[] = [
-  { href: "/teams", label: "All Teams", icon: Building2 },
-  { href: "/chalk-talk/sessions?scroll=series", label: "Series Plans", icon: Trophy },
+// Game Hub — game day operations
+const GAME_HUB_ITEMS: NavItem[] = [
+  { href: "/chalk-talk/sessions", label: "Game Plans", icon: Swords },
+  { href: "/series", label: "Series Planning", icon: Trophy },
+  { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/team-systems", label: "Team Systems", icon: Shield },
 ];
 
-// Coaching items (PRO only — spec Table 11)
-const COACHING_ITEMS: NavItem[] = [
-  { href: "/drills", label: "Drill Library", icon: BookOpen },
-  { href: "/skill-development-lab", label: "Skills Library", icon: Dumbbell },
-  { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
-  { href: "/practice-plans", label: "Practice Plans", icon: ClipboardList },
-  { href: "/glossary", label: "Hockey Glossary", icon: GraduationCap },
-];
-
-// Org Hub items (PRO only — spec Table 11)
+// Org Hub — org management + imports (PRO only)
 const ORG_HUB_ITEMS: NavItem[] = [
   { href: "/org-hub", label: "Org Hub", icon: Building2 },
   { href: "/org-hub/roster-board", label: "Roster Board", icon: Users },
   { href: "/org-hub/trade-board", label: "Trade Board", icon: ArrowLeftRight },
   { href: "/org-hub/draft-board", label: "Draft Board", icon: Trophy },
   { href: "/org-hub/playbook", label: "System Playbook", icon: BookOpen },
-  { href: "/org-hub/development", label: "Development", icon: TrendingUp },
+  { href: "/org-hub/development", label: "Development Dashboard", icon: TrendingUp },
   { href: "/org-hub/scouting", label: "Scouting Pipeline", icon: Eye },
-  { href: "/org-hub/film-library", label: "Film Library", icon: Film },
-  { href: "/org-hub/whiteboard", label: "Whiteboard", icon: PenTool },
-  { href: "/film", label: "Film Room", icon: Video },
-  { href: "/messages", label: "Messages", icon: MessageSquare },
-];
-
-// Broadcast items (PRO dropdown — MEDIA gets a direct link)
-const BROADCAST_ITEMS: NavItem[] = [
-  { href: "/broadcast", label: "Broadcast Hub", icon: Radio },
-];
-
-// Import items (PRO only)
-const IMPORT_ITEMS: NavItem[] = [
+  { href: "/billing", label: "Billing & Admin", icon: CreditCard },
   { href: "/instat", label: "Import Stats (XLSX)", icon: BarChart3 },
   { href: "/imports", label: "Stat Normalizer", icon: Upload },
   { href: "/players/import", label: "Import Players (CSV)", icon: UserPlus },
@@ -223,37 +139,72 @@ const IMPORT_ITEMS: NavItem[] = [
 ];
 
 // ── Role-aware nav items function ──────────────────────────────
-function getNavItems(group: RoleGroup, hockeyRole?: string): {
-  left: NavItem[]; right: NavItem[];
-  showPlayersDropdown: boolean; showScoutingDropdown: boolean;
-  showReportsDropdown: boolean; showCoaching: boolean;
-  showImports: boolean; showBroadcastDropdown: boolean;
-  showTeamsDropdown: boolean; showOrgHub: boolean;
+// Returns direct-link items + visibility flags for hub dropdowns
+function getNavItems(group: RoleGroup): {
+  directLinks: NavItem[];
+  showPlayerHub: boolean; showCoachHub: boolean;
+  showGameHub: boolean; showOrgHub: boolean;
 } {
   const base = {
-    showPlayersDropdown: false, showScoutingDropdown: false,
-    showReportsDropdown: false, showCoaching: false,
-    showImports: false, showBroadcastDropdown: false,
-    showTeamsDropdown: false, showOrgHub: false,
+    showPlayerHub: false, showCoachHub: false,
+    showGameHub: false, showOrgHub: false,
   };
   switch (group) {
-    case "PRO": {
-      // Coach doesn't see Imports dropdown (spec Table 11 note)
-      const canImport = hockeyRole !== "coach";
-      return { ...base, left: PRO_NAV_LEFT, right: PRO_NAV_RIGHT,
-        showPlayersDropdown: true, showScoutingDropdown: true,
-        showReportsDropdown: true, showCoaching: true,
-        showImports: canImport, showBroadcastDropdown: true,
-        showTeamsDropdown: true, showOrgHub: true };
-    }
+    case "PRO":
+      return {
+        ...base,
+        directLinks: [
+          { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        ],
+        showPlayerHub: true, showCoachHub: true,
+        showGameHub: true, showOrgHub: true,
+      };
     case "MEDIA":
-      return { ...base, left: MEDIA_NAV_LEFT, right: MEDIA_NAV_RIGHT };
+      return {
+        ...base,
+        directLinks: [
+          { href: "/", label: "Dashboard", icon: LayoutDashboard },
+          { href: "/leagues", label: "League Hub", icon: Trophy },
+          { href: "/film", label: "Film Hub", icon: Video },
+          { href: "/schedule", label: "Schedule", icon: Calendar },
+        ],
+        showPlayerHub: true,
+      };
     case "PLAYER":
-      return { ...base, left: PLAYER_NAV_LEFT, right: PLAYER_NAV_RIGHT };
+      return {
+        ...base,
+        directLinks: [
+          { href: "/", label: "Dashboard", icon: LayoutDashboard },
+          { href: "/leagues", label: "League Hub", icon: Trophy },
+          { href: "/film", label: "Film Hub", icon: Video },
+          { href: "/schedule", label: "Schedule", icon: Calendar },
+          { href: "/messages", label: "Messages", icon: MessageSquare },
+        ],
+        showPlayerHub: true,
+      };
     case "FAMILY":
-      return { ...base, left: FAMILY_NAV_LEFT, right: FAMILY_NAV_RIGHT };
+      return {
+        ...base,
+        directLinks: [
+          { href: "/", label: "Dashboard", icon: LayoutDashboard },
+          { href: "/leagues", label: "League Hub", icon: Trophy },
+          { href: "/film", label: "Film Hub", icon: Video },
+          { href: "/schedule", label: "Schedule", icon: Calendar },
+          { href: "/messages", label: "Messages", icon: MessageSquare },
+        ],
+        showPlayerHub: true,
+      };
     case "AGENT":
-      return { ...base, left: AGENT_NAV_LEFT, right: AGENT_NAV_RIGHT };
+      return {
+        ...base,
+        directLinks: [
+          { href: "/", label: "Dashboard", icon: LayoutDashboard },
+          { href: "/leagues", label: "League Hub", icon: Trophy },
+          { href: "/schedule", label: "Schedule", icon: Calendar },
+          { href: "/messages", label: "Messages", icon: MessageSquare },
+        ],
+        showPlayerHub: true,
+      };
   }
 }
 
@@ -292,34 +243,16 @@ const ROLE_GROUP_TO_HOCKEY_ROLE: Record<RoleGroup, string> = {
 // ── Main NavBar ────────────────────────────────────────────────
 export default function NavBar() {
   const pathname = usePathname();
-  const router = useRouter();
   const user = getUser();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [agentClientCount, setAgentClientCount] = useState<number>(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
-
-  /* Game Plans nav — always go to hub */
-  const handleGamePlansNav = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setMobileOpen(false);
-    router.push("/chalk-talk/sessions");
-  };
 
   // Effective role: admin override takes priority, otherwise real role
   const effectiveHockeyRole = roleOverride || user?.hockey_role;
   const roleGroup = getRoleGroup(effectiveHockeyRole);
-  const isAgent = roleGroup === "AGENT";
-  const hasMessages = roleGroup === "MEDIA" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "AGENT";
-
-  // Fetch client count for agent badge
-  useEffect(() => {
-    if (!isAgent) return;
-    api.get("/agent/clients")
-      .then((res) => setAgentClientCount(Array.isArray(res.data) ? res.data.length : 0))
-      .catch(() => {});
-  }, [isAgent]);
+  const hasMessages = roleGroup === "PRO" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "AGENT";
 
   // Fetch unread message count (poll every 30s)
   useEffect(() => {
@@ -336,7 +269,7 @@ export default function NavBar() {
 
   if (pathname === "/login") return null;
 
-  const navConfig = getNavItems(roleGroup, effectiveHockeyRole);
+  const navConfig = getNavItems(roleGroup);
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const isPreviewing = !!roleOverride;
 
@@ -346,30 +279,11 @@ export default function NavBar() {
   const orgShortName = user?.org_short_name;
   const hasOrgBranding = !!orgPrimary && orgPrimary !== "#0D9488"; // Skip default teal
 
-  // Inject badge into agent Clients nav item
-  if (isAgent && agentClientCount > 0) {
-    navConfig.left = navConfig.left.map((item) =>
-      item.href === "/my-clients" ? { ...item, badge: agentClientCount } : item
-    );
-  }
-
-  // Fix Dev Plan link for FAMILY/PLAYER — use linked player if available
-  if (roleGroup === "FAMILY" || roleGroup === "PLAYER") {
-    const linkedId = user?.linked_player_id;
-    const devPlanHref = linkedId ? `/players/${linkedId}?tab=devplan` : "/my-player";
-    navConfig.left = navConfig.left.map((item) =>
-      item.label === "Dev Plan" ? { ...item, href: devPlanHref } : item
-    );
-  }
-
-  // Inject unread badge into Messages nav item
+  // Inject unread badge into Messages direct link
   if (hasMessages && unreadMsgCount > 0) {
-    const injectBadge = (items: NavItem[]) =>
-      items.map((item) =>
-        item.href === "/messages" ? { ...item, badge: unreadMsgCount } : item
-      );
-    navConfig.left = injectBadge(navConfig.left);
-    navConfig.right = injectBadge(navConfig.right);
+    navConfig.directLinks = navConfig.directLinks.map((item) =>
+      item.href === "/messages" ? { ...item, badge: unreadMsgCount } : item
+    );
   }
 
   return (
@@ -405,55 +319,44 @@ export default function NavBar() {
             )}
           </Link>
 
-          {/* ── Center Nav ── */}
+          {/* ── Center Nav — Hub Structure ── */}
           <div className="hidden md:flex items-center gap-1 flex-1 justify-center min-w-0">
-            {navConfig.left.map((item) => (
+            {/* Direct links (Dashboard always first) */}
+            {navConfig.directLinks.filter(l => l.label === "Dashboard").map((item) => (
               <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
 
-            {/* Players dropdown (PRO only) */}
-            {navConfig.showPlayersDropdown && <PlayersDropdown pathname={pathname} />}
+            {/* Player Hub dropdown */}
+            {navConfig.showPlayerHub && <PlayerHubDropdown pathname={pathname} roleGroup={roleGroup} />}
 
-            {/* Scouting dropdown (PRO only) */}
-            {navConfig.showScoutingDropdown && <ScoutingDropdown pathname={pathname} />}
+            {/* Coach Hub dropdown (PRO only) */}
+            {navConfig.showCoachHub && <CoachHubDropdown pathname={pathname} />}
 
-            {/* Reports dropdown (PRO only) */}
-            {navConfig.showReportsDropdown && <ReportsDropdown pathname={pathname} />}
+            {/* Game Hub dropdown (PRO only) */}
+            {navConfig.showGameHub && <GameHubDropdown pathname={pathname} />}
 
-            {/* Teams dropdown (PRO only) */}
-            {navConfig.showTeamsDropdown && <TeamsDropdown pathname={pathname} />}
-
-            {/* Coaching dropdown (PRO only) */}
-            {navConfig.showCoaching && <CoachingDropdown pathname={pathname} />}
-
-            {/* Game Plans — top-level (PRO only) */}
-            {navConfig.showCoaching && (
-              <button
-                onClick={handleGamePlansNav}
-                title="Game Plans"
-                className={`flex items-center gap-1.5 px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-                  pathname.startsWith("/chalk-talk")
-                    ? "bg-white/10 text-teal"
-                    : "text-white/70 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Swords size={16} className="shrink-0" />
-                <span className="hidden xl:inline">Game Plans</span>
-              </button>
+            {/* Film Hub — direct link (PRO + PLAYER + FAMILY + MEDIA) */}
+            {(roleGroup === "PRO" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "MEDIA") && (
+              <NavLink href="/film" label="Film Hub" icon={Video} pathname={pathname} />
             )}
 
-            {/* Org Hub dropdown (PRO only — between Coaching and Imports) */}
+            {/* Org Hub dropdown (PRO only) */}
             {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
 
-            {/* Broadcast dropdown (PRO only — MEDIA gets direct link via MEDIA_NAV_LEFT) */}
-            {navConfig.showBroadcastDropdown && <BroadcastDropdown pathname={pathname} />}
+            {/* League Hub — direct link (all roles) */}
+            {(roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "League Hub")) && (
+              <NavLink href="/leagues" label="League Hub" icon={Trophy} pathname={pathname} />
+            )}
 
-            {/* Imports dropdown (PRO only) */}
-            {navConfig.showImports && <ImportDropdown pathname={pathname} />}
+            {/* Schedule — direct link (PRO + all non-PRO that have it) */}
+            {(roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "Schedule")) && (
+              <NavLink href="/schedule" label="Schedule" icon={Calendar} pathname={pathname} />
+            )}
 
-            {navConfig.right.map((item) => (
-              <NavLink key={item.href} {...item} pathname={pathname} />
-            ))}
+            {/* Messages — direct link (PRO + roles that have it) */}
+            {(roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "Messages")) && (
+              <NavLink href="/messages" label="Messages" icon={MessageSquare} pathname={pathname} badge={unreadMsgCount > 0 ? unreadMsgCount : undefined} />
+            )}
           </div>
 
           {/* ── User + Role Badge + Tier Badge + Logout (far right) ── */}
@@ -515,13 +418,6 @@ export default function NavBar() {
                 )}
               </>
             )}
-            <Link
-              href="/billing"
-              className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition-colors"
-            >
-              <CreditCard size={14} />
-              Billing
-            </Link>
             <button
               onClick={logout}
               className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition-colors"
@@ -616,205 +512,120 @@ export default function NavBar() {
         </div>
       )}
 
-      {/* ── Mobile Menu (role-filtered) ── */}
+      {/* ── Mobile Menu (hub-structured, role-filtered) ── */}
       {mobileOpen && (
         <div className="md:hidden border-t border-white/10 px-4 pb-4">
-          {[...navConfig.left, ...navConfig.right].map(({ href, label, icon: Icon, badge }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-            return (
+          {/* Dashboard — always first */}
+          <Link
+            href="/"
+            onClick={() => setMobileOpen(false)}
+            className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+              pathname === "/" ? "text-teal" : "text-white/70"
+            }`}
+          >
+            <LayoutDashboard size={16} />
+            Dashboard
+          </Link>
+
+          {/* Player Hub section */}
+          {navConfig.showPlayerHub && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Player Hub
+              </p>
+              {PLAYER_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Coach Hub section (PRO only) */}
+          {navConfig.showCoachHub && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Coach Hub
+              </p>
+              {COACH_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Game Hub section (PRO only) */}
+          {navConfig.showGameHub && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Game Hub
+              </p>
+              {GAME_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Film Hub — direct link */}
+          {(roleGroup === "PRO" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "MEDIA") && (
+            <div className="border-t border-white/10 mt-1 pt-1">
               <Link
-                key={href}
-                href={href}
+                href="/film"
                 onClick={() => setMobileOpen(false)}
                 className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                  active ? "text-teal" : "text-white/70"
+                  pathname.startsWith("/film") ? "text-teal" : "text-white/70"
                 }`}
               >
-                <Icon size={16} />
-                {label}
-                {badge != null && badge > 0 && (
-                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-teal text-white text-[9px] font-bold leading-none">
-                    {badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-
-          {/* Players section (PRO only — mobile) */}
-          {navConfig.showPlayersDropdown && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Players
-              </p>
-              {PLAYERS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Scouting section (PRO only — mobile) */}
-          {navConfig.showScoutingDropdown && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Scouting
-              </p>
-              {SCOUTING_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Reports section (PRO only — mobile) */}
-          {navConfig.showReportsDropdown && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Reports
-              </p>
-              {REPORTS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Teams section (PRO only — mobile) */}
-          {navConfig.showTeamsDropdown && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Teams
-              </p>
-              {TEAMS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Game Plans — top-level (PRO only — mobile) */}
-          {navConfig.showCoaching && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <Link
-                href="/chalk-talk/sessions"
-                onClick={handleGamePlansNav}
-                className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                  pathname.startsWith("/chalk-talk") ? "text-teal" : "text-white/70"
-                }`}
-              >
-                <Swords size={16} />
-                Game Plans
+                <Video size={16} />
+                Film Hub
               </Link>
             </div>
           )}
 
-          {/* Coaching section (PRO only) */}
-          {navConfig.showCoaching && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Coaching
-              </p>
-              {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Broadcast section (PRO mobile) */}
-          {navConfig.showBroadcastDropdown && (
-            <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Broadcast
-              </p>
-              {BROADCAST_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Org Hub section (PRO only — mobile) */}
+          {/* Org Hub section (PRO only) */}
           {navConfig.showOrgHub && (
             <div className="border-t border-white/10 mt-1 pt-1">
               <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
                 Org Hub
               </p>
               {ORG_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname.startsWith(href);
+                const active = pathname.startsWith(href) || pathname === href;
                 return (
                   <Link
                     key={href}
@@ -832,28 +643,52 @@ export default function NavBar() {
             </div>
           )}
 
-          {/* Import & Manage section (PRO only) */}
-          {navConfig.showImports && (
+          {/* League Hub — direct link */}
+          <div className="border-t border-white/10 mt-1 pt-1">
+            <Link
+              href="/leagues"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                pathname.startsWith("/leagues") ? "text-teal" : "text-white/70"
+              }`}
+            >
+              <Trophy size={16} />
+              League Hub
+            </Link>
+          </div>
+
+          {/* Schedule — direct link */}
+          <div className="border-t border-white/10 mt-1 pt-1">
+            <Link
+              href="/schedule"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                pathname.startsWith("/schedule") ? "text-teal" : "text-white/70"
+              }`}
+            >
+              <Calendar size={16} />
+              Schedule
+            </Link>
+          </div>
+
+          {/* Messages — direct link (PRO + roles with messaging) */}
+          {(roleGroup === "PRO" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "AGENT") && (
             <div className="border-t border-white/10 mt-1 pt-1">
-              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Import & Manage
-              </p>
-              {IMPORT_ITEMS.map(({ href, label, icon: Icon }) => {
-                const active = pathname === href;
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
-                      active ? "text-teal" : "text-white/70"
-                    }`}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </Link>
-                );
-              })}
+              <Link
+                href="/messages"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                  pathname.startsWith("/messages") ? "text-teal" : "text-white/70"
+                }`}
+              >
+                <MessageSquare size={16} />
+                Messages
+                {unreadMsgCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-teal text-white text-[9px] font-bold leading-none">
+                    {unreadMsgCount}
+                  </span>
+                )}
+              </Link>
             </div>
           )}
 
@@ -872,14 +707,6 @@ export default function NavBar() {
               </Link>
             </div>
           )}
-          <Link
-            href="/billing"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 px-3 py-3 text-sm text-white/50 hover:text-white"
-          >
-            <CreditCard size={16} />
-            Billing
-          </Link>
           <button
             onClick={logout}
             className="flex items-center gap-2 px-3 py-3 text-sm text-white/50 hover:text-white w-full"
@@ -1177,13 +1004,19 @@ function UploadIndicator() {
   );
 }
 
-// ── Dropdown Components ────────────────────────────────────────
+// ── Hub Dropdown Components ────────────────────────────────────
 
-function PlayersDropdown({ pathname }: { pathname: string }) {
+function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGroup: RoleGroup }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const isActive = PLAYERS_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
+  // Filter items by role: AGENT sees My Clients + Players + Reports only; MEDIA sees Players + Leaderboard (read-only); PLAYER/FAMILY see limited set
+  const items = roleGroup === "PRO" ? PLAYER_HUB_ITEMS
+    : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
+    : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
+    : PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href));
+
+  const isActive = items.some((item) => pathname.startsWith(item.href));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1206,13 +1039,13 @@ function PlayersDropdown({ pathname }: { pathname: string }) {
         }`}
       >
         <Users size={16} />
-        Players
+        Player Hub
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {PLAYERS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
+        <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {items.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
@@ -1236,202 +1069,11 @@ function PlayersDropdown({ pathname }: { pathname: string }) {
   );
 }
 
-function ScoutingDropdown({ pathname }: { pathname: string }) {
+function CoachHubDropdown({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const isActive = SCOUTING_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
-        }`}
-      >
-        <ClipboardCheck size={16} />
-        Scouting
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {SCOUTING_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-white/10 text-teal"
-                    : "text-white/70 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon size={15} />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReportsDropdown({ pathname }: { pathname: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const isActive = REPORTS_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
-        }`}
-      >
-        <FileText size={16} />
-        Reports
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {REPORTS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-white/10 text-teal"
-                    : "text-white/70 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon size={15} />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TeamsDropdown({ pathname }: { pathname: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const isActive = TEAMS_DROPDOWN_ITEMS.some((item) => pathname.startsWith(item.href));
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
-        }`}
-      >
-        <Building2 size={16} />
-        Teams
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {TEAMS_DROPDOWN_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-white/10 text-teal"
-                    : "text-white/70 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon size={15} />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CoachingDropdown({ pathname }: { pathname: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-
-  const isActive = COACHING_ITEMS.some((item) => pathname.startsWith(item.href));
-
-  /* Smart nav: skip list page for single-session coaches */
-  const handleGamePlansClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    setOpen(false);
-    try {
-      const { data } = await api.get("/chalk-talk-sessions?limit=2");
-      const sessions = Array.isArray(data) ? data : [];
-      if (sessions.length === 0) {
-        router.push("/chalk-talk/new");
-      } else if (sessions.length === 1) {
-        router.push(`/chalk-talk/sessions/${sessions[0].id}`);
-      } else {
-        router.push("/chalk-talk/sessions");
-      }
-    } catch {
-      router.push("/chalk-talk/sessions");
-    }
-  };
+  const isActive = COACH_HUB_ITEMS.some((item) => pathname.startsWith(item.href));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1454,20 +1096,19 @@ function CoachingDropdown({ pathname }: { pathname: string }) {
         }`}
       >
         <ClipboardList size={16} />
-        Coaching
+        Coach Hub
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {COACHING_ITEMS.map(({ href, label, icon: Icon }) => {
+        <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {COACH_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
-            const isGamePlans = href === "/chalk-talk/sessions";
             return (
               <Link
                 key={href}
                 href={href}
-                onClick={isGamePlans ? handleGamePlansClick : () => setOpen(false)}
+                onClick={() => setOpen(false)}
                 className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
                   active
                     ? "bg-white/10 text-teal"
@@ -1485,11 +1126,11 @@ function CoachingDropdown({ pathname }: { pathname: string }) {
   );
 }
 
-function BroadcastDropdown({ pathname }: { pathname: string }) {
+function GameHubDropdown({ pathname }: { pathname: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const isActive = pathname.startsWith("/broadcast");
+  const isActive = GAME_HUB_ITEMS.some((item) => pathname.startsWith(item.href));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1511,14 +1152,14 @@ function BroadcastDropdown({ pathname }: { pathname: string }) {
             : "text-white/70 hover:bg-white/5 hover:text-white"
         }`}
       >
-        <Radio size={16} />
-        Broadcast
+        <Swords size={16} />
+        Game Hub
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {BROADCAST_ITEMS.map(({ href, label, icon: Icon }) => {
+        <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {GAME_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
@@ -1568,15 +1209,15 @@ function OrgHubDropdown({ pathname }: { pathname: string }) {
             : "text-white/70 hover:bg-white/5 hover:text-white"
         }`}
       >
-        <Video size={16} />
+        <Building2 size={16} />
         Org Hub
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+        <div className="absolute left-0 mt-1 w-64 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
           {ORG_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
+            const active = pathname.startsWith(href) || pathname === href;
             return (
               <Link
                 key={href}
@@ -1678,59 +1319,3 @@ function AdminRoleSwitcher({ currentGroup, onSwitch, onReset, isPreviewing }: { 
   );
 }
 
-function ImportDropdown({ pathname }: { pathname: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const isActive = IMPORT_ITEMS.some((item) => pathname === item.href);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
-        }`}
-      >
-        <Upload size={16} />
-        Imports
-        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
-          {IMPORT_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-white/10 text-teal"
-                    : "text-white/70 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon size={15} />
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
