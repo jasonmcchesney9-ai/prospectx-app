@@ -1541,23 +1541,6 @@ export default function PlayerDetailPage() {
                 </div>
 
                 <div style={{ padding: "14px 16px 16px" }}>
-                  {/* ── Player Archetype section ── */}
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: "#EA580C", display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1 3.5H11L8 6.5l1 3.5L6 8l-3 2 1-3.5L1 4.5h4L6 1Z" fill="#EA580C"/></svg>
-                      Player Archetype
-                    </div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: "#0F2942", letterSpacing: -0.3, marginBottom: 4 }}>
-                      {intelligence.archetype || player.archetype || "Unclassified"}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "#5A7291", lineHeight: 1.5 }}>
-                      Compound archetypes help the AI understand the full player profile for system fit analysis.
-                    </div>
-                  </div>
-
-                  {/* ── Divider ── */}
-                  <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
-
                   {/* ── PROSPECTX METRICS heading ── */}
                   <div style={{ marginBottom: 6 }}>
                     <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: "#0F2942", marginBottom: 2 }}>ProspectX Metrics</div>
@@ -1575,20 +1558,6 @@ export default function PlayerDetailPage() {
                   </div>
                   <div style={{ fontSize: 9.5, color: "#8BA4BB", marginTop: 10, fontFamily: "'DM Mono', monospace", textAlign: "right" as const }}>
                     Based on {gpSeason?.gp ?? "—"} GP ({gpSeason?.season || "2025-26"})
-                  </div>
-
-                  {/* ── Divider ── */}
-                  <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
-
-                  {/* ── Role projection + band ── */}
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(13,148,136,.08)", border: "1px solid rgba(13,148,136,.2)", color: "#0D9488", borderRadius: 6, padding: "5px 12px", marginBottom: 10, fontSize: 12.5, fontWeight: 700 }}>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L7.5 4.5H11L8.5 6.8L9.5 10.5L6 8.3L2.5 10.5L3.5 6.8L1 4.5H4.5L6 1Z" fill="#0D9488"/></svg>
-                    {intelligence.archetype || player.archetype || "Unclassified"}
-                    {intelligence.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
-                      <span style={{ display: "inline-block", background: "rgba(234,88,12,.1)", border: "1px solid rgba(234,88,12,.25)", color: "#EA580C", borderRadius: 4, padding: "2px 8px", marginLeft: 6, fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: ".03em" }}>
-                        {gradeToOverallBand(intelligence.overall_grade)}
-                      </span>
-                    )}
                   </div>
 
                   {/* ── Intel narrative ── */}
