@@ -1250,19 +1250,24 @@ export default function PlayerDetailPage() {
             {(() => {
               const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
               if (!currentSeason) return null;
-              const statItems = [
-                ["GP", currentSeason.gp],
-                ["G", currentSeason.g],
-                ["A", currentSeason.a],
-                ["PTS", currentSeason.p],
-                ["PPG", currentSeason.gp > 0 ? (currentSeason.p / currentSeason.gp).toFixed(2) : "—"],
-                ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—"],
-                ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—")],
-                ["PIM", currentSeason.pim],
+              // Compute PXI composite average from 6 dimension scores
+              const pxiMetricsForBar = buildPxiMetrics(playerMetrics, pxrData);
+              const hasRealPxi = playerMetrics || pxrData;
+              const pxiAvg = hasRealPxi ? Math.round(pxiMetricsForBar.reduce((sum, m) => sum + m.score, 0) / pxiMetricsForBar.length) : null;
+              const statItems: [string, string | number, string | null][] = [
+                ["GP", currentSeason.gp, null],
+                ["G", currentSeason.g, null],
+                ["A", currentSeason.a, null],
+                ["PTS", currentSeason.p, null],
+                ["PPG", currentSeason.gp > 0 ? (currentSeason.p / currentSeason.gp).toFixed(2) : "—", null],
+                ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—", null],
+                ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—"), null],
+                ["PIM", currentSeason.pim, null],
+                ["PXI", pxiAvg != null ? pxiAvg : "—", "#14B8A8"],
               ];
-              return statItems.map(([label, value]) => (
+              return statItems.map(([label, value, colorOverride]) => (
                 <div key={label as string} style={{ flex: 1, textAlign: "center", padding: "10px 8px", borderRight: "1px solid rgba(255,255,255,.05)" }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: label === "PTS" ? "#14B8A8" : "white", lineHeight: 1, letterSpacing: -0.3 }}>{value}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: colorOverride || (label === "PTS" ? "#14B8A8" : "white"), lineHeight: 1, letterSpacing: -0.3 }}>{value}</div>
                   <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.3)", marginTop: 2 }}>{label as string}</div>
                 </div>
               ));
@@ -1610,6 +1615,89 @@ export default function PlayerDetailPage() {
                 </button>
               </div>
             )}
+
+            {/* ── PXR Score Profile Card ── */}
+            {(() => {
+              const pxrTierLabel = (score: number): string => {
+                if (score >= 90) return "ELITE";
+                if (score >= 80) return "HIGH IMPACT";
+                if (score >= 70) return "SOLID STARTER";
+                if (score >= 60) return "DEPTH PLAYER";
+                if (score >= 50) return "DEVELOPMENTAL";
+                return "FRINGE";
+              };
+              const hasPxr = pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 && pxrData.toi_gate_met;
+              return (
+                <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                  {/* Teal left stripe */}
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+                  {/* Card band header */}
+                  <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXR Score Profile</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, letterSpacing: ".06em", textTransform: "uppercase", background: hasPxr ? "rgba(13,148,136,.15)" : "rgba(255,255,255,.08)", color: hasPxr ? "#14B8A8" : "rgba(255,255,255,.4)", border: hasPxr ? "1px solid rgba(13,148,136,.25)" : "1px solid rgba(255,255,255,.1)" }}>
+                      {hasPxr ? pxrTierLabel(pxrData.pxr_score) : "Needs Data"}
+                    </span>
+                  </div>
+
+                  <div style={{ padding: "14px 16px 16px" }}>
+                    {!hasPxr ? (
+                      /* Empty state */
+                      <div style={{ textAlign: "center", padding: "16px 0" }}>
+                        <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.3 }}>📊</div>
+                        <p style={{ fontSize: 12, color: "#5A7291", lineHeight: 1.6, maxWidth: 300, margin: "0 auto 14px" }}>
+                          PXR scores require InStat advanced stats with 60+ minutes ice time. Import InStat data to populate.
+                        </p>
+                        <Link href="/instat" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", textDecoration: "none", fontFamily: "'DM Sans', sans-serif" }}>
+                          <Upload size={12} /> Import Data
+                        </Link>
+                      </div>
+                    ) : (
+                      /* PXR data display */
+                      <>
+                        {/* Large composite score */}
+                        <div style={{ textAlign: "center", marginBottom: 16 }}>
+                          <div style={{ fontSize: 42, fontWeight: 800, color: "#0D9488", lineHeight: 1, letterSpacing: -1 }}>{pxrData.pxr_score.toFixed(1)}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#5A7291", marginTop: 4 }}>{pxrTierLabel(pxrData.pxr_score)}</div>
+                        </div>
+
+                        {/* Four pillar bars */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {([
+                            ["P1 — Offense", pxrData.p1_offense],
+                            ["P2 — Defense", pxrData.p2_defense],
+                            ["P3 — Possession", pxrData.p3_possession],
+                            ["P4 — Physical", pxrData.p4_physical],
+                          ] as [string, number | null][]).map(([label, val]) => (
+                            <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, color: "#5A7291", width: 100, flexShrink: 0, letterSpacing: ".04em" }}>{label}</span>
+                              <div style={{ flex: 1, height: 8, borderRadius: 4, background: "#EEF3F8", overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${Math.min(100, val ?? 0)}%`, borderRadius: 4, background: "#0D9488", transition: "width .3s" }} />
+                              </div>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, color: "#0D9488", width: 28, textAlign: "right", flexShrink: 0 }}>{val != null ? Math.round(val) : "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Percentile chips + age modifier */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+                          {pxrData.league_percentile != null && (
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(13,148,136,.1)", color: "#0D9488", letterSpacing: ".04em" }}>League P{Math.round(pxrData.league_percentile)}</span>
+                          )}
+                          {pxrData.cohort_percentile != null && (
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(13,148,136,.1)", color: "#0D9488", letterSpacing: ".04em" }}>Cohort P{Math.round(pxrData.cohort_percentile)}</span>
+                          )}
+                          {pxrData.age_modifier != null && pxrData.age_modifier !== 0 && (
+                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: pxrData.age_modifier > 0 ? "rgba(34,197,94,.1)" : "rgba(249,115,22,.1)", color: pxrData.age_modifier > 0 ? "#16A34A" : "#EA580C", letterSpacing: ".04em" }}>
+                              Age {pxrData.age_modifier > 0 ? "+" : ""}{pxrData.age_modifier.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Team System Context */}
             {teamSystem ? (
