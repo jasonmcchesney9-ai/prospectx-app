@@ -87,8 +87,11 @@ export default function LeagueHubPage() {
 
   const [league, setLeague] = useState("gojhl");
   const [tab, setTab] = useState<Tab>("standings");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadingStandings, setLoadingStandings] = useState(true);
+  const [loadingLeaders, setLoadingLeaders] = useState(true);
+  const [loadingGames, setLoadingGames] = useState(true);
+  const [loadingTeams, setLoadingTeams] = useState(true);
+  const [failedSections, setFailedSections] = useState<Set<string>>(new Set());
 
   // Data
   const [standings, setStandings] = useState<HTStandings[]>([]);
@@ -108,28 +111,41 @@ export default function LeagueHubPage() {
   }, [league]);
 
   const loadData = async () => {
-    setLoading(true);
-    setError("");
+    // Reset per-section loading states
+    setLoadingStandings(true);
+    setLoadingLeaders(true);
+    setLoadingGames(true);
+    setLoadingTeams(true);
+    setFailedSections(new Set());
     // Reset goalie cache on league change
     setGoaliesLoaded(false);
     setGoalieStats([]);
-    try {
-      const [standingsRes, leadersRes, gamesRes, teamsRes] = await Promise.all([
-        api.get<HTStandings[]>(`/hockeytech/${league}/standings`),
-        api.get<HTSkaterStats[]>(`/hockeytech/${league}/stats/leaders?limit=100`),
-        api.get<HTGame[]>(`/hockeytech/${league}/scorebar?days_back=15&days_ahead=15`),
-        api.get<HTTeam[]>(`/hockeytech/${league}/teams`),
-      ]);
-      setStandings(standingsRes.data);
-      setLeaders(leadersRes.data);
-      setGames(gamesRes.data);
-      setTeams(teamsRes.data);
-    } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message || "Failed to load league data";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+
+    const failed = new Set<string>();
+
+    // Fetch 1: Standings
+    api.get<HTStandings[]>(`/hockeytech/${league}/standings`)
+      .then((res) => setStandings(res.data))
+      .catch(() => { setStandings([]); failed.add("standings"); setFailedSections(new Set(failed)); })
+      .finally(() => setLoadingStandings(false));
+
+    // Fetch 2: Player Stats (leaders)
+    api.get<HTSkaterStats[]>(`/hockeytech/${league}/stats/leaders?limit=100`)
+      .then((res) => setLeaders(res.data))
+      .catch(() => { setLeaders([]); failed.add("leaders"); setFailedSections(new Set(failed)); })
+      .finally(() => setLoadingLeaders(false));
+
+    // Fetch 3: Schedule (scorebar)
+    api.get<HTGame[]>(`/hockeytech/${league}/scorebar?days_back=15&days_ahead=15`)
+      .then((res) => setGames(res.data))
+      .catch(() => { setGames([]); failed.add("games"); setFailedSections(new Set(failed)); })
+      .finally(() => setLoadingGames(false));
+
+    // Fetch 4: Teams
+    api.get<HTTeam[]>(`/hockeytech/${league}/teams`)
+      .then((res) => setTeams(res.data))
+      .catch(() => { setTeams([]); failed.add("teams"); setFailedSections(new Set(failed)); })
+      .finally(() => setLoadingTeams(false));
   };
 
   const loadGoalies = async () => {
@@ -228,10 +244,10 @@ export default function LeagueHubPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center gap-2">
+        {failedSections.size >= 2 && (
+          <div className="mb-4 px-4 py-3 rounded-xl flex items-center gap-2" style={{ background: "rgba(217,119,6,0.1)", border: "1px solid rgba(217,119,6,0.3)", color: "#B45309" }}>
             <AlertCircle size={16} />
-            {error}
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>Live data temporarily unavailable &mdash; showing last synced data</span>
           </div>
         )}
 
@@ -256,26 +272,47 @@ export default function LeagueHubPage() {
           })}
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={32} className="text-teal animate-spin" />
-            <span className="ml-3 text-muted">Loading {leagueInfo.label} data...</span>
-          </div>
-        ) : (
-          <>
-            {tab === "standings" && <StandingsTab standings={standings} />}
-            {tab === "player-stats" && (
-              <PlayerStatsTab
-                skaters={leaders}
-                goalies={goalieStats}
-                goalieLoading={goalieLoading}
-                onLoadGoalies={loadGoalies}
-                league={league}
-              />
-            )}
-            {tab === "schedule" && <ScheduleTab games={games} teams={teams} />}
-            {tab === "teams" && <TeamsTab teams={teams} league={league} />}
-          </>
+        {tab === "standings" && (
+          loadingStandings ? (
+            <SectionLoader label="standings" />
+          ) : failedSections.has("standings") ? (
+            <EmptyState text="Data temporarily unavailable" />
+          ) : (
+            <StandingsTab standings={standings} />
+          )
+        )}
+        {tab === "player-stats" && (
+          loadingLeaders ? (
+            <SectionLoader label="player stats" />
+          ) : failedSections.has("leaders") ? (
+            <EmptyState text="Data temporarily unavailable" />
+          ) : (
+            <PlayerStatsTab
+              skaters={leaders}
+              goalies={goalieStats}
+              goalieLoading={goalieLoading}
+              onLoadGoalies={loadGoalies}
+              league={league}
+            />
+          )
+        )}
+        {tab === "schedule" && (
+          loadingGames || loadingTeams ? (
+            <SectionLoader label="schedule" />
+          ) : failedSections.has("games") ? (
+            <EmptyState text="Data temporarily unavailable" />
+          ) : (
+            <ScheduleTab games={games} teams={teams} />
+          )
+        )}
+        {tab === "teams" && (
+          loadingTeams ? (
+            <SectionLoader label="teams" />
+          ) : failedSections.has("teams") ? (
+            <EmptyState text="Data temporarily unavailable" />
+          ) : (
+            <TeamsTab teams={teams} league={league} />
+          )
         )}
       </main>
     </ProtectedRoute>
@@ -1204,6 +1241,17 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Section Loader (skeleton per tab) ────────────────────────────────
+
+function SectionLoader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <Loader2 size={32} className="text-teal animate-spin" />
+      <span className="ml-3 text-muted">Loading {label}...</span>
     </div>
   );
 }
