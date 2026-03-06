@@ -920,135 +920,76 @@ function Dashboard() {
         {/* ── FAMILY View (Player / Parent) ─────────────────── */}
         {roleGroup === "FAMILY" && (
           <>
-            {/* Live Scorebar */}
-            {scorebar.length > 0 && (
-              <div className="mb-4">
-                <LiveScorebar scorebar={scorebar} teamName={activeTeam?.name || ""} scorebarLeague={scorebarLeague} onLeagueChange={setScorebarLeague} />
+            {/* 1. Player Summary Card */}
+            <FamilyPlayerSpotlight scoringLeaders={scoringLeaders} loading={teamDataLoading} />
+
+            {/* 2. Upcoming Games */}
+            <div className="bg-white rounded-xl border border-border mt-4">
+              <div className="px-5 py-3 border-b border-border bg-gradient-to-r from-navy to-navy/90 rounded-t-xl">
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} className="text-teal" />
+                  <h3 className="font-oswald text-xs font-bold text-white uppercase tracking-wider">Upcoming Games</h3>
+                </div>
               </div>
-            )}
-
-            {/* Team Leaders */}
-            {!teamDataLoading && scoringLeaders.length > 0 && (
-              <DashboardCard
-                icon={<BarChart3 size={15} className="text-teal" />}
-                title={`${activeTeam?.name || "Team"} Leaders`}
-                viewAllHref={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}` : "/teams"}
-                loading={teamDataLoading}
-                empty={false}
-              >
-                <div className="space-y-1">
-                  {scoringLeaders.map((l, i) => (
-                    <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
-                      <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
-                      <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
-                        {l.first_name} {l.last_name}
-                      </span>
-                      <span className="font-oswald text-muted/60 w-6 text-center">{l.gp}</span>
-                      <span className="font-oswald text-navy/80 w-14 text-right">
-                        {l.g}G-{l.a}A—<strong>{l.p}</strong>
-                      </span>
-                      <span className="font-oswald text-teal font-bold w-8 text-right">{(l.ppg ?? 0).toFixed(2)}</span>
-                    </Link>
-                  ))}
-                  <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
-                    <span>Player</span>
-                    <span className="flex gap-3"><span>GP</span><span>G-A—P</span><span>P/G</span></span>
-                  </div>
-                </div>
-              </DashboardCard>
-            )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-            {/* Left (3/5) */}
-            <div className="lg:col-span-3 space-y-4">
-              {/* Your Player */}
-              <div className="bg-white rounded-xl border border-border p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Heart size={14} className="text-[#3B6B8A]" />
-                  <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Your Player</h3>
-                </div>
+              <div className="p-4">
                 {(() => {
-                  const myPId = typeof window !== "undefined" ? localStorage.getItem("prospectx_my_player_id") : null;
-                  return myPId ? (
-                    <Link href={`/players/${myPId}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors">
-                      <div className="w-10 h-10 rounded-full bg-[#3B6B8A]/10 flex items-center justify-center">
-                        <Heart size={18} className="text-[#3B6B8A]" />
+                  const upcoming = scorebar.filter(g => g.status === "Not Started" || g.status === "");
+                  if (upcoming.length === 0) {
+                    return (
+                      <div className="text-center py-6">
+                        <Calendar size={28} className="mx-auto text-muted/30 mb-2" />
+                        <p className="text-sm text-muted">No upcoming games scheduled</p>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-navy">View Player Dashboard</p>
-                        <p className="text-[10px] text-muted mt-0.5">Stats, development, and reports</p>
-                      </div>
-                      <ChevronRight size={14} className="text-muted/40 ml-auto" />
-                    </Link>
-                  ) : (
-                    <div className="text-center py-5">
-                      <Heart size={28} className="mx-auto text-muted/30 mb-2" />
-                      <p className="text-muted text-sm">No player selected</p>
-                      <Link href="/my-player" className="inline-block mt-2 text-xs text-teal hover:underline">Select your player</Link>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {upcoming.slice(0, 5).map((g) => (
+                        <div key={g.game_id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="text-center shrink-0">
+                              <p className="text-[10px] text-muted font-oswald uppercase">{g.game_date}</p>
+                              <p className="text-[10px] text-muted">{g.time}</p>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-navy truncate">{g.away_team} @ {g.home_team}</p>
+                              <p className="text-[10px] text-muted truncate">{g.venue}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}
               </div>
-
-              {/* Recent Reports */}
-              <DashboardCard
-                icon={<FileText size={15} className="text-navy" />}
-                title="Recent Reports"
-                viewAllHref="/reports"
-                loading={loading}
-                empty={recentReports.length === 0}
-                emptyIcon={<FileText size={24} className="text-muted/30" />}
-                emptyText="No reports yet"
-                emptyLink="/reports/generate"
-                emptyLinkText="Generate your first report"
-              >
-                <div className="space-y-2">
-                  {recentReports.slice(0, 3).map((r) => (
-                    <ReportCard key={r.id} report={r} compact />
-                  ))}
-                </div>
-              </DashboardCard>
-
-              {/* Player Guide */}
-              <Link href="/player-guide" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-                <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
-                  <BookOpen size={20} className="text-green-600" />
-                </div>
-                <div>
-                  <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Guide</p>
-                  <p className="text-xs text-muted mt-0.5">Nutrition, workouts, mental game, and pathways</p>
-                </div>
-                <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
-              </Link>
             </div>
 
-            {/* Right (2/5) */}
-            <div className="lg:col-span-2 space-y-4">
-              {/* Messages Link Card */}
-              <Link href="/messages" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
-                  <MessageSquare size={20} className="text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Messages</p>
-                  <p className="text-xs text-muted mt-0.5">Team communications and updates</p>
-                </div>
-                <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
-              </Link>
-
-              {/* Monthly Usage */}
-              <div className="bg-white rounded-xl border border-border p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                  <Link href="/billing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
-                    <Crown size={10} />
-                    {user?.subscription_tier || "Rookie"}
+            {/* 3. Family Guide Tiles */}
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen size={14} className="text-teal" />
+                <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Family Guide</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { title: "Nutrition & Recovery", desc: "Meal planning, hydration, sleep, and recovery protocols", icon: Heart, color: "bg-red-50", iconColor: "text-red-500", href: "/player-guide#nutrition" },
+                  { title: "Mental Performance", desc: "Focus, confidence, pre-game routines, and resilience", icon: Sparkles, color: "bg-purple-50", iconColor: "text-purple-500", href: "/player-guide#mental" },
+                  { title: "Education & Development", desc: "Balancing school, skill development, and long-term growth", icon: BookOpen, color: "bg-blue-50", iconColor: "text-blue-500", href: "/player-guide#education" },
+                  { title: "Pathway Planning", desc: "Junior, college, and professional hockey pathways", icon: TrendingUp, color: "bg-green-50", iconColor: "text-green-500", href: "/player-guide#pathway" },
+                ].map((tile) => (
+                  <Link key={tile.title} href={tile.href} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
+                    <div className={`w-10 h-10 rounded-lg ${tile.color} flex items-center justify-center group-hover:scale-110 transition-transform shrink-0`}>
+                      <tile.icon size={20} className={tile.iconColor} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">{tile.title}</p>
+                      <p className="text-xs text-muted mt-0.5">{tile.desc}</p>
+                    </div>
+                    <ChevronRight size={16} className="text-muted/40 mt-1 group-hover:text-teal transition-colors shrink-0" />
                   </Link>
-                </div>
-                <BenchTalkUsage />
+                ))}
               </div>
             </div>
-          </div>
           </>
         )}
 

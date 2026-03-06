@@ -44,6 +44,7 @@ import {
   WifiOff,
   Zap,
   CreditCard,
+  Heart,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -552,7 +553,13 @@ export default function NavBar() {
               <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
                 Player Hub
               </p>
-              {PLAYER_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+              {(roleGroup === "FAMILY"
+                ? [{ href: "/my-player", label: "My Player", icon: Heart }]
+                : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
+                : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
+                : roleGroup === "PLAYER" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
+                : PLAYER_HUB_ITEMS
+              ).map(({ href, label, icon: Icon }) => {
                 const active = pathname.startsWith(href);
                 return (
                   <Link
@@ -1029,10 +1036,11 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Filter items by role: AGENT sees My Clients + Players + Reports only; MEDIA sees Players + Leaderboard (read-only); PLAYER/FAMILY see limited set
+  // Filter items by role: AGENT sees Players + Reports; MEDIA sees Players + Leaderboard; FAMILY sees My Player only; PLAYER sees Players + Reports
   const items = roleGroup === "PRO" ? PLAYER_HUB_ITEMS
     : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
     : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
+    : roleGroup === "FAMILY" ? [{ href: "/my-player", label: "My Player", icon: Heart }]
     : PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href));
 
   const isActive = items.some((item) => pathname.startsWith(item.href));
