@@ -4364,6 +4364,7 @@ def init_db():
         ("confidence_tier", "TEXT DEFAULT 'small_sample'"),
         ("gp", "INTEGER"),
         ("toi_minutes", "REAL"),
+        ("pxr_null_reason", "TEXT"),
     ]:
         if col_name not in pxr_cols:
             conn.execute(f"ALTER TABLE pxr_scores ADD COLUMN {col_name} {col_def}")
@@ -9645,8 +9646,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             _toi_min = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, 'toi_gate', CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
@@ -9654,6 +9655,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     league_percentile = NULL, cohort_percentile = NULL,
                     data_completeness = NULL, confidence_tier = 'small_sample',
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    pxr_null_reason = 'toi_gate',
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (rd['player_id'], season, pos_group, _gp_val, _toi_min))
             continue
@@ -9664,8 +9666,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             _toi_min_gp = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, 'gp_gate', CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
@@ -9673,6 +9675,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     league_percentile = NULL, cohort_percentile = NULL,
                     data_completeness = NULL, confidence_tier = 'small_sample',
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    pxr_null_reason = 'gp_gate',
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (rd['player_id'], season, pos_group, _gp_check, _toi_min_gp))
             continue
@@ -9684,8 +9687,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             _toi_min_pg = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, 'toi_per_game_gate', CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
@@ -9693,6 +9696,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     league_percentile = NULL, cohort_percentile = NULL,
                     data_completeness = NULL, confidence_tier = 'small_sample',
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    pxr_null_reason = 'toi_per_game_gate',
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (rd['player_id'], season, pos_group, _gp_check, _toi_min_pg))
             continue
@@ -9714,8 +9718,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             _toi_min_g = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, 'toi_gate', CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
@@ -9723,6 +9727,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     league_percentile = NULL, cohort_percentile = NULL,
                     data_completeness = NULL, confidence_tier = 'small_sample',
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    pxr_null_reason = 'toi_gate',
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (pid, season, pos_group, _gp_val_g, _toi_min_g))
             continue
@@ -9733,8 +9738,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             _toi_min_gp_g = round(toi_seconds / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
-                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                    pxr_score, confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, 'gp_gate', CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 0, pxr_score = NULL,
                     p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
@@ -9742,6 +9747,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     league_percentile = NULL, cohort_percentile = NULL,
                     data_completeness = NULL, confidence_tier = 'small_sample',
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    pxr_null_reason = 'gp_gate',
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (pid, season, pos_group, _gp_check_g, _toi_min_gp_g))
             continue
@@ -9962,13 +9968,14 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             _toi_nd = round(p.get('toi_seconds', 0) / 60.0, 1)
             conn.execute("""
                 INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
-                    pxr_score, data_completeness, confidence_tier, gp, toi_minutes, calc_timestamp)
-                VALUES (?, ?, ?, 1, NULL, ?, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                    pxr_score, data_completeness, confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp)
+                VALUES (?, ?, ?, 1, NULL, ?, 'small_sample', ?, ?, 'data_incomplete', CURRENT_TIMESTAMP)
                 ON CONFLICT (player_id, season) DO UPDATE SET
                     toi_gate_met = 1, pxr_score = NULL,
                     data_completeness = EXCLUDED.data_completeness,
                     confidence_tier = 'small_sample',
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    pxr_null_reason = 'data_incomplete',
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (pid, season, pos_group, data_comp, _gp_nd, _toi_nd))
             continue
@@ -10040,8 +10047,8 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                 p4_physical, p5_goalie, age_modifier,
                 league_percentile, cohort_percentile,
                 toi_gate_met, data_completeness,
-                confidence_tier, gp, toi_minutes, calc_timestamp
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,CURRENT_TIMESTAMP)
+                confidence_tier, gp, toi_minutes, pxr_null_reason, calc_timestamp
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,NULL,CURRENT_TIMESTAMP)
             ON CONFLICT (player_id, season) DO UPDATE SET
                 pxr_score = EXCLUDED.pxr_score,
                 p1_offense = EXCLUDED.p1_offense,
@@ -10057,6 +10064,7 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                 confidence_tier = EXCLUDED.confidence_tier,
                 gp = EXCLUDED.gp,
                 toi_minutes = EXCLUDED.toi_minutes,
+                pxr_null_reason = NULL,
                 calc_timestamp = CURRENT_TIMESTAMP
         """, (
             p['player_id'], season, p['position_group'],
@@ -28225,6 +28233,30 @@ async def pxr_leaderboard(
         "counts": dict(counts) if counts else {},
     }
 
+
+
+@app.get("/pxr/player/{player_id}")
+async def pxr_player_score(
+    player_id: str,
+    season: str = Query(default="2025-26"),
+    token_data: dict = Depends(verify_token),
+):
+    """Single player PXR score — returns row even if pxr_score is NULL (gated)."""
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT px.pxr_score, px.p1_offense, px.p2_defense, px.p3_possession,
+                   px.p4_physical, px.league_percentile, px.cohort_percentile,
+                   px.age_modifier, px.toi_gate_met, px.data_completeness,
+                   px.confidence_tier, px.gp, px.toi_minutes, px.pxr_null_reason
+            FROM pxr_scores px
+            WHERE px.player_id = ? AND px.season = ?
+        """, (player_id, season)).fetchone()
+        if not row:
+            return None
+        return dict(row)
+    finally:
+        conn.close()
 
 
 @app.get("/pxr/draft-board")

@@ -342,7 +342,7 @@ export default function PlayerDetailPage() {
   const [gameLogOffset, setGameLogOffset] = useState(0);
   const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
   const [trendlineData, setTrendlineData] = useState<import("@/types/api").TrendlineResponse | null>(null);
-  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null; confidence_tier?: string | null; gp?: number | null; toi_minutes?: number | null } | null>(null);
+  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null; confidence_tier?: string | null; gp?: number | null; toi_minutes?: number | null; pxr_null_reason?: string | null } | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
 
@@ -857,9 +857,8 @@ export default function PlayerDetailPage() {
 
         // Load PXR pillar scores (non-blocking — for SkillBars)
         try {
-          const pxrRes = await api.get("/pxr/draft-board?season=2025-26");
-          const match = (pxrRes.data.players || []).find((p: { player_id: string }) => p.player_id === playerId);
-          if (match) setPxrData(match);
+          const pxrRes = await api.get(`/pxr/player/${playerId}?season=2025-26`);
+          if (pxrRes.data) setPxrData(pxrRes.data);
         } catch { /* PXR data may not exist */ }
 
         // Load pending corrections count (non-blocking)
@@ -1627,7 +1626,15 @@ export default function PlayerDetailPage() {
                       <div style={{ textAlign: "center", padding: "16px 0" }}>
                         <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.3 }}>📊</div>
                         <p style={{ fontSize: 12, color: "#5A7291", lineHeight: 1.6, maxWidth: 300, margin: "0 auto 14px" }}>
-                          PXR scores require InStat advanced stats with 60+ minutes ice time. Import InStat data to populate.
+                          {pxrData?.pxr_null_reason === 'gp_gate'
+                            ? `Insufficient data: fewer than 10 games played (${pxrData?.gp ?? 0} GP)`
+                            : pxrData?.pxr_null_reason === 'toi_per_game_gate'
+                            ? 'Insufficient data: average TOI below role threshold'
+                            : pxrData?.pxr_null_reason === 'toi_gate'
+                            ? 'Insufficient data: fewer than 60 total minutes played'
+                            : pxrData?.pxr_null_reason === 'data_incomplete'
+                            ? 'Insufficient data: missing advanced stats for scoring'
+                            : 'PXR scores require InStat advanced stats. Import InStat data to populate.'}
                         </p>
                         <Link href="/instat" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", textDecoration: "none", fontFamily: "'DM Sans', sans-serif" }}>
                           <Upload size={12} /> Import Data
