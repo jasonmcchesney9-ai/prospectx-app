@@ -4635,6 +4635,33 @@ def init_db():
     conn.commit()
     logger.info("Migration: highlight_reels table ready")
 
+    # ── Table: invites (platform-level invite-only gate) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS invites (
+            id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+            email TEXT NOT NULL UNIQUE,
+            invited_by TEXT,
+            org_id TEXT,
+            role TEXT DEFAULT 'coach',
+            token TEXT UNIQUE,
+            accepted INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_invites_email ON invites(email)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_invites_token ON invites(token)")
+    conn.commit()
+
+    # ── Migration: grandfather existing users into invites ──
+    conn.execute("""
+        INSERT OR IGNORE INTO invites (id, email, invited_by, accepted, created_at)
+        SELECT lower(hex(randomblob(16))), email, 'system', 1, created_at
+        FROM users
+    """)
+    conn.commit()
+    logger.info("Migration: invites table ready (existing users grandfathered)")
+
     # ── Migration: contact fields on players ──
     contact_cols = _get_table_columns(conn, "players")
     for col_name in ["email", "phone", "parent_email", "parent_phone", "agent_email", "agent_phone"]:
@@ -10607,6 +10634,17 @@ async def register(request: Request, req: RegisterRequest):
         conn.close()
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    # ── Invite-only gate ──
+    invite_row = conn.execute(
+        "SELECT id, accepted FROM invites WHERE email = ?", (req.email.lower().strip(),)
+    ).fetchone()
+    if not invite_row:
+        conn.close()
+        raise HTTPException(status_code=403, detail="This platform is currently invite-only. Contact your administrator to request access.")
+    if invite_row["accepted"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="This invite has already been used.")
+
     org_id = gen_id()
     user_id = gen_id()
     password_hash = pwd_context.hash(req.password[:72])
@@ -10620,6 +10658,8 @@ async def register(request: Request, req: RegisterRequest):
         "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
         (user_id, org_id, req.email.lower().strip(), password_hash, req.first_name, req.last_name, "admin", hockey_role),
     )
+    # Mark invite as accepted
+    conn.execute("UPDATE invites SET accepted = 1 WHERE email = ?", (req.email.lower().strip(),))
     conn.commit()
 
     # Auto-generate email verification token
@@ -12343,6 +12383,66 @@ async def accept_org_invite(token: str, req: InviteAcceptRequest):
 
         logger.info("Invite accepted: %s joined org %s", req.email, invite["org_id"])
         return TokenResponse(access_token=jwt_token, user=user)
+    finally:
+        conn.close()
+
+
+# ============================================================
+# PLATFORM INVITE MANAGEMENT (invite-only gate)
+# ============================================================
+
+@app.post("/admin/invites")
+async def create_platform_invite(req: dict = Body(...), token_data: dict = Depends(verify_token)):
+    """Create a platform-level invite. Admin only."""
+    _require_admin(token_data)
+    email = req.get("email", "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    role = req.get("role", "coach")
+    invite_org_id = req.get("org_id")
+    conn = get_db()
+    try:
+        # Check if already invited
+        existing = conn.execute("SELECT * FROM invites WHERE email = ?", (email,)).fetchone()
+        if existing:
+            return dict(existing)
+        invite_id = gen_id()
+        invite_token = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO invites (id, email, invited_by, org_id, role, token, accepted) VALUES (?, ?, ?, ?, ?, ?, 0)",
+            (invite_id, email, token_data["user_id"], invite_org_id, role, invite_token),
+        )
+        conn.commit()
+        return {"id": invite_id, "email": email, "invited_by": token_data["user_id"],
+                "org_id": invite_org_id, "role": role, "token": invite_token,
+                "accepted": 0, "created_at": now_iso()}
+    finally:
+        conn.close()
+
+
+@app.get("/admin/invites")
+async def list_platform_invites(token_data: dict = Depends(verify_token)):
+    """List all platform invites. Admin only."""
+    _require_admin(token_data)
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT * FROM invites ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.delete("/admin/invites/{invite_id}")
+async def delete_platform_invite(invite_id: str, token_data: dict = Depends(verify_token)):
+    """Delete a platform invite. Admin only."""
+    _require_admin(token_data)
+    conn = get_db()
+    try:
+        result = conn.execute("DELETE FROM invites WHERE id = ?", (invite_id,))
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Invite not found")
+        return {"status": "deleted", "id": invite_id}
     finally:
         conn.close()
 
