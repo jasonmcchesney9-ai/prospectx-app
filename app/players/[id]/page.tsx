@@ -3125,7 +3125,7 @@ export default function PlayerDetailPage() {
                             created_at: new Date().toISOString(),
                           }]);
                           setParentEmail("");
-                          toast.success("Parent linked successfully");
+                          toast.success(`✓ Access granted. They can now log in and view ${player.first_name} ${player.last_name}'s Family Guide.`);
                         } catch (err: unknown) {
                           const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to link parent";
                           toast.error(msg);
@@ -3140,6 +3140,7 @@ export default function PlayerDetailPage() {
                       Send Invite
                     </button>
                   </div>
+                  <p className="text-[11px] text-muted/40 mt-2">Enter the parent&apos;s account email. They will gain Family access to this player&apos;s profile, development plan, and schedule.</p>
                 </div>
               </div>
             )}
