@@ -358,8 +358,8 @@ export default function NavBar() {
             {/* Org Hub dropdown (PRO only) */}
             {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
 
-            {/* League Hub — direct link (all roles) */}
-            {(roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "League Hub")) && (
+            {/* League Hub — direct link (all roles except PLAYER) */}
+            {roleGroup !== "PLAYER" && (roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "League Hub")) && (
               <NavLink href="/leagues" label="League Hub" icon={Trophy} pathname={pathname} />
             )}
 
@@ -546,13 +546,13 @@ export default function NavBar() {
           {navConfig.showPlayerHub && (
             <div className="border-t border-white/10 mt-1 pt-1">
               <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                {roleGroup === "FAMILY" ? "My Player" : "Player Hub"}
+                {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Player Hub"}
               </p>
               {(roleGroup === "FAMILY"
                 ? [{ href: "/my-player", label: "My Player", icon: Heart }]
-                : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
+                : roleGroup === "PLAYER" ? [{ href: "/my-player", label: "My Profile", icon: Users }, { href: "/my-player/stats", label: "My Stats", icon: BarChart3 }, { href: "/my-player/reports", label: "My Reports", icon: FileText }, { href: "/my-player/dev-plan", label: "My Dev Plan", icon: TrendingUp }]
+                : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports", "/draft-board", "/leaderboard"].includes(i.href))
                 : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
-                : roleGroup === "PLAYER" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
                 : PLAYER_HUB_ITEMS
               ).map(({ href, label, icon: Icon }) => {
                 const active = pathname.startsWith(href);
@@ -664,7 +664,8 @@ export default function NavBar() {
             </div>
           )}
 
-          {/* League Hub — direct link */}
+          {/* League Hub — direct link (not for PLAYER) */}
+          {roleGroup !== "PLAYER" && (
           <div className="border-t border-white/10 mt-1 pt-1">
             <Link
               href="/leagues"
@@ -677,6 +678,7 @@ export default function NavBar() {
               League Hub
             </Link>
           </div>
+          )}
 
           {/* Schedule — direct link */}
           <div className="border-t border-white/10 mt-1 pt-1">
@@ -1031,12 +1033,13 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Filter items by role: AGENT sees Players + Reports; MEDIA sees Players + Leaderboard; FAMILY sees My Player only; PLAYER sees Players + Reports
+  // Filter items by role
   const items = roleGroup === "PRO" ? PLAYER_HUB_ITEMS
-    : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href))
+    : roleGroup === "PLAYER" ? [{ href: "/my-player", label: "My Profile", icon: Users }, { href: "/my-player/stats", label: "My Stats", icon: BarChart3 }, { href: "/my-player/reports", label: "My Reports", icon: FileText }, { href: "/my-player/dev-plan", label: "My Dev Plan", icon: TrendingUp }]
+    : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports", "/draft-board", "/leaderboard"].includes(i.href))
     : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
     : roleGroup === "FAMILY" ? [{ href: "/my-player", label: "My Player", icon: Heart }]
-    : PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports"].includes(i.href));
+    : PLAYER_HUB_ITEMS;
 
   const isActive = items.some((item) => pathname.startsWith(item.href));
 
@@ -1061,7 +1064,7 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
         }`}
       >
         <Users size={16} />
-        {roleGroup === "FAMILY" ? "My Player" : "Player Hub"}
+        {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Player Hub"}
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
