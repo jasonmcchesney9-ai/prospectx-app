@@ -160,8 +160,9 @@ const ALERT_STATUS_STYLES: Record<string, { label: string; bg: string; text: str
 // ── Dashboard ────────────────────────────────────────────────
 function Dashboard() {
   const user = getUser();
-  const { setActivePxiContext } = useBenchTalk();
-  const roleGroup = getRoleGroup(user?.hockey_role);
+  const { setActivePxiContext, roleOverride } = useBenchTalk();
+  const effectiveHockeyRole = roleOverride || user?.hockey_role;
+  const roleGroup = getRoleGroup(effectiveHockeyRole);
 
   useEffect(() => {
     const u = getUser();
