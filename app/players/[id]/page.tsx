@@ -1066,6 +1066,15 @@ export default function PlayerDetailPage() {
             {/* Right: Draft chips + actions */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {/* PXR Score pill — prominent in hero */}
+                {pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 && (
+                  <span
+                    style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: "rgba(13,148,136,.25)", color: "#14B8A8", letterSpacing: ".04em", border: "1px solid rgba(13,148,136,.35)" }}
+                    title={`PXR Score — Composite rating: ${pxrData.pxr_score.toFixed(1)} / 100`}
+                  >
+                    PXR {pxrData.pxr_score.toFixed(1)}
+                  </span>
+                )}
                 {intelligence?.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
                   <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(234,88,12,.2)", color: "#FB923C", letterSpacing: ".04em" }}>
                     {gradeToOverallBand(intelligence.overall_grade)}
@@ -1093,6 +1102,8 @@ export default function PlayerDetailPage() {
                   </span>
                 )}
               </div>
+              {/* Hero action buttons — hidden on Overview tab (duplicated by Quick Actions card) */}
+              {activeTab !== "profile" && (
               <div style={{ display: "flex", gap: 6, marginTop: 4 }} className="no-print">
                 <Link
                   href={`/reports/generate?player=${playerId}&type=pro_skater`}
@@ -1117,6 +1128,7 @@ export default function PlayerDetailPage() {
                   Card
                 </Link>
               </div>
+              )}
             </div>
           </div>
 
@@ -1238,8 +1250,8 @@ export default function PlayerDetailPage() {
           );
         })()}
 
-        {/* Player Info + Archetype — shown on non-overview tabs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ display: activeTab === "profile" ? "none" : undefined }}>
+        {/* Player Info + Archetype — shown on non-overview tabs only */}
+        {activeTab !== "profile" && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Bio Card */}
           <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
             <div className="flex items-center justify-between mb-3">
@@ -1906,7 +1918,7 @@ export default function PlayerDetailPage() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* SeasonSnapshot — shown on non-overview tabs */}
         {activeTab !== "profile" && (() => {
