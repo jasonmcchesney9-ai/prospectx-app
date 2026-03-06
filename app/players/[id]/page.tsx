@@ -126,6 +126,119 @@ function fullPosition(pos: string | null | undefined): string {
   return POSITION_LABELS[pos.toUpperCase()] || pos;
 }
 
+// ── PXI Radar + Donut helpers (ported from PXI_PlayerProfile_v3_styled mockup) ──
+
+interface PxiMetricItem {
+  key: string;
+  label: string;
+  score: number;
+  icon: string;
+  stroke: string;
+  bg: string;
+  text: string;
+  pct: string;
+}
+
+function buildPxiMetrics(
+  playerMetrics: PlayerMetrics | null,
+  pxrData: { p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null } | null,
+): PxiMetricItem[] {
+  // Try real player metrics first, then PXR pillars, then placeholders
+  type MetricKey = "sniper" | "playmaker" | "transition" | "defensive" | "compete" | "hockey_iq";
+  const getIdx = (metricKey: MetricKey) => playerMetrics?.indices?.[metricKey];
+  const get = (metricKey: MetricKey, pxrKey: string | null, fallback: number): number => {
+    const idx = getIdx(metricKey);
+    if (idx) return idx.value ?? fallback;
+    if (pxrKey && pxrData && (pxrData as unknown as Record<string, number | null>)[pxrKey] != null)
+      return Math.round(((pxrData as unknown as Record<string, number | null>)[pxrKey] as number));
+    return fallback;
+  };
+  const pctBand = (v: number): string =>
+    v >= 90 ? "Elite" : v >= 75 ? "Above Avg" : v >= 50 ? "Average" : v >= 25 ? "Below Avg" : "Developing";
+  const pctile = (metricKey: MetricKey): number =>
+    getIdx(metricKey)?.percentile ?? Math.round(Math.min(99, Math.max(1, (get(metricKey, null, 50) / 99) * 100)));
+
+  const snp = get("sniper", "p1_offense", 50);
+  const ply = get("playmaker", null, 50);
+  const trn = get("transition", "p3_possession", 50);
+  const def = get("defensive", "p2_defense", 50);
+  const cmp = get("compete", "p4_physical", 50);
+  const iq  = get("hockey_iq", null, 50);
+
+  return [
+    { key: "SNP", label: "Sniper",     score: snp, icon: "\u{1F3AF}", stroke: "#EF4444", bg: "#FEF2F2", text: "#EF4444", pct: `${pctBand(snp)} · P${pctile("sniper")}` },
+    { key: "PLY", label: "Playmaker",  score: ply, icon: "\u270F\uFE0F",  stroke: "#6366F1", bg: "#EEF2FF", text: "#6366F1", pct: `${pctBand(ply)} · P${pctile("playmaker")}` },
+    { key: "TRN", label: "Transition", score: trn, icon: "\u26A1",  stroke: "#0D9488", bg: "#F0FDF9", text: "#0D9488", pct: `${pctBand(trn)} · P${pctile("transition")}` },
+    { key: "DEF", label: "Defensive",  score: def, icon: "\u{1F6E1}\uFE0F",  stroke: "#0F2942", bg: "#F0F4F8", text: "#0F2942", pct: `${pctBand(def)} · P${pctile("defensive")}` },
+    { key: "CMP", label: "Compete",    score: cmp, icon: "\u{1F4AA}", stroke: "#F97316", bg: "#FFF7ED", text: "#F97316", pct: `${pctBand(cmp)} · P${pctile("compete")}` },
+    { key: "IQ",  label: "Hockey IQ",  score: iq,  icon: "\u{1F9E0}", stroke: "#A855F7", bg: "#FAF5FF", text: "#A855F7", pct: `${pctBand(iq)} · P${pctile("hockey_iq")}` },
+  ];
+}
+
+function PxiRadarChart({ metrics }: { metrics: PxiMetricItem[] }) {
+  const size = 200, cx = 100, cy = 100, r = 72;
+  const n = metrics.length;
+  const angles = metrics.map((_, i) => (i * 2 * Math.PI / n) - Math.PI / 2);
+  const dataPoints = metrics.map((m, i) => ({
+    x: cx + r * (m.score / 100) * Math.cos(angles[i]),
+    y: cy + r * (m.score / 100) * Math.sin(angles[i]),
+  }));
+  const poly = dataPoints.map(p => `${p.x},${p.y}`).join(" ");
+  const gridLevels = [0.25, 0.5, 0.75, 1.0];
+  const labelR = r + 20;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: "visible" }}>
+      {gridLevels.map((lvl, gi) => {
+        const pts = angles.map(a => `${cx + r * lvl * Math.cos(a)},${cy + r * lvl * Math.sin(a)}`).join(" ");
+        return <polygon key={gi} points={pts} fill="none" stroke="#DDE6EF" strokeWidth="1" />;
+      })}
+      {angles.map((a, i) => (
+        <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(a)} y2={cy + r * Math.sin(a)} stroke="#DDE6EF" strokeWidth="1" />
+      ))}
+      <polygon points={poly} fill="rgba(13,148,136,.15)" stroke="#0D9488" strokeWidth="2.5" strokeLinejoin="round" />
+      {dataPoints.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r={4.5} fill="#0D9488" stroke="white" strokeWidth={1.5} />
+      ))}
+      {metrics.map((m, i) => {
+        const lx = cx + labelR * Math.cos(angles[i]);
+        const ly = cy + labelR * Math.sin(angles[i]);
+        return (
+          <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+            style={{ fontSize: 9.5, fontFamily: "'DM Sans', sans-serif", fill: "#5A7291", fontWeight: 600 }}>
+            {m.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function PxiDonutCircle({ m }: { m: PxiMetricItem }) {
+  const rad = 29;
+  const circ = 2 * Math.PI * rad;
+  const dash = (m.score / 100) * circ;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "#F7FAFB", borderRadius: 10, padding: "10px 6px 8px", border: "1px solid #EEF3F8" }}>
+      <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
+        <svg width="72" height="72" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r={rad} fill={m.bg} stroke="#E5E7EB" strokeWidth="7" />
+          <circle cx="36" cy="36" r={rad} fill="none"
+            stroke={m.stroke} strokeWidth="7"
+            strokeDasharray={`${dash} ${circ - dash}`}
+            strokeLinecap="round"
+            transform="rotate(-90 36 36)" />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0 }}>
+          <div style={{ fontSize: 13, lineHeight: 1, marginBottom: 1 }}>{m.icon}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1, letterSpacing: -0.5, color: m.text }}>{m.score}</div>
+        </div>
+      </div>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" as const, color: "#0F2942" }}>{m.key}</div>
+      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, fontWeight: 600, padding: "2px 6px", borderRadius: 3, letterSpacing: ".02em", background: m.bg, color: m.text }}>{m.pct}</div>
+    </div>
+  );
+}
+
 function relativeTime(dateStr: string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
@@ -1385,231 +1498,102 @@ export default function PlayerDetailPage() {
               </div>
             </div>
 
-            {/* ── PXI Intelligence Card ── */}
-            {intelligence && intelligence.version > 0 && (
+            {/* ── PXI Intelligence Card (Radar + Donut Grid) ── */}
+            {intelligence && intelligence.version > 0 && (() => {
+              const pxiMetrics = buildPxiMetrics(playerMetrics, pxrData);
+              const gpSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              return (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                 {/* Teal left stripe */}
                 <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
                 {/* Card band header */}
                 <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div className="flex items-center gap-2">
-                    <Brain size={16} style={{ color: "rgba(255,255,255,.5)" }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXI Intelligence</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: ".08em", padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>v{intelligence.version}</span>
-                    {intelligence.trigger && (
-                      <span className="text-[10px] text-muted/50">via {intelligence.trigger}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXI Intelligence</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", background: "rgba(13,148,136,.12)", color: "#0D9488", padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(13,148,136,.2)" }}>
+                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#EA580C" }} />
+                      PXI
+                    </span>
                     {intelligence.created_at && (
-                      <span className="text-[10px] text-muted/50">
-                        {new Date(intelligence.created_at).toLocaleDateString()}
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>
+                        Updated {new Date(intelligence.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
                     )}
-                    <button
-                      onClick={handleRefreshIntelligence}
-                      disabled={refreshingIntel}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-oswald uppercase tracking-wider rounded-lg border border-teal/30 text-teal hover:bg-teal/10 transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw size={10} className={refreshingIntel ? "animate-spin" : ""} />
-                      {refreshingIntel ? "Analyzing..." : "Refresh"}
-                    </button>
                   </div>
                 </div>
 
-                <div className="p-5 space-y-5">
-                  {/* PXI Intelligence Score */}
-                  {intelligence.overall_grade && intelligence.overall_grade !== "NR" && (() => {
-                    const compositeVal = gradeToNumber(intelligence.overall_grade);
-                    const subScores = [
-                      { label: "Offense", grade: intelligence.offensive_grade },
-                      { label: "Defense", grade: intelligence.defensive_grade },
-                      { label: "Skating", grade: intelligence.skating_grade },
-                      { label: "Hockey IQ", grade: intelligence.hockey_iq_grade },
-                      { label: "Compete", grade: intelligence.compete_grade },
-                      { label: "Overall", grade: intelligence.overall_grade },
-                    ] as const;
-                    return (
-                      <div>
-                        {/* Composite score */}
-                        <div className="flex items-baseline gap-2 mb-3">
-                          <span className="text-2xl font-bold text-teal font-oswald">
-                            {compositeVal > 0 ? compositeVal.toFixed(1) : "—"}
-                          </span>
-                          <span className="text-sm text-muted font-oswald">/ 10</span>
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-muted ml-1 cursor-help" title="PXI Scout Grade — An AI-generated assessment across offense, defense, skating, hockey IQ, and compete level. Based on available scouting data.">PXI Intelligence Score</span>
-                          {FAMILY_ROLES.has(userRole) && compositeVal > 0 && (
-                            <span className="text-xs font-semibold text-teal ml-1">{scoreLabel(compositeVal)}</span>
-                          )}
-                        </div>
-                        {/* 2-column sub-score grid */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {subScores.filter(s => s.grade && s.grade !== "NR").map(({ label, grade }) => {
-                            const val = gradeToNumber(grade);
-                            const isOverall = label === "Overall";
-                            return (
-                              <div
-                                key={label}
-                                className="flex items-center justify-between transition-colors"
-                                style={{
-                                  backgroundColor: "#162E4A",
-                                  border: "1px solid rgba(255,255,255,0.08)",
-                                  borderRadius: "10px",
-                                  padding: "14px 18px",
-                                }}
-                                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,148,136,0.4)"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
-                              >
-                                <span className="text-[10px] font-oswald uppercase tracking-wider font-bold" style={{ letterSpacing: "0.1em", color: "#64748B" }}>{label}</span>
-                                <span className="font-bold font-oswald" style={{ fontSize: "22px", color: isOverall ? "#14B8A8" : "#FFFFFF" }}>{val > 0 ? val.toFixed(1) : "—"}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Archetype + Confidence */}
-                  {intelligence.archetype && (
-                    <div className="flex items-center gap-3">
-                      <div className="px-3 py-1.5 rounded-lg bg-navy/[0.06] border border-navy/10">
-                        <span className="text-sm font-semibold text-navy">{intelligence.archetype}</span>
-                      </div>
-                      {intelligence.archetype_confidence != null && (
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-20 h-1.5 bg-border rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${Math.round(intelligence.archetype_confidence * 100)}%`,
-                                backgroundColor: intelligence.archetype_confidence > 0.7 ? "#18B3A6" : intelligence.archetype_confidence > 0.4 ? "#F36F21" : "#9ca3af"
-                              }}
-                            />
-                          </div>
-                          <span className="text-[10px] text-muted">{Math.round(intelligence.archetype_confidence * 100)}% confidence</span>
-                        </div>
-                      )}
+                <div style={{ padding: "14px 16px 16px" }}>
+                  {/* ── Player Archetype section ── */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: "#EA580C", display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1 3.5H11L8 6.5l1 3.5L6 8l-3 2 1-3.5L1 4.5h4L6 1Z" fill="#EA580C"/></svg>
+                      Player Archetype
                     </div>
-                  )}
-
-                  {/* AI Summary */}
-                  {intelligence.summary && (
-                    <div className="pl-3 border-l-2 border-teal/30">
-                      <p className="text-sm text-navy/80 leading-relaxed">{intelligence.summary}</p>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "#0F2942", letterSpacing: -0.3, marginBottom: 4 }}>
+                      {intelligence.archetype || player.archetype || "Unclassified"}
                     </div>
-                  )}
-
-                  {/* Strengths + Development Areas */}
-                  {((intelligence.strengths?.length ?? 0) > 0 || (intelligence.development_areas?.length ?? 0) > 0) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(intelligence.strengths?.length ?? 0) > 0 && (
-                        <div>
-                          <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
-                            <Star size={11} className="text-green-500" /> Strengths
-                          </h4>
-                          <ul className="space-y-1">
-                            {intelligence.strengths.map((s, i) => (
-                              <li key={i} className="text-sm text-navy/80 flex items-start gap-2">
-                                <span className="w-1 h-1 rounded-full bg-green-500 mt-2 shrink-0" />
-                                {s}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {(intelligence.development_areas?.length ?? 0) > 0 && (
-                        <div>
-                          <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2 flex items-center gap-1.5">
-                            <AlertTriangle size={11} className="text-orange" /> Development Areas
-                          </h4>
-                          <ul className="space-y-1">
-                            {intelligence.development_areas.map((d, i) => (
-                              <li key={i} className="text-sm text-navy/80 flex items-start gap-2">
-                                <span className="w-1 h-1 rounded-full bg-orange mt-2 shrink-0" />
-                                {d}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                    <div style={{ fontSize: 11.5, color: "#5A7291", lineHeight: 1.5 }}>
+                      Compound archetypes help the AI understand the full player profile for system fit analysis.
                     </div>
-                  )}
+                  </div>
 
-                  {/* Stat Signature Chips */}
-                  {intelligence.stat_signature && Object.keys(intelligence.stat_signature).length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Stat Signature</h4>
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(intelligence.stat_signature).map(([key, value]) => {
-                          const meta = STAT_SIGNATURE_LABELS[key];
-                          return (
-                            <span
-                              key={key}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-navy/[0.04] border border-teal/10 text-navy/70"
-                              title={key.replace(/_/g, ' ')}
-                            >
-                              {meta?.emoji && <span>{meta.emoji}</span>}
-                              <span className="font-medium">{meta?.label || key.replace(/_/g, ' ')}:</span> {value}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* ── Divider ── */}
+                  <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
 
-                  {/* Projection */}
-                  {intelligence.projection && (
-                    <div className="bg-navy/[0.02] rounded-lg p-3 border border-teal/8">
-                      <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-1 flex items-center gap-1.5">
-                        <TrendingUp size={11} className="text-teal" /> Projection
-                      </h4>
-                      <p className="text-sm text-navy/80">{intelligence.projection}</p>
-                    </div>
-                  )}
+                  {/* ── PROSPECTX METRICS heading ── */}
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: "#0F2942", marginBottom: 2 }}>ProspectX Metrics</div>
+                    <div style={{ fontSize: 11, color: "#8BA4BB" }}>PXI scores across 6 dimensions — derived from stats, scouting notes, and AI analysis</div>
+                  </div>
 
-                  {/* Comparable Players */}
-                  {(intelligence.comparable_players?.length ?? 0) > 0 && (
-                    <div>
-                      <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-1">Comparable Players</h4>
-                      <div className="space-y-1">
-                        {intelligence.comparable_players.map((comp, i) => (
-                          <p key={i} className="text-sm text-navy/70 italic">{comp}</p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {/* ── Radar Chart ── */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "12px 0 16px" }}>
+                    <PxiRadarChart metrics={pxiMetrics} />
+                  </div>
 
-                  {/* Intelligence History Toggle */}
-                  <div className="pt-2 border-t border-teal/8">
-                    <button
-                      onClick={loadIntelHistory}
-                      className="flex items-center gap-1 text-[10px] font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
-                    >
-                      {showIntelHistory ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                      Intelligence History ({intelligence.version} version{intelligence.version !== 1 ? "s" : ""})
-                    </button>
-                    {showIntelHistory && intelHistory.length > 0 && (
-                      <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
-                        {intelHistory.map((h) => (
-                          <div key={h.id || h.version} className="flex items-center gap-3 text-xs text-muted/70 py-1 border-b border-teal/5 last:border-0">
-                            <span className="font-medium text-navy/50">v{h.version}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy/[0.04]">{h.trigger || "—"}</span>
-                            <span>{h.archetype || "—"}</span>
-                            <span className="font-medium text-teal">
-                              {h.overall_grade ? (gradeToNumber(h.overall_grade) > 0 ? gradeToNumber(h.overall_grade).toFixed(1) : "—") : "—"}
-                            </span>
-                            <span className="ml-auto text-[10px]">
-                              {h.created_at ? new Date(h.created_at).toLocaleDateString() : "—"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                  {/* ── Donut Circles — 3×2 grid ── */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                    {pxiMetrics.map(m => <PxiDonutCircle key={m.key} m={m} />)}
+                  </div>
+                  <div style={{ fontSize: 9.5, color: "#8BA4BB", marginTop: 10, fontFamily: "'DM Mono', monospace", textAlign: "right" as const }}>
+                    Based on {gpSeason?.gp ?? "—"} GP ({gpSeason?.season || "2025-26"})
+                  </div>
+
+                  {/* ── Divider ── */}
+                  <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
+
+                  {/* ── Role projection + band ── */}
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(13,148,136,.08)", border: "1px solid rgba(13,148,136,.2)", color: "#0D9488", borderRadius: 6, padding: "5px 12px", marginBottom: 10, fontSize: 12.5, fontWeight: 700 }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L7.5 4.5H11L8.5 6.8L9.5 10.5L6 8.3L2.5 10.5L3.5 6.8L1 4.5H4.5L6 1Z" fill="#0D9488"/></svg>
+                    {intelligence.archetype || player.archetype || "Unclassified"}
+                    {intelligence.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
+                      <span style={{ display: "inline-block", background: "rgba(234,88,12,.1)", border: "1px solid rgba(234,88,12,.25)", color: "#EA580C", borderRadius: 4, padding: "2px 8px", marginLeft: 6, fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: ".03em" }}>
+                        {gradeToOverallBand(intelligence.overall_grade)}
+                      </span>
                     )}
                   </div>
+
+                  {/* ── Intel narrative ── */}
+                  {intelligence.summary && (
+                    <p style={{ fontSize: 13, lineHeight: 1.65, color: "#2A4A6A" }}>{intelligence.summary}</p>
+                  )}
+
+                  {/* ── Regenerate button ── */}
+                  <button
+                    onClick={handleRefreshIntelligence}
+                    disabled={refreshingIntel}
+                    style={{ width: "100%", padding: 10, background: "white", color: "#0D9488", border: "1.5px solid #0D9488", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12, opacity: refreshingIntel ? 0.5 : 1 }}
+                  >
+                    {refreshingIntel ? (
+                      <><RefreshCw size={12} className="animate-spin" /> Regenerating...</>
+                    ) : (
+                      <><Plus size={12} /> Regenerate PXI Assessment</>
+                    )}
+                  </button>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Generate Intelligence CTA (when no intelligence exists) */}
             {(!intelligence || intelligence.version === 0) && (stats.length > 0 || goalieStats.length > 0 || notes.length > 0) && (
