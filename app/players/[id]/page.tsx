@@ -551,9 +551,28 @@ export default function PlayerDetailPage() {
       const formData = new FormData();
       formData.append("file", file);
       const { data } = await api.post(`/stats/ingest?player_id=${playerId}`, formData);
-      setUploadMsg(`✓ Imported ${data.inserted} stat rows`);
+      // Build smart feedback based on unified engine response
+      const routedTo = data.routed_to || "player_stats";
+      const pxrTriggered = data.pxr_triggered === true;
+      const created = data.players_created || 0;
+      let msg = routedTo.includes("instat")
+        ? `✓ Advanced stats imported.${pxrTriggered ? " PXR score updating..." : ""}`
+        : `✓ Stats imported successfully.`;
+      if (created > 0) msg += ` ${created} new player profile${created > 1 ? "s" : ""} created.`;
+      if (!msg.startsWith("✓")) msg = `✓ ${msg}`;
+      setUploadMsg(msg);
+      // Refresh stats table
       const statsRes = await api.get<PlayerStats[]>(`/stats/player/${playerId}`);
       setStats(statsRes.data);
+      // If PXR was triggered, refetch PXR score after a short delay
+      if (pxrTriggered) {
+        setTimeout(async () => {
+          try {
+            const pxrRes = await api.get(`/pxr/player/${playerId}?season=2025-26`);
+            if (pxrRes.data) setPxrData(pxrRes.data);
+          } catch { /* non-critical */ }
+        }, 3000);
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       const msg = axiosErr?.response?.data?.detail || axiosErr?.message || "Failed to upload CSV";
@@ -2145,6 +2164,20 @@ export default function PlayerDetailPage() {
                     setStats(res.data);
                   }} />
                 </div>
+
+                {/* Data freshness indicator */}
+                {(stats.length > 0 || goalieStats.length > 0) && (() => {
+                  const allStats = [...stats, ...goalieStats];
+                  const newest = allStats.reduce((a, b) => (a.created_at > b.created_at ? a : b));
+                  const source = newest.data_source || "manual";
+                  const ts = new Date(newest.created_at);
+                  const dateStr = isNaN(ts.getTime()) ? "" : ts.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                  return dateStr ? (
+                    <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#5A7291", marginTop: 6 }}>
+                      Stats last updated: {dateStr} | Source: {source}
+                    </p>
+                  ) : null;
+                })()}
 
                 {stats.length === 0 && goalieStats.length === 0 && (
                   <p className="text-xs text-muted/60 mt-2">No stats yet — import via CSV/XLSX or sync from League Data.</p>
