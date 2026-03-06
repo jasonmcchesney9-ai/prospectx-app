@@ -24,8 +24,12 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <nav className="bg-navy border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/logos/prospectx-wordmark-transparent.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
+          <Link href="/" className="flex flex-col leading-none" style={{ gap: 1, textDecoration: "none" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              <span style={{ fontSize: 18, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+              <span style={{ fontSize: 18, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
+            </span>
+            <span style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
           </Link>
 
           {/* Desktop nav */}
@@ -110,7 +114,13 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             {/* Brand */}
             <div>
-              <img src="/logos/prospectx-wordmark-transparent.png" alt="ProspectX Intelligence" className="h-7 object-contain" />
+              <span className="flex flex-col leading-none" style={{ gap: 1 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
+                </span>
+                <span style={{ fontSize: 7, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
+              </span>
               <p className="text-sm text-white/40 mt-2">
                 The intelligence layer for hockey.
               </p>

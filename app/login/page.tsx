@@ -216,7 +216,13 @@ function LoginForm() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/logos/prospectx-wordmark-transparent.png" alt="ProspectX Intelligence" className="h-12 object-contain mx-auto" />
+          <span className="flex flex-col items-center leading-none" style={{ gap: 1 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
+            </span>
+            <span style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
+          </span>
           <p className="font-oswald text-xs tracking-widest text-white/30 uppercase mt-2">
             Decision-Grade Hockey Intelligence
           </p>
