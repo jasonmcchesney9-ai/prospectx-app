@@ -4366,6 +4366,7 @@ def init_db():
         ("toi_minutes", "REAL"),
         ("pxr_null_reason", "TEXT"),
         ("prev_pxr_score", "NUMERIC(5,1)"),
+        ("score_type", "TEXT DEFAULT 'full'"),
     ]:
         if col_name not in pxr_cols:
             conn.execute(f"ALTER TABLE pxr_scores ADD COLUMN {col_name} {col_def}")
@@ -10125,6 +10126,224 @@ def recalculate_pxr_for_players(player_ids: list[str], season: str = '2025-26') 
         conn.close()
 
 
+def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
+    """Tier 2 PXR — estimated scores from basic player_stats for players without InStat data.
+
+    Steps:
+        1. Fetch players with GP >= 10 in player_stats who have NO Tier 1 (full) score
+        2. Compute z-scores for PPG, GPG, APG within league+position_group
+        3. Build composite: F = 50% scoring + 25% consistency + 25% positional
+                            D = 25% scoring + 25% consistency + 50% positional
+                            G = GP-based percentile only (no sv% in basic stats)
+        4. Scale composite to 0-100 using min-max within league+position
+        5. Apply age modifier via league+cohort percentiles
+        6. Insert with score_type='estimated', ON CONFLICT guard — never overwrites Tier 1
+    """
+    import time as _time
+    import statistics as _st
+
+    start = _time.time()
+    _own_conn = conn is None
+    if _own_conn:
+        conn = get_db()
+
+    MIN_GP = 10
+
+    # ── Step 1: Find eligible players (have basic stats, no Tier 1 PXR) ──
+    rows = conn.execute("""
+        SELECT ps.player_id, p.position, p.current_league, p.date_of_birth,
+               SUM(ps.gp) as gp, SUM(ps.g) as g, SUM(ps.a) as a, SUM(ps.p) as pts,
+               SUM(ps.plus_minus) as pm, SUM(ps.pim) as pim
+        FROM player_stats ps
+        JOIN players p ON p.id = ps.player_id
+        LEFT JOIN pxr_scores px ON px.player_id = ps.player_id AND px.season = ?
+                                   AND px.score_type = 'full' AND px.pxr_score IS NOT NULL
+        WHERE ps.season = ?
+          AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+          AND px.player_id IS NULL
+        GROUP BY ps.player_id, p.position, p.current_league, p.date_of_birth
+        HAVING SUM(ps.gp) >= ?
+    """, (season, season, MIN_GP)).fetchall()
+
+    if not rows:
+        if _own_conn:
+            conn.close()
+        return {'scored': 0, 'skipped': 0, 'duration_ms': 0}
+
+    # ── Step 2: Position group mapping + per-60 rates ──
+    def _pos_grp(pos):
+        if not pos:
+            return 'F'
+        p = pos.upper().strip()
+        if p in ('G', 'GOALIE', 'GOALTENDER'):
+            return 'G'
+        if p in ('D', 'LD', 'RD', 'DEFENSE', 'DEFENSEMAN', 'DEFENCEMAN'):
+            return 'D'
+        return 'F'
+
+    def _birth_year(dob):
+        if not dob:
+            return None
+        try:
+            return int(str(dob)[:4])
+        except (ValueError, TypeError):
+            return None
+
+    players = []
+    for r in rows:
+        gp = int(r['gp'] or 0)
+        g = int(r['g'] or 0)
+        a = int(r['a'] or 0)
+        pts = int(r['pts'] or 0)
+        pg = _pos_grp(r['position'])
+        if gp < MIN_GP:
+            continue
+        players.append({
+            'player_id': r['player_id'],
+            'position_group': pg,
+            'league': r['current_league'] or 'Unknown',
+            'birth_year': _birth_year(r['date_of_birth']),
+            'gp': gp,
+            'gpg': g / gp,
+            'apg': a / gp,
+            'ppg': pts / gp,
+            'consistency': gp,  # raw GP for consistency metric
+        })
+
+    if not players:
+        if _own_conn:
+            conn.close()
+        return {'scored': 0, 'skipped': 0, 'duration_ms': 0}
+
+    # ── Step 3: Z-scores within league+position_group ──
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for p in players:
+        groups[(p['league'], p['position_group'])].append(p)
+
+    for key, grp in groups.items():
+        # Compute z-scores for PPG, GPG, APG
+        for metric in ('ppg', 'gpg', 'apg'):
+            vals = [p[metric] for p in grp]
+            mean = _st.mean(vals) if vals else 0
+            sd = _st.stdev(vals) if len(vals) >= 2 else 1.0
+            sd = max(sd, 0.001)  # avoid division by zero
+            for p in grp:
+                p[f'z_{metric}'] = (p[metric] - mean) / sd
+
+        # Consistency z-score: GP / max_gp_in_group
+        max_gp = max(p['gp'] for p in grp) if grp else 1
+        for p in grp:
+            p['z_consistency'] = p['gp'] / max(max_gp, 1)
+
+    # ── Step 4: Composite score per spec weights ──
+    TIER2_WEIGHTS = {
+        'F': {'scoring': 0.50, 'consistency': 0.25, 'positional': 0.25},
+        'D': {'scoring': 0.25, 'consistency': 0.25, 'positional': 0.50},
+    }
+
+    for p in players:
+        pg = p['position_group']
+        if pg == 'G':
+            # Goalie placeholder: GP-based percentile within league goalies
+            p['raw_composite'] = p['z_consistency']
+        else:
+            w = TIER2_WEIGHTS.get(pg, TIER2_WEIGHTS['F'])
+            scoring = p.get('z_ppg', 0)
+            consistency = p.get('z_consistency', 0)
+            positional = p.get('z_apg', 0) if pg == 'D' else p.get('z_gpg', 0)
+            p['raw_composite'] = (
+                w['scoring'] * scoring +
+                w['consistency'] * consistency +
+                w['positional'] * positional
+            )
+
+    # ── Step 5: Scale to 0-100 within league+position ──
+    for key, grp in groups.items():
+        composites = [p['raw_composite'] for p in grp]
+        c_min = min(composites) if composites else 0
+        c_max = max(composites) if composites else 1
+        c_range = c_max - c_min
+        if c_range < 0.001:
+            c_range = 1.0
+        for p in grp:
+            # Scale to 30-85 range (Tier 2 never reaches extreme ends)
+            scaled = ((p['raw_composite'] - c_min) / c_range) * 55 + 30
+            p['pxr_score'] = round(max(30, min(85, scaled)), 1)
+
+    # ── Step 6: League percentile, cohort percentile, age modifier ──
+    # League percentile: within league+position
+    for key, grp in groups.items():
+        sorted_grp = sorted(grp, key=lambda x: x['pxr_score'])
+        n = len(sorted_grp)
+        for rank, p in enumerate(sorted_grp):
+            p['league_percentile'] = round((rank / (n - 1)) * 100, 1) if n > 1 else 50.0
+
+    # Cohort percentile: within birth_year + position_group
+    cohort_groups = defaultdict(list)
+    for p in players:
+        if p['birth_year']:
+            cohort_groups[(p['birth_year'], p['position_group'])].append(p)
+    for key, grp in cohort_groups.items():
+        sorted_grp = sorted(grp, key=lambda x: x['pxr_score'])
+        n = len(sorted_grp)
+        for rank, p in enumerate(sorted_grp):
+            p['cohort_percentile'] = round((rank / (n - 1)) * 100, 1) if n > 1 else 50.0
+
+    for p in players:
+        if 'cohort_percentile' not in p:
+            p['cohort_percentile'] = 50.0
+        lp = p.get('league_percentile', 50.0)
+        cp = p.get('cohort_percentile', 50.0)
+        p['age_modifier'] = age_modifier_calc(lp, cp)
+        p['pxr_final'] = round(max(0, min(100, p['pxr_score'] + p['age_modifier'])), 1)
+
+    # ── Step 7: Insert into pxr_scores with ON CONFLICT guard ──
+    scored = 0
+    skipped = 0
+    now_ts = now_iso()
+    for p in players:
+        # ON CONFLICT: only update if score_type is NOT 'full' (never overwrite Tier 1)
+        conn.execute("""
+            INSERT INTO pxr_scores (
+                player_id, season, position_group,
+                pxr_score, p1_offense, p2_defense, p3_possession, p4_physical,
+                age_modifier, league_percentile, cohort_percentile,
+                toi_gate_met, data_completeness,
+                confidence_tier, gp, toi_minutes, pxr_null_reason, score_type, calc_timestamp
+            ) VALUES (?,?,?,?,NULL,NULL,NULL,NULL,?,?,?,0,?,?,?,NULL,NULL,?,?)
+            ON CONFLICT (player_id, season) DO UPDATE SET
+                pxr_score = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.pxr_score ELSE EXCLUDED.pxr_score END,
+                age_modifier = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.age_modifier ELSE EXCLUDED.age_modifier END,
+                league_percentile = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.league_percentile ELSE EXCLUDED.league_percentile END,
+                cohort_percentile = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.cohort_percentile ELSE EXCLUDED.cohort_percentile END,
+                confidence_tier = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.confidence_tier ELSE EXCLUDED.confidence_tier END,
+                gp = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.gp ELSE EXCLUDED.gp END,
+                score_type = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.score_type ELSE EXCLUDED.score_type END,
+                pxr_null_reason = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.pxr_null_reason ELSE NULL END,
+                calc_timestamp = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.calc_timestamp ELSE CURRENT_TIMESTAMP END
+        """, (
+            p['player_id'], season, p['position_group'],
+            p['pxr_final'],
+            round(p['age_modifier'], 1),
+            round(p.get('league_percentile', 50.0), 1),
+            round(p.get('cohort_percentile', 50.0), 1),
+            0.3,  # data_completeness — Tier 2 has limited data
+            'moderate' if p['gp'] >= 20 else 'small_sample',
+            p['gp'],
+            'estimated', now_ts,
+        ))
+        scored += 1
+
+    conn.commit()
+    if _own_conn:
+        conn.close()
+
+    duration_ms = int((_time.time() - start) * 1000)
+    logger.info("Tier 2 PXR: scored %d players (estimated) in %d ms", scored, duration_ms)
+    return {'scored': scored, 'skipped': skipped, 'duration_ms': duration_ms}
+
+
 def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, error_message: str | None = None):
     """Write a row to pxr_run_log for audit trail."""
     try:
@@ -10150,10 +10369,13 @@ def recalculate_pxr_scores_cron():
         conn = get_db()
         result = calculate_pxr_scores(conn, '2025-26')
         conn.close()
+        scored_t1 = result.get('scored', 0)
+        # Tier 2: estimated scores for players without InStat data
+        t2_result = calculate_tier2_pxr(season='2025-26')
+        scored_t2 = t2_result.get('scored', 0)
         duration = _time.time() - start
-        scored = result.get('scored', 0)
-        logger.info("[PXR CRON] Complete: %d players scored in %.2fs", scored, duration)
-        _log_pxr_run(scored, duration, 'success')
+        logger.info("[PXR CRON] Complete: %d Tier 1 + %d Tier 2 scored in %.2fs", scored_t1, scored_t2, duration)
+        _log_pxr_run(scored_t1 + scored_t2, duration, 'success')
     except Exception as e:
         duration = _time.time() - start
         logger.error("[PXR CRON] Failed after %.2fs: %s", duration, e)
