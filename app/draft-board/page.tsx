@@ -113,7 +113,7 @@ function sortPlayers(players: DraftPlayer[], key: SortKey, asc: boolean): DraftP
 function SkeletonRow() {
   return (
     <tr className="animate-pulse">
-      {Array.from({ length: 11 }).map((_, i) => (
+      {Array.from({ length: 12 }).map((_, i) => (
         <td key={i} className="px-3 py-3">
           <div className="h-4 bg-gray-200 rounded w-full" />
         </td>
@@ -348,6 +348,7 @@ export default function DraftBoardPage() {
                   <SortHeader label="Team" sortId="current_team" />
                   <SortHeader label="League" sortId="current_league" />
                   <SortHeader label="PXR" sortId="pxr_score" />
+                  <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 whitespace-nowrap" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
                   <SortHeader label="League %" sortId="league_percentile" />
                   <SortHeader label="Cohort %" sortId="cohort_percentile" />
                   <SortHeader label="Age Mod" sortId="age_modifier" />
@@ -363,7 +364,7 @@ export default function DraftBoardPage() {
                   Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                 ) : rowsWithTiers.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-12 text-center text-muted text-sm">
+                    <td colSpan={13} className="px-4 py-12 text-center text-muted text-sm">
                       No players match these filters. Try adjusting your criteria.
                     </td>
                   </tr>
@@ -372,7 +373,7 @@ export default function DraftBoardPage() {
                     if (row.type === "tier") {
                       return (
                         <tr key={`tier-${row.tier.id}`} className="border-t-2" style={{ borderColor: row.tier.color }}>
-                          <td colSpan={12} className={`px-4 py-1.5 ${row.tier.bgColor}`}>
+                          <td colSpan={13} className={`px-4 py-1.5 ${row.tier.bgColor}`}>
                             <span
                               className="text-[10px] font-oswald font-bold uppercase tracking-widest"
                               style={{ color: row.tier.color }}
@@ -420,6 +421,7 @@ export default function DraftBoardPage() {
                             <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                           )}
                         </td>
+                        <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>—</td>
                         <td className="px-3 py-2.5 text-xs text-muted">
                           {p.league_percentile != null ? `Top ${Math.max(1, Math.round(100 - p.league_percentile))}%` : "—"}
                         </td>
