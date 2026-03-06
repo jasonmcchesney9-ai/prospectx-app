@@ -256,13 +256,13 @@ function relativeTime(dateStr: string): string {
 
 // Section titles for the 9-section development plan model
 const DEV_PLAN_SECTION_TITLES: Record<number, string> = {
-  1: "Player Snapshot & Identity",
-  2: "Season Context",
-  3: "Current Strengths",
-  4: "Development Priorities",
-  5: "Phase Plan",
-  6: "Practice & Game Integration",
-  7: "Success Metrics",
+  1: "Current Performance",
+  2: "Technical Skills",
+  3: "Physical Development",
+  4: "Mental Game",
+  5: "Hockey IQ",
+  6: "Goals & Milestones",
+  7: "Action Plan",
   8: "Staff Notes",
 };
 
@@ -2617,15 +2617,15 @@ export default function PlayerDetailPage() {
             )}
 
             {/* ── Section 3: Development Plan ─────────────────────── */}
-            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-oswald uppercase tracking-wider text-muted">Development Plan</h3>
+            <div style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #0D9488" }}>
+              <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h3 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".06em", textTransform: "uppercase" }}>Development Plan</h3>
                 <div className="flex gap-2">
                   {/* Version history toggle (coach/admin only, saved state) */}
                   {COACH_ROLES.has(userRole) && devPlanV2History.length > 1 && planStatus === "saved" && (
                     <button
                       onClick={() => setShowDevVersions(!showDevVersions)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-gray-50 text-muted"
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-white/20 rounded-lg hover:bg-white/10 text-white/70"
                     >
                       <History size={14} />
                       v{devPlanV2?.version || 1} of {devPlanV2History.length}
@@ -2636,7 +2636,7 @@ export default function PlayerDetailPage() {
                     <button
                       onClick={handleGenerateV2}
                       disabled={generatingDevPlan}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-orange text-white rounded-lg hover:bg-orange/90 disabled:opacity-50"
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
                     >
                       {generatingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                       {devPlanV2 ? "Generate New Version" : "Generate Dev Plan"}
@@ -2645,6 +2645,7 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
 
+              <div style={{ padding: "12px 16px 14px" }}>
               {/* Version History Dropdown */}
               {showDevVersions && devPlanV2History.length > 1 && (
                 <div className="bg-gray-50 rounded-lg border border-border p-3 space-y-1 mb-3">
@@ -2677,11 +2678,19 @@ export default function PlayerDetailPage() {
                 <div className="text-center py-12">
                   <TrendingUp size={32} className="mx-auto text-muted/40 mb-3" />
                   {FAMILY_ROLES.has(userRole) ? (
-                    <p className="text-muted text-sm">Your development plan will appear here once your coach creates it</p>
+                    <p className="text-muted text-sm">Your development plan hasn&apos;t been created yet. Ask your coach.</p>
                   ) : (
                     <>
                       <p className="text-muted text-sm mb-1">No development plan on file for {new Date().getFullYear()}-{String(new Date().getFullYear() + 1).slice(2)}</p>
-                      <p className="text-muted/60 text-xs">Click &quot;Generate Dev Plan&quot; to create an AI-powered roadmap.</p>
+                      <p className="text-muted/60 text-xs mb-4">Click below to create an AI-powered development roadmap.</p>
+                      <button
+                        onClick={handleGenerateV2}
+                        disabled={generatingDevPlan}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                      >
+                        <Sparkles size={16} />
+                        Generate Dev Plan
+                      </button>
                     </>
                   )}
                 </div>
@@ -2691,7 +2700,7 @@ export default function PlayerDetailPage() {
               {planStatus === "generating" && (
                 <div className="text-center py-12">
                   <Loader2 size={28} className="mx-auto text-teal animate-spin mb-3" />
-                  <p className="text-sm text-navy font-medium">&#9889; PXI is building the plan...</p>
+                  <p className="text-sm text-navy font-medium">&#9889; PXI is generating...</p>
                   <p className="text-xs text-muted mt-1">This may take 15-30 seconds</p>
                 </div>
               )}
@@ -2717,11 +2726,11 @@ export default function PlayerDetailPage() {
                     if (isStaffOnly && !COACH_ROLES.has(userRole)) return null;
 
                     return (
-                      <div key={num} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                      <div key={num} style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #0D9488" }}>
+                        <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-oswald text-muted">{num}.</span>
-                            <h4 className="text-sm font-semibold text-navy">{title}</h4>
+                            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,.4)" }}>{num}.</span>
+                            <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>{title}</h4>
                             {isStaffOnly && (
                               <span className="flex items-center gap-1 text-xs text-teal bg-teal/10 px-2 py-0.5 rounded-full">
                                 <Lock size={10} /> Internal
@@ -2732,7 +2741,7 @@ export default function PlayerDetailPage() {
                           {!isStaffOnly && COACH_ROLES.has(userRole) && (
                             <button
                               onClick={() => setVisibilityFlags((prev) => ({ ...prev, [visKey]: !prev[visKey] }))}
-                              className={`p-1 rounded ${visibilityFlags[visKey] ? "text-teal" : "text-muted/40"}`}
+                              className={`p-1 rounded ${visibilityFlags[visKey] ? "text-teal" : "text-white/30"}`}
                               title={visibilityFlags[visKey] ? "Visible to player/parent" : "Hidden from player/parent"}
                             >
                               {visibilityFlags[visKey] ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -2813,14 +2822,13 @@ export default function PlayerDetailPage() {
 
                     // For family roles, skip hidden sections
                     if (FAMILY_ROLES.has(userRole) && !isVisible) return null;
-                    if (!content) return null;
 
                     return (
-                      <div key={num} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                      <div key={num} style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #0D9488" }}>
+                        <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-oswald text-muted">{num}.</span>
-                            <h4 className="text-sm font-semibold text-navy">{title}</h4>
+                            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,.4)" }}>{num}.</span>
+                            <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>{title}</h4>
                             {isUpdated && (
                               <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Updated
@@ -2830,7 +2838,7 @@ export default function PlayerDetailPage() {
                               <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" title="Unchanged" />
                             )}
                             {!isVisible && COACH_ROLES.has(userRole) && (
-                              <span className="flex items-center gap-1 text-xs text-muted/60 bg-gray-100 px-2 py-0.5 rounded-full">
+                              <span className="flex items-center gap-1 text-xs text-white/40 bg-white/10 px-2 py-0.5 rounded-full">
                                 <EyeOff size={10} /> Hidden
                               </span>
                             )}
@@ -2877,18 +2885,18 @@ export default function PlayerDetailPage() {
                                       }
                                     }}
                                     disabled={savingDevPlan}
-                                    className="p-1 text-teal hover:bg-teal/10 rounded"
+                                    className="p-1 text-teal hover:bg-white/10 rounded"
                                   >
                                     {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                                   </button>
-                                  <button onClick={() => setEditingV2Section(null)} className="p-1 text-muted hover:bg-gray-100 rounded">
+                                  <button onClick={() => setEditingV2Section(null)} className="p-1 text-white/50 hover:bg-white/10 rounded">
                                     <X size={14} />
                                   </button>
                                 </>
                               ) : (
                                 <button
                                   onClick={() => { setEditingV2Section(num); setEditV2Content(content || ""); }}
-                                  className="p-1 text-muted hover:bg-gray-100 rounded"
+                                  className="p-1 text-white/50 hover:bg-white/10 rounded"
                                 >
                                   <Edit3 size={14} />
                                 </button>
@@ -2904,8 +2912,10 @@ export default function PlayerDetailPage() {
                               rows={8}
                               className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
                             />
-                          ) : (
+                          ) : content ? (
                             <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{content}</div>
+                          ) : (
+                            <p className="text-sm text-muted/40 italic">Not yet completed</p>
                           )}
                         </div>
                       </div>
@@ -2913,14 +2923,14 @@ export default function PlayerDetailPage() {
                   })}
 
                   {/* Section 8: Staff Notes (coach/admin only) */}
-                  {COACH_ROLES.has(userRole) && devPlanV2.section_8_staff_notes && (
-                    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                  {COACH_ROLES.has(userRole) && (
+                    <div style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #0D9488" }}>
+                      <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-oswald text-muted">8.</span>
-                          <h4 className="text-sm font-semibold text-navy">Staff Notes</h4>
+                          <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,.4)" }}>8.</span>
+                          <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>Staff Notes</h4>
                           <span className="flex items-center gap-1 text-xs text-teal bg-teal/10 px-2 py-0.5 rounded-full">
-                            <Lock size={10} /> Internal — not visible to player or parent
+                            <Lock size={10} /> Internal
                           </span>
                         </div>
                         <button
@@ -2932,7 +2942,7 @@ export default function PlayerDetailPage() {
                               setEditV2Content(devPlanV2.section_8_staff_notes || "");
                             }
                           }}
-                          className="p-1 text-muted hover:bg-gray-100 rounded"
+                          className="p-1 text-white/50 hover:bg-white/10 rounded"
                         >
                           {editingV2Section === 8 ? <X size={14} /> : <Edit3 size={14} />}
                         </button>
@@ -2985,8 +2995,10 @@ export default function PlayerDetailPage() {
                               </button>
                             </div>
                           </>
-                        ) : (
+                        ) : devPlanV2.section_8_staff_notes ? (
                           <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{devPlanV2.section_8_staff_notes}</div>
+                        ) : (
+                          <p className="text-sm text-muted/40 italic">No staff notes yet</p>
                         )}
                       </div>
                     </div>
@@ -3032,6 +3044,7 @@ export default function PlayerDetailPage() {
                   <p className="text-sm text-muted">Loading development plan...</p>
                 </div>
               )}
+              </div>
             </div>
           </section>
         )}
