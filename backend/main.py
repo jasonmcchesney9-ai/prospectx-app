@@ -9529,6 +9529,10 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     import time as _time
     start = _time.time()
 
+    SHRINKAGE_K = 20  # Bayesian shrinkage constant for per-60 stats
+    MIN_GP = 10       # Minimum games played to receive a PXR score
+    MIN_TOI_PER_GAME = {'F': 480, 'D': 720, 'G': 0}  # seconds/game (F=8min, D=12min, G=exempt)
+
     # Step 0: Orphan cleanup — remove stale pxr_scores rows for players
     # no longer present in instat_player_stats (prevents ghost scores)
     conn.execute("""
@@ -9653,6 +9657,45 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (rd['player_id'], season, pos_group, _gp_val, _toi_min))
             continue
+        # FIX 1: GP gate — minimum 10 games played
+        _gp_check = int(rd.get('gp') or 0)
+        if _gp_check < MIN_GP:
+            null_toi += 1
+            _toi_min_gp = round(toi_seconds / 60.0, 1)
+            conn.execute("""
+                INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
+                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    toi_gate_met = 0, pxr_score = NULL,
+                    p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
+                    p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
+                    league_percentile = NULL, cohort_percentile = NULL,
+                    data_completeness = NULL, confidence_tier = 'small_sample',
+                    gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    calc_timestamp = CURRENT_TIMESTAMP
+            """, (rd['player_id'], season, pos_group, _gp_check, _toi_min_gp))
+            continue
+        # FIX 3: TOI-per-game gate — F: 8 min/gm, D: 12 min/gm, G: exempt
+        avg_toi_per_game = toi_seconds / _gp_check if _gp_check > 0 else 0
+        min_toi_pg = MIN_TOI_PER_GAME.get(pos_group, 0)
+        if min_toi_pg > 0 and avg_toi_per_game < min_toi_pg:
+            null_toi += 1
+            _toi_min_pg = round(toi_seconds / 60.0, 1)
+            conn.execute("""
+                INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
+                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    toi_gate_met = 0, pxr_score = NULL,
+                    p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
+                    p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
+                    league_percentile = NULL, cohort_percentile = NULL,
+                    data_completeness = NULL, confidence_tier = 'small_sample',
+                    gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    calc_timestamp = CURRENT_TIMESTAMP
+            """, (rd['player_id'], season, pos_group, _gp_check, _toi_min_pg))
+            continue
         rd['toi_seconds'] = toi_seconds
         rd['position_group'] = pos_group
         players_data.append(rd)
@@ -9682,6 +9725,25 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                     gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
                     calc_timestamp = CURRENT_TIMESTAMP
             """, (pid, season, pos_group, _gp_val_g, _toi_min_g))
+            continue
+        # FIX 1: GP gate for goalies
+        _gp_check_g = int(gd.get('gp') or 0)
+        if _gp_check_g < MIN_GP:
+            null_toi += 1
+            _toi_min_gp_g = round(toi_seconds / 60.0, 1)
+            conn.execute("""
+                INSERT INTO pxr_scores (player_id, season, position_group, toi_gate_met,
+                    pxr_score, confidence_tier, gp, toi_minutes, calc_timestamp)
+                VALUES (?, ?, ?, 0, NULL, 'small_sample', ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (player_id, season) DO UPDATE SET
+                    toi_gate_met = 0, pxr_score = NULL,
+                    p1_offense = NULL, p2_defense = NULL, p3_possession = NULL,
+                    p4_physical = NULL, p5_goalie = NULL, age_modifier = NULL,
+                    league_percentile = NULL, cohort_percentile = NULL,
+                    data_completeness = NULL, confidence_tier = 'small_sample',
+                    gp = EXCLUDED.gp, toi_minutes = EXCLUDED.toi_minutes,
+                    calc_timestamp = CURRENT_TIMESTAMP
+            """, (pid, season, pos_group, _gp_check_g, _toi_min_gp_g))
             continue
         gd['toi_seconds'] = toi_seconds
         gd['position_group'] = pos_group
@@ -9747,6 +9809,38 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
                 p['g_sc_sv_pct'] = float(gd.get('sc_sv_pct') or 0)
                 p['g_sv_pct_hd'] = float(gd.get('sv_pct_high_danger') or 0)
                 p['g_xg_per_shot'] = float(gd.get('xg_per_shot') or 0)
+
+    # Step 3b: Bayesian shrinkage on per-60 stats (FIX 2)
+    # shrunk = (GP / (GP + k)) * player_per60 + (k / (GP + k)) * league_mean_per60
+    per60_metrics = [
+        'goals_60', 'assists_60', 'xg_60', 'shots_60', 'sc_60', 'pp_60',
+        'opp_xg_60', 'takeaways_60', 'blocks_60', 'hits_60', 'losses_60', 'bkouts_60',
+    ]
+    # Compute league+position means for each per-60 metric (qualifying skaters only)
+    skaters_for_shrinkage = [p for p in players_data if p['position_group'] in ('F', 'D')]
+    league_pos_means = {}  # (league, pos_group, metric) -> mean
+    from collections import defaultdict as _defaultdict
+    _lp_buckets = _defaultdict(lambda: _defaultdict(list))
+    for p in skaters_for_shrinkage:
+        key = (p.get('current_league') or 'UNKNOWN', p['position_group'])
+        for m in per60_metrics:
+            _lp_buckets[key][m].append(float(p.get(m) or 0))
+    for (league, pos), metric_vals in _lp_buckets.items():
+        for m, vals in metric_vals.items():
+            league_pos_means[(league, pos, m)] = statistics.mean(vals) if vals else 0.0
+
+    # Apply shrinkage to each skater's per-60 stats
+    for p in skaters_for_shrinkage:
+        gp = int(p.get('gp') or 0)
+        if gp <= 0:
+            continue
+        key = (p.get('current_league') or 'UNKNOWN', p['position_group'])
+        w_player = gp / (gp + SHRINKAGE_K)
+        w_prior = SHRINKAGE_K / (gp + SHRINKAGE_K)
+        for m in per60_metrics:
+            raw = float(p.get(m) or 0)
+            league_mean = league_pos_means.get((key[0], key[1], m), 0.0)
+            p[m] = w_player * raw + w_prior * league_mean
 
     # Step 4: League z-scores + position-separated percentiles
     # Compute PERCENT_RANK within position_group (F, D separately) so that
