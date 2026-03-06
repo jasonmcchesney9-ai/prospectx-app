@@ -545,7 +545,7 @@ export default function NavBar() {
           {navConfig.showPlayerHub && (
             <div className="border-t border-white/10 mt-1 pt-1">
               <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                Player Hub
+                {roleGroup === "FAMILY" ? "My Player" : "Player Hub"}
               </p>
               {(roleGroup === "FAMILY"
                 ? [{ href: "/my-player", label: "My Player", icon: Heart }]
@@ -1060,7 +1060,7 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
         }`}
       >
         <Users size={16} />
-        Player Hub
+        {roleGroup === "FAMILY" ? "My Player" : "Player Hub"}
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
