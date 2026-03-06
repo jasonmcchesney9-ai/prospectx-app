@@ -342,7 +342,7 @@ export default function PlayerDetailPage() {
   const [gameLogOffset, setGameLogOffset] = useState(0);
   const [recentForm, setRecentForm] = useState<RecentForm | null>(null);
   const [trendlineData, setTrendlineData] = useState<import("@/types/api").TrendlineResponse | null>(null);
-  const [pxrData, setPxrData] = useState<{ pxr_score: number; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null; confidence_tier?: string | null; gp?: number | null; toi_minutes?: number | null; pxr_null_reason?: string | null } | null>(null);
+  const [pxrData, setPxrData] = useState<{ pxr_score: number | null; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null; confidence_tier?: string | null; gp?: number | null; toi_minutes?: number | null; pxr_null_reason?: string | null } | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
 
@@ -1616,7 +1616,7 @@ export default function PlayerDetailPage() {
                   <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXR Score Profile</span>
                     <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, letterSpacing: ".06em", textTransform: "uppercase", background: hasPxr ? "rgba(13,148,136,.15)" : "rgba(255,255,255,.08)", color: hasPxr ? "#14B8A8" : "rgba(255,255,255,.4)", border: hasPxr ? "1px solid rgba(13,148,136,.25)" : "1px solid rgba(255,255,255,.1)" }}>
-                      {hasPxr ? pxrTierLabel(pxrData.pxr_score) : "Needs Data"}
+                      {hasPxr ? pxrTierLabel(pxrData.pxr_score!) : "Needs Data"}
                     </span>
                   </div>
 
@@ -1645,8 +1645,8 @@ export default function PlayerDetailPage() {
                       <>
                         {/* Large composite score */}
                         <div style={{ textAlign: "center", marginBottom: 16 }}>
-                          <div style={{ fontSize: 42, fontWeight: 800, color: "#0D9488", lineHeight: 1, letterSpacing: -1 }}>{pxrData.pxr_score.toFixed(1)}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#5A7291", marginTop: 4 }}>{pxrTierLabel(pxrData.pxr_score)}</div>
+                          <div style={{ fontSize: 42, fontWeight: 800, color: "#0D9488", lineHeight: 1, letterSpacing: -1 }}>{pxrData.pxr_score!.toFixed(1)}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#5A7291", marginTop: 4 }}>{pxrTierLabel(pxrData.pxr_score!)}</div>
                         </div>
 
                         {/* Four pillar bars */}
