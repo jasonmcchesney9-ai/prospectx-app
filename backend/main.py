@@ -25627,6 +25627,7 @@ def detect_and_route_import(
         now = datetime.now()
         year = now.year
         season = f"{year-1}-{year}" if now.month < 9 else f"{year}-{year+1}"
+    season = _normalize_season(season) or season
 
     # ── XML file: route to XML event import pipeline ──
     if fname.endswith(".xml"):
@@ -26199,6 +26200,7 @@ def _import_league_teams(rows, season, org_id, team_name_override=None):
 
 def _import_league_skaters(rows, season, org_id):
     """Import league-level skater stats (760 players x 138 columns)."""
+    season = _normalize_season(season) or season
     conn = get_db()
     created = 0
     updated = 0
@@ -26336,6 +26338,7 @@ def _import_league_skaters(rows, season, org_id):
 
 def _import_league_goalies(rows, season, org_id):
     """Import league-level goalie stats."""
+    season = _normalize_season(season) or season
     conn = get_db()
     created = 0
     updated = 0
