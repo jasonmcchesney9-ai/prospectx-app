@@ -939,237 +939,215 @@ export default function PlayerDetailPage() {
   return (
     <ProtectedRoute>
       <NavBar />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <Link href="/players" className="flex items-center gap-1 text-sm text-muted hover:text-navy mb-6 no-print">
-          <ArrowLeft size={14} /> Back to Players
-        </Link>
+      <main className="max-w-[1200px] mx-auto px-6 py-6" style={{ fontFamily: "'DM Sans', sans-serif", background: "#DCF0FA", minHeight: "100vh" }}>
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 mb-4 no-print" style={{ fontFamily: "'DM Mono', monospace", fontSize: 11.5, color: "#5A7291" }}>
+          <Link href="/players" className="hover:underline" style={{ color: "#0D9488" }}>Players</Link>
+          <span style={{ color: "#8BA4BB" }}>›</span>
+          {player.current_team && (
+            <>
+              <Link href={`/teams/${encodeURIComponent(player.current_team)}`} className="hover:underline" style={{ color: "#0D9488" }}>{player.current_team}</Link>
+              <span style={{ color: "#8BA4BB" }}>›</span>
+            </>
+          )}
+          <span style={{ color: "#0F2942", fontWeight: 600 }}>{player.first_name} {player.last_name}</span>
+        </div>
 
-        {/* Player Header */}
-        <div className="bg-gradient-to-br from-navy to-navy-light rounded-xl p-6 text-white mb-1">
-          <div className="flex items-start justify-between gap-4">
-            {/* Left: Avatar + Identity */}
-            <div className="flex items-start gap-4 flex-1 min-w-0">
-              {/* Player Photo / Position Silhouette */}
-              <div className="shrink-0">
-                {hasRealImage(player.image_url) ? (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-white/20 bg-white/10">
-                    <img
-                      src={assetUrl(player.image_url)}
-                      alt={`${player.first_name} ${player.last_name}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-white/10 bg-teal/10 flex items-center justify-center">
-                    {player.position === "G" || player.position === "GK" ? (
-                      <svg width={32} height={32} viewBox="0 0 24 24" fill="none" className="text-white/40">
-                        <circle cx="12" cy="5" r="3" fill="currentColor" opacity="0.6" />
-                        <path d="M6 11h12v2H6z" fill="currentColor" opacity="0.3" />
-                        <path d="M8 13v7h2v-4h4v4h2v-7H8z" fill="currentColor" opacity="0.5" />
-                        <rect x="4" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
-                        <rect x="17" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
-                      </svg>
-                    ) : (
-                      <svg width={32} height={32} viewBox="0 0 24 24" fill="none" className="text-white/40">
-                        <circle cx="12" cy="4" r="3" fill="currentColor" opacity="0.6" />
-                        <path d="M10 8h4l2 6h-8l2-6z" fill="currentColor" opacity="0.5" />
-                        <path d="M9 14l-2 6h2l2-4 2 4h2l-2-6H9z" fill="currentColor" opacity="0.4" />
-                        <line x1="15" y1="10" x2="19" y2="6" stroke="currentColor" strokeWidth="1.2" opacity="0.35" strokeLinecap="round" />
-                      </svg>
-                    )}
-                  </div>
-                )}
-                {intelligence?.overall_grade && gradeToNumber(intelligence.overall_grade) > 0 && (
-                  <div className="mt-2 text-center cursor-help" title="PXI Scout Grade — An AI-generated assessment of this player's abilities across skating, hockey IQ, compete level, and more. Based on available scouting data.">
-                    <div className="text-lg font-bold text-teal">
-                      {gradeToNumber(intelligence.overall_grade).toFixed(1)}
-                      <span className="text-xs text-white/50 font-normal"> / 10</span>
-                    </div>
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-white/40">
-                      PXI Score
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0">
-                {/* Line 1: Player Name */}
-                <h1 className="text-2xl font-bold font-oswald truncate">
-                  {player.first_name} {player.last_name}
-                </h1>
-                {/* Line 2: Position · Team · League */}
-                <div className="flex items-center gap-1.5 mt-1 text-sm text-white/70 flex-wrap">
-                  <span className="px-2 py-0.5 bg-teal/20 text-teal rounded font-oswald font-bold text-xs uppercase tracking-wide">
-                    {fullPosition(player.position)}
-                  </span>
-                  {player.current_team && (
-                    <>
-                      <span className="text-white/30">·</span>
-                      <Link href={`/teams/${encodeURIComponent(player.current_team)}`} className="text-teal hover:underline">
-                        {player.current_team}
-                      </Link>
-                    </>
-                  )}
-                  {player.current_league && (
-                    <>
-                      <span className="text-white/30">·</span>
-                      <Link href={`/leagues?league=${encodeURIComponent(player.current_league)}`} className="text-white/50 hover:text-teal transition-colors">
-                        {formatLeague(player.current_league)}
-                      </Link>
-                    </>
-                  )}
-                  {playerTransfers.length > 0 && playerTransfers[0].from_team_name && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange/20 text-orange/90 font-medium">
-                      Acquired from {playerTransfers[0].from_team_name}
-                    </span>
-                  )}
-                  {player.commitment_status && player.commitment_status !== "Uncommitted" && (
-                    <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs ${
-                      COMMITMENT_STATUS_COLORS[player.commitment_status]?.bg || "bg-white/10"
-                    } ${COMMITMENT_STATUS_COLORS[player.commitment_status]?.text || "text-white/70"}`}>
-                      {player.commitment_status}
-                    </span>
-                  )}
-                  {player.roster_status && player.roster_status !== "active" && (
-                    <span className={`px-2 py-0.5 rounded font-oswald font-bold text-xs uppercase tracking-wide ${
-                      player.roster_status === "inj" ? "bg-red-500/20 text-red-300" :
-                      player.roster_status === "susp" ? "bg-yellow-500/20 text-yellow-300" :
-                      player.roster_status === "ap" ? "bg-blue-500/20 text-blue-300" :
-                      player.roster_status === "scrch" ? "bg-gray-400/20 text-gray-300" :
-                      "bg-white/10 text-white/70"
-                    }`}>
-                      {player.roster_status === "inj" ? "INJ" :
-                       player.roster_status === "susp" ? "SUSP" :
-                       player.roster_status === "ap" ? "AP" :
-                       player.roster_status === "scrch" ? "SCRCH" :
-                       player.roster_status.toUpperCase()}
-                    </span>
-                  )}
-                  <PlayerStatusBadges tags={player.tags || []} size="md" />
+        {/* ── HERO ── */}
+        <div style={{ background: "linear-gradient(145deg, #091C30 0%, #0F2942 60%, #1A3A5C 100%)", borderRadius: 14, border: "1px solid rgba(255,255,255,.07)", boxShadow: "0 4px 24px rgba(0,0,0,.2)", padding: "20px 24px 0", position: "relative", overflow: "hidden", marginBottom: 4 }}>
+          {/* Teal left stripe */}
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: "#0D9488", borderRadius: "14px 0 0 14px" }} />
+          {/* Decorative circle */}
+          <div style={{ position: "absolute", right: -60, top: -60, width: 240, height: 240, border: "1.5px solid rgba(255,255,255,.04)", borderRadius: "50%", pointerEvents: "none" }} />
+
+          <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+            {/* Player Photo */}
+            <div style={{ flexShrink: 0, position: "relative" }}>
+              {hasRealImage(player.image_url) ? (
+                <div style={{ width: 88, height: 88, borderRadius: 12, border: "2px solid rgba(13,148,136,.4)", overflow: "hidden" }}>
+                  <img src={assetUrl(player.image_url)} alt={`${player.first_name} ${player.last_name}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </div>
-                {/* Line 3: Jersey # · Handedness · Birth Year · Age */}
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-white/50 flex-wrap">
-                  {player.jersey_number && (
-                    <>
-                      <span className="font-oswald font-bold text-white/70">#{player.jersey_number}</span>
-                      <span className="text-white/20">·</span>
-                    </>
-                  )}
-                  {player.shoots && (
-                    <>
-                      <span>Shoots {player.shoots}</span>
-                      <span className="text-white/20">·</span>
-                    </>
-                  )}
-                  {player.birth_year && <span>Born {player.birth_year}</span>}
-                  {player.dob && (() => {
-                    const birth = new Date(player.dob);
-                    const today = new Date();
-                    let age = today.getFullYear() - birth.getFullYear();
-                    const m = today.getMonth() - birth.getMonth();
-                    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-                    return (
-                      <>
-                        {player.birth_year && <span className="text-white/20"> · </span>}
-                        <span>Age {age}</span>
-                      </>
-                    );
-                  })()}
-                </div>
-                {/* Line 4: Archetype (if set) */}
-                {player.archetype && (
-                  <p className="text-xs text-white/40 italic mt-1">{player.archetype}</p>
-                )}
-                {/* OVR badge removed — replaced by RoleAndOverallRow below header */}
-              </div>
-            </div>
-            {/* Right: Draft Chips + Physical Profile + Actions */}
-            <div className="shrink-0 flex flex-col items-end gap-3">
-              {/* Draft Context Chips */}
-              {(() => {
-                const league = (player.current_league || "").toUpperCase();
-                const by = player.birth_year;
-                const chlLeagues = ["OHL", "WHL", "QMJHL", "LHJMQ"];
-                const ncaaLeagues = ["USHL", "NAHL", "PREP", "USHS", "US PREP"];
-                const isCHL = chlLeagues.some(l => league.includes(l));
-                const isNCAA = ncaaLeagues.some(l => league.includes(l));
-                const isDraftWindow = by != null && by >= 2004 && by <= 2007;
-                if (isCHL && isDraftWindow) {
-                  return (
-                    <span className="px-2.5 py-1 rounded-lg bg-teal/20 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider border border-teal/30">
-                      CHL + NCAA Viable
-                    </span>
-                  );
-                }
-                if (isNCAA) {
-                  return (
-                    <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 text-[10px] font-oswald font-bold uppercase tracking-wider border border-blue-500/30">
-                      NCAA Path Only
-                    </span>
-                  );
-                }
-                return null;
-              })()}
-              {/* Physical Profile Mini-Block */}
-              {(player.height_cm || player.weight_kg || player.shoots) && (
-                <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/10 text-right">
-                  <p className="text-[9px] font-oswald uppercase tracking-wider text-white/40 mb-1">Physical</p>
-                  <div className="flex items-center gap-2 text-xs text-white/70">
-                    {player.height_cm && <span>{player.height_cm}cm</span>}
-                    {player.height_cm && player.weight_kg && <span className="text-white/20">·</span>}
-                    {player.weight_kg && <span>{player.weight_kg}kg</span>}
-                    {(player.height_cm || player.weight_kg) && player.shoots && <span className="text-white/20">·</span>}
-                    {player.shoots && <span>{player.shoots}</span>}
-                  </div>
+              ) : (
+                <div style={{ width: 88, height: 88, borderRadius: 12, background: "linear-gradient(145deg, #1A3A5C, #0F2942)", border: "2px solid rgba(13,148,136,.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                    <circle cx="22" cy="16" r="8" fill="white" opacity="0.4" />
+                    <path d="M6 40c0-8.837 7.163-16 16-16s16 7.163 16 16" fill="white" opacity="0.3" />
+                  </svg>
                 </div>
               )}
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 no-print">
+              {player.jersey_number && (
+                <div style={{ position: "absolute", bottom: -6, right: -6, background: "#0D9488", color: "white", fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 500, padding: "2px 6px", borderRadius: 4, border: "2px solid #091C30" }}>
+                  #{player.jersey_number}
+                </div>
+              )}
+            </div>
+
+            {/* Player Identity */}
+            <div style={{ flex: 1, paddingTop: 2 }}>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: "white", letterSpacing: -0.4, lineHeight: 1, marginBottom: 5, fontFamily: "'DM Sans', sans-serif" }}>
+                {player.first_name} {player.last_name}
+              </h1>
+              {/* Meta pills */}
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", letterSpacing: ".04em" }}>
+                  {player.position || "—"}
+                </span>
+                <span style={{ color: "rgba(255,255,255,.2)", fontSize: 12 }}>·</span>
+                {player.shoots && (
+                  <>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(255,255,255,.09)", color: "rgba(255,255,255,.55)", letterSpacing: ".04em" }}>
+                      {player.shoots}-shot
+                    </span>
+                    <span style={{ color: "rgba(255,255,255,.2)", fontSize: 12 }}>·</span>
+                  </>
+                )}
+                {player.current_team && (
+                  <>
+                    <Link href={`/teams/${encodeURIComponent(player.current_team)}`} style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(13,148,136,.15)", color: "#14B8A8", letterSpacing: ".04em", cursor: "pointer", textDecoration: "none" }}>
+                      {player.current_team}
+                    </Link>
+                    <span style={{ color: "rgba(255,255,255,.2)", fontSize: 12 }}>·</span>
+                  </>
+                )}
+                {player.current_league && (
+                  <>
+                    <Link href={`/leagues?league=${encodeURIComponent(player.current_league)}`} style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(255,255,255,.09)", color: "rgba(255,255,255,.55)", letterSpacing: ".04em", textDecoration: "none" }}>
+                      {formatLeague(player.current_league)}
+                    </Link>
+                    <span style={{ color: "rgba(255,255,255,.2)", fontSize: 12 }}>·</span>
+                  </>
+                )}
+                {player.dob && (() => {
+                  const birth = new Date(player.dob);
+                  const today = new Date();
+                  let age = today.getFullYear() - birth.getFullYear();
+                  const m = today.getMonth() - birth.getMonth();
+                  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+                  return (
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(255,255,255,.09)", color: "rgba(255,255,255,.55)", letterSpacing: ".04em" }}>
+                      Age {age}
+                    </span>
+                  );
+                })()}
+                <PlayerStatusBadges tags={player.tags || []} size="md" />
+              </div>
+              {/* Physical row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                {(player.height_cm || player.weight_kg) && (
+                  <>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.28)", fontFamily: "'DM Mono', monospace" }}>Height / Weight</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.8)" }}>{player.height_cm ? `${player.height_cm} cm` : "—"} · {player.weight_kg ? `${player.weight_kg} kg` : "—"}</span>
+                    </div>
+                    <div style={{ width: 1, height: 28, background: "rgba(255,255,255,.08)" }} />
+                  </>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.28)", fontFamily: "'DM Mono', monospace" }}>Status</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#14B8A8" }}>{player.roster_status === "inj" ? "Injured" : player.roster_status === "susp" ? "Suspended" : "Healthy"}</span>
+                </div>
+                <div style={{ width: 1, height: 28, background: "rgba(255,255,255,.08)" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.28)", fontFamily: "'DM Mono', monospace" }}>Commitment</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,.8)" }}>{player.commitment_status || "Uncommitted"}</span>
+                </div>
+                {intelligence?.archetype && (
+                  <>
+                    <div style={{ width: 1, height: 28, background: "rgba(255,255,255,.08)" }} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.28)", fontFamily: "'DM Mono', monospace" }}>Role</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: "rgba(255,255,255,.8)" }}>{intelligence.archetype}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Draft chips + actions */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {intelligence?.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(234,88,12,.2)", color: "#FB923C", letterSpacing: ".04em" }}>
+                    {gradeToOverallBand(intelligence.overall_grade)}
+                  </span>
+                )}
+                {(() => {
+                  const league = (player.current_league || "").toUpperCase();
+                  const by = player.birth_year;
+                  const chlLeagues = ["OHL", "WHL", "QMJHL", "LHJMQ"];
+                  const ncaaLeagues = ["USHL", "NAHL", "PREP", "USHS", "US PREP"];
+                  const isCHL = chlLeagues.some(l => league.includes(l));
+                  const isNCAA = ncaaLeagues.some(l => league.includes(l));
+                  const isDraftWindow = by != null && by >= 2004 && by <= 2007;
+                  if (isCHL && isDraftWindow) {
+                    return <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", letterSpacing: ".04em" }}>CHL + NCAA Viable</span>;
+                  }
+                  if (isNCAA) {
+                    return <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(59,130,246,.2)", color: "#60A5FA", letterSpacing: ".04em" }}>NCAA Path Only</span>;
+                  }
+                  return null;
+                })()}
+                {playerTransfers.length > 0 && playerTransfers[0].from_team_name && (
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(234,88,12,.2)", color: "#FB923C", letterSpacing: ".04em" }}>
+                    Acquired from {playerTransfers[0].from_team_name}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }} className="no-print">
                 <Link
                   href={`/reports/generate?player=${playerId}&type=pro_skater`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors hover:opacity-90"
-                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#FFFFFF", background: "#0D9488" }}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", cursor: "pointer", transition: "all .15s" }}
                   title="Generate PXI Scout Report for this player"
                 >
-                  <Sparkles size={11} />
-                  PXI Scout Report
+                  <Sparkles size={12} />
+                  Generate Report
                 </Link>
                 <button
                   onClick={handleDownloadPDF}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors"
-                  title="Download as PDF"
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all .15s" }}
                 >
-                  <Download size={14} />
+                  <Download size={12} />
                   PDF
                 </button>
                 <Link
                   href={`/players/${playerId}/card`}
-                  className="flex items-center gap-2 px-3 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", cursor: "pointer", transition: "all .15s" }}
                 >
-                  <Eye size={14} />
-                  Player Card
-                </Link>
-                <Link
-                  href={`/reports/custom?player=${playerId}`}
-                  className="flex items-center gap-2 px-3 py-2 bg-navy text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors"
-                >
-                  <Wand2 size={14} />
-                  Custom
-                </Link>
-                <Link
-                  href={`/reports/generate?player=${playerId}`}
-                  className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-                >
-                  <Zap size={14} />
-                  Generate Report
+                  <Eye size={12} />
+                  Card
                 </Link>
               </div>
             </div>
           </div>
+
+          {/* ── Stat Bar ── */}
+          <div style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,.06)", margin: "14px -24px 0" }}>
+            {(() => {
+              const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              if (!currentSeason) return null;
+              const statItems = [
+                ["GP", currentSeason.gp],
+                ["G", currentSeason.g],
+                ["A", currentSeason.a],
+                ["PTS", currentSeason.p],
+                ["PPG", currentSeason.gp > 0 ? (currentSeason.p / currentSeason.gp).toFixed(2) : "—"],
+                ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—"],
+                ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—")],
+                ["PIM", currentSeason.pim],
+              ];
+              return statItems.map(([label, value]) => (
+                <div key={label as string} style={{ flex: 1, textAlign: "center", padding: "10px 8px", borderRight: "1px solid rgba(255,255,255,.05)" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: label === "PTS" ? "#14B8A8" : "white", lineHeight: 1, letterSpacing: -0.3 }}>{value}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.3)", marginTop: 2 }}>{label as string}</div>
+                </div>
+              ));
+            })()}
+          </div>
         </div>
 
-        {/* RoleAndOverallRow — hidden for FAMILY role */}
-        {!FAMILY_ROLES.has(userRole) && (
-          <div className="bg-white border border-border rounded-xl px-5 py-3 mt-2 mb-1 flex items-center justify-between">
+        {/* RoleAndOverallRow — shown on non-overview tabs only */}
+        {activeTab !== "profile" && !FAMILY_ROLES.has(userRole) && (
+          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 20px", marginTop: 8, marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             {intelligence && intelligence.version > 0 ? (
               <>
                 {/* Role Projection */}
@@ -1219,8 +1197,8 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* PXI Score Tiles — numeric 1-10 above the fold (PXR-gated) */}
-        {pxrData && pxrData.pxr_score > 0 && (() => {
+        {/* PXI Score Tiles — shown on non-overview tabs */}
+        {activeTab !== "profile" && pxrData && pxrData.pxr_score > 0 && (() => {
           const pxrTiles = [
             { label: "Offense", value: pxrData.p1_offense, tip: "Offense — Goal scoring, shot generation, and power play impact." },
             { label: "Defense", value: pxrData.p2_defense, tip: "Defense — Shot suppression, takeaways, and defensive reads." },
@@ -1260,10 +1238,10 @@ export default function PlayerDetailPage() {
           );
         })()}
 
-        {/* Player Info + Archetype */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Player Info + Archetype — shown on non-overview tabs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ display: activeTab === "profile" ? "none" : undefined }}>
           {/* Bio Card */}
-          <div className="bg-white rounded-xl border border-teal/20 p-5">
+          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                 <User size={14} className="text-teal" /> Player Info
@@ -1709,7 +1687,7 @@ export default function PlayerDetailPage() {
             }
             const hasAnyData = visibleFields.some(f => (player as unknown as Record<string, unknown>)[f.key]);
             return (
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <Phone size={14} className="text-teal" /> Contact Info
@@ -1800,7 +1778,7 @@ export default function PlayerDetailPage() {
           })()}
 
           {/* Archetype Card */}
-          <div className="bg-white rounded-xl border border-teal/20 p-5">
+          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
             <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
               <Activity size={14} className="text-orange" /> Player Archetype
             </h3>
@@ -1930,8 +1908,8 @@ export default function PlayerDetailPage() {
           </div>
         </div>
 
-        {/* SeasonSnapshot — current season stats bar + trendline */}
-        {(() => {
+        {/* SeasonSnapshot — shown on non-overview tabs */}
+        {activeTab !== "profile" && (() => {
           // Find current season stats — prefer most recent season entry
           const seasonStats = stats
             .filter(s => s.stat_type === "season")
@@ -1939,7 +1917,7 @@ export default function PlayerDetailPage() {
           if (!seasonStats || seasonStats.gp === 0) return null;
           const ppg = seasonStats.gp > 0 ? (seasonStats.p / seasonStats.gp).toFixed(2) : "---";
           return (
-            <div className="bg-white border border-border rounded-xl px-5 py-3 mt-2 mb-1">
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 20px", marginTop: 8, marginBottom: 4 }}>
               {/* Primary line */}
               <div className="flex items-center gap-4 text-sm font-oswald">
                 <span className="text-navy font-bold">{seasonStats.gp} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">GP</span></span>
@@ -1981,9 +1959,9 @@ export default function PlayerDetailPage() {
           );
         })()}
 
-        {/* PXR Score Block (hidden for parent/player roles) */}
-        {!FAMILY_ROLES.has(userRole) && (
-          <div className="bg-white border border-border rounded-xl px-5 py-4 mt-2 mb-1">
+        {/* PXR Score Block — shown on non-overview tabs */}
+        {activeTab !== "profile" && !FAMILY_ROLES.has(userRole) && (
+          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 20px 16px", marginTop: 8, marginBottom: 4 }}>
             {pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 ? (() => {
               const score = pxrData.pxr_score;
               const tier = score >= 90 ? { id: "1A", label: "ELITE", color: "#0D9488" }
@@ -2091,10 +2069,10 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-1 mt-3 mb-4 no-print">
+        {/* ── Tabs Bar ── attached to hero bottom */}
+        <div className="no-print" style={{ display: "flex", background: "#0F2942", borderRadius: "0 0 14px 14px", border: "1px solid rgba(255,255,255,.06)", borderTop: "none", overflow: "hidden", marginBottom: 18 }}>
           {([
-            { key: "profile" as Tab, label: "Profile", count: null },
+            { key: "profile" as Tab, label: "Overview", count: null },
             { key: "stats" as Tab, label: "Stats", count: stats.length },
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
@@ -2104,94 +2082,110 @@ export default function PlayerDetailPage() {
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
-                activeTab === key
-                  ? "bg-navy text-white"
-                  : "bg-navy/5 text-navy hover:bg-navy/10"
-              }`}
+              style={{
+                flex: 1,
+                textAlign: "center",
+                padding: "10px 4px",
+                fontSize: 11.5,
+                fontWeight: 600,
+                color: activeTab === key ? "#14B8A8" : "rgba(255,255,255,.38)",
+                cursor: "pointer",
+                transition: "all .12s",
+                borderBottom: activeTab === key ? "2px solid #0D9488" : "2px solid transparent",
+                background: activeTab === key ? "rgba(13,148,136,.08)" : "transparent",
+                whiteSpace: "nowrap",
+                border: "none",
+                borderBottomWidth: 2,
+                borderBottomStyle: "solid",
+                borderBottomColor: activeTab === key ? "#0D9488" : "transparent",
+                fontFamily: "'DM Sans', sans-serif",
+              }}
             >
               {label}
-              {count !== null && <span className="ml-1.5 text-xs opacity-60">({count})</span>}
+              {count !== null && count > 0 && <span style={{ marginLeft: 4, opacity: 0.6, fontSize: 10 }}>({count})</span>}
             </button>
           ))}
         </div>
 
-        {/* QuickActions — Scout + Report + overflow (hidden for parent/player) */}
-        {!FAMILY_ROLES.has(userRole) && player && (
-          <div className="flex gap-1.5 mt-2 mb-1 no-print">
-            <button
-              onClick={() => openBenchTalk(
-                `Scout ${player.first_name} ${player.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`,
-                "scout"
-              )}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-teal/10 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/20 transition-colors"
-            >
-              <Search size={12} />
-              Scout
-            </button>
-            <button
-              onClick={() => { window.location.href = `/reports/generate?player_id=${playerId}`; }}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-navy/5 text-navy/70 text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-navy/10 transition-colors"
-            >
-              <FileText size={12} />
-              Report
-            </button>
-            <div className="relative" ref={overflowRef}>
-              <button
-                onClick={() => setOverflowOpen(!overflowOpen)}
-                className="p-2 rounded-lg bg-navy/5 text-navy/40 hover:text-navy hover:bg-navy/10 transition-colors"
-                title="More actions"
-              >
-                <MoreVertical size={14} />
-              </button>
-              {overflowOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1">
-                  <button
-                    onClick={() => { openBenchTalk(`Scout ${player.first_name} ${player.last_name}`, "scout"); setOverflowOpen(false); }}
-                    className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
-                  >
-                    <Search size={12} className="text-teal" /> Scout in Bench Talk
-                  </button>
-                  <Link
-                    href="/scouting"
-                    onClick={() => setOverflowOpen(false)}
-                    className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
-                  >
-                    <ListPlus size={12} className="text-muted" /> Add to Scouting List
-                  </Link>
-                  <Link
-                    href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
-                    onClick={() => setOverflowOpen(false)}
-                    className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
-                  >
-                    <Wand2 size={12} className="text-muted" /> Generate PXI Assessment
-                  </Link>
-                  <Link
-                    href={`/reports/custom?player=${playerId}`}
-                    onClick={() => setOverflowOpen(false)}
-                    className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
-                  >
-                    <FileText size={12} className="text-muted" /> Custom Report
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Profile Tab */}
+        {/* Profile / Overview Tab */}
         {activeTab === "profile" && (
-          <section className="space-y-6">
-            <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-3">Intelligence overview, archetype, and AI-generated scouting assessment.</p>
-            {/* ── PXI Scout Summary Panel ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "start" }}>
+            {/* ── LEFT COLUMN ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* Quick Actions row (visible to staff) */}
+            {!FAMILY_ROLES.has(userRole) && player && (
+              <div className="no-print" style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => openBenchTalk(
+                    `Scout ${player.first_name} ${player.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`,
+                    "scout"
+                  )}
+                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  <Search size={12} />
+                  Scout in PXI
+                </button>
+                <button
+                  onClick={() => { window.location.href = `/reports/generate?player_id=${playerId}`; }}
+                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  <FileText size={12} />
+                  Generate Report
+                </button>
+                <div className="relative" ref={overflowRef}>
+                  <button
+                    onClick={() => setOverflowOpen(!overflowOpen)}
+                    style={{ padding: "8px 10px", borderRadius: 8, background: "white", color: "#5A7291", border: "1.5px solid #DDE6EF", cursor: "pointer" }}
+                    title="More actions"
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+                  {overflowOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1">
+                      <button
+                        onClick={() => { openBenchTalk(`Scout ${player.first_name} ${player.last_name}`, "scout"); setOverflowOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                      >
+                        <Search size={12} className="text-teal" /> Scout in Bench Talk
+                      </button>
+                      <Link
+                        href="/scouting"
+                        onClick={() => setOverflowOpen(false)}
+                        className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                      >
+                        <ListPlus size={12} className="text-muted" /> Add to Scouting List
+                      </Link>
+                      <Link
+                        href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
+                        onClick={() => setOverflowOpen(false)}
+                        className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                      >
+                        <Wand2 size={12} className="text-muted" /> Generate PXI Assessment
+                      </Link>
+                      <Link
+                        href={`/reports/custom?player=${playerId}`}
+                        onClick={() => setOverflowOpen(false)}
+                        className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                      >
+                        <FileText size={12} className="text-muted" /> Custom Report
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* ── PXI Intelligence Card ── */}
             {intelligence && intelligence.version > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-navy/[0.04] to-teal/[0.04] px-5 py-3 border-b border-teal/10 flex items-center justify-between">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                {/* Teal left stripe */}
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+                {/* Card band header */}
+                <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div className="flex items-center gap-2">
-                    <Brain size={16} className="text-teal" />
-                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy">PXI Scout Summary</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal/10 text-teal font-medium">v{intelligence.version}</span>
+                    <Brain size={16} style={{ color: "rgba(255,255,255,.5)" }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXI Intelligence</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: ".08em", padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>v{intelligence.version}</span>
                     {intelligence.trigger && (
                       <span className="text-[10px] text-muted/50">via {intelligence.trigger}</span>
                     )}
@@ -2425,7 +2419,7 @@ export default function PlayerDetailPage() {
 
             {/* Team System Context */}
             {teamSystem ? (
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <Shield size={14} className="text-navy" /> Team System — {teamSystem.team_name}
@@ -2506,14 +2500,14 @@ export default function PlayerDetailPage() {
 
             {/* Player Notes Preview */}
             {player.notes && (
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Player Notes</h3>
                 <p className="text-sm text-navy/80 whitespace-pre-wrap">{player.notes}</p>
               </div>
             )}
 
             {/* Suggest Correction */}
-            <div className="bg-white rounded-xl border border-teal/20 p-5 no-print">
+            <div className="no-print" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                   <AlertTriangle size={14} className="text-orange" />
@@ -2649,7 +2643,7 @@ export default function PlayerDetailPage() {
 
             {/* ── BelowFold: Career Stats ── */}
             {stats.filter(s => s.stat_type === "season").length > 1 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
                   <TrendingUp size={14} className="text-teal" /> Career Stats
                 </h3>
@@ -2691,7 +2685,7 @@ export default function PlayerDetailPage() {
 
             {/* ── BelowFold: Recent Game Log ── */}
             {gameLog && gameLog.games.length > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <Activity size={14} className="text-teal" /> Recent Games
@@ -2734,7 +2728,7 @@ export default function PlayerDetailPage() {
 
             {/* ── BelowFold: Scout Notes Preview ── */}
             {notes.length > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
                     <PenLine size={14} className="text-teal" /> Scout Notes
@@ -2773,7 +2767,134 @@ export default function PlayerDetailPage() {
 
             {/* Achievements Accordion */}
             <AchievementsAccordion achievements={playerAchievements} />
-          </section>
+
+          </div>
+
+          {/* ── RIGHT COLUMN ── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* Season Snapshot Card */}
+            {(() => {
+              const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              if (!currentSeason) return null;
+              return (
+                <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+                  <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Season Snapshot</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>
+                      {currentSeason.season || "Current"}
+                    </span>
+                  </div>
+                  <div style={{ padding: "14px 16px 16px" }}>
+                    <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                      {[["GP", currentSeason.gp], ["G", currentSeason.g], ["A", currentSeason.a], ["PTS", currentSeason.p]].map(([l, v]) => (
+                        <div key={l as string} style={{ textAlign: "center", flex: 1 }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: l === "PTS" ? "#0D9488" : "#0F2942", lineHeight: 1 }}>{v}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, color: "#8BA4BB", marginTop: 2, textTransform: "uppercase", letterSpacing: ".1em" }}>{l as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 6 }}>
+                      {[
+                        ["PPG", currentSeason.gp > 0 ? (currentSeason.p / currentSeason.gp).toFixed(2) : "—"],
+                        ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—"],
+                        ["PIM", currentSeason.pim],
+                        ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—")],
+                        ["SOG", currentSeason.sog > 0 ? currentSeason.sog : "—"],
+                      ].map(([l, v]) => (
+                        <div key={l as string} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: "#0F2942" }}>{v}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#8BA4BB", textTransform: "uppercase", letterSpacing: ".07em" }}>{l as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {trendlineData && (
+                      <>
+                        <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "#5A7291", marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 2, background: "#0D9488", flexShrink: 0 }} />
+                          Points Per Game Trend
+                        </div>
+                        <TrendlineChart data={trendlineData} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Quick Actions Card */}
+            {!FAMILY_ROLES.has(userRole) && (
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(234,88,12,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#EA580C" }} />
+                <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Quick Actions</span>
+                </div>
+                <div style={{ padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <Link href={`/reports/generate?player=${playerId}&type=pro_skater`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <Sparkles size={12} /> Generate PXI Report
+                  </Link>
+                  <Link href="/scouting" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <ListPlus size={12} /> Add to Tracking
+                  </Link>
+                  <Link href={`/players/${playerId}/card`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <Eye size={12} /> Player Card
+                  </Link>
+                  <Link href={`/reports/custom?player=${playerId}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#EA580C", border: "1.5px solid rgba(234,88,12,.25)", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <Wand2 size={12} /> Custom Report
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Physical Profile Card */}
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+              <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Physical Profile</span>
+              </div>
+              <div style={{ padding: "14px 16px 16px" }}>
+                {[
+                  ["Height / Weight", `${player.height_cm ? `${player.height_cm} cm` : "—"} · ${player.weight_kg ? `${player.weight_kg} kg` : "—"}`],
+                  ["Handedness", player.shoots ? `${player.shoots}-shot` : "—"],
+                  ["Status", player.roster_status === "inj" ? "Injured" : player.roster_status === "susp" ? "Suspended" : "Healthy"],
+                  ["Commitment", player.commitment_status || "Uncommitted"],
+                  ["Birth Year", player.birth_year ? `${player.birth_year}` : "—"],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #EEF3F8" }}>
+                    <span style={{ fontSize: 10, color: "#5A7291", fontFamily: "'DM Mono', monospace", letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: label === "Status" ? "#0D9488" : "#0F2942" }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Data Sources Card */}
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+              <div style={{ padding: "12px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "#5A7291", display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: "#0D9488", flexShrink: 0 }} />
+                    Data Sources
+                  </div>
+                </div>
+                <div style={{ height: 1, background: "#EEF3F8", margin: "8px 0" }} />
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {Boolean((player as unknown as Record<string, unknown>)["hockeytech_id"]) && (
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(13,148,136,.09)", color: "#0D9488", border: "1px solid rgba(13,148,136,.18)" }}>HockeyTech</span>
+                  )}
+                  {player.current_league && (
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>{formatLeague(player.current_league)}</span>
+                  )}
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>Manual Entry</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          </div>
         )}
 
         {/* Stats Tab */}
@@ -2866,14 +2987,14 @@ export default function PlayerDetailPage() {
                 {goalieStats.length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Goaltending</h3>
-                    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+                    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                       <GoalieStatTable stats={goalieStats} />
                     </div>
                   </div>
                 )}
 
                 {/* Skater Stats */}
-                <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+                <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                   <StatTable stats={stats} editable={true} onStatsChange={async () => {
                     const res = await api.get<PlayerStats[]>(`/stats/player/${playerId}`);
                     setStats(res.data);
@@ -2931,7 +3052,7 @@ export default function PlayerDetailPage() {
                       <ArrowRightLeft size={14} className="text-teal" />
                       Team Splits (Current Season)
                     </h3>
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-navy/[0.04] border-b border-border">
@@ -3038,7 +3159,7 @@ export default function PlayerDetailPage() {
 
             {/* Note Form — Mobile Optimized */}
             {showNoteForm && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4 mb-4">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", marginBottom: 16, position: "relative" }}>
                 <h3 className="text-sm font-semibold text-navy mb-3">
                   {editingNoteId ? "Edit Note" : "New Note"}
                 </h3>
@@ -3115,7 +3236,7 @@ export default function PlayerDetailPage() {
 
             {/* Notes List */}
             {notes.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-xl border border-teal/20">
+              <div style={{ textAlign: "center", paddingTop: 32, paddingBottom: 32, background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
                 <PenLine size={24} className="mx-auto text-muted/40 mb-2" />
                 <p className="text-muted text-sm">No notes yet for this player.</p>
                 <p className="text-xs text-muted/60 mt-1">Add your first scouting observation above.</p>
@@ -3123,7 +3244,7 @@ export default function PlayerDetailPage() {
             ) : (
               <div className="space-y-3">
                 {notes.map((note) => (
-                  <div key={note.id} className="bg-white rounded-xl border border-teal/20 p-4">
+                  <div key={note.id} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         {/* Header */}
@@ -3250,7 +3371,7 @@ export default function PlayerDetailPage() {
               <span className="text-xs text-muted">{reports.length} total</span>
             </div>
             {reports.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-xl border border-teal/20">
+              <div style={{ textAlign: "center", paddingTop: 32, paddingBottom: 32, background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
                 <FileText size={24} className="mx-auto text-muted/40 mb-2" />
                 <p className="text-muted text-sm">No reports yet for this player.</p>
               </div>
@@ -3270,7 +3391,7 @@ export default function PlayerDetailPage() {
             <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Player card, development plan, and long-term projection tools.</p>
             {/* ── Section 1: Player Card ──────────────────────────── */}
             {player && (
-              <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-4">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative", display: "flex", alignItems: "center", gap: 16 }}>
                 {player.image_url && hasRealImage(player.image_url) ? (
                   <img src={assetUrl(player.image_url)} alt={`${player.first_name} ${player.last_name}`} className="w-16 h-16 rounded-full object-cover border border-border" />
                 ) : (
@@ -3296,7 +3417,7 @@ export default function PlayerDetailPage() {
 
             {/* ── Section 2: Season Snapshot ───────────────────────── */}
             {stats.length > 0 && (
-              <div className="bg-white rounded-xl border border-border p-4">
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
                 <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Season Snapshot</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {(() => {
@@ -3337,7 +3458,7 @@ export default function PlayerDetailPage() {
             )}
 
             {/* ── Section 3: Development Plan ─────────────────────── */}
-            <div className="bg-white rounded-xl border border-border p-4">
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-oswald uppercase tracking-wider text-muted">Development Plan</h3>
                 <div className="flex gap-2">
@@ -3437,7 +3558,7 @@ export default function PlayerDetailPage() {
                     if (isStaffOnly && !COACH_ROLES.has(userRole)) return null;
 
                     return (
-                      <div key={num} className="bg-white rounded-xl border border-border overflow-hidden">
+                      <div key={num} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-oswald text-muted">{num}.</span>
@@ -3536,7 +3657,7 @@ export default function PlayerDetailPage() {
                     if (!content) return null;
 
                     return (
-                      <div key={num} className="bg-white rounded-xl border border-border overflow-hidden">
+                      <div key={num} style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-oswald text-muted">{num}.</span>
@@ -3634,7 +3755,7 @@ export default function PlayerDetailPage() {
 
                   {/* Section 8: Staff Notes (coach/admin only) */}
                   {COACH_ROLES.has(userRole) && devPlanV2.section_8_staff_notes && (
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
+                    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-oswald text-muted">8.</span>
@@ -3714,7 +3835,7 @@ export default function PlayerDetailPage() {
 
                   {/* Recent Reports (coach/admin/scout only) */}
                   {COACH_ROLES.has(userRole) && reports.length > 0 && (
-                    <div className="bg-white rounded-xl border border-border p-4">
+                    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
                       <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Recent Reports</h3>
                       <div className="space-y-2">
                         {reports.slice(0, 3).map((r) => (
@@ -3732,7 +3853,7 @@ export default function PlayerDetailPage() {
 
                   {/* Legacy backward compat: show old sections model if no v2 sections */}
                   {!devPlanV2.section_1_snapshot && devPlan?.sections && devPlan.sections.length > 0 && (
-                    <div className="bg-white rounded-xl border border-border p-4">
+                    <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
                       <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Legacy Plan Sections</h3>
                       {devPlan.sections.map((section: DevelopmentPlanSection, idx: number) => (
                         <div key={idx} className="mb-3 last:mb-0">
@@ -3758,7 +3879,7 @@ export default function PlayerDetailPage() {
 
         {/* Training Volume Widget */}
         {drillLogData && drillLogData.summary.total_season > 0 && (
-          <section className="bg-white rounded-xl border border-border p-4 print:hidden">
+          <section className="print:hidden" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px" }}>
             <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center p-3 bg-teal/5 rounded-lg">
@@ -3792,7 +3913,7 @@ export default function PlayerDetailPage() {
         {activeTab === "video" && (
           <section className="space-y-4">
             <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Video sessions, game film clips, and tagged highlights.</p>
-            <div className="bg-white rounded-xl border border-teal/20 p-5">
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
                 <Video size={14} className="text-teal" /> Game Film
               </h3>
@@ -3862,7 +3983,7 @@ export default function PlayerDetailPage() {
             </div>
 
             {/* Film Room Clips */}
-            <div className="bg-white rounded-xl border border-teal/20 p-5">
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
                 <Scissors size={14} className="text-teal" /> Film Room Clips
               </h3>
