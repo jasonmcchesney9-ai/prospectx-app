@@ -227,11 +227,9 @@ export default function LandingPage() {
       <nav className="border-b border-white/5">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Logo — use image if available, fallback to text */}
+            {/* Logo */}
             <div className="flex items-center gap-2">
-              <span className="font-oswald text-2xl font-bold tracking-widest text-teal uppercase">
-                Prospect<span className="text-orange">X</span>
-              </span>
+              <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -735,9 +733,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 bg-navy">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-oswald text-sm font-bold tracking-widest text-teal uppercase">
-              Prospect<span className="text-orange">X</span>
-            </span>
+            <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-6 object-contain" />
             <span className="text-xs text-white/20">
               Decision-Grade Hockey Intelligence
             </span>

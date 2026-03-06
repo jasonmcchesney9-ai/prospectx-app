@@ -398,19 +398,10 @@ export default function NavBar() {
                   {orgShortName || ""}
                 </span>
                 <span className="hidden lg:inline text-white/30 mx-1">|</span>
-                <span className="font-oswald text-xs font-bold tracking-widest uppercase text-white/60">
-                  <span className="text-teal">P</span><span className="text-orange">X</span>
-                </span>
+                <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-5 object-contain" />
               </>
             ) : (
-              <>
-                <span className="font-oswald text-lg font-bold tracking-widest uppercase">
-                  <span className="text-teal">Prospect</span><span className="text-orange">X</span>
-                </span>
-                <span className="hidden lg:inline font-oswald text-xs tracking-wider text-white/60 uppercase">
-                  Intelligence
-                </span>
-              </>
+              <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
             )}
           </Link>
 

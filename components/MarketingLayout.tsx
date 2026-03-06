@@ -25,9 +25,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <span className="font-oswald text-2xl font-bold tracking-widest text-teal uppercase">
-              Prospect<span className="text-orange">X</span>
-            </span>
+            <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
           </Link>
 
           {/* Desktop nav */}
@@ -112,9 +110,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             {/* Brand */}
             <div>
-              <span className="font-oswald text-xl font-bold tracking-widest text-teal uppercase">
-                Prospect<span className="text-orange">X</span>
-              </span>
+              <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-7 object-contain" />
               <p className="text-sm text-white/40 mt-2">
                 The intelligence layer for hockey.
               </p>
