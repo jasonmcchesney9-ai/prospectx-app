@@ -4638,7 +4638,7 @@ def init_db():
     # ── Table: invites (platform-level invite-only gate) ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invites (
-            id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+            id TEXT PRIMARY KEY,
             email TEXT NOT NULL UNIQUE,
             invited_by TEXT,
             org_id TEXT,
@@ -4654,11 +4654,16 @@ def init_db():
     conn.commit()
 
     # ── Migration: grandfather existing users into invites ──
-    conn.execute("""
-        INSERT OR IGNORE INTO invites (id, email, invited_by, accepted, created_at)
-        SELECT lower(hex(randomblob(16))), email, 'system', 1, created_at
-        FROM users
-    """)
+    # Populate invites for existing users (idempotent — skips duplicates)
+    existing_users = conn.execute("SELECT email, created_at FROM users").fetchall()
+    for eu in existing_users:
+        try:
+            conn.execute(
+                "INSERT INTO invites (id, email, invited_by, accepted, created_at) VALUES (?, ?, 'system', 1, ?)",
+                (str(uuid.uuid4()), eu["email"], eu["created_at"])
+            )
+        except Exception:
+            pass  # Already exists — skip
     conn.commit()
     logger.info("Migration: invites table ready (existing users grandfathered)")
 
