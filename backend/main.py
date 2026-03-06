@@ -25559,13 +25559,59 @@ def detect_and_route_import(
 ) -> dict:
     """Unified import engine — single entry point for all file imports.
 
-    1. Parse file → rows
-    2. Detect TOI → choose Advanced vs Basic route
-    3. Detect file subtype (league skaters, goalies, game log, etc.)
-    4. Route to correct handler(s)
-    5. If advanced stats written → trigger targeted PXR recalc
-    6. Return structured result with routed_to + pxr_triggered
+    1. Role-based permission check
+    2. Parse file → rows
+    3. Detect TOI → choose Advanced vs Basic route
+    4. Detect file subtype (league skaters, goalies, game log, etc.)
+    5. Route to correct handler(s)
+    6. If advanced stats written → trigger targeted PXR recalc
+    7. Return structured result with routed_to + pxr_triggered
     """
+    # ── Role-based upload permission check ──
+    _perm_conn = get_db()
+    try:
+        _user_row = _perm_conn.execute(
+            "SELECT hockey_role, linked_player_id FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        _role = _user_row["hockey_role"] if _user_row else "scout"
+        _linked = _user_row["linked_player_id"] if _user_row and _user_row["linked_player_id"] else None
+
+        # MEDIA (broadcaster/producer) — read only, no uploads
+        if _role in ("broadcaster", "producer"):
+            raise HTTPException(status_code=403, detail="Your account does not have permission to upload data.")
+
+        # PLAYER/PARENT — single player only, must be their linked profile
+        if _role in ("player", "parent"):
+            if not player_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Your account does not have permission to upload data for other players."
+                )
+            if not _linked or _linked != player_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Your account does not have permission to upload data for other players."
+                )
+
+        # AGENT — single player only, must be on their client roster
+        if _role == "agent":
+            if not player_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Your account does not have permission to upload data for other players."
+                )
+            _is_client = _perm_conn.execute(
+                "SELECT 1 FROM agent_clients WHERE agent_user_id = ? AND player_id = ?",
+                (user_id, player_id)
+            ).fetchone()
+            if not _is_client:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only upload data for players on your client roster."
+                )
+    finally:
+        _perm_conn.close()
+
     fname = filename.lower()
 
     # ── Auto-detect team name from filename ──
