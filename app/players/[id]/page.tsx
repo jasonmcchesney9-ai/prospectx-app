@@ -452,6 +452,11 @@ export default function PlayerDetailPage() {
   // Training Volume (drill logs)
   const [drillLogData, setDrillLogData] = useState<PlayerDrillLogsResponse | null>(null);
 
+  // Parent Access (coach/admin only)
+  const [linkedParents, setLinkedParents] = useState<{ link_id: string; user_id: string; email: string; first_name: string | null; last_name: string | null; created_at: string }[]>([]);
+  const [parentEmail, setParentEmail] = useState("");
+  const [linkingParent, setLinkingParent] = useState(false);
+
   // Film Room clips for this player
   const [filmClips, setFilmClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; created_at: string }[]>([]);
   const [filmClipsLoading, setFilmClipsLoading] = useState(false);
@@ -906,6 +911,14 @@ export default function PlayerDetailPage() {
           const splitsRes = await api.get<TeamSplit[]>(`/players/${playerId}/team-splits`);
           setTeamSplits(splitsRes.data);
         } catch { /* Non-critical */ }
+
+        // Load linked parents (coach/admin only)
+        if (COACH_ROLES.has(userRole)) {
+          try {
+            const parentsRes = await api.get<{ link_id: string; user_id: string; email: string; first_name: string | null; last_name: string | null; created_at: string }[]>(`/players/${playerId}/parents`);
+            setLinkedParents(parentsRes.data);
+          } catch { /* Non-critical */ }
+        }
 
         // Match team system to player's current team
         if (sysRes.status === "fulfilled" && playerRes.data.current_team) {
@@ -3046,6 +3059,90 @@ export default function PlayerDetailPage() {
               )}
               </div>
             </div>
+
+            {/* ── Parent Access Card (coach/admin only) ───────── */}
+            {COACH_ROLES.has(userRole) && (
+              <div style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #0D9488" }}>
+                <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>Parent Access</h4>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-teal/20 text-teal">{linkedParents.length} linked</span>
+                </div>
+                <div className="px-4 py-3">
+                  {/* Linked parents list */}
+                  {linkedParents.length > 0 ? (
+                    <div className="space-y-2 mb-3">
+                      {linkedParents.map((p) => (
+                        <div key={p.link_id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+                          <div className="flex items-center gap-2">
+                            <User size={13} className="text-muted/50" />
+                            <div>
+                              <p className="text-sm text-navy font-medium">{p.first_name || ""} {p.last_name || ""}</p>
+                              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#6B7B8D" }}>{p.email}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Remove this parent's access?")) return;
+                              try {
+                                await api.delete(`/players/${playerId}/parents/${p.user_id}`);
+                                setLinkedParents((prev) => prev.filter((lp) => lp.link_id !== p.link_id));
+                                toast.success("Parent unlinked");
+                              } catch {
+                                toast.error("Failed to unlink parent");
+                              }
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted/50 italic mb-3">No parent accounts linked. Add a parent email to give family access.</p>
+                  )}
+                  {/* Add parent form */}
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={parentEmail}
+                      onChange={(e) => setParentEmail(e.target.value)}
+                      placeholder="Parent email address"
+                      className="flex-1 text-sm px-3 py-2 border border-border rounded-lg outline-none focus:border-teal/40 bg-gray-50"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!parentEmail.trim()) return;
+                        setLinkingParent(true);
+                        try {
+                          const { data } = await api.post(`/players/${playerId}/link-parent`, { parent_email: parentEmail.trim() });
+                          setLinkedParents((prev) => [...prev, {
+                            link_id: data.id,
+                            user_id: data.parent_id,
+                            email: parentEmail.trim(),
+                            first_name: data.parent_name?.split(" ")[0] || null,
+                            last_name: data.parent_name?.split(" ").slice(1).join(" ") || null,
+                            created_at: new Date().toISOString(),
+                          }]);
+                          setParentEmail("");
+                          toast.success("Parent linked successfully");
+                        } catch (err: unknown) {
+                          const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to link parent";
+                          toast.error(msg);
+                        } finally {
+                          setLinkingParent(false);
+                        }
+                      }}
+                      disabled={linkingParent || !parentEmail.trim()}
+                      className="flex items-center gap-1 px-4 py-2 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                    >
+                      {linkingParent ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      Send Invite
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
