@@ -2070,7 +2070,7 @@ export default function PlayerDetailPage() {
         )}
 
         {/* ── Tabs Bar ── attached to hero bottom */}
-        <div className="no-print" style={{ display: "flex", background: "#0F2942", borderRadius: "0 0 14px 14px", border: "1px solid rgba(255,255,255,.06)", borderTop: "none", overflow: "hidden", marginBottom: 18 }}>
+        <div className="no-print" style={{ display: "flex", background: "#0F2942", borderRadius: "0 0 14px 14px", border: "1px solid rgba(255,255,255,.06)", borderTop: "none", overflow: "hidden", marginBottom: 18, position: "sticky", top: 48, zIndex: 50 }}>
           {([
             { key: "profile" as Tab, label: "Overview", count: null },
             { key: "stats" as Tab, label: "Stats", count: stats.length },
@@ -2175,6 +2175,125 @@ export default function PlayerDetailPage() {
                 </div>
               </div>
             )}
+            {/* ── Player Archetype Block ── */}
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#EA580C" }} />
+              <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace", display: "flex", alignItems: "center", gap: 6 }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1 3.5H11L8 6.5l1 3.5L6 8l-3 2 1-3.5L1 4.5h4L6 1Z" fill="#EA580C"/></svg>
+                  Player Archetype
+                </span>
+                {!editingArchetype && (
+                  <button onClick={() => setEditingArchetype(true)} style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: ".08em", padding: "2px 7px", borderRadius: 3, background: "rgba(255,255,255,.1)", color: "rgba(255,255,255,.5)", textTransform: "uppercase", border: "none", cursor: "pointer" }}>
+                    <Edit3 size={10} />
+                  </button>
+                )}
+              </div>
+              <div style={{ padding: "14px 16px 16px" }}>
+                {!editingArchetype ? (
+                  <div>
+                    {player.archetype ? (
+                      <>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: "#0F2942", letterSpacing: -0.3, marginBottom: 4 }}>{player.archetype}</div>
+                        <div style={{ fontSize: 11.5, color: "#5A7291", lineHeight: 1.5 }}>Compound archetypes help the AI understand the full player profile for system fit analysis.</div>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setEditingArchetype(true)}
+                        style={{ fontSize: 12, color: "#0D9488", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}
+                      >
+                        + Assign archetype
+                      </button>
+                    )}
+                    {intelligence?.archetype && player.archetype !== intelligence.archetype && (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(13,148,136,.08)", border: "1px solid rgba(13,148,136,.2)", color: "#0D9488", borderRadius: 6, padding: "5px 12px", marginTop: 10, fontSize: 12.5, fontWeight: 700 }}>
+                        <Star size={12} />
+                        PXI Role: {intelligence.archetype}
+                        {intelligence.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
+                          <span style={{ display: "inline-block", background: "rgba(234,88,12,.1)", border: "1px solid rgba(234,88,12,.25)", color: "#EA580C", borderRadius: 4, padding: "2px 8px", marginLeft: 6, fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: ".03em" }}>
+                            {gradeToOverallBand(intelligence.overall_grade)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      value={archetypeValue}
+                      onChange={(e) => setArchetypeValue(e.target.value)}
+                      placeholder="e.g., Two-Way Playmaking Forward"
+                      style={{ width: "100%", padding: "8px 12px", border: "1.5px solid rgba(13,148,136,.3)", borderRadius: 8, fontSize: 13, marginBottom: 8, fontFamily: "'DM Sans', sans-serif", outline: "none" }}
+                      autoFocus
+                    />
+                    <p style={{ fontSize: 10, color: "#8BA4BB", marginBottom: 8 }}>Click traits below to build a compound archetype, or type your own:</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                      {([
+                        { group: "Style", chips: ["Two-Way", "Offensive", "Defensive", "Physical", "Speed", "Playmaking", "Sniper", "Power", "Shutdown"] },
+                        { group: "Role", chips: ["Forward", "Center", "Winger", "Defenseman", "Goalie"] },
+                        { group: "Traits", chips: ["Elite IQ", "Net-Front", "Transition", "Puck-Moving", "Grinder", "Energy", "Checking", "Hybrid"] },
+                      ] as const).map(({ group, chips }) => (
+                        <div key={group} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: ".1em", color: "#8BA4BB", marginRight: 2 }}>{group}:</span>
+                          {chips.map((chip) => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => {
+                                const current = archetypeValue.trim();
+                                if (current && !current.endsWith(" ")) {
+                                  setArchetypeValue(current + " " + chip);
+                                } else {
+                                  setArchetypeValue((current + " " + chip).trim());
+                                }
+                              }}
+                              style={{ padding: "2px 8px", fontSize: 10, borderRadius: 99, border: "1px solid rgba(13,148,136,.2)", background: "transparent", color: "#0F2942", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.put(`/players/${playerId}`, {
+                              ...player,
+                              archetype: archetypeValue.trim() || null,
+                            });
+                            setPlayer({ ...player, archetype: archetypeValue.trim() || null });
+                            setEditingArchetype(false);
+                          } catch {
+                            toast.error("Failed to save archetype");
+                          }
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 14px", background: "#0D9488", color: "white", fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        <Save size={12} /> Save
+                      </button>
+                      <button
+                        onClick={() => { setArchetypeValue(player.archetype || ""); setEditingArchetype(false); }}
+                        style={{ padding: "6px 12px", fontSize: 12, color: "#5A7291", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        Cancel
+                      </button>
+                      {archetypeValue && (
+                        <button
+                          onClick={() => setArchetypeValue("")}
+                          style={{ padding: "4px 8px", fontSize: 11, color: "#8BA4BB", background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* ── PXI Intelligence Card ── */}
             {intelligence && intelligence.version > 0 && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
