@@ -229,7 +229,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             {/* Logo */}
             <div className="flex items-center gap-2">
-              <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
+              <img src="/logos/prospectx-wordmark-transparent.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -733,7 +733,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 bg-navy">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-6 object-contain" />
+            <img src="/logos/prospectx-wordmark-transparent.png" alt="ProspectX Intelligence" className="h-6 object-contain" />
             <span className="text-xs text-white/20">
               Decision-Grade Hockey Intelligence
             </span>

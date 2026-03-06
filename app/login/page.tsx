@@ -216,7 +216,7 @@ function LoginForm() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-12 object-contain mx-auto" />
+          <img src="/logos/prospectx-wordmark-transparent.png" alt="ProspectX Intelligence" className="h-12 object-contain mx-auto" />
           <p className="font-oswald text-xs tracking-widest text-white/30 uppercase mt-2">
             Decision-Grade Hockey Intelligence
           </p>

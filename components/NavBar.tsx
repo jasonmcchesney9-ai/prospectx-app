@@ -303,7 +303,7 @@ export default function NavBar() {
       )}
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center h-16">
-          {/* ── Logo (far left) ── */}
+          {/* ── Logo (far left) — CSS text for dark nav background ── */}
           <Link href="/" className="flex items-center gap-2 mr-8 shrink-0">
             {orgLogo ? (
               <>
@@ -312,10 +312,29 @@ export default function NavBar() {
                   {orgShortName || ""}
                 </span>
                 <span className="hidden lg:inline text-white/30 mx-1">|</span>
-                <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-5 object-contain" />
+                {/* Small co-branded ProspectX wordmark */}
+                <span className="hidden lg:flex flex-col leading-none" style={{ gap: 1 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ margin: "0 -0.5px" }}>
+                      <path d="M4.5 2.5L12 10L19.5 2.5C20.3 1.7 21.7 1.7 22.5 2.5C23.3 3.3 23.3 4.7 22.5 5.5L15 12L22.5 19.5C23.3 20.3 23.3 21.7 22.5 22.5C21.7 23.3 20.3 23.3 19.5 22.5L12 15L4.5 22.5C3.7 23.3 2.3 23.3 1.5 22.5C0.7 21.7 0.7 20.3 1.5 19.5L9 12L1.5 4.5C0.7 3.7 0.7 2.3 1.5 1.5C2.3 0.7 3.7 0.7 4.5 1.5Z" fill="#EA580C"/>
+                      <circle cx="12" cy="12" r="2.5" fill="#14B8A6"/>
+                    </svg>
+                  </span>
+                  <span style={{ fontSize: 5.5, fontWeight: 600, color: "rgba(255,255,255,.45)", letterSpacing: "0.22em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
+                </span>
               </>
             ) : (
-              <img src="/logos/prospectx-wordmark.png" alt="ProspectX Intelligence" className="h-9 object-contain" />
+              <span className="flex flex-col leading-none" style={{ gap: 1 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ margin: "0 -0.5px" }}>
+                    <path d="M4.5 2.5L12 10L19.5 2.5C20.3 1.7 21.7 1.7 22.5 2.5C23.3 3.3 23.3 4.7 22.5 5.5L15 12L22.5 19.5C23.3 20.3 23.3 21.7 22.5 22.5C21.7 23.3 20.3 23.3 19.5 22.5L12 15L4.5 22.5C3.7 23.3 2.3 23.3 1.5 22.5C0.7 21.7 0.7 20.3 1.5 19.5L9 12L1.5 4.5C0.7 3.7 0.7 2.3 1.5 1.5C2.3 0.7 3.7 0.7 4.5 1.5Z" fill="#EA580C"/>
+                    <circle cx="12" cy="12" r="2.5" fill="#14B8A6"/>
+                  </svg>
+                </span>
+                <span style={{ fontSize: 7, fontWeight: 600, color: "rgba(255,255,255,.45)", letterSpacing: "0.22em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
+              </span>
             )}
           </Link>
 
