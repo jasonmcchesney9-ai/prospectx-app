@@ -58,7 +58,7 @@ const PLAN_CARDS = [
     period: "/mo",
     icon: Star,
     description: "Everything + draft board, advanced analytics, leaderboards",
-    features: ["Unlimited reports", "Unlimited Bench Talk", "Full PXI (10 modes)", "InStat data", "Export & share"],
+    features: ["Unlimited reports", "Unlimited Bench Talk", "Full PXI (10 modes)", "Advanced stats data", "Export & share"],
   },
   {
     tier: "team_org",

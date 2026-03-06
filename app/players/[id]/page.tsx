@@ -1653,7 +1653,7 @@ export default function PlayerDetailPage() {
                             ? 'Insufficient data: fewer than 60 total minutes played'
                             : pxrData?.pxr_null_reason === 'data_incomplete'
                             ? 'Insufficient data: missing advanced stats for scoring'
-                            : 'PXR scores require InStat advanced stats. Import InStat data to populate.'}
+                            : 'PXR scores require advanced stats data. Import advanced stats to populate.'}
                         </p>
                         <Link href="/instat" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", textDecoration: "none", fontFamily: "'DM Sans', sans-serif" }}>
                           <Upload size={12} /> Import Data
@@ -3410,7 +3410,7 @@ export default function PlayerDetailPage() {
                 <div style={{ height: 1, background: "#EEF3F8", margin: "8px 0" }} />
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                   {Boolean((player as unknown as Record<string, unknown>)["hockeytech_id"]) && (
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(13,148,136,.09)", color: "#0D9488", border: "1px solid rgba(13,148,136,.18)" }}>HockeyTech</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(13,148,136,.09)", color: "#0D9488", border: "1px solid rgba(13,148,136,.18)" }}>League Linked</span>
                   )}
                   {player.current_league && (
                     <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>{formatLeague(player.current_league)}</span>

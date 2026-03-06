@@ -281,9 +281,9 @@ SUBSCRIPTION_TIERS = {
         "monthly_practice_plans": -1,
         "monthly_highlight_reels": -1,
         "max_seats": 1,
-        "description": "Unlimited reports, full PXI (10 modes), all coaching tools, InStat, and export.",
+        "description": "Unlimited reports, full PXI (10 modes), all coaching tools, advanced stats, and export.",
         "target_user": "Head coaches, agents, GMs",
-        "features": ["Unlimited reports", "Unlimited Bench Talk", "Full PXI (10 modes)", "All 21 report templates", "Unlimited coaching tools", "InStat game data", "Line builder & series planning", "Multi-team views", "Export & share reports", "Unlimited uploads (50MB max)"],
+        "features": ["Unlimited reports", "Unlimited Bench Talk", "Full PXI (10 modes)", "All 21 report templates", "Unlimited coaching tools", "Advanced stats data", "Line builder & series planning", "Multi-team views", "Export & share reports", "Unlimited uploads (50MB max)"],
         # Permissions
         "can_sync_data": True,
         "can_bulk_sync": True,
