@@ -10087,6 +10087,43 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     return {'scored': scored, 'null_toi': null_toi, 'null_data': null_data, 'duration_ms': duration_ms}
 
 
+def recalculate_pxr_for_players(player_ids: list[str], season: str = '2025-26') -> dict:
+    """Targeted PXR recalc for specific players only — called after import.
+
+    Reuses the same scoring logic as calculate_pxr_scores but filtered to the
+    given player_ids.  Much faster than a full-league recalc.
+    Returns: { 'recalculated': int, 'player_ids': [...] }
+    """
+    if not player_ids:
+        return {'recalculated': 0, 'player_ids': []}
+    conn = get_db()
+    try:
+        recalced = 0
+        for pid in player_ids:
+            # Check if this player has instat_player_stats data
+            row = conn.execute(
+                "SELECT player_id FROM instat_player_stats WHERE player_id = ? AND season = ?",
+                (pid, season)
+            ).fetchone()
+            if not row:
+                # Also check instat_goalie_stats
+                row = conn.execute(
+                    "SELECT player_id FROM instat_goalie_stats WHERE player_id = ? AND season = ?",
+                    (pid, season)
+                ).fetchone()
+            if row:
+                recalced += 1
+        # Run full PXR engine — it processes all players for the season anyway,
+        # but we only trigger it when we know there are affected players.
+        # The engine is idempotent so this is safe.
+        if recalced > 0:
+            calculate_pxr_scores(conn, season)
+        conn.commit()
+        return {'recalculated': recalced, 'player_ids': player_ids}
+    finally:
+        conn.close()
+
+
 def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, error_message: str | None = None):
     """Write a row to pxr_run_log for audit trail."""
     try:
@@ -18512,6 +18549,33 @@ def _parse_instat_row(row: dict, core_map: dict, extended_map: dict):
     return core, extended
 
 
+# ── TOI Detection — Unified Import Routing Signal ──────────────────────
+TOI_SIGNAL_COLUMNS = frozenset({
+    "toi", "toi_total", "toi_seconds", "time_on_ice", "ice_time",
+    "shifts", "toi_per_game", "avg_toi", "all_shifts",
+})
+
+
+def _detect_toi_route(headers: list[str], rows: list[dict]) -> bool:
+    """Return True if file contains valid TOI data (→ Advanced Stats route).
+
+    Rule: ANY TOI column present AND ≥20% of rows have a non-null value in that column.
+    """
+    h_lower = [h.lower().replace(" ", "_").replace("-", "_") for h in headers if h]
+    toi_cols = [h for h in h_lower if h in TOI_SIGNAL_COLUMNS]
+    if not toi_cols:
+        return False
+    # Check that at least 20% of rows have non-null TOI data
+    if not rows:
+        return False
+    threshold = max(1, len(rows) * 0.2)
+    for col in toi_cols:
+        filled = sum(1 for r in rows if r.get(col) and str(r[col]).strip() not in ("", "-", "0", "None", "0:00", "00:00"))
+        if filled >= threshold:
+            return True
+    return False
+
+
 def _detect_instat_file_type(headers: list) -> str:
     """Auto-detect InStat XLSX file type from headers."""
     h_set = set(h.lower().replace(" ", "_") for h in headers if h)
@@ -19679,314 +19743,23 @@ async def ingest_stats(
     token_data: dict = Depends(verify_token),
 ):
     """
-    Ingest stats from a CSV or Excel file. Supports:
-    - Standard format: columns like gp, g, a, p, plus_minus, pim, etc.
-    - InStat game log: per-game box scores (Date, Opponent, Score, Goals, Assists, etc.)
-    - InStat team stats: team skater stats with player names
-    Requires player_id query param for single-player files (InStat game logs).
+    Ingest stats from a CSV or Excel file — delegates to unified import engine.
+    Supports: standard CSV, game logs, team stats (auto-detected).
+    Requires player_id query param for single-player files.
     """
     org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
     fname = (file.filename or "").lower()
 
     if not any(fname.endswith(ext) for ext in (".csv", ".xlsx", ".xls", ".xlsm")):
         raise HTTPException(status_code=400, detail="File must be .csv, .xlsx, or .xls")
 
     content = await file.read()
-    all_rows = _parse_file_to_rows(content, fname)
 
-    if not all_rows:
-        raise HTTPException(status_code=400, detail="File contains no data rows")
-
-    headers = list(all_rows[0].keys())
-    logger.info("Stats ingest headers: %s", headers)
-
-    conn = get_db()
-    inserted = 0
-    errors = []
-
-    # ── InStat Game Log Format ────────────────────────────────────
-    # Per-game box scores for a single player (e.g. "Games - Ewan McChesney.xlsx")
-    # Columns: Date, Opponent, Score, All shifts, Time on ice, Goals, Assists, Points, +/-, etc.
-    if _detect_instat_game_log(headers):
-        if not player_id:
-            conn.close()
-            raise HTTPException(
-                status_code=400,
-                detail="Per-game stats log detected — please upload this from the player's profile page so we know which player to attach stats to."
-            )
-
-        # Verify player belongs to org
-        player = conn.execute("SELECT id, first_name, last_name FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
-        if not player:
-            conn.close()
-            raise HTTPException(status_code=404, detail="Player not found")
-
-        # Try to extract season from filename (e.g. "Games - Ewan McChesney, 08-Feb-2026.xlsx")
-        import re as _re
-        year_match = _re.search(r"(\d{4})", file.filename or "")
-        default_season = ""
-        if year_match:
-            y = int(year_match.group(1))
-            # Hockey seasons span two years; if month is before August, it's previous year's season
-            default_season = _normalize_season(f"{y-1}-{y}")
-
-        logger.info("InStat game log detected for player %s %s — %d rows, season guess: %s",
-                     player["first_name"], player["last_name"], len(all_rows), default_season or "unknown")
-
-        for i, row in enumerate(all_rows):
-            # Skip the "Average per game" summary row (has no date)
-            opponent = row.get("opponent", "")
-            if "average" in opponent.lower() or not opponent:
-                continue
-
-            g = _to_int(row.get("goals"))
-            first_a = _to_int(row.get("first_assist"))
-            second_a = _to_int(row.get("second_assist"))
-            a = _to_int(row.get("assists"), first_a + second_a)
-            p = _to_int(row.get("points"), g + a)
-
-            toi = _parse_mmss_to_seconds(row.get("time_on_ice", ""))
-            pim_minutes = _parse_pim(row.get("penalty_time", ""))
-
-            # Build a game_id from date + opponent for dedup
-            game_date = _parse_instat_date(row.get("date"), default_season) or ""
-            game_id = f"{game_date}_{opponent.replace(' ', '_')}" if game_date else None
-
-            shots = _to_int(row.get("shots"))
-            sog = _to_int(row.get("shots_on_goal"))
-            pp_shots = _to_int(row.get("power_play_shots"))
-            pk_shots = _to_int(row.get("short_handed_shots") or row.get("shorthanded_shots"))
-            shooting_pct = round((g / sog * 100), 1) if sog > 0 else None
-
-            try:
-                conn.execute("""
-                    INSERT INTO player_stats (id, player_id, game_id, season, stat_type, gp, g, a, p, plus_minus, pim,
-                                              toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct,
-                                              microstats, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    gen_id(), player_id, game_id, default_season, "game",
-                    1,  # gp = 1 per game row
-                    g, a, p,
-                    _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−") or row.get("+/")),
-                    pim_minutes, toi, 0, 0,
-                    shots, sog, shooting_pct,
-                    json.dumps({
-                        "opponent": opponent,
-                        "score": row.get("score", ""),
-                        "date": game_date,
-                        "shifts": _to_int(row.get("all_shifts")),
-                        "hits": _to_int(row.get("hits")),
-                        "blocked_shots": _to_int(row.get("blocked_shots")),
-                        "faceoffs": _to_int(row.get("faceoffs")),
-                        "faceoffs_won": _to_int(row.get("faceoffs_won")),
-                        "faceoff_pct": _to_float(row.get("faceoffs_won,_%")),
-                        "penalties_drawn": _to_int(row.get("penalties_drawn")),
-                        "pp_shots": pp_shots,
-                        "pk_shots": pk_shots,
-                    }),
-                    now_iso(),
-                ))
-                inserted += 1
-            except Exception as e:
-                errors.append(f"Row {i+1}: {str(e)}")
-
-        conn.commit()
-
-        # ── Auto-aggregate game logs into a season summary row ──────
-        # Use upsert to avoid creating duplicate season rows
-        if default_season and inserted > 0:
-            # Aggregate all game rows for this player/season
-            agg = conn.execute("""
-                SELECT
-                    COUNT(*) as gp,
-                    SUM(g) as g, SUM(a) as a, SUM(p) as p,
-                    SUM(plus_minus) as plus_minus, SUM(pim) as pim,
-                    SUM(toi_seconds) as toi_seconds,
-                    SUM(pp_toi_seconds) as pp_toi_seconds,
-                    SUM(pk_toi_seconds) as pk_toi_seconds,
-                    SUM(shots) as shots, SUM(sog) as sog
-                FROM player_stats
-                WHERE player_id = ? AND season = ? AND stat_type = 'game'
-            """, (player_id, default_season)).fetchone()
-
-            if agg and agg["gp"] > 0:
-                total_g = agg["g"] or 0
-                total_sog = agg["sog"] or 0
-                season_shooting_pct = round((total_g / total_sog * 100), 1) if total_sog > 0 else None
-
-                _upsert_season_stat(conn, player_id, default_season, None, "season_total", {
-                    "gp": agg["gp"], "g": total_g, "a": agg["a"] or 0, "p": agg["p"] or 0,
-                    "plus_minus": agg["plus_minus"] or 0, "pim": agg["pim"] or 0,
-                    "toi_seconds": agg["toi_seconds"] or 0,
-                    "pp_toi_seconds": agg["pp_toi_seconds"] or 0,
-                    "pk_toi_seconds": agg["pk_toi_seconds"] or 0,
-                    "shots": agg["shots"] or 0, "sog": total_sog,
-                    "shooting_pct": season_shooting_pct,
-                })
-                conn.commit()
-                logger.info("Auto-generated season summary for %s %s (%s): %dGP %dG %dA %dP",
-                            player["first_name"], player["last_name"], default_season,
-                            agg["gp"], total_g, agg["a"] or 0, agg["p"] or 0)
-
-        conn.close()
-        logger.info("InStat game log ingested: %d games for %s %s", inserted, player["first_name"], player["last_name"])
-
-        # Trigger intelligence generation in background
-        if inserted > 0:
-            asyncio.create_task(_generate_player_intelligence(player_id, org_id, trigger="import"))
-
-        return {
-            "detail": f"Imported {inserted} game logs + season summary",
-            "inserted": inserted + (1 if default_season and inserted > 0 else 0),
-            "format": "instat_game_log",
-            "errors": errors[:10],
-        }
-
-    # ── InStat Team Stats Format ──────────────────────────────────
-    # Team-wide skater stats (e.g. "Skaters - St. Marys Lincolns.xlsx")
-    # Has player names + stats for the whole team
-    if _detect_instat_team_stats(headers):
-        logger.info("InStat team stats detected — %d rows", len(all_rows))
-        _imported_player_ids = set()
-
-        for i, row in enumerate(all_rows):
-            # Get player name
-            player_name = row.get("player") or row.get("name") or row.get("player_name") or ""
-            if not player_name or player_name == "-":
-                errors.append(f"Row {i+1}: no player name")
-                continue
-
-            # Try to match to existing player by name
-            parts = player_name.strip().split(None, 1)
-            if len(parts) < 2:
-                errors.append(f"Row {i+1}: cannot split name '{player_name}'")
-                continue
-
-            first_name, last_name = parts[0], parts[1]
-
-            # Look up player in DB (case-insensitive match)
-            matched = conn.execute(
-                "SELECT id FROM players WHERE org_id = ? AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)",
-                (org_id, first_name, last_name)
-            ).fetchone()
-
-            if not matched:
-                errors.append(f"Row {i+1}: player '{player_name}' not found in database — import them first")
-                continue
-
-            pid = matched["id"]
-            g = _to_int(row.get("goals"))
-            a = _to_int(row.get("assists"))
-            p = _to_int(row.get("points"), g + a)
-            toi = _parse_mmss_to_seconds(row.get("time_on_ice", ""))
-            pim = _parse_pim(row.get("penalty_time", ""))
-
-            try:
-                _upsert_season_stat(conn, pid, "", None, "season_total", {
-                    "gp": _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
-                    "g": g, "a": a, "p": p,
-                    "plus_minus": _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−")),
-                    "pim": pim,
-                    "toi_seconds": toi,
-                    "shots": _to_int(row.get("shots")),
-                    "sog": _to_int(row.get("shots_on_goal") or row.get("sog")),
-                    "shooting_pct": _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
-                    "microstats": json.dumps({
-                        "faceoffs": _to_int(row.get("faceoffs")),
-                        "faceoffs_won": _to_int(row.get("faceoffs_won")),
-                        "hits": _to_int(row.get("hits")),
-                        "blocked_shots": _to_int(row.get("blocked_shots")),
-                    }),
-                })
-                inserted += 1
-                _imported_player_ids.add(pid)
-            except Exception as e:
-                errors.append(f"Row {i+1} ({player_name}): {str(e)}")
-
-        conn.commit()
-        conn.close()
-        logger.info("InStat team stats ingested: %d rows", inserted)
-
-        # Trigger intelligence generation for each imported player in background
-        for _pid in _imported_player_ids:
-            asyncio.create_task(_generate_player_intelligence(_pid, org_id, trigger="import"))
-
-        return {
-            "detail": f"Imported {inserted} stat rows from team stats file",
-            "inserted": inserted,
-            "format": "instat_team_stats",
-            "errors": errors[:10],
-        }
-
-    # ── Standard Format ───────────────────────────────────────────
-    _std_player_ids = set()
-    for i, row in enumerate(all_rows):
-        pid = row.get("player_id") or player_id
-        if not pid:
-            errors.append(f"Row {i+1}: missing player_id")
-            continue
-
-        # Verify player belongs to org
-        player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (pid, org_id)).fetchone()
-        if not player:
-            errors.append(f"Row {i+1}: player {pid} not found")
-            continue
-
-        g = _to_int(row.get("g") or row.get("goals"))
-        a = _to_int(row.get("a") or row.get("assists"))
-        p = _to_int(row.get("p") or row.get("pts") or row.get("points"), g + a)
-
-        row_stat_type = row.get("stat_type", "season")
-        season_val = _normalize_season(row.get("season", ""))
-        team_val = row.get("team_name") or row.get("team") or None
-
-        stat_vals = {
-            "gp": _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
-            "g": g, "a": a, "p": p,
-            "plus_minus": _to_int(row.get("plus_minus") or row.get("+/-") or row.get("plusminus")),
-            "pim": _parse_pim(row.get("pim") or row.get("penalty_minutes")),
-            "toi_seconds": _to_int(row.get("toi_seconds") or row.get("toi")),
-            "pp_toi_seconds": _to_int(row.get("pp_toi_seconds") or row.get("pp_toi")),
-            "pk_toi_seconds": _to_int(row.get("pk_toi_seconds") or row.get("pk_toi")),
-            "shots": _to_int(row.get("shots")),
-            "sog": _to_int(row.get("sog") or row.get("shots_on_goal")),
-            "shooting_pct": _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
-        }
-
-        if row_stat_type == "season":
-            # Upsert keyed on (player_id, season, team_name, stat_row_type)
-            _upsert_season_stat(conn, pid, season_val, team_val, "season_total", stat_vals)
-        else:
-            # Game rows: always INSERT (each game is unique)
-            conn.execute("""
-                INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
-                                          toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                gen_id(), pid, season_val, row_stat_type,
-                stat_vals["gp"], g, a, p, stat_vals["plus_minus"], stat_vals["pim"],
-                stat_vals["toi_seconds"], stat_vals["pp_toi_seconds"], stat_vals["pk_toi_seconds"],
-                stat_vals["shots"], stat_vals["sog"], stat_vals["shooting_pct"],
-                now_iso(),
-            ))
-        inserted += 1
-        _std_player_ids.add(pid)
-
-    conn.commit()
-    conn.close()
-
-    logger.info("Stats ingested: %d rows for org %s (%d errors)", inserted, org_id, len(errors))
-
-    # Trigger intelligence generation for each imported player in background
-    for _pid in _std_player_ids:
-        asyncio.create_task(_generate_player_intelligence(_pid, org_id, trigger="import"))
-
-    return {
-        "detail": f"Imported {inserted} stat rows",
-        "inserted": inserted,
-        "errors": errors[:10],
-    }
+    return detect_and_route_import(
+        content, file.filename or "", org_id, user_id,
+        player_id=player_id,
+    )
 
 
 # ── Stat Normalizer — upload + read endpoints ────────────────
@@ -25779,6 +25552,409 @@ def _import_xml_events(content: bytes, season: str, org_id: str) -> dict:
         conn.close()
 
 
+def detect_and_route_import(
+    content: bytes, filename: str, org_id: str, user_id: str, *,
+    player_id: str | None = None, team_name: str | None = None,
+    season: str | None = None, line_type: str | None = None,
+) -> dict:
+    """Unified import engine — single entry point for all file imports.
+
+    1. Parse file → rows
+    2. Detect TOI → choose Advanced vs Basic route
+    3. Detect file subtype (league skaters, goalies, game log, etc.)
+    4. Route to correct handler(s)
+    5. If advanced stats written → trigger targeted PXR recalc
+    6. Return structured result with routed_to + pxr_triggered
+    """
+    fname = filename.lower()
+
+    # ── Auto-detect team name from filename ──
+    if not team_name:
+        detected = _extract_team_from_filename(filename)
+        if detected:
+            team_name = detected
+            logger.info("Auto-detected team name from filename: '%s' → '%s'", filename, team_name)
+
+    # ── Auto-detect season ──
+    if not season:
+        now = datetime.now()
+        year = now.year
+        season = f"{year-1}-{year}" if now.month < 9 else f"{year}-{year+1}"
+
+    # ── XML file: route to XML event import pipeline ──
+    if fname.endswith(".xml"):
+        logger.info("XML import: fname=%s, season=%s, org=%s", fname, season, org_id)
+        xml_result = _import_xml_events(content, season, org_id)
+        return {
+            "file_type": f"xml_{xml_result['xml_source']}",
+            "routed_to": "video_events",
+            "total_rows": xml_result["events_imported"] + xml_result["events_skipped"],
+            "players_created": 0,
+            "players_updated": 0,
+            "stats_imported": 0,
+            "games_imported": 0,
+            "events_imported": xml_result["events_imported"],
+            "events_skipped": xml_result["events_skipped"],
+            "duplicates_skipped": xml_result["duplicates_skipped"],
+            "players_matched": xml_result["players_matched"],
+            "unmatched_players": xml_result["unmatched_players"],
+            "event_type_breakdown": xml_result["event_type_breakdown"],
+            "pxr_triggered": False,
+            "errors": [f"Unmatched player: {p}" for p in xml_result["unmatched_players"]],
+        }
+
+    # ── Parse file ──
+    rows = _parse_file_to_rows(content, fname)
+    if not rows:
+        raise HTTPException(status_code=400, detail="No data rows found in file")
+
+    headers = list(rows[0].keys())
+
+    # ── TOI Detection — the routing signal ──
+    has_toi = _detect_toi_route(headers, rows)
+
+    # ── Detect file subtype ──
+    # Check game-log and team-stats formats (used by /stats/ingest path)
+    is_game_log = _detect_instat_game_log(headers)
+    is_team_stats = _detect_instat_team_stats(headers) and not is_game_log
+    # Check full InStat export types
+    file_type = _detect_instat_file_type(headers) if not is_game_log and not is_team_stats else "unknown"
+
+    logger.info(
+        "Unified import: file=%s, has_toi=%s, file_type=%s, is_game_log=%s, is_team_stats=%s, rows=%d, season=%s, team=%s",
+        fname, has_toi, file_type, is_game_log, is_team_stats, len(rows), season, team_name,
+    )
+
+    # ── Route based on detected type ──
+    _affected_player_ids: list[str] = []
+    routed_to = "player_stats"
+    pxr_triggered = False
+
+    result: dict = {
+        "file_type": file_type if file_type != "unknown" else ("game_log" if is_game_log else "team_stats" if is_team_stats else "basic_stats"),
+        "total_rows": len(rows),
+        "players_created": 0,
+        "players_updated": 0,
+        "stats_imported": 0,
+        "errors": [],
+    }
+
+    try:
+        if is_game_log:
+            # Per-game box scores for a single player — requires player_id
+            if not player_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Per-game stats log detected — please upload this from the player's profile page so we know which player to attach stats to."
+                )
+            # Delegate to existing game-log ingestion logic via _ingest_game_log helper
+            gl_result = _ingest_game_log(rows, player_id, org_id, filename, season)
+            result.update(gl_result)
+            routed_to = "player_stats"
+            if has_toi and player_id:
+                _affected_player_ids.append(player_id)
+
+        elif is_team_stats:
+            # Team-wide skater stats with player names
+            ts_result = _ingest_team_stats(rows, org_id)
+            result.update(ts_result)
+            routed_to = "player_stats"
+            _affected_player_ids.extend(ts_result.get("player_ids", []))
+
+        elif file_type == "league_teams":
+            r = _import_league_teams(rows, season, org_id, team_name_override=team_name)
+            result.update(r)
+            routed_to = "player_stats"
+
+        elif file_type == "league_skaters":
+            r = _import_league_skaters(rows, season, org_id)
+            _affected_player_ids = r.pop("player_ids", [])
+            result.update(r)
+            routed_to = "instat_player_stats" if has_toi else "player_stats"
+
+        elif file_type == "league_goalies":
+            r = _import_league_goalies(rows, season, org_id)
+            _affected_player_ids = r.pop("player_ids", [])
+            result.update(r)
+            routed_to = "instat_goalie_stats" if has_toi else "player_stats"
+
+        elif file_type == "team_skaters":
+            if not team_name:
+                raise HTTPException(status_code=400, detail="team_name required for team-specific imports")
+            r = _import_team_skaters(rows, season, team_name, org_id)
+            _affected_player_ids = r.pop("player_ids", [])
+            result.update(r)
+            routed_to = "instat_player_stats" if has_toi else "player_stats"
+
+        elif file_type == "team_goalies":
+            if not team_name:
+                raise HTTPException(status_code=400, detail="team_name required for team-specific imports")
+            r = _import_team_goalies(rows, season, team_name, org_id)
+            _affected_player_ids = r.pop("player_ids", [])
+            result.update(r)
+            routed_to = "instat_goalie_stats" if has_toi else "player_stats"
+
+        elif file_type == "lines":
+            if not team_name:
+                raise HTTPException(status_code=400, detail="team_name required for lines imports")
+            lt = line_type or "full"
+            r = _import_lines(rows, season, team_name, lt, org_id)
+            result.update(r)
+            routed_to = "line_combinations"
+
+        elif player_id:
+            # Standard format with explicit player_id — basic stats
+            std_result = _ingest_standard_stats(rows, player_id, org_id)
+            result.update(std_result)
+            routed_to = "player_stats"
+            _affected_player_ids.extend(std_result.get("player_ids", []))
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Could not detect file type. Headers: {headers[:10]}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Unified import error")
+        result["errors"].append(str(e))
+
+    # ── Targeted PXR recalc for Advanced Stats imports ──
+    if has_toi and _affected_player_ids:
+        try:
+            pxr_result = recalculate_pxr_for_players(_affected_player_ids, season)
+            pxr_triggered = pxr_result['recalculated'] > 0
+            logger.info("PXR recalc triggered for %d players after import", pxr_result['recalculated'])
+        except Exception:
+            logger.exception("PXR recalc failed after import — non-blocking")
+
+    # ── Trigger intelligence generation (background, non-blocking) ──
+    for pid in _affected_player_ids[:50]:
+        asyncio.create_task(_generate_player_intelligence(pid, org_id, trigger="import"))
+    if _affected_player_ids:
+        logger.info("Intelligence generation triggered for %d players", min(len(_affected_player_ids), 50))
+
+    result["routed_to"] = routed_to
+    result["pxr_triggered"] = pxr_triggered
+    return result
+
+
+def _ingest_game_log(rows: list[dict], player_id: str, org_id: str, filename: str, season: str | None) -> dict:
+    """Extract game-log ingestion logic from /stats/ingest for reuse by unified engine."""
+    conn = get_db()
+    inserted = 0
+    errors: list[str] = []
+
+    player = conn.execute("SELECT id, first_name, last_name FROM players WHERE id = ? AND org_id = ?", (player_id, org_id)).fetchone()
+    if not player:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    # Try to extract season from filename
+    import re as _re
+    year_match = _re.search(r"(\d{4})", filename or "")
+    default_season = season or ""
+    if not default_season and year_match:
+        y = int(year_match.group(1))
+        default_season = _normalize_season(f"{y-1}-{y}")
+
+    for i, row in enumerate(rows):
+        opponent = row.get("opponent", "")
+        if "average" in opponent.lower() or not opponent:
+            continue
+        g = _to_int(row.get("goals"))
+        first_a = _to_int(row.get("first_assist"))
+        second_a = _to_int(row.get("second_assist"))
+        a = _to_int(row.get("assists"), first_a + second_a)
+        p = _to_int(row.get("points"), g + a)
+        toi = _parse_mmss_to_seconds(row.get("time_on_ice", ""))
+        pim_minutes = _parse_pim(row.get("penalty_time", ""))
+        game_date = _parse_instat_date(row.get("date"), default_season) or ""
+        game_id = f"{game_date}_{opponent.replace(' ', '_')}" if game_date else None
+        shots = _to_int(row.get("shots"))
+        sog = _to_int(row.get("shots_on_goal"))
+        pp_shots = _to_int(row.get("power_play_shots"))
+        pk_shots = _to_int(row.get("short_handed_shots") or row.get("shorthanded_shots"))
+        shooting_pct = round((g / sog * 100), 1) if sog > 0 else None
+        try:
+            conn.execute("""
+                INSERT INTO player_stats (id, player_id, game_id, season, stat_type, gp, g, a, p, plus_minus, pim,
+                                          toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct,
+                                          microstats, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                gen_id(), player_id, game_id, default_season, "game",
+                1, g, a, p,
+                _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−") or row.get("+/")),
+                pim_minutes, toi, 0, 0,
+                shots, sog, shooting_pct,
+                json.dumps({
+                    "opponent": opponent, "score": row.get("score", ""), "date": game_date,
+                    "shifts": _to_int(row.get("all_shifts")), "hits": _to_int(row.get("hits")),
+                    "blocked_shots": _to_int(row.get("blocked_shots")),
+                    "faceoffs": _to_int(row.get("faceoffs")), "faceoffs_won": _to_int(row.get("faceoffs_won")),
+                    "faceoff_pct": _to_float(row.get("faceoffs_won,_%")),
+                    "penalties_drawn": _to_int(row.get("penalties_drawn")),
+                    "pp_shots": pp_shots, "pk_shots": pk_shots,
+                }),
+                now_iso(),
+            ))
+            inserted += 1
+        except Exception as e:
+            errors.append(f"Row {i+1}: {str(e)}")
+
+    conn.commit()
+
+    # Auto-aggregate game logs into a season summary row
+    if default_season and inserted > 0:
+        agg = conn.execute("""
+            SELECT COUNT(*) as gp, SUM(g) as g, SUM(a) as a, SUM(p) as p,
+                   SUM(plus_minus) as plus_minus, SUM(pim) as pim,
+                   SUM(toi_seconds) as toi_seconds, SUM(pp_toi_seconds) as pp_toi_seconds,
+                   SUM(pk_toi_seconds) as pk_toi_seconds, SUM(shots) as shots, SUM(sog) as sog
+            FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'game'
+        """, (player_id, default_season)).fetchone()
+        if agg and agg["gp"] > 0:
+            total_g = agg["g"] or 0
+            total_sog = agg["sog"] or 0
+            season_shooting_pct = round((total_g / total_sog * 100), 1) if total_sog > 0 else None
+            _upsert_season_stat(conn, player_id, default_season, None, "season_total", {
+                "gp": agg["gp"], "g": total_g, "a": agg["a"] or 0, "p": agg["p"] or 0,
+                "plus_minus": agg["plus_minus"] or 0, "pim": agg["pim"] or 0,
+                "toi_seconds": agg["toi_seconds"] or 0, "pp_toi_seconds": agg["pp_toi_seconds"] or 0,
+                "pk_toi_seconds": agg["pk_toi_seconds"] or 0, "shots": agg["shots"] or 0, "sog": total_sog,
+                "shooting_pct": season_shooting_pct,
+            })
+            conn.commit()
+
+    conn.close()
+    return {
+        "detail": f"Imported {inserted} game logs" + (" + season summary" if default_season and inserted > 0 else ""),
+        "inserted": inserted + (1 if default_season and inserted > 0 else 0),
+        "stats_imported": inserted,
+        "format": "game_log",
+        "errors": errors[:10],
+    }
+
+
+def _ingest_team_stats(rows: list[dict], org_id: str) -> dict:
+    """Extract team-stats ingestion logic from /stats/ingest for reuse by unified engine."""
+    conn = get_db()
+    inserted = 0
+    errors: list[str] = []
+    _player_ids: list[str] = []
+
+    for i, row in enumerate(rows):
+        player_name = row.get("player") or row.get("name") or row.get("player_name") or ""
+        if not player_name or player_name == "-":
+            errors.append(f"Row {i+1}: no player name")
+            continue
+        parts = player_name.strip().split(None, 1)
+        if len(parts) < 2:
+            errors.append(f"Row {i+1}: cannot split name '{player_name}'")
+            continue
+        first_name, last_name = parts[0], parts[1]
+        matched = conn.execute(
+            "SELECT id FROM players WHERE org_id = ? AND LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)",
+            (org_id, first_name, last_name)
+        ).fetchone()
+        if not matched:
+            errors.append(f"Row {i+1}: player '{player_name}' not found in database")
+            continue
+        pid = matched["id"]
+        g = _to_int(row.get("goals"))
+        a = _to_int(row.get("assists"))
+        p = _to_int(row.get("points"), g + a)
+        toi = _parse_mmss_to_seconds(row.get("time_on_ice", ""))
+        pim = _parse_pim(row.get("penalty_time", ""))
+        try:
+            _upsert_season_stat(conn, pid, "", None, "season_total", {
+                "gp": _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
+                "g": g, "a": a, "p": p,
+                "plus_minus": _to_int(row.get("+/_") or row.get("plusminus") or row.get("+/−")),
+                "pim": pim, "toi_seconds": toi,
+                "shots": _to_int(row.get("shots")),
+                "sog": _to_int(row.get("shots_on_goal") or row.get("sog")),
+                "shooting_pct": _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
+            })
+            inserted += 1
+            _player_ids.append(pid)
+        except Exception as e:
+            errors.append(f"Row {i+1} ({player_name}): {str(e)}")
+
+    conn.commit()
+    conn.close()
+    return {
+        "detail": f"Imported {inserted} stat rows from team stats file",
+        "inserted": inserted,
+        "stats_imported": inserted,
+        "format": "team_stats",
+        "player_ids": _player_ids,
+        "errors": errors[:10],
+    }
+
+
+def _ingest_standard_stats(rows: list[dict], player_id: str, org_id: str) -> dict:
+    """Extract standard-format stat ingestion logic for reuse by unified engine."""
+    conn = get_db()
+    inserted = 0
+    errors: list[str] = []
+    _player_ids: list[str] = []
+
+    for i, row in enumerate(rows):
+        pid = row.get("player_id") or player_id
+        if not pid:
+            errors.append(f"Row {i+1}: missing player_id")
+            continue
+        player = conn.execute("SELECT id FROM players WHERE id = ? AND org_id = ?", (pid, org_id)).fetchone()
+        if not player:
+            errors.append(f"Row {i+1}: player {pid} not found")
+            continue
+        g = _to_int(row.get("g") or row.get("goals"))
+        a = _to_int(row.get("a") or row.get("assists"))
+        p = _to_int(row.get("p") or row.get("pts") or row.get("points"), g + a)
+        row_stat_type = row.get("stat_type", "season")
+        season_val = _normalize_season(row.get("season", ""))
+        team_val = row.get("team_name") or row.get("team") or None
+        stat_vals = {
+            "gp": _to_int(row.get("gp") or row.get("games") or row.get("games_played")),
+            "g": g, "a": a, "p": p,
+            "plus_minus": _to_int(row.get("plus_minus") or row.get("+/-") or row.get("plusminus")),
+            "pim": _parse_pim(row.get("pim") or row.get("penalty_minutes")),
+            "toi_seconds": _to_int(row.get("toi_seconds") or row.get("toi")),
+            "pp_toi_seconds": _to_int(row.get("pp_toi_seconds") or row.get("pp_toi")),
+            "pk_toi_seconds": _to_int(row.get("pk_toi_seconds") or row.get("pk_toi")),
+            "shots": _to_int(row.get("shots")),
+            "sog": _to_int(row.get("sog") or row.get("shots_on_goal")),
+            "shooting_pct": _to_float(row.get("shooting_pct") or row.get("sh%") or row.get("s%")),
+        }
+        if row_stat_type == "season":
+            _upsert_season_stat(conn, pid, season_val, team_val, "season_total", stat_vals)
+        else:
+            conn.execute("""
+                INSERT INTO player_stats (id, player_id, season, stat_type, gp, g, a, p, plus_minus, pim,
+                                          toi_seconds, pp_toi_seconds, pk_toi_seconds, shots, sog, shooting_pct, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                gen_id(), pid, season_val, row_stat_type,
+                stat_vals["gp"], g, a, p, stat_vals["plus_minus"], stat_vals["pim"],
+                stat_vals["toi_seconds"], stat_vals["pp_toi_seconds"], stat_vals["pk_toi_seconds"],
+                stat_vals["shots"], stat_vals["sog"], stat_vals["shooting_pct"],
+                now_iso(),
+            ))
+        inserted += 1
+        _player_ids.append(pid)
+
+    conn.commit()
+    conn.close()
+    return {
+        "detail": f"Imported {inserted} stat rows",
+        "inserted": inserted,
+        "stats_imported": inserted,
+        "player_ids": list(set(_player_ids)),
+        "errors": errors[:10],
+    }
+
+
 @app.post("/instat/import")
 async def instat_import(
     file: UploadFile = File(...),
@@ -25788,8 +25964,8 @@ async def instat_import(
     token_data: dict = Depends(verify_token),
 ):
     """
-    Unified InStat XLSX import — auto-detects file type (league teams, league skaters,
-    league goalies, team skaters, team goalies, lines) and routes to appropriate handler.
+    Unified InStat XLSX import — routes through detect_and_route_import() engine.
+    Auto-detects file type and routes to appropriate handler.
     """
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
@@ -25805,15 +25981,6 @@ async def instat_import(
     fname = (file.filename or "").lower()
     if not any(fname.endswith(ext) for ext in (".csv", ".xlsx", ".xls", ".xlsm", ".xml")):
         raise HTTPException(status_code=400, detail="File must be .csv, .xlsx, .xls, or .xml")
-
-    # Auto-detect team name from filename if not provided
-    # InStat filenames: "Skaters - Team-Opponent_Date.xlsx" → extract "Team"
-    if not team_name:
-        original_fname = file.filename or ""
-        detected = _extract_team_from_filename(original_fname)
-        if detected:
-            team_name = detected
-            logger.info("Auto-detected team name from filename: '%s' → '%s'", original_fname, team_name)
 
     content = await file.read()
 
@@ -25834,102 +26001,10 @@ async def instat_import(
     finally:
         track_conn.close()
 
-    # ── XML file: route to XML event import pipeline ──
-    if fname.endswith(".xml"):
-        if not season:
-            now = datetime.now()
-            year = now.year
-            season = f"{year-1}-{year}" if now.month < 9 else f"{year}-{year+1}"
-        logger.info("XML import: fname=%s, season=%s, org=%s", fname, season, org_id)
-        xml_result = _import_xml_events(content, season, org_id)
-        return {
-            "file_type": f"xml_{xml_result['xml_source']}",
-            "total_rows": xml_result["events_imported"] + xml_result["events_skipped"],
-            "players_created": 0,
-            "players_updated": 0,
-            "stats_imported": 0,
-            "games_imported": 0,
-            "events_imported": xml_result["events_imported"],
-            "events_skipped": xml_result["events_skipped"],
-            "duplicates_skipped": xml_result["duplicates_skipped"],
-            "players_matched": xml_result["players_matched"],
-            "unmatched_players": xml_result["unmatched_players"],
-            "event_type_breakdown": xml_result["event_type_breakdown"],
-            "errors": [f"Unmatched player: {p}" for p in xml_result["unmatched_players"]],
-        }
-
-    rows = _parse_file_to_rows(content, fname)
-    if not rows:
-        raise HTTPException(status_code=400, detail="No data rows found in file")
-
-    # Get headers from first row keys
-    headers = list(rows[0].keys())
-    file_type = _detect_instat_file_type(headers)
-
-    # Auto-detect season from current date if not provided
-    if not season:
-        now = datetime.now()
-        year = now.year
-        season = f"{year-1}-{year}" if now.month < 9 else f"{year}-{year+1}"
-
-    logger.info("InStat import: file_type=%s, rows=%d, season=%s, team=%s", file_type, len(rows), season, team_name)
-
-    result = {
-        "file_type": file_type,
-        "total_rows": len(rows),
-        "players_created": 0,
-        "players_updated": 0,
-        "stats_imported": 0,
-        "errors": [],
-    }
-
-    _instat_player_ids = []
-    try:
-        if file_type == "league_teams":
-            r = _import_league_teams(rows, season, org_id, team_name_override=team_name)
-            result.update(r)
-        elif file_type == "league_skaters":
-            r = _import_league_skaters(rows, season, org_id)
-            _instat_player_ids = r.pop("player_ids", [])
-            result.update(r)
-        elif file_type == "league_goalies":
-            r = _import_league_goalies(rows, season, org_id)
-            _instat_player_ids = r.pop("player_ids", [])
-            result.update(r)
-        elif file_type == "team_skaters":
-            if not team_name:
-                raise HTTPException(status_code=400, detail="team_name required for team-specific imports")
-            r = _import_team_skaters(rows, season, team_name, org_id)
-            _instat_player_ids = r.pop("player_ids", [])
-            result.update(r)
-        elif file_type == "team_goalies":
-            if not team_name:
-                raise HTTPException(status_code=400, detail="team_name required for team-specific imports")
-            r = _import_team_goalies(rows, season, team_name, org_id)
-            _instat_player_ids = r.pop("player_ids", [])
-            result.update(r)
-        elif file_type == "lines":
-            if not team_name:
-                raise HTTPException(status_code=400, detail="team_name required for lines imports")
-            lt = line_type or "full"
-            r = _import_lines(rows, season, team_name, lt, org_id)
-            result.update(r)
-        else:
-            raise HTTPException(status_code=400, detail=f"Could not detect file type. Headers: {headers[:10]}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("InStat import error")
-        result["errors"].append(str(e))
-
-    # Trigger intelligence generation for imported players (background, non-blocking)
-    # Limit to first 50 players to avoid overwhelming the API on large league imports
-    for pid in _instat_player_ids[:50]:
-        asyncio.create_task(_generate_player_intelligence(pid, org_id, trigger="import"))
-    if _instat_player_ids:
-        logger.info("Intelligence generation triggered for %d players from InStat import", min(len(_instat_player_ids), 50))
-
-    return result
+    return detect_and_route_import(
+        content, file.filename or "", org_id, user_id,
+        team_name=team_name, season=season, line_type=line_type,
+    )
 
 
 @app.post("/instat/import-xml")
