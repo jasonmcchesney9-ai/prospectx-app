@@ -1157,930 +1157,6 @@ export default function PlayerDetailPage() {
           </div>
         </div>
 
-        {/* RoleAndOverallRow — shown on non-overview tabs only */}
-        {activeTab !== "profile" && !FAMILY_ROLES.has(userRole) && (
-          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 20px", marginTop: 8, marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            {intelligence && intelligence.version > 0 ? (
-              <>
-                {/* Role Projection */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Role</span>
-                  <span className="text-sm font-semibold text-navy font-oswald">
-                    {intelligence.archetype || "—"}
-                  </span>
-                </div>
-                {/* Overall Band */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Overall</span>
-                  <span className="text-sm font-semibold text-teal font-oswald">
-                    {gradeToOverallBand(intelligence.overall_grade) || "—"}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider cursor-help" title="Needs Scouting — This player has no PXI intelligence data yet. Generate a scouting assessment or add scout notes to populate this profile.">
-                    Needs Scouting
-                  </span>
-                  <span className="text-xs text-muted">No intelligence data yet</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openBenchTalk(
-                      `I want to scout ${player.first_name} ${player.last_name}, ${fullPosition(player.position)} for ${player.current_team || "unknown team"} in ${player.current_league ? formatLeague(player.current_league) : "unknown league"}.`,
-                      "scout"
-                    )}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors"
-                  >
-                    <Zap size={12} />
-                    Scout Now
-                  </button>
-                  <Link
-                    href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-teal/30 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/10 transition-colors"
-                  >
-                    <Wand2 size={12} />
-                    Generate PXI Assessment
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* PXI Score Tiles — shown on non-overview tabs */}
-        {activeTab !== "profile" && pxrData && pxrData.pxr_score > 0 && (() => {
-          const pxrTiles = [
-            { label: "Offense", value: pxrData.p1_offense, tip: "Offense — Goal scoring, shot generation, and power play impact." },
-            { label: "Defense", value: pxrData.p2_defense, tip: "Defense — Shot suppression, takeaways, and defensive reads." },
-            { label: "Possession", value: pxrData.p3_possession, tip: "Possession — Puck control, zone entries, and play-driving ability." },
-            { label: "Physical", value: pxrData.p4_physical, tip: "Physical — Board battles, hits, and competitive intensity." },
-            { label: "Overall", value: pxrData.pxr_score, tip: "Overall PXR Score — Composite rating across all four performance pillars." },
-          ];
-          const validTiles = pxrTiles.filter(t => t.value != null && t.value > 0);
-          if (validTiles.length === 0) return null;
-          return (
-            <div className="grid grid-cols-5 gap-2 mt-2 mb-1">
-              {validTiles.map(({ label, value, tip }) => {
-                const val = (value ?? 0) / 10;
-                const isOverall = label === "Overall";
-                return (
-                  <div
-                    key={label}
-                    className="flex flex-col items-center justify-center py-3 rounded-xl transition-colors cursor-help"
-                    style={{
-                      backgroundColor: "#162E4A",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                    }}
-                    title={tip}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,148,136,0.4)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
-                  >
-                    <span className="font-bold font-oswald" style={{ fontSize: "22px", color: isOverall ? "#14B8A8" : "#FFFFFF" }}>
-                      {val > 0 ? val.toFixed(1) : "—"}
-                    </span>
-                    <span className="text-[9px] font-oswald uppercase tracking-wider font-bold mt-0.5" style={{ color: "#64748B" }}>
-                      {label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-        {/* Player Info + Archetype — shown on non-overview tabs only */}
-        {activeTab !== "profile" && <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Bio Card */}
-          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                <User size={14} className="text-teal" /> Player Info
-              </h3>
-              <button
-                onClick={() => setEditingBio(!editingBio)}
-                className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
-              >
-                {editingBio ? <X size={12} /> : <Edit3 size={12} />}
-                {editingBio ? "Cancel" : "Edit"}
-              </button>
-            </div>
-
-            {/* Inline edit form */}
-            {editingBio && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-teal/20 space-y-2">
-                {/* League */}
-                <div>
-                  <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">League</label>
-                  {customLeague ? (
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        value={editFields.current_league}
-                        onChange={(e) => setEditFields((f) => ({ ...f, current_league: e.target.value }))}
-                        placeholder="Enter league name"
-                        className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => { setCustomLeague(false); setEditFields((f) => ({ ...f, current_league: "" })); }}
-                        className="text-[10px] text-teal hover:underline px-1 shrink-0"
-                      >
-                        List
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      value={editFields.current_league}
-                      onChange={(e) => {
-                        if (e.target.value === "__custom__") {
-                          setCustomLeague(true);
-                          setEditFields((f) => ({ ...f, current_league: "", current_team: "" }));
-                          setCustomTeam(true);
-                        } else {
-                          setEditFields((f) => ({ ...f, current_league: e.target.value, current_team: "" }));
-                          setCustomTeam(false);
-                        }
-                      }}
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    >
-                      <option value="">Select league...</option>
-                      {editLeagues.map((lg) => (
-                        <option key={lg.id} value={lg.name}>{lg.name}</option>
-                      ))}
-                      <option value="__custom__">Custom...</option>
-                    </select>
-                  )}
-                </div>
-                {/* Team */}
-                <div>
-                  <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Team</label>
-                  {customTeam ? (
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        value={editFields.current_team}
-                        onChange={(e) => setEditFields((f) => ({ ...f, current_team: e.target.value }))}
-                        placeholder="Enter team name"
-                        className="flex-1 border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                      />
-                      {!customLeague && (
-                        <button
-                          type="button"
-                          onClick={() => { setCustomTeam(false); setEditFields((f) => ({ ...f, current_team: "" })); }}
-                          className="text-[10px] text-teal hover:underline px-1 shrink-0"
-                        >
-                          List
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <select
-                      value={editFields.current_team}
-                      onChange={(e) => {
-                        if (e.target.value === "__custom__") {
-                          setCustomTeam(true);
-                          setEditFields((f) => ({ ...f, current_team: "" }));
-                        } else {
-                          setEditFields((f) => ({ ...f, current_team: e.target.value }));
-                        }
-                      }}
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    >
-                      <option value="">Select team...</option>
-                      {filteredEditTeams.map((t) => (
-                        <option key={t.id} value={t.name}>{t.name}{t.city ? ` (${t.city})` : ""}</option>
-                      ))}
-                      <option value="__custom__">Custom...</option>
-                    </select>
-                  )}
-                </div>
-                {/* Position, Shoots, DOB */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Position</label>
-                    <select
-                      value={editFields.position}
-                      onChange={(e) => setEditFields((f) => ({ ...f, position: e.target.value }))}
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    >
-                      <option value="C">Center</option>
-                      <option value="LW">Left Wing</option>
-                      <option value="RW">Right Wing</option>
-                      <option value="D">Defense</option>
-                      <option value="G">Goalie</option>
-                      <option value="F">Forward</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Shoots</label>
-                    <select
-                      value={editFields.shoots}
-                      onChange={(e) => setEditFields((f) => ({ ...f, shoots: e.target.value }))}
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    >
-                      <option value="">—</option>
-                      <option value="L">Left</option>
-                      <option value="R">Right</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">DOB</label>
-                    <input
-                      type="date"
-                      value={editFields.dob}
-                      onChange={(e) => setEditFields((f) => ({ ...f, dob: e.target.value }))}
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    />
-                  </div>
-                </div>
-                {/* Height & Weight */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Height (cm)</label>
-                    <input
-                      type="number"
-                      value={editFields.height_cm}
-                      onChange={(e) => setEditFields((f) => ({ ...f, height_cm: e.target.value }))}
-                      placeholder="e.g. 183"
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Weight (kg)</label>
-                    <input
-                      type="number"
-                      value={editFields.weight_kg}
-                      onChange={(e) => setEditFields((f) => ({ ...f, weight_kg: e.target.value }))}
-                      placeholder="e.g. 82"
-                      className="w-full border border-teal/20 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={handleSaveEdit}
-                  disabled={savingEdit}
-                  className="w-full mt-2 bg-teal text-white py-1.5 rounded text-xs font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
-                >
-                  {savingEdit ? "Saving..." : <><Save size={12} /> Save Changes</>}
-                </button>
-                {editError && <p className="text-xs text-red-500 mt-1">{editError}</p>}
-              </div>
-            )}
-
-            {/* Player Photo Upload */}
-            <div className="flex items-center gap-4 mb-4 pb-4 border-b border-teal/10">
-              <div className="relative group">
-                {hasRealImage(player.image_url) ? (
-                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-teal/20 bg-navy/5">
-                    <img
-                      src={assetUrl(player.image_url)}
-                      alt={`${player.first_name} ${player.last_name}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-20 h-20 rounded-lg border-2 border-dashed border-teal/20 bg-navy/[0.02] flex items-center justify-center">
-                    <Camera size={24} className="text-muted/30" />
-                  </div>
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-muted mb-1.5">Player Photo</p>
-                <div className="flex items-center gap-2">
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal border border-teal/20 hover:bg-teal/20 transition-colors">
-                    <Camera size={12} />
-                    {uploadingImage ? "Uploading..." : hasRealImage(player.image_url) ? "Change" : "Upload"}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleImageUpload}
-                      disabled={uploadingImage}
-                      className="hidden"
-                    />
-                  </label>
-                  {hasRealImage(player.image_url) && (
-                    <button
-                      onClick={handleImageDelete}
-                      className="text-xs text-muted hover:text-red-600 transition-colors"
-                      title="Remove photo"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-                <p className="text-[10px] text-muted/50 mt-1">JPG, PNG, or WebP. Max 5 MB.</p>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted">Position</span>
-                <span className="font-semibold text-navy">{fullPosition(player.position)}</span>
-              </div>
-              {player.shoots && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Shoots</span>
-                  <span className="font-semibold text-navy">{player.shoots}</span>
-                </div>
-              )}
-              {player.dob && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Date of Birth</span>
-                  <span className="font-semibold text-navy">
-                    {player.dob}
-                    <span className="text-xs text-muted ml-1.5">
-                      (Age {(() => {
-                        const birth = new Date(player.dob!);
-                        const today = new Date();
-                        let age = today.getFullYear() - birth.getFullYear();
-                        const m = today.getMonth() - birth.getMonth();
-                        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-                        return age;
-                      })()})
-                    </span>
-                  </span>
-                </div>
-              )}
-              {player.height_cm && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Height</span>
-                  <span className="font-semibold text-navy">
-                    {Math.floor(player.height_cm / 2.54 / 12)}&apos;{Math.round(player.height_cm / 2.54 % 12)}&quot;
-                    <span className="text-xs text-muted ml-1">({player.height_cm}cm)</span>
-                  </span>
-                </div>
-              )}
-              {player.weight_kg && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Weight</span>
-                  <span className="font-semibold text-navy">
-                    {Math.round(player.weight_kg * 2.205)} lbs
-                    <span className="text-xs text-muted ml-1">({player.weight_kg}kg)</span>
-                  </span>
-                </div>
-              )}
-              {player.current_team && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Team</span>
-                  <span className="font-semibold text-navy">
-                    <Link href={`/teams/${encodeURIComponent(player.current_team)}`} className="hover:text-teal transition-colors">
-                      {player.current_team}
-                    </Link>
-                    {player.current_league && (
-                      <Link href={`/leagues?league=${encodeURIComponent(player.current_league)}`} className="text-xs text-muted ml-1 hover:text-teal transition-colors">
-                        ({formatLeague(player.current_league)})
-                      </Link>
-                    )}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    setTransferLeague(player.current_league || "");
-                    setTransferTeam("");
-                    setTransferNote("");
-                    setTransferCustomLeague(false);
-                    setTransferCustomTeam(false);
-                    setShowTransferModal(true);
-                  }}
-                  className="text-[10px] text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
-                >
-                  <ArrowRightLeft size={10} /> Change Team
-                </button>
-              </div>
-              {player.league_tier && player.league_tier !== "Unknown" && (
-                <div className="flex justify-between">
-                  <span className="text-muted">League Tier</span>
-                  <span className="font-semibold text-navy text-xs">{player.league_tier}</span>
-                </div>
-              )}
-              {player.age_group && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Age Group</span>
-                  <span className={`font-semibold text-xs px-1.5 py-0.5 rounded ${
-                    player.age_group === "U16" ? "bg-green-50 text-green-700" :
-                    player.age_group === "U18" ? "bg-blue-50 text-blue-700" :
-                    player.age_group === "U20" ? "bg-orange/10 text-orange" :
-                    "bg-gray-50 text-gray-600"
-                  }`}>{player.age_group}</span>
-                </div>
-              )}
-              {player.draft_eligible_year && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Draft Eligible</span>
-                  <span className="font-semibold text-navy">{player.draft_eligible_year}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center">
-                <span className="text-muted">Status</span>
-                <select
-                  value={player.commitment_status || "Uncommitted"}
-                  onChange={async (e) => {
-                    const newStatus = e.target.value;
-                    try {
-                      await api.patch(`/players/${playerId}`, { commitment_status: newStatus });
-                      setPlayer((prev) => prev ? { ...prev, commitment_status: newStatus } : prev);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                  className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
-                    COMMITMENT_STATUS_COLORS[player.commitment_status || "Uncommitted"]?.text || "text-gray-600"
-                  }`}
-                >
-                  {COMMITMENT_STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted">Roster Status</span>
-                <select
-                  value={player.roster_status || "active"}
-                  onChange={async (e) => {
-                    const newStatus = e.target.value;
-                    try {
-                      await api.patch(`/players/${playerId}`, { roster_status: newStatus });
-                      setPlayer((prev) => prev ? { ...prev, roster_status: newStatus } : prev);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                  className={`text-xs font-oswald font-bold bg-transparent border-b border-dashed border-teal/20 cursor-pointer pr-5 py-0.5 rounded ${
-                    (player.roster_status || "active") === "active" ? "text-green-600" :
-                    (player.roster_status || "active") === "inj" ? "text-red-600" :
-                    (player.roster_status || "active") === "susp" ? "text-yellow-600" :
-                    (player.roster_status || "active") === "ap" ? "text-blue-600" :
-                    (player.roster_status || "active") === "scrch" ? "text-gray-500" :
-                    "text-gray-600"
-                  }`}
-                >
-                  {[
-                    { value: "active", label: "Active" },
-                    { value: "ap", label: "AP (Affiliated Player)" },
-                    { value: "inj", label: "INJ (Injured)" },
-                    { value: "susp", label: "SUSP (Suspended)" },
-                    { value: "scrch", label: "SCRCH (Healthy Scratch)" },
-                  ].map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-              {player.passports && player.passports.length > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Nationality</span>
-                  <span className="font-semibold text-navy">{player.passports.join(", ")}</span>
-                </div>
-              )}
-              {player.tags && player.tags.length > 0 && (
-                <div className="pt-2 border-t border-teal/10">
-                  <span className="text-xs text-muted">Tags</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {player.tags.map((tag) => (
-                      <span key={tag} className="px-2 py-0.5 text-xs bg-navy/5 text-navy/70 rounded-full">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {player.elite_prospects_url && (
-                <div className="pt-2 border-t border-teal/10">
-                  <a
-                    href={player.elite_prospects_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-teal hover:text-teal/80 transition-colors"
-                  >
-                    <ExternalLink size={14} />
-                    Elite Prospects Profile
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Contact Info Card — role-gated */}
-          {(() => {
-            const isStaff = COACH_ROLES.has(userRole);
-            const isAgent = userRole === "agent";
-            const isParent = userRole === "parent";
-            const isPlayerRole = userRole === "player";
-            const isBroadcaster = userRole === "broadcaster" || userRole === "media";
-            // Broadcasters/media see nothing
-            if (isBroadcaster) return null;
-            // Build visible field list based on role
-            type CField = { key: string; label: string; icon: React.ReactNode; editable: boolean };
-            const allFields: CField[] = [
-              { key: "email", label: "Player Email", icon: <Mail size={13} className="text-teal" />, editable: true },
-              { key: "phone", label: "Player Phone", icon: <Phone size={13} className="text-teal" />, editable: true },
-              { key: "parent_email", label: "Parent Email", icon: <Mail size={13} className="text-orange" />, editable: true },
-              { key: "parent_phone", label: "Parent Phone", icon: <Phone size={13} className="text-orange" />, editable: true },
-              { key: "agent_email", label: "Agent Email", icon: <Mail size={13} className="text-navy/60" />, editable: true },
-              { key: "agent_phone", label: "Agent Phone", icon: <Phone size={13} className="text-navy/60" />, editable: true },
-            ];
-            let visibleFields: CField[];
-            let canEdit: Set<string>;
-            if (isStaff) {
-              visibleFields = allFields;
-              canEdit = new Set(allFields.map(f => f.key));
-            } else if (isAgent) {
-              visibleFields = allFields.filter(f => ["email", "phone", "parent_email", "parent_phone"].includes(f.key));
-              canEdit = new Set<string>();
-            } else if (isParent) {
-              visibleFields = allFields.filter(f => ["email", "phone", "parent_email", "parent_phone"].includes(f.key));
-              canEdit = new Set(["parent_email", "parent_phone"]);
-            } else if (isPlayerRole) {
-              visibleFields = allFields.filter(f => ["email", "phone"].includes(f.key));
-              canEdit = new Set(["email", "phone"]);
-            } else {
-              return null;
-            }
-            const hasAnyData = visibleFields.some(f => (player as unknown as Record<string, unknown>)[f.key]);
-            return (
-              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                    <Phone size={14} className="text-teal" /> Contact Info
-                  </h3>
-                  {canEdit.size > 0 && (
-                    <button
-                      onClick={() => {
-                        if (editingContact) {
-                          setEditingContact(false);
-                        } else {
-                          setContactFields({
-                            email: player.email || "",
-                            phone: player.phone || "",
-                            parent_email: player.parent_email || "",
-                            parent_phone: player.parent_phone || "",
-                            agent_email: player.agent_email || "",
-                            agent_phone: player.agent_phone || "",
-                          });
-                          setEditingContact(true);
-                        }
-                      }}
-                      className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
-                    >
-                      {editingContact ? <X size={12} /> : <Edit3 size={12} />}
-                      {editingContact ? "Cancel" : "Edit"}
-                    </button>
-                  )}
-                </div>
-                {editingContact ? (
-                  <div className="space-y-2.5">
-                    {visibleFields.filter(f => canEdit.has(f.key)).map((f) => (
-                      <div key={f.key}>
-                        <label className="flex items-center gap-1.5 text-xs text-muted mb-1">
-                          {f.icon} {f.label}
-                        </label>
-                        <input
-                          type={f.key.includes("email") ? "email" : "tel"}
-                          value={contactFields[f.key as keyof typeof contactFields]}
-                          onChange={(e) => setContactFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                          placeholder={f.key.includes("email") ? "email@example.com" : "(555) 123-4567"}
-                          className="w-full px-3 py-1.5 border border-teal/20 rounded-lg text-sm"
-                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveContact(); }}
-                        />
-                      </div>
-                    ))}
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        onClick={handleSaveContact}
-                        disabled={savingContact}
-                        className="px-3 py-1.5 bg-teal text-white text-xs rounded-lg hover:bg-teal/90 disabled:opacity-50 flex items-center gap-1"
-                      >
-                        {savingContact ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingContact(false)}
-                        className="px-3 py-1.5 text-xs text-muted hover:text-navy transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : hasAnyData ? (
-                  <div className="space-y-2 text-sm">
-                    {visibleFields.map((f) => {
-                      const val = (player as unknown as Record<string, unknown>)[f.key] as string | null | undefined;
-                      if (!val) return null;
-                      return (
-                        <div key={f.key} className="flex items-center justify-between">
-                          <span className="text-muted flex items-center gap-1.5">{f.icon} {f.label}</span>
-                          {f.key.includes("email") ? (
-                            <a href={`mailto:${val}`} className="font-semibold text-teal hover:text-teal/80 transition-colors">{val}</a>
-                          ) : (
-                            <a href={`tel:${val}`} className="font-semibold text-navy hover:text-teal transition-colors">{val}</a>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted/60 italic">
-                    No contact information on file.
-                    {canEdit.size > 0 && " Click Edit to add."}
-                  </p>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Archetype Card */}
-          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-            <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
-              <Activity size={14} className="text-orange" /> Player Archetype
-            </h3>
-            {!editingArchetype ? (
-              <div>
-                {player.archetype ? (
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-semibold text-navy">{player.archetype}</span>
-                    <button
-                      onClick={() => setEditingArchetype(true)}
-                      className="text-xs text-muted hover:text-teal transition-colors"
-                    >
-                      <Edit3 size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setEditingArchetype(true)}
-                    className="text-xs text-teal hover:underline"
-                  >
-                    + Assign archetype
-                  </button>
-                )}
-                {player.archetype && (
-                  <p className="text-xs text-muted/70 mt-2 leading-relaxed">
-                    Compound archetypes help the AI understand the full player profile for system fit analysis.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div>
-                <input
-                  type="text"
-                  value={archetypeValue}
-                  onChange={(e) => setArchetypeValue(e.target.value)}
-                  placeholder="e.g., Two-Way Playmaking Forward"
-                  className="w-full px-3 py-2 border border-teal/20 rounded-lg text-sm mb-2"
-                  autoFocus
-                />
-                <p className="text-[10px] text-muted/60 mb-2">Click traits below to build a compound archetype, or type your own:</p>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {([
-                    { group: "Style", chips: ["Two-Way", "Offensive", "Defensive", "Physical", "Speed", "Playmaking", "Sniper", "Power", "Shutdown"] },
-                    { group: "Role", chips: ["Forward", "Center", "Winger", "Defenseman", "Goalie"] },
-                    { group: "Traits", chips: ["Elite IQ", "Net-Front", "Transition", "Puck-Moving", "Grinder", "Energy", "Checking", "Hybrid"] },
-                  ] as const).map(({ group, chips }) => (
-                    <div key={group} className="flex flex-wrap items-center gap-1">
-                      <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/50 mr-0.5">{group}:</span>
-                      {chips.map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => {
-                            const current = archetypeValue.trim();
-                            if (current && !current.endsWith(" ")) {
-                              setArchetypeValue(current + " " + chip);
-                            } else {
-                              setArchetypeValue((current + " " + chip).trim());
-                            }
-                          }}
-                          className="px-2 py-0.5 text-[10px] rounded-full border border-teal/20 hover:border-teal/50 hover:bg-teal/5 text-navy/70 transition-colors"
-                        >
-                          {chip}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        await api.put(`/players/${playerId}`, {
-                          ...player,
-                          archetype: archetypeValue.trim() || null,
-                        });
-                        setPlayer({ ...player, archetype: archetypeValue.trim() || null });
-                        setEditingArchetype(false);
-                      } catch {
-                        toast.error("Failed to save archetype");
-                      }
-                    }}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-                  >
-                    <Save size={12} /> Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setArchetypeValue(player.archetype || "");
-                      setEditingArchetype(false);
-                    }}
-                    className="px-3 py-1.5 text-xs text-muted hover:text-navy transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  {archetypeValue && (
-                    <button
-                      onClick={() => setArchetypeValue("")}
-                      className="px-2 py-1 text-xs text-muted/60 hover:text-red-500 transition-colors"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ProspectX Metrics */}
-            {(playerMetrics || stats.length > 0) && (
-              <div className="mt-4 pt-4 border-t border-teal/10">
-                <h4 className="text-xs font-oswald uppercase tracking-wider text-muted mb-0.5">
-                  ProspectX Metrics
-                </h4>
-                <p className="text-[10px] text-muted/50 mb-2">
-                  PXI scores across 6 dimensions — derived from stats, scouting notes, and AI analysis
-                </p>
-                {playerMetrics ? (
-                  <>
-                    <MetricsRadarChart indices={playerMetrics} />
-                    <ProspectXMetricsPanel indices={playerMetrics} />
-                  </>
-                ) : (
-                  <QuickMetrics stats={stats} position={player.position} />
-                )}
-              </div>
-            )}
-          </div>
-        </div>}
-
-        {/* SeasonSnapshot — shown on non-overview tabs */}
-        {activeTab !== "profile" && (() => {
-          // Find current season stats — prefer most recent season entry
-          const seasonStats = stats
-            .filter(s => s.stat_type === "season")
-            .sort((a, b) => (b.season || "").localeCompare(a.season || ""))[0];
-          if (!seasonStats || seasonStats.gp === 0) return null;
-          const ppg = seasonStats.gp > 0 ? (seasonStats.p / seasonStats.gp).toFixed(2) : "---";
-          return (
-            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 20px", marginTop: 8, marginBottom: 4 }}>
-              {/* Primary line */}
-              <div className="flex items-center gap-4 text-sm font-oswald">
-                <span className="text-navy font-bold">{seasonStats.gp} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">GP</span></span>
-                <span className="text-white/20">·</span>
-                <span className="text-navy font-bold">{seasonStats.g} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">G</span></span>
-                <span className="text-white/20">·</span>
-                <span className="text-navy font-bold">{seasonStats.a} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">A</span></span>
-                <span className="text-white/20">·</span>
-                <span className="text-navy font-bold">{seasonStats.p} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">P</span></span>
-                <span className="text-white/20">·</span>
-                <span className="text-teal font-bold">{ppg} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">PPG</span></span>
-                {seasonStats.plus_minus != null && seasonStats.plus_minus !== 0 && (
-                  <>
-                    <span className="text-white/20">·</span>
-                    <span className={`font-bold ${seasonStats.plus_minus > 0 ? "text-green-600" : "text-red-500"}`}>
-                      {seasonStats.plus_minus > 0 ? "+" : ""}{seasonStats.plus_minus} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">+/-</span>
-                    </span>
-                  </>
-                )}
-                {seasonStats.pim != null && seasonStats.pim > 0 && (
-                  <>
-                    <span className="text-white/20">·</span>
-                    <span className="text-navy font-bold">{seasonStats.pim} <span className="text-[10px] text-muted font-normal uppercase tracking-wider">PIM</span></span>
-                  </>
-                )}
-              </div>
-              {/* Secondary line */}
-              {(seasonStats.sog > 0 || (seasonStats.shooting_pct != null && seasonStats.shooting_pct > 0)) && (
-                <div className="flex items-center gap-4 text-xs text-muted mt-1">
-                  {seasonStats.sog > 0 && <span>{seasonStats.sog} shots</span>}
-                  {seasonStats.shooting_pct != null && seasonStats.shooting_pct > 0 && <span>{seasonStats.shooting_pct.toFixed(1)}% SH</span>}
-                </div>
-              )}
-              {/* Trendline sparkline */}
-              <div className="mt-2">
-                <TrendlineChart data={trendlineData} />
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* PXR Score Block — shown on non-overview tabs */}
-        {activeTab !== "profile" && !FAMILY_ROLES.has(userRole) && (
-          <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 20px 16px", marginTop: 8, marginBottom: 4 }}>
-            {pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 ? (() => {
-              const score = pxrData.pxr_score;
-              const tier = score >= 90 ? { id: "1A", label: "ELITE", color: "#0D9488" }
-                : score >= 80 ? { id: "1B", label: "HIGH IMPACT", color: "#0D9488" }
-                : score >= 70 ? { id: "2A", label: "SOLID STARTER", color: "#1B2A4A" }
-                : score >= 60 ? { id: "2B", label: "DEPTH PLAYER", color: "#1B2A4A" }
-                : score >= 50 ? { id: "3A", label: "DEVELOPING", color: "#6B7280" }
-                : { id: "3B", label: "EARLY STAGE", color: "#6B7280" };
-              const lp = pxrData.league_percentile;
-              const cp = pxrData.cohort_percentile;
-              const am = pxrData.age_modifier;
-              return (
-                <div className="space-y-3">
-                  {/* Score + Tier Badge */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl font-bold font-oswald text-teal cursor-help" title="PXR Score — A composite rating (0-100) reflecting this player's overall performance across offense, defense, possession, and physicality.">{score.toFixed(1)}</span>
-                    <span
-                      className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white cursor-help"
-                      style={{ backgroundColor: tier.color }}
-                      title="Tier — Players are grouped into performance tiers based on their PXR score. Higher tiers indicate stronger overall impact."
-                    >
-                      {tier.id} {tier.label}
-                    </span>
-                    {am != null && am !== 0 && (
-                      <span
-                        className="inline-block px-2 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white cursor-help"
-                        style={{ backgroundColor: am > 0 ? "#10B981" : "#E87722" }}
-                        title="Age Modifier — Adjusts for relative age within a birth-year cohort. Positive values indicate a younger player performing above age expectations."
-                      >
-                        {am > 0 ? "+" : ""}{am.toFixed(1)}
-                      </span>
-                    )}
-                    {pxrData.confidence_tier && (() => {
-                      const ct = pxrData.confidence_tier;
-                      const confTip = ct === "high"
-                        ? "High Confidence — Sufficient games played, ice time, and data across all four pillars to produce a reliable rating."
-                        : ct === "moderate"
-                        ? "Moderate Confidence — Some data limitations (fewer games or missing pillar data). Rating is directionally useful but may shift with more games."
-                        : "Small Sample — Limited games played or ice time. This rating may change significantly as more data becomes available.";
-                      if (ct === "high") return (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700 cursor-help" title={confTip}>High Confidence</span>
-                      );
-                      if (ct === "moderate") return (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700 cursor-help" title={confTip}>Moderate</span>
-                      );
-                      return (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500 cursor-help" title={confTip}>
-                          Small Sample{pxrData.gp != null && pxrData.gp < 15 ? ` (${pxrData.gp} GP)` : ""}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  {/* Percentile Bars */}
-                  {(lp != null || cp != null) && (
-                    <div className="space-y-1.5">
-                      {lp != null && (
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0 cursor-help" title="League Percentile — Where this player ranks among all players in their league. Higher is better.">League %</span>
-                          <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
-                            <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(lp, 100)}%` }} />
-                          </div>
-                          <span className="text-xs font-oswald font-bold text-navy w-10 text-right">{Math.round(lp)}%</span>
-                        </div>
-                      )}
-                      {cp != null && (
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0 cursor-help" title="Cohort Percentile — Where this player ranks among all players born in the same year, across all leagues. Useful for spotting age-relative talent.">Cohort %</span>
-                          <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
-                            <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(cp, 100)}%` }} />
-                          </div>
-                          <span className="text-xs font-oswald font-bold text-navy w-10 text-right">{Math.round(cp)}%</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {/* Pillar Mini-Bars */}
-                  <div className="space-y-1.5 pt-1 border-t border-border">
-                    {([
-                      { label: "P1 OFF", value: pxrData.p1_offense, tip: "Offense Pillar — Measures goal scoring, shot generation, expected goals, and power play contributions." },
-                      { label: "P2 DEF", value: pxrData.p2_defense, tip: "Defense Pillar — Measures defensive impact including shot suppression, takeaways, and blocked shots." },
-                      { label: "P3 POSS", value: pxrData.p3_possession, tip: "Possession Pillar — Measures puck control, zone entries, and ability to drive play in the offensive zone." },
-                      { label: "P4 PHYS", value: pxrData.p4_physical, tip: "Physical Pillar — Measures physicality, board battles, hits, and competitive intensity." },
-                    ] as const).map(({ label, value, tip }) => (
-                      <div key={label} className="flex items-center gap-3">
-                        <span className="text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-20 shrink-0 cursor-help" title={tip}>{label}</span>
-                        <div className="flex-1 h-2.5 bg-navy/[0.06] rounded-full overflow-hidden">
-                          {value != null && value > 0 && (
-                            <div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.min(value, 100)}%` }} />
-                          )}
-                        </div>
-                        <span className="text-xs font-oswald font-bold text-navy w-8 text-right">
-                          {value != null && value > 0 ? Math.round(value) : "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })() : (
-              <div className="text-center py-3">
-                <span className="text-sm font-oswald text-navy/40 uppercase tracking-wider">Insufficient Data</span>
-                <p className="text-[10px] text-muted/50 mt-1">Minimum 60 min TOI required for PXR scoring</p>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── Tabs Bar ── attached to hero bottom */}
         <div className="no-print" style={{ display: "flex", background: "#0F2942", borderRadius: "0 0 14px 14px", border: "1px solid rgba(255,255,255,.06)", borderTop: "none", overflow: "hidden", marginBottom: 18, position: "sticky", top: 48, zIndex: 50 }}>
           {([
@@ -2119,11 +1195,14 @@ export default function PlayerDetailPage() {
           ))}
         </div>
 
-        {/* Profile / Overview Tab */}
-        {activeTab === "profile" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "start" }}>
-            {/* ── LEFT COLUMN ── */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* ── Two-Column Layout (shared across all tabs) ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, alignItems: "start" }}>
+          {/* ── LEFT COLUMN (tab content changes here) ── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Profile / Overview Tab — Left Column */}
+          {activeTab === "profile" && (
+            <>
 
             {/* Quick Actions row (visible to staff) */}
             {!FAMILY_ROLES.has(userRole) && player && (
@@ -2899,136 +1978,10 @@ export default function PlayerDetailPage() {
             {/* Achievements Accordion */}
             <AchievementsAccordion achievements={playerAchievements} />
 
-          </div>
+            </>
+          )}
 
-          {/* ── RIGHT COLUMN ── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-            {/* Season Snapshot Card */}
-            {(() => {
-              const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
-              if (!currentSeason) return null;
-              return (
-                <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
-                  <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Season Snapshot</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>
-                      {currentSeason.season || "Current"}
-                    </span>
-                  </div>
-                  <div style={{ padding: "14px 16px 16px" }}>
-                    <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                      {[["GP", currentSeason.gp], ["G", currentSeason.g], ["A", currentSeason.a], ["PTS", currentSeason.p]].map(([l, v]) => (
-                        <div key={l as string} style={{ textAlign: "center", flex: 1 }}>
-                          <div style={{ fontSize: 22, fontWeight: 800, color: l === "PTS" ? "#0D9488" : "#0F2942", lineHeight: 1 }}>{v}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, color: "#8BA4BB", marginTop: 2, textTransform: "uppercase", letterSpacing: ".1em" }}>{l as string}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 6 }}>
-                      {[
-                        ["PPG", currentSeason.gp > 0 ? (currentSeason.p / currentSeason.gp).toFixed(2) : "—"],
-                        ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—"],
-                        ["PIM", currentSeason.pim],
-                        ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—")],
-                        ["SOG", currentSeason.sog > 0 ? currentSeason.sog : "—"],
-                      ].map(([l, v]) => (
-                        <div key={l as string} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: "#0F2942" }}>{v}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#8BA4BB", textTransform: "uppercase", letterSpacing: ".07em" }}>{l as string}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {trendlineData && (
-                      <>
-                        <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
-                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "#5A7291", marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: 2, background: "#0D9488", flexShrink: 0 }} />
-                          Points Per Game Trend
-                        </div>
-                        <TrendlineChart data={trendlineData} />
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Quick Actions Card */}
-            {!FAMILY_ROLES.has(userRole) && (
-              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(234,88,12,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#EA580C" }} />
-                <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Quick Actions</span>
-                </div>
-                <div style={{ padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-                  <Link href={`/reports/generate?player=${playerId}&type=pro_skater`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
-                    <Sparkles size={12} /> Generate PXI Report
-                  </Link>
-                  <Link href="/scouting" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
-                    <ListPlus size={12} /> Add to Tracking
-                  </Link>
-                  <Link href={`/players/${playerId}/card`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
-                    <Eye size={12} /> Player Card
-                  </Link>
-                  <Link href={`/reports/custom?player=${playerId}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#EA580C", border: "1.5px solid rgba(234,88,12,.25)", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
-                    <Wand2 size={12} /> Custom Report
-                  </Link>
-                </div>
-              </div>
-            )}
-
-            {/* Physical Profile Card */}
-            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
-              <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Physical Profile</span>
-              </div>
-              <div style={{ padding: "14px 16px 16px" }}>
-                {[
-                  ["Height / Weight", `${player.height_cm ? `${player.height_cm} cm` : "—"} · ${player.weight_kg ? `${player.weight_kg} kg` : "—"}`],
-                  ["Handedness", player.shoots ? `${player.shoots}-shot` : "—"],
-                  ["Status", player.roster_status === "inj" ? "Injured" : player.roster_status === "susp" ? "Suspended" : "Healthy"],
-                  ["Commitment", player.commitment_status || "Uncommitted"],
-                  ["Birth Year", player.birth_year ? `${player.birth_year}` : "—"],
-                ].map(([label, value]) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #EEF3F8" }}>
-                    <span style={{ fontSize: 10, color: "#5A7291", fontFamily: "'DM Mono', monospace", letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: label === "Status" ? "#0D9488" : "#0F2942" }}>{value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Data Sources Card */}
-            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
-              <div style={{ padding: "12px 16px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "#5A7291", display: "flex", alignItems: "center", gap: 7 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 2, background: "#0D9488", flexShrink: 0 }} />
-                    Data Sources
-                  </div>
-                </div>
-                <div style={{ height: 1, background: "#EEF3F8", margin: "8px 0" }} />
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                  {Boolean((player as unknown as Record<string, unknown>)["hockeytech_id"]) && (
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(13,148,136,.09)", color: "#0D9488", border: "1px solid rgba(13,148,136,.18)" }}>HockeyTech</span>
-                  )}
-                  {player.current_league && (
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>{formatLeague(player.current_league)}</span>
-                  )}
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>Manual Entry</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-          </div>
-        )}
-
-        {/* Stats Tab */}
+          {/* Stats Tab — Left Column */}
         {activeTab === "stats" && (
           <section>
             <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">Season stats, game log, and performance progression over time.</p>
@@ -3255,6 +2208,7 @@ export default function PlayerDetailPage() {
           </section>
         )}
 
+          {/* Notes Tab — Left Column */}
         {/* Notes Tab */}
         {activeTab === "notes" && (
           <section>
@@ -3493,6 +2447,7 @@ export default function PlayerDetailPage() {
           </section>
         )}
 
+          {/* Reports Tab — Left Column */}
         {/* Reports Tab */}
         {activeTab === "reports" && (
           <section>
@@ -3516,6 +2471,7 @@ export default function PlayerDetailPage() {
           </section>
         )}
 
+          {/* Dev Plan Tab — Left Column */}
         {/* Player Tab */}
         {activeTab === "player" && (
           <section className="space-y-4">
@@ -4008,38 +2964,7 @@ export default function PlayerDetailPage() {
           </section>
         )}
 
-        {/* Training Volume Widget */}
-        {drillLogData && drillLogData.summary.total_season > 0 && (
-          <section className="print:hidden" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px" }}>
-            <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 bg-teal/5 rounded-lg">
-                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_week}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Week</p>
-              </div>
-              <div className="text-center p-3 bg-teal/5 rounded-lg">
-                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_month}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Month</p>
-              </div>
-              <div className="text-center p-3 bg-teal/5 rounded-lg">
-                <p className="text-lg font-bold text-navy">{drillLogData.summary.total_season}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Season Total</p>
-              </div>
-            </div>
-            {drillLogData.logs.length > 0 && (
-              <div className="mt-3 space-y-1">
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Recent Drills</p>
-                {drillLogData.logs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="flex items-center justify-between text-xs py-1">
-                    <span className="text-navy truncate">{log.drill_name}</span>
-                    <span className="text-muted shrink-0 ml-2">{new Date(log.logged_at).toLocaleDateString()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
+          {/* Video Tab — Left Column */}
         {/* Video Tab */}
         {activeTab === "video" && (
           <section className="space-y-4">
@@ -4175,6 +3100,167 @@ export default function PlayerDetailPage() {
                 </div>
               )}
             </div>
+          </section>
+        )}
+
+          </div>
+
+          {/* ── RIGHT COLUMN (persistent sidebar — all tabs) ── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* Season Snapshot Card */}
+            {(() => {
+              const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              if (!currentSeason) return null;
+              return (
+                <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+                  <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Season Snapshot</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>
+                      {currentSeason.season || "Current"}
+                    </span>
+                  </div>
+                  <div style={{ padding: "14px 16px 16px" }}>
+                    <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                      {[["GP", currentSeason.gp], ["G", currentSeason.g], ["A", currentSeason.a], ["PTS", currentSeason.p]].map(([l, v]) => (
+                        <div key={l as string} style={{ textAlign: "center", flex: 1 }}>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: l === "PTS" ? "#0D9488" : "#0F2942", lineHeight: 1 }}>{v}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, color: "#8BA4BB", marginTop: 2, textTransform: "uppercase", letterSpacing: ".1em" }}>{l as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 6 }}>
+                      {[
+                        ["PPG", currentSeason.gp > 0 ? (currentSeason.p / currentSeason.gp).toFixed(2) : "—"],
+                        ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—"],
+                        ["PIM", currentSeason.pim],
+                        ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—")],
+                        ["SOG", currentSeason.sog > 0 ? currentSeason.sog : "—"],
+                      ].map(([l, v]) => (
+                        <div key={l as string} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: "#0F2942" }}>{v}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, color: "#8BA4BB", textTransform: "uppercase", letterSpacing: ".07em" }}>{l as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {trendlineData && (
+                      <>
+                        <div style={{ height: 1, background: "#EEF3F8", margin: "12px 0" }} />
+                        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "#5A7291", marginBottom: 8, display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 2, background: "#0D9488", flexShrink: 0 }} />
+                          Points Per Game Trend
+                        </div>
+                        <TrendlineChart data={trendlineData} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Quick Actions Card */}
+            {!FAMILY_ROLES.has(userRole) && (
+              <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(234,88,12,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#EA580C" }} />
+                <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Quick Actions</span>
+                </div>
+                <div style={{ padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <Link href={`/reports/generate?player=${playerId}&type=pro_skater`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <Sparkles size={12} /> Generate PXI Report
+                  </Link>
+                  <Link href="/scouting" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <ListPlus size={12} /> Add to Tracking
+                  </Link>
+                  <Link href={`/players/${playerId}/card`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <Eye size={12} /> Player Card
+                  </Link>
+                  <Link href={`/reports/custom?player=${playerId}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#EA580C", border: "1.5px solid rgba(234,88,12,.25)", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                    <Wand2 size={12} /> Custom Report
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Physical Profile Card */}
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+              <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>Physical Profile</span>
+              </div>
+              <div style={{ padding: "14px 16px 16px" }}>
+                {[
+                  ["Height / Weight", `${player.height_cm ? `${player.height_cm} cm` : "—"} · ${player.weight_kg ? `${player.weight_kg} kg` : "—"}`],
+                  ["Handedness", player.shoots ? `${player.shoots}-shot` : "—"],
+                  ["Status", player.roster_status === "inj" ? "Injured" : player.roster_status === "susp" ? "Suspended" : "Healthy"],
+                  ["Commitment", player.commitment_status || "Uncommitted"],
+                  ["Birth Year", player.birth_year ? `${player.birth_year}` : "—"],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #EEF3F8" }}>
+                    <span style={{ fontSize: 10, color: "#5A7291", fontFamily: "'DM Mono', monospace", letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: label === "Status" ? "#0D9488" : "#0F2942" }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Data Sources Card */}
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+              <div style={{ padding: "12px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "#5A7291", display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: "#0D9488", flexShrink: 0 }} />
+                    Data Sources
+                  </div>
+                </div>
+                <div style={{ height: 1, background: "#EEF3F8", margin: "8px 0" }} />
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {Boolean((player as unknown as Record<string, unknown>)["hockeytech_id"]) && (
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(13,148,136,.09)", color: "#0D9488", border: "1px solid rgba(13,148,136,.18)" }}>HockeyTech</span>
+                  )}
+                  {player.current_league && (
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>{formatLeague(player.current_league)}</span>
+                  )}
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 9px", borderRadius: 3, background: "rgba(90,114,145,.08)", color: "#5A7291", border: "1px solid rgba(90,114,145,.15)" }}>Manual Entry</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* Training Volume Widget — shown on Dev Plan tab */}
+        {activeTab === "player" && drillLogData && drillLogData.summary.total_season > 0 && (
+          <section className="print:hidden" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px" }}>
+            <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center p-3 bg-teal/5 rounded-lg">
+                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_week}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Week</p>
+              </div>
+              <div className="text-center p-3 bg-teal/5 rounded-lg">
+                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_month}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Month</p>
+              </div>
+              <div className="text-center p-3 bg-teal/5 rounded-lg">
+                <p className="text-lg font-bold text-navy">{drillLogData.summary.total_season}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Season Total</p>
+              </div>
+            </div>
+            {drillLogData.logs.length > 0 && (
+              <div className="mt-3 space-y-1">
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Recent Drills</p>
+                {drillLogData.logs.slice(0, 5).map((log) => (
+                  <div key={log.id} className="flex items-center justify-between text-xs py-1">
+                    <span className="text-navy truncate">{log.drill_name}</span>
+                    <span className="text-muted shrink-0 ml-2">{new Date(log.logged_at).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
