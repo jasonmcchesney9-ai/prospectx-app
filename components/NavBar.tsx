@@ -95,6 +95,7 @@ const PLAYER_HUB_ITEMS: NavItem[] = [
   { href: "/draft-board", label: "Draft Board (PXR)", icon: BarChart3 },
   { href: "/scouting", label: "Scouting List", icon: Target },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/reports/library", label: "Report Library", icon: FileText },
   { href: "/reports/generate", label: "Generate Report", icon: FileText },
   { href: "/reports/custom", label: "Custom Report", icon: PenTool },
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
