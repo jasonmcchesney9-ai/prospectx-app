@@ -28235,6 +28235,212 @@ async def pxr_leaderboard(
 
 
 
+@app.get("/admin/pxr/diagnostics")
+async def pxr_diagnostics(
+    season: str = Query(default="2025-26"),
+    token_data: dict = Depends(verify_token),
+):
+    """Admin-only. PXR engine diagnostic report: GP bucket distribution + shrinkage impact."""
+    _require_admin(token_data)
+    import statistics as _stats
+    from datetime import datetime as _dt
+
+    SHRINKAGE_K = 20  # Must match calculate_pxr_scores()
+    MIN_TOI_PER_GAME = {'F': 480, 'D': 720, 'G': 0}
+
+    conn = get_db()
+    try:
+        # ── SECTION 1: GP Bucket Distribution by League ──
+        rows = conn.execute("""
+            SELECT px.gp, px.pxr_score, px.pxr_null_reason, p.current_league
+            FROM pxr_scores px
+            JOIN players p ON p.id = px.player_id
+            WHERE px.season = %s
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        """, (season,)).fetchall()
+
+        def _gp_bucket(gp_val):
+            if gp_val < 10:
+                return "under_10"
+            elif gp_val < 20:
+                return "10_to_19"
+            elif gp_val < 40:
+                return "20_to_39"
+            return "40_plus"
+
+        # Aggregate by league + bucket
+        league_buckets: dict = {}
+        for r in rows:
+            league = r['current_league'] or 'UNKNOWN'
+            gp = int(r['gp'] or 0)
+            bucket = _gp_bucket(gp)
+            key = (league, bucket)
+            if key not in league_buckets:
+                league_buckets[key] = {'scores': [], 'null_count': 0, 'total': 0}
+            league_buckets[key]['total'] += 1
+            if r['pxr_score'] is not None:
+                league_buckets[key]['scores'].append(float(r['pxr_score']))
+            else:
+                league_buckets[key]['null_count'] += 1
+
+        gp_distribution: dict = {}
+        for (league, bucket), data in sorted(league_buckets.items()):
+            if league not in gp_distribution:
+                gp_distribution[league] = {}
+            scores = data['scores']
+            gp_distribution[league][bucket] = {
+                'player_count': data['total'],
+                'scored_count': len(scores),
+                'null_count': data['null_count'],
+                'avg_pxr': round(_stats.mean(scores), 2) if scores else None,
+                'std_dev': round(_stats.stdev(scores), 2) if len(scores) >= 2 else None,
+            }
+
+        # Flag anomalies: 10_to_19 avg > 40_plus avg within same league
+        gp_flags = []
+        for league, buckets in gp_distribution.items():
+            b10 = buckets.get('10_to_19', {})
+            b40 = buckets.get('40_plus', {})
+            if b10.get('avg_pxr') is not None and b40.get('avg_pxr') is not None:
+                if b10['avg_pxr'] > b40['avg_pxr']:
+                    gp_flags.append({
+                        'league': league,
+                        'issue': 'shrinkage_may_need_tuning',
+                        'detail': f"10-19 GP avg ({b10['avg_pxr']}) > 40+ GP avg ({b40['avg_pxr']})",
+                    })
+
+        # ── SECTION 2: Shrinkage Impact Report ──
+        # Fetch raw InStat data for skaters who passed all gates (have scores)
+        skater_rows = conn.execute("""
+            SELECT i.player_id, i.gp, i.toi_total, i.goals,
+                   p.position, p.current_league
+            FROM instat_player_stats i
+            JOIN players p ON p.id = i.player_id
+            JOIN pxr_scores px ON px.player_id = i.player_id AND px.season = %s
+            WHERE i.season = %s
+              AND px.pxr_score IS NOT NULL
+              AND i.toi_total IS NOT NULL
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        """, (season, season)).fetchall()
+
+        def _parse_toi_diag(toi_val):
+            if toi_val is None:
+                return 0.0
+            if isinstance(toi_val, (int, float)):
+                return float(toi_val)
+            s = str(toi_val).strip()
+            if ':' in s:
+                parts = s.split(':')
+                return float(parts[0]) * 60 + float(parts[1])
+            try:
+                return float(s)
+            except (ValueError, TypeError):
+                return 0.0
+
+        def _pos_group(pos):
+            if not pos:
+                return 'F'
+            p = pos.upper().strip()
+            if p in ('G', 'GOALIE', 'GOALTENDER'):
+                return 'G'
+            if p in ('D', 'LD', 'RD', 'DEFENSE', 'DEFENSEMAN', 'DEFENCEMAN'):
+                return 'D'
+            return 'F'
+
+        # Build per-60 goals raw for each skater
+        skater_data = []
+        for r in skater_rows:
+            gp = int(r['gp'] or 0)
+            toi_s = _parse_toi_diag(r['toi_total'])
+            goals = int(r['goals'] or 0)
+            pos_group = _pos_group(r['position'])
+            if pos_group == 'G' or toi_s <= 0 or gp <= 0:
+                continue
+            raw_g60 = (goals / toi_s) * 3600
+            skater_data.append({
+                'player_id': r['player_id'],
+                'league': r['current_league'] or 'UNKNOWN',
+                'pos_group': pos_group,
+                'gp': gp,
+                'raw_g60': raw_g60,
+                'bucket': _gp_bucket(gp),
+            })
+
+        # Compute league+position mean for goals_60
+        from collections import defaultdict as _dd
+        lp_g60 = _dd(list)
+        for s in skater_data:
+            lp_g60[(s['league'], s['pos_group'])].append(s['raw_g60'])
+        lp_means = {}
+        for k, vals in lp_g60.items():
+            lp_means[k] = _stats.mean(vals) if vals else 0.0
+
+        # Apply shrinkage and compute deltas
+        for s in skater_data:
+            league_mean = lp_means.get((s['league'], s['pos_group']), 0.0)
+            w_player = s['gp'] / (s['gp'] + SHRINKAGE_K)
+            w_prior = SHRINKAGE_K / (s['gp'] + SHRINKAGE_K)
+            s['shrunk_g60'] = w_player * s['raw_g60'] + w_prior * league_mean
+            s['delta'] = s['raw_g60'] - s['shrunk_g60']
+
+        # Aggregate by league + position_group
+        shrinkage_agg: dict = _dd(lambda: _dd(list))
+        for s in skater_data:
+            key = (s['league'], s['pos_group'])
+            shrinkage_agg[key]['all'].append(s)
+            shrinkage_agg[key][s['bucket']].append(s)
+
+        shrinkage_report = []
+        for (league, pos), bucket_data in sorted(shrinkage_agg.items()):
+            all_skaters = bucket_data.get('all', [])
+            if not all_skaters:
+                continue
+
+            # Bucket breakdown
+            bucket_breakdown = {}
+            for bkt in ['10_to_19', '20_to_39', '40_plus']:
+                bkt_players = bucket_data.get(bkt, [])
+                if bkt_players:
+                    avg_delta = round(_stats.mean([s['delta'] for s in bkt_players]), 4)
+                    bucket_breakdown[bkt] = {
+                        'player_count': len(bkt_players),
+                        'avg_shrinkage_delta': avg_delta,
+                    }
+
+            avg_raw = round(_stats.mean([s['raw_g60'] for s in all_skaters]), 4)
+            avg_shrunk = round(_stats.mean([s['shrunk_g60'] for s in all_skaters]), 4)
+            avg_delta = round(avg_raw - avg_shrunk, 4)
+
+            entry = {
+                'league': league,
+                'position_group': pos,
+                'avg_raw_goals_per_60': avg_raw,
+                'avg_shrunk_goals_per_60': avg_shrunk,
+                'delta': avg_delta,
+                'shrinkage_k': SHRINKAGE_K,
+                'gp_bucket_breakdown': bucket_breakdown,
+            }
+
+            # Flag if 40+ GP delta exceeds 0.15
+            b40_delta = bucket_breakdown.get('40_plus', {}).get('avg_shrinkage_delta')
+            if b40_delta is not None and abs(b40_delta) > 0.15:
+                entry['flag'] = 'SHRINKAGE_K may be too aggressive for 40+ GP players'
+
+            shrinkage_report.append(entry)
+
+    finally:
+        conn.close()
+
+    return {
+        'generated_at': _dt.utcnow().isoformat() + 'Z',
+        'pxr_engine_version': '2.1.0',
+        'season': season,
+        'gp_bucket_distribution': gp_distribution,
+        'gp_anomaly_flags': gp_flags,
+        'shrinkage_impact': shrinkage_report,
+    }
+
+
 @app.get("/pxr/player/{player_id}")
 async def pxr_player_score(
     player_id: str,
