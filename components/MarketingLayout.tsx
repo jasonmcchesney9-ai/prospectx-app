@@ -150,9 +150,9 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               <a href="#" className="text-sm text-white/40 hover:text-white/70 block py-1 transition-colors">
                 Privacy Policy
               </a>
-              <a href="#" className="text-sm text-white/40 hover:text-white/70 block py-1 transition-colors">
+              <Link href="/terms" className="text-sm text-white/40 hover:text-white/70 block py-1 transition-colors">
                 Terms of Service
-              </a>
+              </Link>
             </div>
           </div>
 
