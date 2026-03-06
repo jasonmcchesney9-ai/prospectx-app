@@ -191,10 +191,9 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── View 1: By League — Top 25 in selected league+position ──
+  // ── View 1: By League — Top 25 per position group in selected league ──
   const byLeaguePlayers = useMemo(() => {
     if (ppgFallbackMode) {
-      // In PPG fallback mode, show all players sorted by PPG (no league filter — scoring-leaders already filtered)
       let filtered = [...allPlayers];
       if (selectedPosition) {
         filtered = filtered.filter((p) => p.position_group === selectedPosition);
@@ -204,22 +203,40 @@ export default function LeaderboardPage() {
         .slice(0, 25);
     }
     if (!selectedLeague) return [];
-    let filtered = allPlayers.filter((p) => p.current_league === selectedLeague);
+    const leaguePlayers = allPlayers.filter((p) => p.current_league === selectedLeague);
     if (selectedPosition) {
-      filtered = filtered.filter((p) => p.position_group === selectedPosition);
+      // Single position selected — top 25 in that position
+      return leaguePlayers
+        .filter((p) => p.position_group === selectedPosition)
+        .sort((a, b) => (b.pxr_score ?? 0) - (a.pxr_score ?? 0))
+        .slice(0, 25);
     }
-    return filtered
-      .sort((a, b) => (b.pxr_score ?? 0) - (a.pxr_score ?? 0))
-      .slice(0, 25);
+    // No position filter: top 25 F + top 25 D + top 25 G, then merged and sorted
+    const result: LeaderboardPlayer[] = [];
+    for (const pos of ["F", "D", "G"]) {
+      const posPlayers = leaguePlayers
+        .filter((p) => p.position_group === pos)
+        .sort((a, b) => (b.pxr_score ?? 0) - (a.pxr_score ?? 0))
+        .slice(0, 25);
+      result.push(...posPlayers);
+    }
+    return result.sort((a, b) => (b.pxr_score ?? 0) - (a.pxr_score ?? 0));
   }, [allPlayers, selectedLeague, selectedPosition, ppgFallbackMode]);
 
-  // ── View 2: By Cohort — Top 25 in selected birth year across all leagues ──
+  // ── View 2: By Cohort — Top 25 per position group in selected birth year ──
   const byCohortPlayers = useMemo(() => {
     if (!selectedBirthYear) return [];
-    return allPlayers
-      .filter((p) => String(p.birth_year) === selectedBirthYear)
-      .sort((a, b) => (b.cohort_percentile ?? 0) - (a.cohort_percentile ?? 0))
-      .slice(0, 25);
+    const cohort = allPlayers.filter((p) => String(p.birth_year) === selectedBirthYear);
+    // Top 25 F + top 25 D + top 25 G within this birth year, ranked by cohort_percentile
+    const result: LeaderboardPlayer[] = [];
+    for (const pos of ["F", "D", "G"]) {
+      const posPlayers = cohort
+        .filter((p) => p.position_group === pos)
+        .sort((a, b) => (b.cohort_percentile ?? 0) - (a.cohort_percentile ?? 0))
+        .slice(0, 25);
+      result.push(...posPlayers);
+    }
+    return result.sort((a, b) => (b.cohort_percentile ?? 0) - (a.cohort_percentile ?? 0));
   }, [allPlayers, selectedBirthYear]);
 
   // ── View 3: Undervalued — cohort% >= 60 AND league% <= 45 ──
@@ -239,12 +256,22 @@ export default function LeaderboardPage() {
       .sort((a, b) => b.gap - a.gap);
   }, [allPlayers]);
 
-  // ── View 4: Top Movers — sorted by age_modifier desc ──
+  // ── View 4: Top Movers — max 5 per league, sorted by age_modifier desc ──
   const topMoversPlayers = useMemo(() => {
-    return allPlayers
+    const eligible = allPlayers
       .filter((p) => p.age_modifier != null && p.age_modifier > 0)
-      .sort((a, b) => (b.age_modifier ?? 0) - (a.age_modifier ?? 0))
-      .slice(0, 25);
+      .sort((a, b) => (b.age_modifier ?? 0) - (a.age_modifier ?? 0));
+    // Cap at 5 per league to prevent one league dominating
+    const perLeagueCount: Record<string, number> = {};
+    const capped: LeaderboardPlayer[] = [];
+    for (const p of eligible) {
+      const league = p.current_league || "Unknown";
+      perLeagueCount[league] = (perLeagueCount[league] || 0) + 1;
+      if (perLeagueCount[league] <= 5) {
+        capped.push(p);
+      }
+    }
+    return capped;
   }, [allPlayers]);
 
   const handleRowClick = (playerId: string) => {

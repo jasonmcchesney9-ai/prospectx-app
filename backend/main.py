@@ -4365,6 +4365,7 @@ def init_db():
         ("gp", "INTEGER"),
         ("toi_minutes", "REAL"),
         ("pxr_null_reason", "TEXT"),
+        ("prev_pxr_score", "NUMERIC(5,1)"),
     ]:
         if col_name not in pxr_cols:
             conn.execute(f"ALTER TABLE pxr_scores ADD COLUMN {col_name} {col_def}")
