@@ -127,6 +127,40 @@ export default function PlayerCardPage() {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
+  // ── Hooks that must be called unconditionally (before any early returns) ──
+  const { openBenchTalk, setActivePxiContext } = useBenchTalk();
+  const currentUser = getUser();
+  const userRole = currentUser?.hockey_role;
+
+  // Set active PXI context for BenchTalk when viewing this player card
+  useEffect(() => {
+    if (card) {
+      const ci = card.identity;
+      setActivePxiContext({
+        user: {
+          id: currentUser?.id || "",
+          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
+          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "SCOUT" | "COACH" | "GM" | "PARENT" | "AGENT" | "BROADCASTER" | "ANALYST",
+          orgId: currentUser?.org_id || "",
+          orgName: "ProspectX",
+        },
+        page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
+        entity: {
+          type: "PLAYER",
+          id: playerId,
+          name: `${ci.first_name} ${ci.last_name}`,
+          metadata: {
+            position: ci.position || undefined,
+            team: ci.current_team || undefined,
+            league: ci.current_league || undefined,
+          },
+        },
+      });
+    }
+    return () => { setActivePxiContext(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card, playerId, setActivePxiContext]);
+
   // ── Load card ──
   const loadCard = useCallback(async () => {
     try {
@@ -238,10 +272,6 @@ export default function PlayerCardPage() {
     );
   }
 
-  const { openBenchTalk, setActivePxiContext } = useBenchTalk();
-  const currentUser = getUser();
-  const userRole = currentUser?.hockey_role;
-
   const { identity: id, performance: perf, development: dev, league_context } = card;
   const fullPos = POSITION_LABELS[id.position?.toUpperCase()] || id.position || "Unknown";
   const healthStyle = HEALTH_COLORS[id.health_status] || HEALTH_COLORS.healthy;
@@ -257,35 +287,6 @@ export default function PlayerCardPage() {
       fullMark: 10,
     })) : [];
   const allZeroRadar = radarData.every(d => d.value === 0);
-
-  // Set active PXI context for BenchTalk when viewing this player card
-  useEffect(() => {
-    if (card) {
-      const ci = card.identity;
-      setActivePxiContext({
-        user: {
-          id: currentUser?.id || "",
-          name: `${currentUser?.first_name || ""} ${currentUser?.last_name || ""}`.trim() || "User",
-          role: (currentUser?.hockey_role?.toUpperCase() || "SCOUT") as "SCOUT" | "COACH" | "GM" | "PARENT" | "AGENT" | "BROADCASTER" | "ANALYST",
-          orgId: currentUser?.org_id || "",
-          orgName: "ProspectX",
-        },
-        page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
-        entity: {
-          type: "PLAYER",
-          id: playerId,
-          name: `${ci.first_name} ${ci.last_name}`,
-          metadata: {
-            position: ci.position || undefined,
-            team: ci.current_team || undefined,
-            league: ci.current_league || undefined,
-          },
-        },
-      });
-    }
-    return () => { setActivePxiContext(null); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card, playerId, setActivePxiContext]);
 
   return (
     <ProtectedRoute>
