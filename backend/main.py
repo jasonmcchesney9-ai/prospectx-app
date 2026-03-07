@@ -28847,11 +28847,19 @@ async def pxr_draft_board(
     league: Optional[str] = Query(default=None),
     position_group: Optional[str] = Query(default=None),
     birth_year: Optional[int] = Query(default=None),
+    tier: Optional[str] = Query(default=None),
+    score_type: Optional[str] = Query(default=None),
     token_data: dict = Depends(verify_token),
 ):
-    """Draft Board — ranked player list from pxr_scores. Authenticated users."""
+    """Draft Board — ranked player list from pxr_scores. Role-gated."""
+    user_id = token_data["user_id"]
     conn = get_db()
     try:
+        # Role gate: scout, gm, analyst, agent, admin, superadmin
+        hockey_role = _get_hockey_role(conn, user_id)
+        _allowed = {"scout", "gm", "analyst", "agent", "admin"}
+        if hockey_role not in _allowed and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Draft Board requires scout, gm, analyst, or agent role")
         where_clauses = ["px.pxr_score IS NOT NULL", "px.season = %s",
                          "(p.is_deleted = 0 OR p.is_deleted IS NULL)"]
         params: list = [season]
@@ -28865,6 +28873,9 @@ async def pxr_draft_board(
         if birth_year:
             where_clauses.append("p.birth_year = %s")
             params.append(str(birth_year))
+        if score_type and score_type in ("full", "estimated"):
+            where_clauses.append("px.score_type = %s")
+            params.append(score_type)
 
         where_sql = " AND ".join(where_clauses)
 
@@ -28874,7 +28885,7 @@ async def pxr_draft_board(
                    position_group, pxr_score, league_percentile, cohort_percentile,
                    age_modifier, p1_offense, p2_defense, p3_possession, p4_physical,
                    data_completeness, season, confidence_tier, gp, toi_minutes,
-                   score_type
+                   score_type, pxr_null_reason, pxr_tier
             FROM (
                 SELECT p.id AS player_id,
                        p.first_name, p.last_name,
@@ -28886,7 +28897,16 @@ async def pxr_draft_board(
                        px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
                        px.data_completeness, px.season,
                        px.confidence_tier, px.gp, px.toi_minutes,
-                       px.score_type,
+                       px.score_type, px.pxr_null_reason,
+                       CASE
+                           WHEN px.pxr_score >= 90 THEN '1A'
+                           WHEN px.pxr_score >= 80 THEN '1B'
+                           WHEN px.pxr_score >= 70 THEN '2A'
+                           WHEN px.pxr_score >= 60 THEN '2B'
+                           WHEN px.pxr_score >= 50 THEN '3A'
+                           WHEN px.pxr_score IS NOT NULL THEN '3B'
+                           ELSE NULL
+                       END AS pxr_tier,
                        ROW_NUMBER() OVER (
                            PARTITION BY p.first_name, p.last_name, p.position
                            ORDER BY px.gp DESC NULLS LAST, px.pxr_score DESC
@@ -28897,6 +28917,10 @@ async def pxr_draft_board(
             ) ranked WHERE rn = 1
             ORDER BY pxr_score DESC
         """, params).fetchall()
+
+        # Post-query tier filter (tier is derived, can't filter in WHERE)
+        if tier and tier in ("1A", "1B", "2A", "2B", "3A", "3B"):
+            rows = [r for r in rows if r["pxr_tier"] == tier]
 
         # Gather distinct filter options
         filters = conn.execute("""
@@ -28923,9 +28947,25 @@ async def pxr_draft_board(
     finally:
         conn.close()
 
+    # Build player dicts with combined name field
+    player_list = []
+    for r in rows:
+        d = dict(r)
+        d["name"] = f"{d.get('first_name', '')} {d.get('last_name', '')}".strip()
+        player_list.append(d)
+
     return {
-        "players": [dict(r) for r in rows],
-        "total": len(rows),
+        "season": season,
+        "players": player_list,
+        "total": len(player_list),
+        "filters_applied": {
+            "league": league,
+            "position_group": position_group,
+            "birth_year": birth_year,
+            "tier": tier,
+            "score_type": score_type,
+            "season": season,
+        },
         "filter_options": {
             "leagues": [r["current_league"] for r in filters if r["current_league"]],
             "birth_years": [r["birth_year"] for r in birth_years if r["birth_year"]],
