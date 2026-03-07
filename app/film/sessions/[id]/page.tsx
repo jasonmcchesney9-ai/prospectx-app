@@ -995,11 +995,16 @@ export default function FilmSessionViewerPage() {
 
           {/* ── COL 1 — Code Window (EventTagger) ──────────────── */}
           <div style={{ gridColumn: 1, gridRow: 1, background: "#0A1929", borderRight: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1 }}>
-            {/* Code Window header */}
-            <div style={{ padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14B8A8" }} />
-              <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
-                CODE WINDOW
+            {/* Code Window header — 34px, #0A1929 */}
+            <div style={{ height: 34, padding: "0 10px", background: "#0A1929", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14B8A8" }} />
+                <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#14B8A8" }}>
+                  CODE WINDOW
+                </span>
+              </div>
+              <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#14B8A8", background: "rgba(13,148,136,0.15)", border: "1px solid rgba(13,148,136,0.25)", borderRadius: 999, padding: "2px 8px" }}>
+                REVIEW
               </span>
             </div>
             {/* EventTagger — props unchanged */}
@@ -1013,10 +1018,14 @@ export default function FilmSessionViewerPage() {
                 />
               )}
             </div>
-            {/* Keyboard shortcut hint */}
-            <div style={{ padding: "4px 10px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-              <p style={{ fontSize: 8, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap", margin: 0 }}>
-                1–9: Tag shortcuts · Space: Play/Pause
+            {/* Code Window footer — recording state + keyboard hints */}
+            <div style={{ padding: "6px 8px", borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0A1929", flexShrink: 0 }}>
+              {/* TODO: Replace static "Recording: none" with active tag name when recording state is added */}
+              <p style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", margin: "0 0 3px 0" }}>
+                Recording: <span style={{ color: "rgba(255,255,255,0.28)" }}>none</span>
+              </p>
+              <p style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.28)", whiteSpace: "nowrap", margin: 0 }}>
+                1–9: Tag · Space: Play · N/P: Clips
               </p>
             </div>
           </div>
@@ -1076,6 +1085,14 @@ export default function FilmSessionViewerPage() {
                 >
                   {playbackSpeed}x
                 </span>
+              )}
+              {/* Recording dot — top-right of video area */}
+              {/* TODO: Show only when a tag event is actively being recorded; currently static placeholder */}
+              {upload?.playback_id && (
+                <span
+                  className="absolute top-3 right-3 z-10"
+                  style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", display: "block" }}
+                />
               )}
             </div>
 
