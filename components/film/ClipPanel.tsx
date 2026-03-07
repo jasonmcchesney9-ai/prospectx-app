@@ -87,7 +87,13 @@ export default function ClipPanel({
   const [showCreator, setShowCreator] = useState(false);
   const [editingClip, setEditingClip] = useState<Clip | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [clipFilter, setClipFilter] = useState<ClipCategory>("all");
+  const [clipFilter, setClipFilter] = useState<ClipCategory>(() => {
+    try {
+      const stored = sessionStorage.getItem(`clip_filter_${sessionId}`);
+      if (stored === "teal" || stored === "navy" || stored === "orange" || stored === "gray") return stored;
+    } catch { /* */ }
+    return "all";
+  });
 
   // Creator form state
   const [clipTitle, setClipTitle] = useState("");
@@ -105,11 +111,14 @@ export default function ClipPanel({
   const clipListRef = useRef<HTMLDivElement>(null);
   const clipRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Poll currentTime every 500ms to determine active clip
+  // Poll currentTime every 500ms to determine active clip (respects filter)
   useEffect(() => {
     const interval = setInterval(() => {
       const t = getCurrentTime();
-      const active = clips.find((c) => t >= c.start_time_seconds && t <= c.end_time_seconds);
+      const visible = clipFilter === "all"
+        ? clips
+        : clips.filter((c) => getClipCategoryKey(c) === clipFilter);
+      const active = visible.find((c) => t >= c.start_time_seconds && t <= c.end_time_seconds);
       setActiveClipId((prev) => {
         const newId = active?.id || null;
         if (newId !== prev && newId && !userScrolledRef.current) {
@@ -123,7 +132,7 @@ export default function ClipPanel({
       });
     }, 500);
     return () => clearInterval(interval);
-  }, [clips, getCurrentTime]);
+  }, [clips, clipFilter, getCurrentTime]);
 
   // Detect manual scroll — pause auto-scroll for 5 seconds
   useEffect(() => {
@@ -312,7 +321,10 @@ export default function ClipPanel({
         ]).map((f) => (
           <button
             key={f.value}
-            onClick={() => setClipFilter(f.value)}
+            onClick={() => {
+              setClipFilter(f.value);
+              try { sessionStorage.setItem(`clip_filter_${sessionId}`, f.value); } catch { /* */ }
+            }}
             className="px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors"
             style={clipFilter === f.value
               ? { fontFamily: "ui-monospace, monospace", letterSpacing: 0.5, background: "#0D9488", color: "#FFFFFF" }
