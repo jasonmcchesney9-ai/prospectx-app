@@ -4639,6 +4639,19 @@ def init_db():
     conn.commit()
     logger.info("Migration: highlight_reels table ready")
 
+    # ── Migration: highlight_reels share columns ──
+    hr_cols = _get_table_columns(conn, "highlight_reels")
+    for col_name, col_def in [
+        ("share_token", "TEXT"),
+        ("share_enabled", "INTEGER DEFAULT 0"),
+    ]:
+        if col_name not in hr_cols:
+            conn.execute(f"ALTER TABLE highlight_reels ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to highlight_reels", col_name)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_highlight_reels_share_token ON highlight_reels(share_token)")
+    conn.commit()
+
     # ── Table: invites (platform-level invite-only gate) ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS invites (
@@ -44136,14 +44149,16 @@ async def create_highlight_reel(request: Request, token_data: dict = Depends(ver
         raise HTTPException(status_code=400, detail="title is required")
     reel_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    share_token = secrets.token_urlsafe(12)
     conn = get_db()
     try:
         conn.execute("""
             INSERT INTO highlight_reels
                 (id, org_id, player_id, created_by, title, description, level,
                  clip_ids, clip_order, player_info, pxi_suggestions, pxi_status,
-                 visibility, status, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 visibility, status, created_at, updated_at,
+                 share_token, share_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             reel_id, org_id, body.get("player_id"), user_id,
             title, body.get("description", ""), body.get("level", "junior"),
@@ -44155,11 +44170,13 @@ async def create_highlight_reel(request: Request, token_data: dict = Depends(ver
             body.get("visibility", "org"),
             body.get("status", "draft"),
             now, now,
+            share_token, 0,
         ))
         conn.commit()
         return {
             "id": reel_id, "title": title, "status": "draft",
             "player_id": body.get("player_id"), "created_at": now,
+            "share_token": share_token, "share_enabled": False,
         }
     finally:
         conn.close()
@@ -44319,6 +44336,165 @@ async def delete_highlight_reel(reel_id: str, token_data: dict = Depends(verify_
         conn.execute("DELETE FROM highlight_reels WHERE id = ?", (reel_id,))
         conn.commit()
         return {"status": "deleted", "id": reel_id}
+    finally:
+        conn.close()
+
+
+@app.patch("/highlight-reels/{reel_id}/share")
+async def toggle_reel_share(reel_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Toggle share_enabled and optionally regenerate share_token for a highlight reel."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, share_token, share_enabled FROM highlight_reels WHERE id = ? AND org_id = ?",
+            (reel_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Highlight reel not found")
+        d = dict(row) if hasattr(row, "keys") else {"id": row[0], "share_token": row[1], "share_enabled": row[2]}
+        share_token = d.get("share_token") or secrets.token_urlsafe(12)
+        share_enabled = d.get("share_enabled", 0)
+        if "share_enabled" in body:
+            share_enabled = 1 if body["share_enabled"] else 0
+        if body.get("regenerate_token"):
+            share_token = secrets.token_urlsafe(12)
+        conn.execute(
+            "UPDATE highlight_reels SET share_token = ?, share_enabled = ?, updated_at = ? WHERE id = ?",
+            (share_token, share_enabled, datetime.now(timezone.utc).isoformat(), reel_id),
+        )
+        conn.commit()
+        return {"share_token": share_token, "share_enabled": bool(share_enabled)}
+    finally:
+        conn.close()
+
+
+@app.get("/reel/{token}")
+async def get_public_reel(token: str):
+    """Public endpoint — returns reel data by share_token. No auth required."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM highlight_reels WHERE share_token = ?", (token,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Reel not found or sharing disabled")
+        d = dict(row) if hasattr(row, "keys") else row
+        if not isinstance(d, dict):
+            raise HTTPException(status_code=404, detail="Reel not found")
+        if not d.get("share_enabled"):
+            raise HTTPException(status_code=404, detail="Reel not found or sharing disabled")
+
+        # Parse JSON fields
+        for jf in ("clip_ids", "clip_order", "player_info", "pxi_suggestions"):
+            if d.get(jf):
+                try:
+                    d[jf] = json.loads(d[jf])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        # Build clips array with mux_playback_id via join to video_uploads
+        clip_ids = d.get("clip_ids", [])
+        clips_out = []
+        if clip_ids and isinstance(clip_ids, list) and len(clip_ids) > 0:
+            placeholders = ",".join("?" for _ in clip_ids)
+            clips = conn.execute(
+                f"""SELECT vc.id, vc.title, vc.description, vc.start_time_seconds,
+                           vc.end_time_seconds, vc.clip_type,
+                           vu.mux_playback_id
+                    FROM video_clips vc
+                    LEFT JOIN video_uploads vu ON vc.upload_id = vu.id
+                    WHERE vc.id IN ({placeholders})""",
+                clip_ids,
+            ).fetchall()
+            clip_map = {}
+            for c in clips:
+                cd = dict(c) if hasattr(c, "keys") else c
+                if isinstance(cd, dict) and cd.get("mux_playback_id"):
+                    clip_map[cd["id"]] = {
+                        "id": cd["id"],
+                        "title": cd.get("title", ""),
+                        "description": cd.get("description"),
+                        "start_time_seconds": cd.get("start_time_seconds", 0),
+                        "end_time_seconds": cd.get("end_time_seconds", 0),
+                        "clip_type": cd.get("clip_type"),
+                        "mux_playback_id": cd["mux_playback_id"],
+                    }
+            clips_out = [clip_map[cid] for cid in clip_ids if cid in clip_map]
+
+        # Player info from players table
+        player_info = {}
+        player_id = d.get("player_id")
+        if player_id:
+            p_row = conn.execute(
+                """SELECT first_name, last_name, position, image_url
+                   FROM players WHERE id = ?""",
+                (player_id,),
+            ).fetchone()
+            if p_row:
+                pd = dict(p_row) if hasattr(p_row, "keys") else p_row
+                if isinstance(pd, dict):
+                    player_info["first_name"] = pd.get("first_name")
+                    player_info["last_name"] = pd.get("last_name")
+                    player_info["position"] = pd.get("position")
+                    player_info["headshot_url"] = pd.get("image_url")
+                    # Get latest season stats
+                    stat_row = conn.execute(
+                        """SELECT team, season, gp, g, a, p
+                           FROM player_stats WHERE player_id = ?
+                           ORDER BY season DESC LIMIT 1""",
+                        (player_id,),
+                    ).fetchone()
+                    if stat_row:
+                        sd = dict(stat_row) if hasattr(stat_row, "keys") else stat_row
+                        if isinstance(sd, dict):
+                            player_info["team_name"] = sd.get("team")
+                            player_info["season"] = sd.get("season")
+                            player_info["gp"] = sd.get("gp")
+                            player_info["g"] = sd.get("g")
+                            player_info["a"] = sd.get("a")
+                            player_info["p"] = sd.get("p")
+        # Merge any stored player_info from the reel
+        stored_pi = d.get("player_info", {})
+        if isinstance(stored_pi, dict):
+            for k, v in stored_pi.items():
+                if v and not player_info.get(k):
+                    player_info[k] = v
+
+        # Coach name + org info from users/organizations
+        coach_name = None
+        org_name = None
+        org_email = None
+        created_by = d.get("created_by")
+        if created_by:
+            u_row = conn.execute(
+                """SELECT u.first_name, u.last_name, u.email, o.name AS org_name
+                   FROM users u
+                   LEFT JOIN organizations o ON u.org_id = o.id
+                   WHERE u.id = ?""",
+                (created_by,),
+            ).fetchone()
+            if u_row:
+                ud = dict(u_row) if hasattr(u_row, "keys") else u_row
+                if isinstance(ud, dict):
+                    fn = ud.get("first_name", "")
+                    ln = ud.get("last_name", "")
+                    coach_name = f"{fn} {ln}".strip() or None
+                    org_name = ud.get("org_name")
+                    org_email = ud.get("email")
+
+        return {
+            "id": d["id"],
+            "title": d.get("title", ""),
+            "type": d.get("level", "custom"),
+            "clips": clips_out,
+            "player_info": player_info,
+            "coach_name": coach_name,
+            "org_name": org_name,
+            "org_email": org_email,
+            "created_at": d.get("created_at", ""),
+        }
     finally:
         conn.close()
 
