@@ -299,7 +299,8 @@ export default function FilmSessionViewerPage() {
 
   // Reel builder modal + session reels
   const [showReelBuilder, setShowReelBuilder] = useState(false);
-  const [sessionReels, setSessionReels] = useState<{ id: string; title: string; status: string; clip_count: number; created_at: string }[]>([]);
+  const [sessionReels, setSessionReels] = useState<{ id: string; title: string; status: string; clip_count: number; created_at: string; share_token?: string; share_enabled?: boolean }[]>([]);
+  const [copiedReelId, setCopiedReelId] = useState<string | null>(null);
 
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
@@ -380,12 +381,14 @@ export default function FilmSessionViewerPage() {
           const reelsRes = await api.get("/highlight-reels");
           const all = Array.isArray(reelsRes.data) ? reelsRes.data : [];
           setSessionReels(
-            all.map((r: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string }) => ({
+            all.map((r: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string; share_token?: string; share_enabled?: boolean | number }) => ({
               id: r.id,
               title: r.title,
               status: r.status || "draft",
               clip_count: Array.isArray(r.clip_ids) ? r.clip_ids.length : 0,
               created_at: r.created_at,
+              share_token: r.share_token,
+              share_enabled: !!r.share_enabled,
             }))
           );
         } catch {
@@ -456,12 +459,14 @@ export default function FilmSessionViewerPage() {
       // Since the API doesn't filter by session, we show all org reels for now.
       // A lightweight approach: show reels created from this session (we pass session context at creation).
       setSessionReels(
-        all.map((r: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string }) => ({
+        all.map((r: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string; share_token?: string; share_enabled?: boolean | number }) => ({
           id: r.id,
           title: r.title,
           status: r.status || "draft",
           clip_count: Array.isArray(r.clip_ids) ? r.clip_ids.length : 0,
           created_at: r.created_at,
+          share_token: r.share_token,
+          share_enabled: !!r.share_enabled,
         }))
       );
     } catch { /* */ }
@@ -1456,25 +1461,70 @@ export default function FilmSessionViewerPage() {
                   </div>
                   <div style={{ padding: "4px 6px" }}>
                     {sessionReels.map((reel) => (
-                      <Link
-                        key={reel.id}
-                        href={`/reels/${reel.id}`}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderRadius: 4, textDecoration: "none", transition: "background 0.15s" }}
-                        className="hover:bg-white/[0.03]"
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
-                          <Film size={9} style={{ color: "#EA580C", flexShrink: 0 }} />
-                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reel.title}</span>
+                      <div key={reel.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                        <Link
+                          href={`/reels/${reel.id}`}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderRadius: 4, textDecoration: "none", transition: "background 0.15s" }}
+                          className="hover:bg-white/[0.03]"
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                            <Film size={9} style={{ color: "#EA580C", flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reel.title}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                            <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, textTransform: "uppercase", background: reel.status === "ready" ? "rgba(13,148,136,0.15)" : reel.status === "shared" ? "rgba(234,88,12,0.15)" : "rgba(255,255,255,0.06)", color: reel.status === "ready" ? "#14B8A8" : reel.status === "shared" ? "#EA580C" : "rgba(255,255,255,0.4)", borderRadius: 3, padding: "0 4px" }}>
+                              {reel.status}
+                            </span>
+                            <span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>
+                              {reel.clip_count} clip{reel.clip_count !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                        </Link>
+                        {/* Share row */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 6px 4px", marginLeft: 14 }}>
+                          {/* Share toggle */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await api.patch(`/highlight-reels/${reel.id}/share`, { share_enabled: !reel.share_enabled });
+                                setSessionReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, share_enabled: res.data.share_enabled, share_token: res.data.share_token } : r));
+                              } catch { toast.error("Failed to update share"); }
+                            }}
+                            style={{ display: "flex", alignItems: "center", gap: 3, padding: "1px 5px", borderRadius: 3, fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: reel.share_enabled ? "#14B8A8" : "rgba(255,255,255,0.3)", background: reel.share_enabled ? "rgba(13,148,136,0.15)" : "transparent", border: reel.share_enabled ? "1px solid rgba(13,148,136,0.3)" : "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}
+                          >
+                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: reel.share_enabled ? "#14B8A8" : "rgba(255,255,255,0.2)" }} />
+                            {reel.share_enabled ? "Shared" : "Share"}
+                          </button>
+                          {/* Copy link + Regenerate — only when share_enabled */}
+                          {reel.share_enabled && reel.share_token && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`https://www.prospectxintelligence.com/reel/${reel.share_token}`).then(() => {
+                                    setCopiedReelId(reel.id);
+                                    setTimeout(() => setCopiedReelId(null), 2000);
+                                  }).catch(() => toast.error("Failed to copy"));
+                                }}
+                                style={{ padding: "1px 5px", borderRadius: 3, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: copiedReelId === reel.id ? "#14B8A8" : "rgba(255,255,255,0.4)", background: copiedReelId === reel.id ? "rgba(13,148,136,0.15)" : "rgba(255,255,255,0.04)", border: "none", cursor: "pointer" }}
+                              >
+                                {copiedReelId === reel.id ? "Copied!" : "Copy Link"}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await api.patch(`/highlight-reels/${reel.id}/share`, { regenerate_token: true });
+                                    setSessionReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, share_token: res.data.share_token } : r));
+                                    toast.success("New link generated");
+                                  } catch { toast.error("Failed to regenerate"); }
+                                }}
+                                style={{ padding: 0, border: "none", background: "transparent", fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.25)", cursor: "pointer", textDecoration: "underline" }}
+                              >
+                                Regenerate
+                              </button>
+                            </>
+                          )}
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                          <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, textTransform: "uppercase", background: reel.status === "ready" ? "rgba(13,148,136,0.15)" : reel.status === "shared" ? "rgba(234,88,12,0.15)" : "rgba(255,255,255,0.06)", color: reel.status === "ready" ? "#14B8A8" : reel.status === "shared" ? "#EA580C" : "rgba(255,255,255,0.4)", borderRadius: 3, padding: "0 4px" }}>
-                            {reel.status}
-                          </span>
-                          <span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>
-                            {reel.clip_count} clip{reel.clip_count !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                      </Link>
+                      </div>
                     ))}
                   </div>
                 </div>
