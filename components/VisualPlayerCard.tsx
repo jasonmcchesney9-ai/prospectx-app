@@ -56,7 +56,7 @@ function renderSpiderSVG(
           key={s}
           points={Array.from({ length: n }, (_, i) => pt(i, s)).join(" ")}
           fill="none"
-          stroke="rgba(255,255,255,0.08)"
+          stroke="#E2EAF2"
           strokeWidth="0.5"
         />
       ))}
@@ -68,7 +68,7 @@ function renderSpiderSVG(
           y1={String(cy)}
           x2={pt(i, 1).split(",")[0]}
           y2={pt(i, 1).split(",")[1]}
-          stroke="rgba(255,255,255,0.06)"
+          stroke="#E2EAF2"
           strokeWidth="0.5"
         />
       ))}
@@ -76,8 +76,8 @@ function renderSpiderSVG(
       {hasData && (
         <polygon
           points={values.map((v, i) => pt(i, Math.max(v, 0.05))).join(" ")}
-          fill={`${polyColor},0.2)`}
-          stroke={`${polyColor},0.8)`}
+          fill={`${polyColor},0.35)`}
+          stroke={`${polyColor},1.0)`}
           strokeWidth="1"
         />
       )}
@@ -93,7 +93,7 @@ function renderSpiderSVG(
             y={ly}
             textAnchor="middle"
             dominantBaseline="central"
-            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 5.5, fill: "rgba(255,255,255,0.4)" }}
+            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 5.5, fill: "#94A3B8" }}
           >
             {label}
           </text>
@@ -249,12 +249,12 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
             {player.current_team && (
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {player.current_team}
               </span>
             )}
             {player.current_league && (
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
                 {player.current_team ? " · " : ""}{formatLeague(player.current_league)}
               </span>
             )}
@@ -272,8 +272,8 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
 
       {/* ── Body: Spider + PXR + Archetype ── */}
       <div style={{ background: "#FFFFFF", padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-        {/* Spider chart on dark bg circle */}
-        <div style={{ width: 68, height: 68, borderRadius: "50%", background: "#0F2942", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        {/* Spider chart */}
+        <div style={{ width: 68, height: 68, flexShrink: 0 }}>
           {renderSpiderSVG(68, player.metrics, !!pxrEstimated)}
         </div>
 
