@@ -2,34 +2,14 @@
 
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
-import { User, Search, FileText, MoreVertical, ListPlus, GitCompareArrows, MessageSquare, Eye } from "lucide-react";
-import {
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  Radar,
-  ResponsiveContainer,
-} from "recharts";
+import { User, Search, FileText, MoreVertical, ListPlus, Eye } from "lucide-react";
 import type { PlayerCardData } from "@/types/api";
-import { METRIC_COLORS, COMMITMENT_STATUS_COLORS } from "@/types/api";
-import PlayerStatusBadges from "./PlayerStatusBadges";
 import { assetUrl, hasRealImage } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { formatLeague } from "@/lib/leagues";
 import { useBenchTalk } from "./BenchTalkProvider";
 
-const RADAR_AXES = [
-  { key: "sniper", label: "SNP" },
-  { key: "playmaker", label: "PLY" },
-  { key: "transition", label: "TRN" },
-  { key: "defensive", label: "DEF" },
-  { key: "compete", label: "CMP" },
-  { key: "hockey_iq", label: "IQ" },
-] as const;
-
 const GOALIE_POSITIONS = new Set(["G", "GK", "Goalie"]);
-
-// ── Sub-Components ──────────────────────────────────────────
 
 const GRADE_TO_SCORE: Record<string, number> = {
   "A+": 10, "A": 9.5, "A-": 9, "B+": 8.5, "B": 8, "B-": 7.5,
@@ -40,42 +20,94 @@ function gradeToScore(grade: string | null | undefined): number {
   return GRADE_TO_SCORE[grade] ?? (parseFloat(grade) || 0);
 }
 
-function ScoreBadge({ grade }: { grade: string | null }) {
-  if (!grade || grade === "NR") return null;
-  const score = gradeToScore(grade);
-  return (
-    <span
-      className="inline-flex items-center justify-center w-9 h-9 rounded-lg font-oswald font-bold text-sm text-white shadow-sm bg-teal"
-    >
-      {score > 0 ? score.toFixed(1) : "—"}
-    </span>
-  );
-}
+const SPIDER_AXES = [
+  { key: "sniper", label: "SNP" },
+  { key: "hockey_iq", label: "IQ" },
+  { key: "playmaker", label: "PLY" },
+  { key: "transition", label: "TRN" },
+  { key: "defensive", label: "DEF" },
+  { key: "compete", label: "CMP" },
+] as const;
 
-function CommitmentBadge({ status }: { status: string | null }) {
-  if (!status || status === "Uncommitted") return null;
-  const colors = COMMITMENT_STATUS_COLORS[status] || { bg: "bg-gray-100", text: "text-gray-600" };
-  return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider ${colors.bg} ${colors.text}`}>
-      {status}
-    </span>
-  );
-}
+function renderSpiderSVG(
+  size: number,
+  metrics: Record<string, number> | null,
+  isEstimated: boolean
+) {
+  const cx = size / 2, cy = size / 2, r = size * 0.36;
+  const n = SPIDER_AXES.length;
+  const angleOf = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
+  const pt = (i: number, pct: number) => {
+    const a = angleOf(i);
+    return `${cx + Math.cos(a) * r * pct},${cy + Math.sin(a) * r * pct}`;
+  };
 
-function PositionBadge({ position }: { position: string }) {
+  const values = SPIDER_AXES.map(({ key }) =>
+    metrics ? Math.min((metrics[key as keyof typeof metrics] ?? 0) / 99, 1) : 0
+  );
+  const hasData = values.some((v) => v > 0);
+  const polyColor = isEstimated ? "rgba(245,158,11" : "rgba(13,148,136";
+
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal/10 text-teal border border-teal/20 font-oswald tracking-wider">
-      {position}
-    </span>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {/* Grid rings */}
+      {[0.33, 0.66, 1].map((s) => (
+        <polygon
+          key={s}
+          points={Array.from({ length: n }, (_, i) => pt(i, s)).join(" ")}
+          fill="none"
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth="0.5"
+        />
+      ))}
+      {/* Axis lines */}
+      {Array.from({ length: n }, (_, i) => (
+        <line
+          key={i}
+          x1={String(cx)}
+          y1={String(cy)}
+          x2={pt(i, 1).split(",")[0]}
+          y2={pt(i, 1).split(",")[1]}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth="0.5"
+        />
+      ))}
+      {/* Data polygon */}
+      {hasData && (
+        <polygon
+          points={values.map((v, i) => pt(i, Math.max(v, 0.05))).join(" ")}
+          fill={`${polyColor},0.2)`}
+          stroke={`${polyColor},0.8)`}
+          strokeWidth="1"
+        />
+      )}
+      {/* Labels */}
+      {SPIDER_AXES.map(({ label }, i) => {
+        const a = angleOf(i);
+        const lx = cx + Math.cos(a) * (r + 8);
+        const ly = cy + Math.sin(a) * (r + 8);
+        return (
+          <text
+            key={label}
+            x={lx}
+            y={ly}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 5.5, fill: "rgba(255,255,255,0.4)" }}
+          >
+            {label}
+          </text>
+        );
+      })}
+    </svg>
   );
 }
 
 /** Position-specific silhouette when no photo */
 function PlayerSilhouette({ position, size = 20 }: { position: string; size?: number }) {
   if (GOALIE_POSITIONS.has(position)) {
-    // Goalie silhouette — wider stance, blocker/glove hint
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="text-navy/40">
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ color: "rgba(255,255,255,0.4)" }}>
         <circle cx="12" cy="5" r="3" fill="currentColor" opacity="0.6" />
         <path d="M6 11h12v2H6z" fill="currentColor" opacity="0.3" />
         <path d="M8 13v7h2v-4h4v4h2v-7H8z" fill="currentColor" opacity="0.5" />
@@ -84,9 +116,8 @@ function PlayerSilhouette({ position, size = 20 }: { position: string; size?: nu
       </svg>
     );
   }
-  // Skater silhouette — stick + skating stance
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="text-navy/40">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ color: "rgba(255,255,255,0.4)" }}>
       <circle cx="12" cy="4" r="3" fill="currentColor" opacity="0.6" />
       <path d="M10 8h4l2 6h-8l2-6z" fill="currentColor" opacity="0.5" />
       <path d="M9 14l-2 6h2l2-4 2 4h2l-2-6H9z" fill="currentColor" opacity="0.4" />
@@ -95,44 +126,7 @@ function PlayerSilhouette({ position, size = 20 }: { position: string; size?: nu
   );
 }
 
-/** Metric circle with value inside + label below */
-function MetricCircle({ label, value }: { label: string; value: number | null }) {
-  const hasValue = value !== null && value !== undefined;
-  const fillOpacity = hasValue ? Math.max(0.1, (value / 99) * 0.5) : 0;
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <div
-        className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-oswald font-bold ${
-          hasValue
-            ? "border border-teal/30 text-navy"
-            : "border border-dashed border-navy/20 text-navy/30"
-        }`}
-        style={hasValue ? { backgroundColor: `rgba(24, 179, 166, ${fillOpacity})` } : undefined}
-      >
-        {hasValue ? Math.round(value) : "?"}
-      </div>
-      <span className="text-[7px] font-oswald uppercase tracking-wider text-muted">{label}</span>
-    </div>
-  );
-}
-
-/** "Needs Scouting" badge for unscouted players — dashed circles per axis */
-function NeedsScoutingBadge() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center h-[130px] gap-2">
-      <div className="flex items-center gap-2">
-        {RADAR_AXES.map(({ label }) => (
-          <MetricCircle key={label} label={label} value={null} />
-        ))}
-      </div>
-      <span className="text-[9px] text-muted/50 text-center leading-tight max-w-[200px]">
-        No intelligence grades yet. Generate a PXI Assessment to grade this player.
-      </span>
-    </div>
-  );
-}
-
-// ── Overflow Menu ────────────────────────────────────────────
+// ── Overflow Menu ────────────────────────────────────────
 
 function OverflowMenu({ player, onScout }: { player: PlayerCardData; onScout: () => void }) {
   const [open, setOpen] = useState(false);
@@ -152,35 +146,39 @@ function OverflowMenu({ player, onScout }: { player: PlayerCardData; onScout: ()
     <div className="relative" ref={ref}>
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }}
-        className="p-1 rounded-md text-navy/30 hover:text-navy hover:bg-navy/5 transition-colors"
+        style={{ padding: 3, borderRadius: 4, color: "rgba(255,255,255,0.3)", cursor: "pointer", background: "none", border: "none" }}
+        className="hover:bg-white/10 transition-colors"
         title="More actions"
       >
-        <MoreVertical size={14} />
+        <MoreVertical size={13} />
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 w-44 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1"
+          style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, width: 176, background: "#FFFFFF", border: "1px solid #DDE6EF", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 50, padding: "4px 0" }}
           onClick={(e) => e.preventDefault()}
         >
           <button
             onClick={(e) => { e.stopPropagation(); onScout(); setOpen(false); }}
-            className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+            style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 12, color: "#0F2942", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+            className="hover:bg-[#F0F4F8] transition-colors"
           >
-            <Search size={12} className="text-teal" /> Scout in Bench Talk
+            <Search size={12} style={{ color: "#0D9488" }} /> Scout in Bench Talk
           </button>
           <Link
-            href={`/scouting`}
+            href="/scouting"
             onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-            className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", fontSize: 12, color: "#0F2942", textDecoration: "none" }}
+            className="hover:bg-[#F0F4F8] transition-colors"
           >
-            <ListPlus size={12} className="text-muted" /> Add to Scouting List
+            <ListPlus size={12} style={{ color: "#94A3B8" }} /> Add to Scouting List
           </Link>
           <Link
             href={`/players/${player.id}`}
             onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-            className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", fontSize: 12, color: "#0F2942", textDecoration: "none" }}
+            className="hover:bg-[#F0F4F8] transition-colors"
           >
-            <Eye size={12} className="text-muted" /> View Full Profile
+            <Eye size={12} style={{ color: "#94A3B8" }} /> View Full Profile
           </Link>
         </div>
       )}
@@ -188,23 +186,14 @@ function OverflowMenu({ player, onScout }: { player: PlayerCardData; onScout: ()
   );
 }
 
-// ── Main Component ──────────────────────────────────────────
+// ── Main Component ──────────────────────────────────────
 
 export default function VisualPlayerCard({ player }: { player: PlayerCardData }) {
   const { openBenchTalk } = useBenchTalk();
-  const userRole = getUser()?.hockey_role;
   const ppg = player.gp > 0 ? (player.p / player.gp).toFixed(2) : "---";
-
-  const radarData = player.metrics
-    ? RADAR_AXES.map(({ key, label }) => ({
-        axis: label,
-        value: player.metrics![key as keyof typeof player.metrics] ?? 0,
-        fullMark: 99,
-      }))
-    : null;
-
-  const allZeroRadar = radarData ? radarData.every(d => d.value === 0) : false;
-  const hasIntel = !!(player.overall_grade && player.overall_grade !== "NR") || !!player.metrics;
+  const pxrScore = (player as unknown as Record<string, unknown>).pxr_score as number | null | undefined;
+  const pxrEstimated = (player as unknown as Record<string, unknown>).pxr_estimated as boolean | undefined;
+  const pxrTier = (player as unknown as Record<string, unknown>).pxr_tier as string | null | undefined;
 
   function handleScout(e: React.MouseEvent) {
     e.preventDefault();
@@ -221,159 +210,143 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
   return (
     <Link
       href={`/players/${player.id}`}
-      className="block bg-white rounded-xl border border-teal/20 hover:shadow-lg hover:border-teal/30 transition-all group overflow-hidden"
+      className="block overflow-hidden group"
+      style={{ borderRadius: 10, border: "1px solid #DDE6EF", transition: "all 0.15s", textDecoration: "none" }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = "rgba(13,148,136,0.3)";
+        el.style.boxShadow = "0 4px 16px rgba(13,148,136,0.08)";
+        el.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = "#DDE6EF";
+        el.style.boxShadow = "none";
+        el.style.transform = "translateY(0)";
+      }}
     >
-      {/* ── Header: Photo + Name + Position + Overflow ── */}
-      <div className="flex items-start gap-3 p-3 pb-2">
+      {/* ── Header: Navy bg, Photo, Name, Position ── */}
+      <div style={{ background: "#0F2942", padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Player photo */}
         {hasRealImage(player.image_url) ? (
-          <div className="w-12 h-12 rounded-lg overflow-hidden bg-navy/10 shrink-0">
+          <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(13,148,136,0.4)", flexShrink: 0 }}>
             <img
               src={assetUrl(player.image_url)}
               alt={`${player.first_name} ${player.last_name}`}
-              className="w-full h-full object-cover"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           </div>
         ) : (
-          <div className="w-12 h-12 rounded-lg bg-navy/5 flex items-center justify-center shrink-0">
-            <PlayerSilhouette position={player.position} size={22} />
+          <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.06)", border: "2px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <PlayerSilhouette position={player.position} size={20} />
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-1">
-            <div className="min-w-0 flex-1">
-              <h3 className="font-oswald font-bold text-navy text-sm leading-tight truncate group-hover:text-teal transition-colors">
-                {player.first_name} {player.last_name}
-              </h3>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <PositionBadge position={player.position} />
-              <OverflowMenu player={player} onScout={() => openBenchTalk(`Scout ${player.first_name} ${player.last_name}`)} />
-            </div>
-          </div>
-          <p className="text-[11px] text-muted truncate mt-0.5">
+
+        {/* Name + Team */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 14, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.03em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.2 }}>
+            {player.first_name} {player.last_name}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
             {player.current_team && (
-              <span
-                className="hover:text-teal transition-colors cursor-pointer"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/teams/${encodeURIComponent(player.current_team!)}`; }}
-              >
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {player.current_team}
               </span>
             )}
             {player.current_league && (
-              <>
-                {player.current_team ? " • " : ""}
-                <span
-                  className="hover:text-teal transition-colors cursor-pointer"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/leagues?league=${encodeURIComponent(player.current_league!)}`; }}
-                >
-                  {formatLeague(player.current_league)}
-                </span>
-              </>
-            )}
-          </p>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {player.archetype && (
-              <span className="text-[10px] text-navy/60 font-medium italic truncate">
-                {player.archetype}
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>
+                {player.current_team ? " · " : ""}{formatLeague(player.current_league)}
               </span>
             )}
-            <CommitmentBadge status={player.commitment_status} />
-            <PlayerStatusBadges tags={player.tags || []} size="sm" />
           </div>
+        </div>
+
+        {/* Position badge + Overflow */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          <div style={{ width: 26, height: 26, borderRadius: 6, background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{player.position}</span>
+          </div>
+          <OverflowMenu player={player} onScout={() => openBenchTalk(`Scout ${player.first_name} ${player.last_name}`)} />
         </div>
       </div>
 
-      {/* ── Body: Radar / Metrics + Grade ─────────────── */}
-      <div className="flex items-center px-3 pb-1">
-        {/* Grade badge / Generate CTA */}
-        {userRole !== "parent" && (
-          <div className="flex flex-col items-center gap-1 mr-2">
-            {player.overall_grade && player.overall_grade !== "NR" ? (
+      {/* ── Body: Spider + PXR + Archetype ── */}
+      <div style={{ background: "#FFFFFF", padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Spider chart on dark bg circle */}
+        <div style={{ width: 68, height: 68, borderRadius: "50%", background: "#0F2942", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {renderSpiderSVG(68, player.metrics, !!pxrEstimated)}
+        </div>
+
+        {/* PXR Score + Archetype */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            {pxrScore != null ? (
               <>
-                <ScoreBadge grade={player.overall_grade} />
-                <span className="text-[9px] text-muted font-oswald uppercase tracking-wider">OVR</span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 20, color: pxrEstimated ? "#F59E0B" : "#0D9488", lineHeight: 1 }}>
+                  {typeof pxrScore === "number" ? pxrScore.toFixed(1) : pxrScore}
+                </span>
+                {pxrTier && (
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", padding: "2px 5px", borderRadius: 4, background: pxrEstimated ? "rgba(245,158,11,0.12)" : "rgba(13,148,136,0.12)", color: pxrEstimated ? "#F59E0B" : "#0D9488" }}>
+                    {pxrTier}
+                  </span>
+                )}
               </>
             ) : (
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  window.location.href = `/reports/generate?player_id=${player.id}&report_type=elite_profile`;
-                }}
-                className="px-2.5 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors whitespace-nowrap"
-              >
-                Generate PXI Assessment
-              </button>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 20, color: "#94A3B8", lineHeight: 1 }}>—</span>
             )}
           </div>
-        )}
-
-        {/* Radar chart / Needs Scouting / Metric circles */}
-        {radarData && !allZeroRadar ? (
-          <div className="flex-1 h-[130px] -my-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                <PolarGrid stroke="#e5e7eb" strokeWidth={0.5} />
-                <PolarAngleAxis
-                  dataKey="axis"
-                  tick={{ fontSize: 9, fill: "#6b7280", fontFamily: "Oswald, sans-serif" }}
-                  tickLine={false}
-                />
-                <Radar
-                  dataKey="value"
-                  stroke={METRIC_COLORS.transition}
-                  fill={METRIC_COLORS.transition}
-                  fillOpacity={0.2}
-                  strokeWidth={1.5}
-                  dot={{ r: 2, fill: METRIC_COLORS.transition }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+            {pxrScore != null && (
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#94A3B8", textTransform: "uppercase" }}>
+                {pxrEstimated ? "PXR~" : "PXR"}
+              </span>
+            )}
           </div>
-        ) : (
-          <NeedsScoutingBadge />
-        )}
+          {player.archetype && (
+            <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, color: "#0D9488", textTransform: "uppercase", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {player.archetype}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* ── Quick Actions ─────────────────────────────── */}
-      <div className="flex gap-1.5 px-3 pb-2">
+      {/* ── Stats Row ── */}
+      <div style={{ background: "#F5F5F5", borderRadius: 6, margin: "0 12px 10px", overflow: "hidden", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr" }}>
+        <StatCell label="GP" value={player.gp} />
+        <StatCell label="G" value={player.g} divider />
+        <StatCell label="A" value={player.a} divider />
+        <StatCell label="P" value={player.p} divider highlight />
+        <StatCell label="PPG" value={ppg} divider highlight />
+      </div>
+
+      {/* ── Footer: Scout + Report buttons ── */}
+      <div style={{ background: "#FAFBFC", borderTop: "1px solid #DDE6EF", padding: "8px 12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         <button
           onClick={handleScout}
-          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-teal/10 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/20 transition-colors"
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 0", borderRadius: 6, background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1px solid rgba(13,148,136,0.2)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", cursor: "pointer" }}
+          className="hover:opacity-80 transition-opacity"
         >
-          <Search size={11} />
-          Scout
+          <Search size={11} /> Scout
         </button>
         <button
           onClick={handleReport}
-          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-navy/5 text-navy/70 text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-navy/10 transition-colors"
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 0", borderRadius: 6, background: "#F5F5F5", color: "#666666", border: "1px solid #DDE6EF", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", cursor: "pointer" }}
+          className="hover:opacity-80 transition-opacity"
         >
-          <FileText size={11} />
-          Report
+          <FileText size={11} /> Report
         </button>
-      </div>
-
-      {/* ── Footer: Stats Row ─────────────────────────── */}
-      <div className="bg-navy/[0.03] border-t border-teal/10 px-3 py-2">
-        <div className="flex items-center justify-between text-[11px]">
-          <StatCell label="GP" value={player.gp} />
-          <StatCell label="G" value={player.g} />
-          <StatCell label="A" value={player.a} />
-          <StatCell label="P" value={player.p} />
-          <StatCell label="PPG" value={ppg} highlight />
-        </div>
       </div>
     </Link>
   );
 }
 
-function StatCell({ label, value, highlight }: { label: string; value: string | number; highlight?: boolean }) {
+function StatCell({ label, value, highlight, divider }: { label: string; value: string | number; highlight?: boolean; divider?: boolean }) {
   return (
-    <div className="text-center">
-      <p className={`font-oswald font-bold ${highlight ? "text-teal text-sm" : "text-navy text-xs"}`}>
+    <div style={{ textAlign: "center", padding: "8px 4px", borderLeft: divider ? "1px solid #E5E5E5" : "none" }}>
+      <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 14, color: highlight ? "#0D9488" : "#0F2942", lineHeight: 1.1 }}>
         {value}
       </p>
-      <p className="text-[9px] text-muted font-oswald uppercase tracking-wider">{label}</p>
+      <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#94A3B8", textTransform: "uppercase", marginTop: 2 }}>{label}</p>
     </div>
   );
 }
