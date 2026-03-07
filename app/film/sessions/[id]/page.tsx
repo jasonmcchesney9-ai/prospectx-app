@@ -307,9 +307,14 @@ export default function FilmSessionViewerPage() {
 
   const getCurrentTime = useCallback(() => currentTimeRef.current, []);
 
+  // TODO: totalDuration should come from upload.duration when available; using 3600s fallback
+  const totalDuration = 3600;
+  const [playheadPct, setPlayheadPct] = useState(0);
+
   const handleTimeUpdate = useCallback((seconds: number) => {
     currentTimeRef.current = seconds;
-  }, []);
+    setPlayheadPct(totalDuration > 0 ? (seconds / totalDuration) * 100 : 0);
+  }, [totalDuration]);
 
   // Load session data
   useEffect(() => {
@@ -1540,79 +1545,106 @@ export default function FilmSessionViewerPage() {
           </div>
 
           {/* ── TIMELINE ROW — spans all 3 columns ──────────────── */}
-          <div style={{ gridColumn: "1 / 4", gridRow: 2, background: "#070F1C", borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Timeline header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14B8A8" }} />
-                <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>
-                  EVENT TIMELINE
-                </span>
-                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)" }}>
-                  ({sessionEvents.length} events)
-                </span>
-              </div>
-              {/* Category filter tabs */}
-              <div style={{ display: "flex", gap: 3 }}>
-                {EVENT_CATEGORY_LABELS.map((cat) => (
-                  <button
-                    key={cat.value}
-                    onClick={() => setEventFilter(cat.value)}
-                    style={{
-                      padding: "2px 6px",
-                      borderRadius: 3,
-                      fontSize: 8,
-                      fontFamily: "'Oswald', sans-serif",
-                      fontWeight: 600,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      color: eventFilter === cat.value ? "#FFFFFF" : "rgba(255,255,255,0.35)",
-                      background: eventFilter === cat.value ? "#0D9488" : "transparent",
-                      border: eventFilter === cat.value ? "none" : "1px solid rgba(255,255,255,0.08)",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
+          <div style={{ gridColumn: "1 / 4", gridRow: 2, height: 108, background: "#070F1C", borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Timeline header — 28px */}
+            <div style={{ height: 28, display: "flex", alignItems: "center", gap: 8, padding: "5px 12px 4px", borderBottom: "1px solid rgba(255,255,255,0.04)", flexShrink: 0 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14B8A8", flexShrink: 0 }} />
+              <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>
+                EVENT TIMELINE
+              </span>
+              <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, background: "#0D9488", color: "#FFFFFF", borderRadius: 999, padding: "1px 5px" }}>
+                {sessionEvents.length}
+              </span>
+              {/* Filter pills — reuse eventFilter state */}
+              <div style={{ display: "flex", gap: 3, marginLeft: "auto" }}>
+                {(["all", "offensive", "defensive", "special_teams"] as EventCategory[]).map((fv) => {
+                  const label = fv === "all" ? "All" : fv === "offensive" ? "Offensive" : fv === "defensive" ? "Defensive" : "ST";
+                  const active = eventFilter === fv;
+                  return (
+                    <button
+                      key={fv}
+                      onClick={() => setEventFilter(fv)}
+                      style={{ padding: "2px 7px", borderRadius: 999, fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: active ? "#FFFFFF" : "rgba(255,255,255,0.4)", background: active ? "#0F2942" : "transparent", boxShadow: active ? "0 0 0 1px #14B8A8" : "none", border: "none", cursor: "pointer" }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            {/* Scrollable event list (placeholder — Commit 3 will replace with track view) */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px" }}>
+
+            {/* Scrub area — time ruler + event tracks + playhead */}
+            <div style={{ flex: 1, padding: "4px 12px 5px", position: "relative", overflow: "hidden" }}>
+              {/* Time ruler — 12px height */}
+              <div style={{ height: 12, position: "relative", marginBottom: 3 }}>
+                {Array.from({ length: 10 }, (_, i) => {
+                  const secs = (i / 10) * totalDuration;
+                  const m = Math.floor(secs / 60);
+                  const s = Math.floor(secs % 60);
+                  const label = totalDuration > 0 ? `${m}:${s.toString().padStart(2, "0")}` : (i === 0 ? "0:00" : "—:—");
+                  return (
+                    <span key={i} style={{ position: "absolute", left: `calc(62px + ${(i / 10) * (100 - 0)}% * (1 - 62 / 100 / 1))`, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)", transform: "translateX(-50%)", whiteSpace: "nowrap", top: 0 }}>
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Event tracks — GOALS, SHOTS, FACEOFFS */}
               {(() => {
                 const filteredEvents = eventFilter === "all"
                   ? sessionEvents
                   : sessionEvents.filter((ev) => getEventCategory(ev.event_type) === eventFilter);
-                return filteredEvents.length === 0 ? (
-                  <p style={{ fontSize: 10, textAlign: "center", padding: "16px 0", color: "rgba(255,255,255,0.25)" }}>
-                    {sessionEvents.length === 0 ? "No events yet — tag events from the Code Window." : "No events match this filter."}
-                  </p>
-                ) : (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                    {filteredEvents.map((ev) => {
-                      const cat = getEventCategory(ev.event_type);
-                      const dotColor = cat === "offensive" ? "#14B8A8" : cat === "defensive" ? "#E67E22" : cat === "special_teams" ? "#818CF8" : "rgba(255,255,255,0.3)";
+                const tracks: { key: string; label: string; match: (t: string) => boolean; color: string }[] = [
+                  { key: "goals", label: "GOALS", match: (t) => t.toLowerCase().includes("goal"), color: "#0D9488" },
+                  { key: "shots", label: "SHOTS", match: (t) => t.toLowerCase().includes("shot"), color: "#14B8A8" },
+                  { key: "faceoffs", label: "FACEOFFS", match: (t) => t.toLowerCase().includes("faceoff"), color: "#F59E0B" },
+                ];
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {tracks.map((track) => {
+                      const trackEvents = filteredEvents.filter((ev) => track.match(ev.event_type));
                       return (
-                        <button
-                          key={ev.id}
-                          onClick={() => setStartTime(ev.time_seconds)}
-                          style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.04)", border: "none", cursor: "pointer", transition: "background 0.15s" }}
-                          className="hover:bg-white/[0.08]"
-                          title={`${ev.event_type.replace(/_/g, " ")} at ${formatTimestamp(ev.time_seconds)}`}
-                        >
-                          <span style={{ width: 4, height: 4, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
-                          <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#14B8A8" }}>
-                            {formatTimestamp(ev.time_seconds)}
-                          </span>
-                          <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>
-                            {ev.event_type.replace(/_/g, " ")}
-                          </span>
-                        </button>
+                        <div key={track.key} style={{ height: 14, position: "relative", background: "rgba(255,255,255,0.02)", borderRadius: 3 }}>
+                          {/* Track label */}
+                          <div style={{ position: "absolute", left: 0, top: 0, width: 60, height: "100%", background: "rgba(6,14,26,0.8)", borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", paddingLeft: 6, zIndex: 1, borderRadius: "3px 0 0 3px" }}>
+                            <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>{track.label}</span>
+                          </div>
+                          {/* Events area */}
+                          <div style={{ position: "absolute", left: 62, right: 0, top: 0, bottom: 0 }}>
+                            {trackEvents.map((ev) => {
+                              const pct = totalDuration > 0 ? (ev.time_seconds / totalDuration) * 100 : 0;
+                              return (
+                                <button
+                                  key={ev.id}
+                                  onClick={() => setStartTime(ev.time_seconds)}
+                                  title={`${ev.event_type.replace(/_/g, " ")} at ${formatTimestamp(ev.time_seconds)}`}
+                                  style={{ position: "absolute", left: `${pct}%`, width: "max(0.8%, 4px)", top: 1, bottom: 1, borderRadius: 2, background: track.color, opacity: 0.85, cursor: "pointer", border: "none", padding: 0, transition: "opacity 0.15s" }}
+                                  onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+                                  onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.85"; }}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 );
               })()}
+
+              {/* Playhead — vertical teal line tracking current playback position */}
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: `calc(62px + ${playheadPct}% * (1 - 62 / 100 / 1))`, width: 1, background: "#14B8A8", zIndex: 20, pointerEvents: "none", transition: "left 0.25s linear" }}>
+                {/* Triangle cap */}
+                <div style={{ position: "absolute", top: 0, left: -3, width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid #14B8A8" }} />
+              </div>
+
+              {/* Empty state */}
+              {sessionEvents.length === 0 && (
+                <p style={{ fontSize: 10, textAlign: "center", padding: "6px 0", color: "rgba(255,255,255,0.25)", position: "absolute", left: 62, right: 0, top: "50%", transform: "translateY(-50%)", margin: 0 }}>
+                  No events yet — tag events from the Code Window.
+                </p>
+              )}
             </div>
           </div>
         </div>
