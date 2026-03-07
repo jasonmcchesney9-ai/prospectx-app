@@ -378,8 +378,8 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PPG" : "PXR Score"}</th>
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>}
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PXR Status" : "League %"}</th>
-                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>}
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title={ppgFallbackMode ? undefined : "League Percentile — ranks this player among all same-position players in their league this season"}>{ppgFallbackMode ? "PXR Status" : "League %"}</th>
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>}
@@ -477,8 +477,8 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="League Percentile — ranks this player among all same-position players in their league this season">League %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
                       </thead>
@@ -564,8 +564,8 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Birth Year</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="League Percentile — ranks this player among all same-position players in their league this season">League %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Gap</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
@@ -642,7 +642,7 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Advantage</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>

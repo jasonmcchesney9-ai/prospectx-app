@@ -1691,10 +1691,10 @@ export default function PlayerDetailPage() {
                         {/* Percentile chips + age modifier */}
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
                           {pxrData.league_percentile != null && (
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(13,148,136,.1)", color: "#0D9488", letterSpacing: ".04em" }}>League P{Math.round(pxrData.league_percentile)}</span>
+                            <span title="League Percentile — ranks this player among all players at the same position in their league this season. P90 = top 10%." className="cursor-help" style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(13,148,136,.1)", color: "#0D9488", letterSpacing: ".04em" }}>League P{Math.round(pxrData.league_percentile)}</span>
                           )}
                           {pxrData.cohort_percentile != null && (
-                            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(13,148,136,.1)", color: "#0D9488", letterSpacing: ".04em" }}>Cohort P{Math.round(pxrData.cohort_percentile)}</span>
+                            <span title="Cohort Percentile — ranks this player among all same-position players born in the same year across all leagues. P90 = top 10%." className="cursor-help" style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(13,148,136,.1)", color: "#0D9488", letterSpacing: ".04em" }}>Cohort P{Math.round(pxrData.cohort_percentile)}</span>
                           )}
                           {pxrData.age_modifier != null && pxrData.age_modifier !== 0 && (
                             <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: pxrData.age_modifier > 0 ? "rgba(34,197,94,.1)" : "rgba(249,115,22,.1)", color: pxrData.age_modifier > 0 ? "#16A34A" : "#EA580C", letterSpacing: ".04em" }}>
