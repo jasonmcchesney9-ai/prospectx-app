@@ -216,11 +216,12 @@ function NavLink({ href, label, icon: Icon, pathname, badge }: { href: string; l
   return (
     <Link
       href={href}
-      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
         active
           ? "bg-white/10 text-teal"
-          : "text-white/70 hover:bg-white/5 hover:text-white"
+          : "hover:bg-white/5 hover:text-white"
       }`}
+      style={active ? undefined : { color: "#C8D8E8" }}
     >
       <Icon size={16} />
       {label}
@@ -1057,11 +1058,12 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
           isActive
             ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
+            : "hover:bg-white/5 hover:text-white"
         }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
       >
         <Users size={16} />
         {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Player Hub"}
@@ -1114,11 +1116,12 @@ function CoachHubDropdown({ pathname }: { pathname: string }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
           isActive
             ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
+            : "hover:bg-white/5 hover:text-white"
         }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
       >
         <ClipboardList size={16} />
         Coach Hub
@@ -1171,11 +1174,12 @@ function GameHubDropdown({ pathname }: { pathname: string }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
           isActive
             ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
+            : "hover:bg-white/5 hover:text-white"
         }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
       >
         <Swords size={16} />
         Game Hub
@@ -1228,11 +1232,12 @@ function OrgHubDropdown({ pathname }: { pathname: string }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
           isActive
             ? "bg-white/10 text-teal"
-            : "text-white/70 hover:bg-white/5 hover:text-white"
+            : "hover:bg-white/5 hover:text-white"
         }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
       >
         <Building2 size={16} />
         Org Hub
