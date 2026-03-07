@@ -422,6 +422,15 @@ export default function FilmSessionViewerPage() {
     } catch { /* localStorage unavailable */ }
   }, [sessionId]);
 
+  // Escape key exits Cinema Mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCinemaMode(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const toggleReportExpanded = useCallback(() => {
     setReportExpanded((prev) => {
       const next = !prev;
@@ -999,7 +1008,7 @@ export default function FilmSessionViewerPage() {
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: cinemaMode ? "0px 1fr 0px" : "220px 1fr 260px", gridTemplateRows: "1fr 108px", overflow: "hidden", transition: "grid-template-columns 0.3s ease" }}>
 
           {/* ── COL 1 — Code Window (EventTagger) ──────────────── */}
-          <div style={{ gridColumn: 1, gridRow: 1, background: "#0A1929", borderRight: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1 }}>
+          <div style={{ gridColumn: 1, gridRow: 1, background: "#0A1929", borderRight: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1, pointerEvents: cinemaMode ? "none" : "auto" }}>
             {/* Code Window header — 34px, #0A1929 */}
             <div style={{ height: 34, padding: "0 10px", background: "#0A1929", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1092,13 +1101,18 @@ export default function FilmSessionViewerPage() {
                 </span>
               )}
               {/* Recording dot — top-right of video area */}
-              {/* TODO: Show only when a tag event is actively being recorded; currently static placeholder */}
+              {/* TODO: Wire to EventTagger recording state when exposed via props/callback; currently always visible with blink */}
               {upload?.playback_id && (
-                <span
-                  className="absolute top-3 right-3 z-10"
-                  style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", display: "block" }}
-                />
+                <>
+                  <style>{`@keyframes recDotBlink { 0%,100%{opacity:1} 50%{opacity:0.2} }`}</style>
+                  <span
+                    className="absolute top-3 right-3 z-10"
+                    style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", display: "block", animation: "recDotBlink 1.2s infinite" }}
+                  />
+                </>
               )}
+              {/* Score badge — bottom-left of video area */}
+              {/* TODO: Render score badge when session has team names/scores (home_team, away_team, home_score, away_score, period). Currently session only has team_id/opponent_team_id with no names or scores. */}
             </div>
 
             {/* Transport bar — Mark In/Out + Frame step + Speed + Cinema */}
@@ -1109,7 +1123,7 @@ export default function FilmSessionViewerPage() {
                   {/* Mark In */}
                   <button
                     onClick={() => setClipStart(Math.floor(currentTimeRef.current))}
-                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", background: "transparent", border: "1px solid rgba(20,184,166,0.3)", cursor: "pointer" }}
+                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 5, fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", background: "rgba(13,148,136,0.18)", border: "1px solid rgba(13,148,136,0.35)", cursor: "pointer" }}
                   >
                     <Scissors size={11} />
                     In
@@ -1123,7 +1137,7 @@ export default function FilmSessionViewerPage() {
                   {/* Mark Out */}
                   <button
                     onClick={() => setClipEnd(Math.floor(currentTimeRef.current))}
-                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", background: "transparent", border: "1px solid rgba(20,184,166,0.3)", cursor: "pointer" }}
+                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 5, fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#E67E22", background: "rgba(230,126,34,0.13)", border: "1px solid rgba(230,126,34,0.3)", cursor: "pointer" }}
                   >
                     <Scissors size={11} />
                     Out
@@ -1203,14 +1217,15 @@ export default function FilmSessionViewerPage() {
                         key={rate}
                         onClick={() => handleSpeedChange(rate)}
                         style={{
-                          padding: "2px 6px",
+                          padding: "3px 7px",
                           borderRadius: 4,
                           fontSize: 9,
-                          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-                          fontWeight: 700,
+                          fontFamily: "'Oswald', sans-serif",
+                          fontWeight: 600,
+                          letterSpacing: "0.06em",
                           color: playbackSpeed === rate ? "#FFFFFF" : "rgba(255,255,255,0.4)",
-                          background: playbackSpeed === rate ? "#0D9488" : "transparent",
-                          border: playbackSpeed === rate ? "none" : "1px solid rgba(255,255,255,0.08)",
+                          background: playbackSpeed === rate ? "#0D9488" : "rgba(255,255,255,0.04)",
+                          border: "none",
                           cursor: "pointer",
                         }}
                         title={`${rate}x speed`}
@@ -1321,7 +1336,7 @@ export default function FilmSessionViewerPage() {
           </div>
 
           {/* ── COL 3 — Clips Panel + Reels + Comments ─────────── */}
-          <div style={{ gridColumn: 3, gridRow: 1, background: "#0A1929", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1 }}>
+          <div style={{ gridColumn: 3, gridRow: 1, background: "#0A1929", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1, pointerEvents: cinemaMode ? "none" : "auto" }}>
             <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 6 }}>
               {/* Session info — compact */}
               <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
