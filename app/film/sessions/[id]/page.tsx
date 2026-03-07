@@ -250,8 +250,8 @@ export default function FilmSessionViewerPage() {
   const [loadingTeams, setLoadingTeams] = useState(false);
 
   // Generated report display
-  const [generatedReport, setGeneratedReport] = useState<{ id: string; title: string; output_text: string } | null>(null);
-  const [reportExpanded, setReportExpanded] = useState(true);
+  const [generatedReport, setGeneratedReport] = useState<{ id: string; title: string; output_text: string; created_at?: string } | null>(null);
+  const [reportExpanded, setReportExpanded] = useState(false);
 
   // Comment form
   const [commentText, setCommentText] = useState("");
@@ -322,6 +322,7 @@ export default function FilmSessionViewerPage() {
                 id: reportRes.data.id,
                 title: reportRes.data.title || "Film Analysis",
                 output_text: reportRes.data.output_text,
+                created_at: reportRes.data.created_at,
               });
             }
           } catch {
@@ -368,6 +369,22 @@ export default function FilmSessionViewerPage() {
       }
     }
   }, [seekTime, upload]);
+
+  // Restore analysis panel expand state from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`film_analysis_expanded_${sessionId}`);
+      if (stored === "true") setReportExpanded(true);
+    } catch { /* localStorage unavailable */ }
+  }, [sessionId]);
+
+  const toggleReportExpanded = useCallback(() => {
+    setReportExpanded((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(`film_analysis_expanded_${sessionId}`, String(next)); } catch { /* */ }
+      return next;
+    });
+  }, [sessionId]);
 
   const loadComments = useCallback(async () => {
     try {
@@ -502,8 +519,10 @@ export default function FilmSessionViewerPage() {
               id: reportRes.data.id,
               title: reportRes.data.title || "Film Analysis",
               output_text: reportRes.data.output_text,
+              created_at: reportRes.data.created_at,
             });
             setReportExpanded(true);
+            try { localStorage.setItem(`film_analysis_expanded_${sessionId}`, "true"); } catch { /* */ }
           }
         } catch {
           // Fallback: still show success
@@ -1186,7 +1205,7 @@ export default function FilmSessionViewerPage() {
             {generatedReport && !generating && (
               <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #F97316" }}>
                 <button
-                  onClick={() => setReportExpanded(!reportExpanded)}
+                  onClick={toggleReportExpanded}
                   className="w-full flex items-center justify-between px-5 py-3 transition-colors"
                   style={{ background: "#0F2942" }}
                 >
@@ -1199,6 +1218,14 @@ export default function FilmSessionViewerPage() {
                     >
                       {generatedReport.title}
                     </span>
+                    {generatedReport.created_at && (
+                      <span
+                        className="px-2 py-0.5 rounded"
+                        style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", color: "rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.08)" }}
+                      >
+                        {formatDate(generatedReport.created_at)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1214,10 +1241,19 @@ export default function FilmSessionViewerPage() {
                       <RefreshCw size={10} />
                       Regenerate
                     </button>
-                    {reportExpanded ? <ChevronDown size={14} style={{ color: "rgba(255,255,255,0.5)" }} /> : <ChevronRight size={14} style={{ color: "rgba(255,255,255,0.5)" }} />}
+                    <ChevronDown
+                      size={14}
+                      style={{ color: "rgba(255,255,255,0.5)", transition: "transform 0.3s ease", transform: reportExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                    />
                   </div>
                 </button>
-                {reportExpanded && (
+                <div
+                  style={{
+                    maxHeight: reportExpanded ? 2000 : 0,
+                    overflow: "hidden",
+                    transition: "max-height 0.3s ease",
+                  }}
+                >
                   <div className="bg-white px-5 py-4" style={{ borderTop: "1px solid #DDE6EF" }}>
                     <div className="flex justify-end mb-2">
                       <ListenButton text={generatedReport.output_text || ""} label="Listen" />
@@ -1236,7 +1272,35 @@ export default function FilmSessionViewerPage() {
                       </Link>
                     </div>
                   </div>
-                )}
+                </div>
+              </div>
+            )}
+
+            {/* No analysis yet — collapsed CTA */}
+            {!generatedReport && !generating && (
+              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #F97316" }}>
+                <button
+                  onClick={() => { setShowTypeSelector(true); setPendingReportType(null); }}
+                  className="w-full flex items-center justify-between px-5 py-3 transition-colors hover:opacity-90"
+                  style={{ background: "#0F2942" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
+                    <Sparkles size={12} style={{ color: "#F97316" }} />
+                    <span
+                      className="font-bold uppercase text-white"
+                      style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                    >
+                      PLAYER FILM ANALYSIS
+                    </span>
+                  </div>
+                  <span
+                    className="text-xs font-bold uppercase"
+                    style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, letterSpacing: 1, color: "#0D9488" }}
+                  >
+                    Generate PXI Report
+                  </span>
+                </button>
               </div>
             )}
 
