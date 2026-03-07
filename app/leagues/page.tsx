@@ -180,12 +180,12 @@ export default function LeagueHubPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-lg bg-orange/10 flex items-center justify-center">
-              <BarChart3 size={22} className="text-orange" />
+            <div className="w-9 h-9 rounded-lg bg-orange/10 flex items-center justify-center">
+              <BarChart3 size={18} className="text-orange" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold font-oswald text-navy">League Hub</h1>
-              <p className="text-sm text-muted">Your league at a glance. Live standings, scores, and team activity across all tracked leagues.</p>
+              <h1 className="font-bold font-oswald text-navy" style={{ fontSize: 20 }}>League Hub</h1>
+              <p className="text-muted" style={{ fontSize: 13 }}>Your league at a glance. Live standings, scores, and team activity across all tracked leagues.</p>
             </div>
           </div>
 

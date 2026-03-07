@@ -111,7 +111,7 @@ export default function OrgHubPage() {
           {/* ── Page Header ─────────────────────────────────── */}
           <div
             className="flex items-center justify-between mb-6"
-            style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942", padding: "16px 20px" }}
+            style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942", padding: "12px 20px" }}
           >
             <div className="flex items-center gap-3">
               <span
@@ -121,7 +121,7 @@ export default function OrgHubPage() {
                 ORG HUB
               </span>
               <div>
-                <h1 className="text-lg font-bold text-white font-oswald uppercase tracking-wider">
+                <h1 className="font-bold text-white font-oswald uppercase tracking-wider" style={{ fontSize: 20 }}>
                   Digital Front Office
                 </h1>
                 <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>Manage your roster, draft board, playbook, scouting pipeline, and more.</p>

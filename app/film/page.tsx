@@ -156,7 +156,7 @@ export default function FilmRoomPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
         {/* ── War Room Header ─────────────────────────────────── */}
-        <div className="bg-[#0F2942] rounded-xl p-5 sm:p-6">
+        <div className="bg-[#0F2942] rounded-xl py-4 px-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-teal/20 flex items-center justify-center">
@@ -164,7 +164,7 @@ export default function FilmRoomPage() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-oswald uppercase tracking-wider text-white">Film Hub</h1>
+                  <h1 className="font-oswald uppercase tracking-wider text-white" style={{ fontSize: 20 }}>Film Hub</h1>
                   <span className="text-[9px] font-oswald uppercase tracking-widest bg-teal/20 text-teal px-2 py-0.5 rounded">PXI</span>
                 </div>
                 <p className="text-xs text-white/50 mt-0.5">
