@@ -532,32 +532,183 @@ function Dashboard() {
 
             {/* Roster Alerts */}
             {rosterAlerts.length > 0 && (
-              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle size={14} className="text-amber-600" />
-                  <span className="text-xs font-oswald font-bold text-amber-800 uppercase tracking-wider">
+              <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <AlertCircle size={14} style={{ color: "#92400E" }} />
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", color: "#92400E", letterSpacing: "0.06em" }}>
                     Roster Alert — {rosterAlerts.length} player{rosterAlerts.length !== 1 ? "s" : ""} out
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {rosterAlerts.map((p) => {
-                    const style = ALERT_STATUS_STYLES[p.roster_status || ""] || { label: p.roster_status, bg: "bg-gray-50", text: "text-gray-600" };
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {rosterAlerts.slice(0, 8).map((p) => {
+                    const statusKey = p.roster_status || "";
+                    const badgeColors: Record<string, { bg: string; color: string }> = {
+                      "day-to-day": { bg: "#FEF3C7", color: "#92400E" },
+                      ir: { bg: "#FEE2E2", color: "#991B1B" },
+                      injured: { bg: "#FEE2E2", color: "#991B1B" },
+                      ap: { bg: "#DBEAFE", color: "#1E40AF" },
+                      scratched: { bg: "#F3F4F6", color: "#6B7280" },
+                      suspended: { bg: "#FEF9C3", color: "#854D0E" },
+                    };
+                    const badge = badgeColors[statusKey] || { bg: "#F3F4F6", color: "#6B7280" };
+                    const badgeLabel = ALERT_STATUS_STYLES[statusKey]?.label || statusKey.toUpperCase();
                     return (
                       <Link
                         key={p.id}
                         href={`/players/${p.id}`}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-amber-200 hover:border-amber-300 transition-colors"
+                        style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 8px 3px 10px", textDecoration: "none" }}
+                        className="hover:opacity-80 transition-opacity"
                       >
-                        <span className="text-xs font-medium text-navy">{p.first_name} {p.last_name}</span>
-                        <span className={`text-[9px] font-oswald font-bold uppercase px-1.5 py-0.5 rounded-full ${style.bg} ${style.text}`}>
-                          {style.label}
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "#1A2B3C" }}>{p.first_name} {p.last_name}</span>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 8, textTransform: "uppercase", background: badge.bg, color: badge.color, padding: "2px 5px", borderRadius: 4 }}>
+                          {badgeLabel}
                         </span>
                       </Link>
                     );
                   })}
+                  {rosterAlerts.length > 8 && (
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94A3B8", alignSelf: "center" }}>+{rosterAlerts.length - 8} more</span>
+                  )}
                 </div>
               </div>
             )}
+
+            {/* ── Next Game Card ── */}
+            {(() => {
+              const teamLower = (activeTeam?.name || "").toLowerCase();
+              const now = new Date();
+              const nextGame = scorebar
+                .filter((g) => {
+                  const gd = new Date(g.game_date || g.date);
+                  return gd >= now && g.status !== "Final" && g.status !== "Final OT" && g.status !== "Final SO" && g.status !== "final";
+                })
+                .filter((g) => g.home_team.toLowerCase().includes(teamLower) || g.away_team.toLowerCase().includes(teamLower) || teamLower.includes(g.home_team.toLowerCase()) || teamLower.includes(g.away_team.toLowerCase()))
+                .sort((a, b) => new Date(a.game_date || a.date).getTime() - new Date(b.game_date || b.date).getTime())[0];
+              if (!nextGame) return null;
+              const isHome = nextGame.home_team.toLowerCase().includes(teamLower) || teamLower.includes(nextGame.home_team.toLowerCase());
+              const opponent = isHome ? nextGame.away_team : nextGame.home_team;
+              const recentResults = scorebar
+                .filter((g) => (g.status === "Final" || g.status === "Final OT" || g.status === "Final SO" || g.status === "final"))
+                .filter((g) => g.home_team.toLowerCase().includes(teamLower) || g.away_team.toLowerCase().includes(teamLower) || teamLower.includes(g.home_team.toLowerCase()) || teamLower.includes(g.away_team.toLowerCase()))
+                .sort((a, b) => new Date(b.game_date || b.date).getTime() - new Date(a.game_date || a.date).getTime())
+                .slice(0, 5);
+              const seriesDots = recentResults.slice(0, 5).reverse().map((g) => {
+                const isH = g.home_team.toLowerCase().includes(teamLower) || teamLower.includes(g.home_team.toLowerCase());
+                const our = parseInt(isH ? g.home_score : g.away_score) || 0;
+                const their = parseInt(isH ? g.away_score : g.home_score) || 0;
+                return our > their ? "W" : "L";
+              });
+              return (
+                <div style={{ background: "#0F2942", borderRadius: 10, overflow: "hidden", marginBottom: 16 }}>
+                  {/* Header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.7)" }}>Next Game</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#14B8A8" }}>
+                      {new Date(nextGame.game_date || nextGame.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      {nextGame.time ? ` · ${nextGame.time}` : ""}
+                    </span>
+                  </div>
+                  {/* Matchup */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, padding: "18px 16px" }}>
+                    {/* Home team */}
+                    <div style={{ textAlign: "center" }}>
+                      <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>HOME</span>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "6px auto" }}>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{nextGame.home_team.slice(0, 3).toUpperCase()}</span>
+                      </div>
+                      <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 15, color: "#FFFFFF", textTransform: "uppercase" }}>{nextGame.home_team}</p>
+                    </div>
+                    {/* VS */}
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 12, color: "rgba(255,255,255,0.2)" }}>VS</span>
+                    {/* Away team */}
+                    <div style={{ textAlign: "center" }}>
+                      <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>AWAY</span>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "6px auto" }}>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{nextGame.away_team.slice(0, 3).toUpperCase()}</span>
+                      </div>
+                      <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 15, color: "#FFFFFF", textTransform: "uppercase" }}>{nextGame.away_team}</p>
+                    </div>
+                  </div>
+                  {/* Series dots */}
+                  {seriesDots.length > 0 && (
+                    <div style={{ display: "flex", justifyContent: "center", gap: 6, paddingBottom: 12 }}>
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const dot = seriesDots[i];
+                        return (
+                          <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: dot === "W" ? "#22C55E" : dot === "L" ? "#C0392B" : "rgba(255,255,255,0.1)", border: !dot ? "1px solid rgba(255,255,255,0.15)" : "none" }} />
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Action buttons 2x2 */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: "0 16px 14px" }}>
+                    <Link href={`/game-plans/new?opponent=${encodeURIComponent(opponent)}&date=${nextGame.game_date}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(13,148,136,0.2)", color: "#14B8A8", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
+                      <Swords size={11} /> Game Plan
+                    </Link>
+                    <Link href="/game-plans/new" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
+                      <Swords size={11} /> Chalk Talk
+                    </Link>
+                    <Link href={`/players?team=${encodeURIComponent(opponent)}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
+                      <Target size={11} /> Scout Opp.
+                    </Link>
+                    <Link href="/video-sessions" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
+                      <FileText size={11} /> Film Room
+                    </Link>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Recent Results Card ── */}
+            {(() => {
+              const teamLower = (activeTeam?.name || "").toLowerCase();
+              const recentGames = scorebar
+                .filter((g) => g.status === "Final" || g.status === "Final OT" || g.status === "Final SO" || g.status === "final")
+                .filter((g) => g.home_team.toLowerCase().includes(teamLower) || g.away_team.toLowerCase().includes(teamLower) || teamLower.includes(g.home_team.toLowerCase()) || teamLower.includes(g.away_team.toLowerCase()))
+                .sort((a, b) => new Date(b.game_date || b.date).getTime() - new Date(a.game_date || a.date).getTime())
+                .slice(0, 5);
+              if (recentGames.length === 0) return null;
+              return (
+                <div style={{ borderRadius: 10, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 16 }}>
+                  <div style={{ background: "#0F2942", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.7)" }}>Recent Results</span>
+                    <Link href="/leagues?tab=schedule" style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, textTransform: "uppercase", color: "#14B8A8", textDecoration: "none" }}>View All</Link>
+                  </div>
+                  <div style={{ background: "#FFFFFF" }}>
+                    {recentGames.map((g) => {
+                      const isH = g.home_team.toLowerCase().includes(teamLower) || teamLower.includes(g.home_team.toLowerCase());
+                      const ourScore = parseInt(isH ? g.home_score : g.away_score) || 0;
+                      const theirScore = parseInt(isH ? g.away_score : g.home_score) || 0;
+                      const opponent = isH ? g.away_team : g.home_team;
+                      const isOT = g.status === "Final OT" || g.status === "Final SO";
+                      const result = ourScore > theirScore ? (isOT ? "OW" : "W") : "L";
+                      const pillColors: Record<string, { bg: string; color: string }> = {
+                        W: { bg: "rgba(30,107,60,0.12)", color: "#1E6B3C" },
+                        L: { bg: "rgba(192,57,43,0.12)", color: "#C0392B" },
+                        OW: { bg: "rgba(13,148,136,0.12)", color: "#0D9488" },
+                      };
+                      const pill = pillColors[result] || pillColors.L;
+                      return (
+                        <div key={g.game_id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 16px", borderBottom: "1px solid #F0F4F8" }}>
+                          <div style={{ width: 28, height: 28, borderRadius: 6, background: pill.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, color: pill.color }}>{result}</span>
+                          </div>
+                          <span style={{ fontFamily: "'Source Serif 4', serif", fontWeight: 600, fontSize: 12.5, color: "#0F2942", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {isH ? "vs" : "@"} {opponent}
+                          </span>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#0F2942", flexShrink: 0 }}>
+                            {ourScore}-{theirScore}
+                          </span>
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94A3B8", flexShrink: 0, width: 60, textAlign: "right" }}>
+                            {new Date(g.game_date || g.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Live Schedule Strip — today's games, live first */}
             {(() => {
@@ -740,27 +891,36 @@ function Dashboard() {
                   emptyLink="/game-plans/new"
                   emptyLinkText="Create a session"
                 >
-                  <div className="space-y-2">
-                    {activeGamePlans.slice(0, 3).map((gp) => (
-                      <Link key={gp.id} href={`/game-plans/${gp.id}`} className="flex items-center justify-between p-3 rounded-lg border border-teal/20 hover:bg-navy/[0.02] transition-colors group">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-navy truncate">
-                            {gp.team_name} <span className="text-muted font-normal">vs</span> {gp.opponent_team_name}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className={`text-[10px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${SESSION_BADGE_COLORS[gp.session_type] || "bg-navy/5 text-navy/60"}`}>
-                              {SESSION_TYPE_MAP[gp.session_type] || gp.session_type}
-                            </span>
-                            {gp.game_date && (
-                              <span className="text-[10px] text-muted">
-                                {new Date(gp.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {activeGamePlans.slice(0, 3).map((gp) => {
+                      const isActive = gp.status === "active";
+                      const isComplete = gp.status === "completed";
+                      return (
+                        <Link key={gp.id} href={`/game-plans/${gp.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: isActive ? "#E6F7F6" : isComplete ? "#FAFBFC" : "#FFFFFF", border: isActive ? "1px solid rgba(13,148,136,0.15)" : "1px solid #DDE6EF", textDecoration: "none" }} className="hover:opacity-90 transition-opacity group">
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 12, color: "#0F2942", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {gp.team_name} <span style={{ color: "#94A3B8", fontWeight: 400 }}>vs</span> {gp.opponent_team_name}
+                            </p>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+                              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", padding: "2px 6px", borderRadius: 4, background: isActive ? "rgba(13,148,136,0.15)" : isComplete ? "rgba(30,107,60,0.1)" : "rgba(15,41,66,0.05)", color: isActive ? "#0D9488" : isComplete ? "#1E6B3C" : "#94A3B8" }}>
+                                {isActive ? "Active" : isComplete ? "Complete" : gp.status || "Draft"}
                               </span>
-                            )}
+                              {gp.game_date && (
+                                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#94A3B8" }}>
+                                  {new Date(gp.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </span>
+                              )}
+                              {gp.session_type && (
+                                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#94A3B8" }}>
+                                  {SESSION_TYPE_MAP[gp.session_type] || gp.session_type}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <ChevronRight size={14} className="text-muted/40 group-hover:text-teal transition-colors shrink-0 ml-2" />
-                      </Link>
-                    ))}
+                          <ChevronRight size={14} style={{ color: "#94A3B8", flexShrink: 0, marginLeft: 8 }} />
+                        </Link>
+                      );
+                    })}
                   </div>
                 </DashboardCard>
                 )}
@@ -825,21 +985,22 @@ function Dashboard() {
                   emptyIcon={<Pin size={24} className="text-muted/30" />}
                   emptyText="Your Wall Board is empty. Pin players, reports, or game plans here for quick access."
                 >
-                  <div className="space-y-1">
-                    {pinnedPlayers.map((p) => (
-                      <Link key={p.id} href={`/players/${p.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
-                        <span className="w-5 text-center">
-                          <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal/10 text-teal font-oswald">
-                            {p.position || "—"}
-                          </span>
-                        </span>
-                        <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {pinnedPlayers.slice(0, 4).map((p) => (
+                      <Link key={p.id} href={`/players/${p.id}`} style={{ display: "block", padding: "10px 12px", borderRadius: 8, background: "#E6F7F6", textDecoration: "none", transition: "opacity 0.15s" }} className="hover:opacity-80">
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "#0D9488" }}>Player</span>
+                        <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "#0F2942", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
                           {p.first_name} {p.last_name}
-                        </span>
-                        {p.current_team && (
-                          <span className="text-[10px] text-muted/60 truncate max-w-[80px]">{p.current_team}</span>
-                        )}
+                        </p>
+                        <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {p.current_team || p.position || "—"}
+                        </p>
                       </Link>
+                    ))}
+                    {Array.from({ length: Math.max(0, 4 - pinnedPlayers.length) }).map((_, i) => (
+                      <div key={`empty-${i}`} style={{ padding: "10px 12px", borderRadius: 8, border: "1.5px dashed #DDE6EF", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 60 }}>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "#94A3B8", textTransform: "uppercase" }}>+ Pin Item</span>
+                      </div>
                     ))}
                   </div>
                 </DashboardCard>
@@ -1229,36 +1390,34 @@ function DashboardCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
+    <div className="overflow-hidden" style={{ borderRadius: 10, border: "1px solid #DDE6EF" }}>
       {/* Navy header */}
-      <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
+      <div className="flex items-center justify-between" style={{ background: "#0F2942", padding: "10px 16px" }}>
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
           {icon}
-          <span
-            className="font-bold uppercase text-white"
-            style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-          >
+          <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.7)" }}>
             {title}
           </span>
         </div>
         <Link
           href={viewAllHref}
-          className="font-bold uppercase transition-colors hover:opacity-80"
-          style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0D9488" }}
+          className="transition-colors hover:opacity-80"
+          style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: "#14B8A8" }}
         >
-          View all
+          View All
         </Link>
       </div>
       {/* White body */}
-      <div className="bg-white px-5 py-4">
+      <div style={{ background: "#FFFFFF", padding: "16px 16px" }}>
         {loading ? (
           <CardSkeleton lines={3} />
         ) : empty ? (
-          <div className="text-center py-5">
-            {emptyIcon && <div className="mb-2">{emptyIcon}</div>}
-            {emptyText && <p className="text-sm" style={{ color: "#5A7291" }}>{emptyText}</p>}
-            {emptyLink && <Link href={emptyLink} className="inline-block mt-2 text-xs hover:underline" style={{ color: "#0D9488" }}>{emptyLinkText}</Link>}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
+            {emptyIcon && <span style={{ opacity: 0.3 }}>{emptyIcon}</span>}
+            <div>
+              {emptyText && <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: 13, color: "#666666" }}>{emptyText}</p>}
+              {emptyLink && <Link href={emptyLink} style={{ fontFamily: "'Oswald', sans-serif", fontSize: 11, color: "#0D9488", textDecoration: "none" }} className="hover:underline">{emptyLinkText}</Link>}
+            </div>
           </div>
         ) : (
           children
@@ -1283,25 +1442,40 @@ function ScoutingListSection({ scoutingList, loading }: { scoutingList: Scouting
       emptyLink="/scouting"
       emptyLinkText="Add a player"
     >
-      <div className="space-y-1">
-        {scoutingList.map((item) => (
-          <Link key={item.id} href={`/players/${item.player_id}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-navy/[0.02] transition-colors group">
-            <div className="relative shrink-0">
-              <div className="w-7 h-7 rounded-full bg-navy/5 flex items-center justify-center text-[10px] font-oswald font-bold text-navy uppercase">
-                {item.position || "?"}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {scoutingList.map((item) => {
+          const pxrScore = (item as unknown as Record<string, unknown>).pxr_score as number | null | undefined;
+          const isEstimated = (item as unknown as Record<string, unknown>).pxr_estimated as boolean | undefined;
+          return (
+            <Link key={item.id} href={`/players/${item.player_id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", borderRadius: 8, textDecoration: "none", transition: "background 0.15s" }} className="hover:bg-[#F8FBFF] group">
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                {item.image_url ? (
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", border: "2px solid #DDE6EF" }}>
+                    <img src={assetUrl(item.image_url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                ) : (
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(15,41,66,0.05)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #DDE6EF" }}>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, color: "#0F2942", textTransform: "uppercase" }}>{item.position || "?"}</span>
+                  </div>
+                )}
+                <span style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: "50%", border: "2px solid #FFFFFF", background: item.priority === "high" ? "#C0392B" : item.priority === "medium" ? "#F59E0B" : "#22C55E" }} />
               </div>
-              <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${PRIORITY_DOT[item.priority] || "bg-gray-400"}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-navy truncate group-hover:text-teal transition-colors">
-                {item.first_name} {item.last_name}
-              </p>
-              <p className="text-[10px] text-muted truncate">
-                {[item.current_team, formatLeague(item.current_league)].filter(Boolean).join(" / ") || "No team"}
-              </p>
-            </div>
-          </Link>
-        ))}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 12, color: "#0F2942", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {item.first_name} {item.last_name}
+                </p>
+                <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {[item.current_team, formatLeague(item.current_league)].filter(Boolean).join(" / ") || "No team"}
+                </p>
+              </div>
+              {pxrScore != null && (
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 16, color: isEstimated ? "#F59E0B" : "#0D9488", flexShrink: 0 }}>
+                  {typeof pxrScore === "number" ? pxrScore.toFixed(1) : pxrScore}
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </div>
     </DashboardCard>
   );
