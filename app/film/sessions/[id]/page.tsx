@@ -1014,6 +1014,7 @@ export default function FilmSessionViewerPage() {
                 sessionId={sessionId}
                 uploadId={upload.id}
                 getCurrentTime={getCurrentTime}
+                cinemaMode={cinemaMode}
               />
             )}
 
