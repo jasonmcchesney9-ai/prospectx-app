@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Film, Upload, Video, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw, ExternalLink, Plus, BarChart3, Tag, FileText, CheckCircle2 } from "lucide-react";
 import NavBar from "@/components/NavBar";
@@ -39,6 +39,17 @@ interface FilmStats {
   film_reports: number;
   reels?: number;
 }
+
+interface ReelRow {
+  id: string;
+  title: string;
+  status: string;
+  clip_count: number;
+  created_at: string;
+}
+
+type HubTab = "sessions" | "uploads" | "reels";
+type StatsFilter = "all" | "clips" | "events" | "reports";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
   general: "General",
@@ -81,6 +92,21 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+function formatLastOpened(iso: string): string | null {
+  try {
+    const opened = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - opened.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "Opened today";
+    if (diffDays === 1) return "Opened yesterday";
+    if (diffDays <= 14) return `Opened ${diffDays} days ago`;
+    return `Opened ${opened.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  } catch {
+    return null;
+  }
+}
+
 export default function FilmRoomPage() {
   const [sessions, setSessions] = useState<FilmSession[]>([]);
   const [uploads, setUploads] = useState<VideoUploadRow[]>([]);
@@ -89,6 +115,22 @@ export default function FilmRoomPage() {
   const [loadingUploads, setLoadingUploads] = useState(true);
   const [errorSessions, setErrorSessions] = useState("");
   const [errorUploads, setErrorUploads] = useState("");
+  const [activeTab, setActiveTab] = useState<HubTab>(() => {
+    try {
+      const stored = sessionStorage.getItem("film_hub_tab");
+      if (stored === "uploads" || stored === "reels") return stored;
+    } catch { /* */ }
+    return "sessions";
+  });
+  const [activeFilter, setActiveFilter] = useState<StatsFilter>(() => {
+    try {
+      const stored = sessionStorage.getItem("film_hub_filter");
+      if (stored === "clips" || stored === "events" || stored === "reports") return stored;
+    } catch { /* */ }
+    return "all";
+  });
+  const [reels, setReels] = useState<ReelRow[]>([]);
+  const [loadingReels, setLoadingReels] = useState(true);
 
   useEffect(() => {
     api
@@ -115,10 +157,21 @@ export default function FilmRoomPage() {
       const s = r.data;
       try {
         const reelsRes = await api.get("/highlight-reels");
-        s.reels = Array.isArray(reelsRes.data) ? reelsRes.data.length : 0;
+        const reelData = Array.isArray(reelsRes.data) ? reelsRes.data : [];
+        s.reels = reelData.length;
+        setReels(
+          reelData.map((rr: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string }) => ({
+            id: rr.id,
+            title: rr.title,
+            status: rr.status || "draft",
+            clip_count: Array.isArray(rr.clip_ids) ? rr.clip_ids.length : 0,
+            created_at: rr.created_at,
+          }))
+        );
       } catch { s.reels = 0; }
       setStats(s);
-    }).catch(() => {});
+      setLoadingReels(false);
+    }).catch(() => { setLoadingReels(false); });
   }, []);
 
   const handleDeleteSession = async (id: string) => {
@@ -155,7 +208,26 @@ export default function FilmRoomPage() {
     }
   };
 
-  const displaySessions = sessions.slice(0, 6);
+  const handleDeleteReel = useCallback(async (reelId: string) => {
+    if (!confirm("Delete this reel?")) return;
+    try {
+      await api.delete(`/highlight-reels/${reelId}`);
+      setReels((prev) => prev.filter((r) => r.id !== reelId));
+      toast.success("Reel deleted");
+    } catch {
+      toast.error("Failed to delete reel");
+    }
+  }, []);
+
+  const filteredSessions = activeFilter === "all"
+    ? sessions
+    : activeFilter === "clips"
+    ? sessions.filter((s) => (s.clip_count ?? 0) > 0)
+    : activeFilter === "events"
+    ? sessions.filter((s) => (s.event_count ?? 0) > 0)
+    : sessions.filter((s) => s.pxi_status === "completed");
+
+  const displaySessions = filteredSessions.slice(0, 6);
   const displayUploads = uploads.slice(0, 6);
 
   return (
@@ -199,64 +271,107 @@ export default function FilmRoomPage() {
           </div>
         </div>
 
-        {/* ── Quick Stats Bar ─────────────────────────────────── */}
+        {/* ── Quick Stats Bar (clickable filters) ─────────────── */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-navy/5 flex items-center justify-center">
-                <Film size={14} className="text-navy/60" />
+            {([
+              { key: "all" as StatsFilter, label: "Sessions", value: stats.sessions, icon: <Film size={14} />, iconBg: "rgba(15,41,66,0.05)", iconColor: "rgba(15,41,66,0.6)" },
+              { key: "clips" as StatsFilter, label: "Clips", value: stats.clips, icon: <Scissors size={14} />, iconBg: "rgba(13,148,136,0.1)", iconColor: "#0D9488" },
+              { key: "events" as StatsFilter, label: "Events", value: stats.events, icon: <Tag size={14} />, iconBg: "rgba(234,88,12,0.1)", iconColor: "#EA580C" },
+              { key: "reports" as StatsFilter, label: "Reports", value: stats.film_reports, icon: <FileText size={14} />, iconBg: "rgba(147,51,234,0.1)", iconColor: "#9333EA" },
+            ]).map((pill) => {
+              const isActive = activeFilter === pill.key && pill.key !== "all";
+              return (
+                <button
+                  key={pill.key}
+                  onClick={() => {
+                    const next = activeFilter === pill.key ? "all" : pill.key;
+                    setActiveFilter(next);
+                    if (next !== "all") setActiveTab("sessions");
+                    try { sessionStorage.setItem("film_hub_filter", next); } catch { /* */ }
+                  }}
+                  className="rounded-lg px-4 py-3 flex items-center gap-3 transition-colors text-left"
+                  style={{
+                    background: isActive ? "#0D9488" : "#FFFFFF",
+                    border: isActive ? "1px solid #0D9488" : "1px solid #E2EAF3",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: isActive ? "rgba(255,255,255,0.2)" : pill.iconBg, color: isActive ? "#FFFFFF" : pill.iconColor }}>
+                    {pill.icon}
+                  </div>
+                  <div>
+                    <p className="text-lg font-oswald" style={{ color: isActive ? "#FFFFFF" : "#0F2942" }}>{pill.value}</p>
+                    <p className="text-[10px] font-oswald uppercase tracking-wider" style={{ color: isActive ? "rgba(255,255,255,0.7)" : "#5A7291" }}>{pill.label}</p>
+                  </div>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                setActiveTab("reels");
+                setActiveFilter("all");
+                try { sessionStorage.setItem("film_hub_tab", "reels"); sessionStorage.setItem("film_hub_filter", "all"); } catch { /* */ }
+              }}
+              className="rounded-lg px-4 py-3 flex items-center gap-3 transition-colors text-left"
+              style={{
+                background: activeTab === "reels" ? "#0D9488" : "#FFFFFF",
+                border: activeTab === "reels" ? "1px solid #0D9488" : "1px solid #E2EAF3",
+                cursor: "pointer",
+              }}
+            >
+              <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: activeTab === "reels" ? "rgba(255,255,255,0.2)" : "rgba(234,88,12,0.1)", color: activeTab === "reels" ? "#FFFFFF" : "#EA580C" }}>
+                <Film size={14} />
               </div>
               <div>
-                <p className="text-lg font-oswald text-navy">{stats.sessions}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Sessions</p>
+                <p className="text-lg font-oswald" style={{ color: activeTab === "reels" ? "#FFFFFF" : "#0F2942" }}>{stats.reels ?? 0}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider" style={{ color: activeTab === "reels" ? "rgba(255,255,255,0.7)" : "#5A7291" }}>Reels</p>
               </div>
-            </div>
-            <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-teal/10 flex items-center justify-center">
-                <Scissors size={14} className="text-teal" />
-              </div>
-              <div>
-                <p className="text-lg font-oswald text-navy">{stats.clips}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Clips</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-orange/10 flex items-center justify-center">
-                <Tag size={14} className="text-orange" />
-              </div>
-              <div>
-                <p className="text-lg font-oswald text-navy">{stats.events}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Events</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-purple-100 flex items-center justify-center">
-                <FileText size={14} className="text-purple-600" />
-              </div>
-              <div>
-                <p className="text-lg font-oswald text-navy">{stats.film_reports}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Reports</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "rgba(234,88,12,0.1)" }}>
-                <Film size={14} style={{ color: "#EA580C" }} />
-              </div>
-              <div>
-                <p className="text-lg font-oswald text-navy">{stats.reels ?? 0}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Reels</p>
-              </div>
-            </div>
+            </button>
           </div>
         )}
 
-        {/* ── Recent Sessions ─────────────────────────────────── */}
+        {/* ── Tab Bar ─────────────────────────────────────────── */}
+        <div className="flex items-center gap-1" style={{ borderBottom: "2px solid #E2EAF3" }}>
+          {([
+            { key: "sessions" as HubTab, label: "Sessions" },
+            { key: "uploads" as HubTab, label: "Uploads" },
+            { key: "reels" as HubTab, label: "Reels" },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                if (tab.key !== "sessions") { setActiveFilter("all"); try { sessionStorage.setItem("film_hub_filter", "all"); } catch { /* */ } }
+                try { sessionStorage.setItem("film_hub_tab", tab.key); } catch { /* */ }
+              }}
+              className="px-4 py-2.5 text-xs font-oswald uppercase tracking-widest transition-colors"
+              style={{
+                color: activeTab === tab.key ? "#0D9488" : "#5A7291",
+                fontWeight: activeTab === tab.key ? 700 : 400,
+                borderBottom: activeTab === tab.key ? "2px solid #0D9488" : "2px solid transparent",
+                marginBottom: -2,
+                background: "none",
+                border: "none",
+                borderBottomWidth: 2,
+                borderBottomStyle: "solid",
+                borderBottomColor: activeTab === tab.key ? "#0D9488" : "transparent",
+                cursor: "pointer",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Sessions Tab ──────────────────────────────────────── */}
+        {activeTab === "sessions" && (
         <section>
           <div className="bg-[#0F2942] rounded-t-xl px-5 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-oswald uppercase tracking-widest text-white/80">Recent Sessions</h2>
-              {!loadingSessions && sessions.length > 0 && (
-                <span className="text-[9px] font-oswald bg-white/10 text-white/50 px-2 py-0.5 rounded">{sessions.length}</span>
+              {!loadingSessions && filteredSessions.length > 0 && (
+                <span className="text-[9px] font-oswald bg-white/10 text-white/50 px-2 py-0.5 rounded">{filteredSessions.length}{activeFilter !== "all" ? ` / ${sessions.length}` : ""}</span>
               )}
             </div>
           </div>
@@ -282,6 +397,17 @@ export default function FilmRoomPage() {
                   <Upload size={14} />
                   Upload Video
                 </Link>
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-sm" style={{ color: "#8BA4BB" }}>No sessions match this filter.</p>
+                <button
+                  onClick={() => { setActiveFilter("all"); try { sessionStorage.setItem("film_hub_filter", "all"); } catch { /* */ } }}
+                  className="mt-2 text-xs font-oswald uppercase tracking-wider transition-colors"
+                  style={{ color: "#0D9488", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Clear filter
+                </button>
               </div>
             ) : (
               <>
@@ -313,6 +439,20 @@ export default function FilmRoomPage() {
                             </span>
                             <span className="text-[11px] text-muted">{formatDate(s.created_at)}</span>
                           </div>
+                          {(() => {
+                            try {
+                              const ts = localStorage.getItem(`film_session_opened_${s.id}`);
+                              if (ts) {
+                                const hint = formatLastOpened(ts);
+                                if (hint) return (
+                                  <p style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "#8BA4BB", marginTop: 2 }}>
+                                    {hint}
+                                  </p>
+                                );
+                              }
+                            } catch { /* */ }
+                            return null;
+                          })()}
                           <div className="flex items-center gap-3 mt-2.5 text-[11px] text-muted">
                             <span className="flex items-center gap-1">
                               <Scissors size={11} className="text-teal/60" />
@@ -335,7 +475,7 @@ export default function FilmRoomPage() {
                     );
                   })}
                 </div>
-                {sessions.length > 6 && (
+                {filteredSessions.length > 6 && (
                   <div className="text-center mt-4">
                     <Link href="/video-sessions" className="text-xs font-oswald uppercase tracking-wider text-teal hover:text-teal/80 transition-colors">
                       View All Sessions →
@@ -346,8 +486,10 @@ export default function FilmRoomPage() {
             )}
           </div>
         </section>
+        )}
 
-        {/* ── Recent Uploads ──────────────────────────────────── */}
+        {/* ── Uploads Tab ───────────────────────────────────────── */}
+        {activeTab === "uploads" && (
         <section>
           <div className="bg-[#0F2942] rounded-t-xl px-5 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -451,6 +593,89 @@ export default function FilmRoomPage() {
             )}
           </div>
         </section>
+        )}
+
+        {/* ── Reels Tab ─────────────────────────────────────────── */}
+        {activeTab === "reels" && (
+        <section>
+          <div className="bg-[#0F2942] rounded-t-xl px-5 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-oswald uppercase tracking-widest text-white/80">Reels</h2>
+              {reels.length > 0 && (
+                <span className="text-[9px] font-oswald bg-white/10 text-white/50 px-2 py-0.5 rounded">{reels.length}</span>
+              )}
+            </div>
+          </div>
+          <div className="bg-white rounded-b-xl border border-t-0 border-border">
+            {loadingReels ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={24} className="animate-spin text-teal" />
+                <span className="ml-2 text-sm text-muted">Loading reels...</span>
+              </div>
+            ) : reels.length === 0 ? (
+              <div className="text-center py-12">
+                <Film size={36} className="mx-auto mb-3" style={{ color: "rgba(234,88,12,0.3)" }} />
+                <p className="text-sm mb-3" style={{ color: "#5A7291" }}>No reels yet &mdash; build one from any session.</p>
+                <button
+                  onClick={() => { setActiveTab("sessions"); try { sessionStorage.setItem("film_hub_tab", "sessions"); } catch { /* */ } }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-xs transition-colors"
+                  style={{ background: "#0D9488", color: "#FFFFFF", border: "none", cursor: "pointer" }}
+                >
+                  <Film size={14} />
+                  Go to Sessions
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {reels.map((reel) => {
+                  const statusStyle = reel.status === "ready"
+                    ? { background: "rgba(13,148,136,0.1)", color: "#0D9488" }
+                    : reel.status === "shared"
+                    ? { background: "rgba(234,88,12,0.1)", color: "#EA580C" }
+                    : { background: "rgba(15,41,66,0.06)", color: "#5A7291" };
+                  return (
+                    <div key={reel.id} className="flex items-center justify-between px-5 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Film size={14} style={{ color: "#EA580C", flexShrink: 0 }} />
+                        <div className="min-w-0">
+                          <Link
+                            href={`/highlight-reels/${reel.id}`}
+                            className="text-sm font-medium truncate block transition-colors"
+                            style={{ color: "#0F2942" }}
+                          >
+                            {reel.title}
+                          </Link>
+                          <p className="text-[11px]" style={{ color: "#5A7291" }}>
+                            {formatDate(reel.created_at)}
+                            {" · "}
+                            {reel.clip_count} clip{reel.clip_count !== 1 ? "s" : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span
+                          className="text-[9px] font-bold uppercase px-2 py-0.5 rounded"
+                          style={{ fontFamily: "ui-monospace, monospace", ...statusStyle }}
+                        >
+                          {reel.status}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteReel(reel.id)}
+                          className="p-1.5 rounded-lg transition-colors"
+                          style={{ color: "rgba(90,114,145,0.4)" }}
+                          title="Delete reel"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+        )}
       </main>
     </ProtectedRoute>
   );

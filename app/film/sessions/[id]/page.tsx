@@ -305,6 +305,9 @@ export default function FilmSessionViewerPage() {
         const sessionData = sessionRes.data;
         setSession(sessionData);
 
+        // Track last opened for Film Hub hints
+        try { localStorage.setItem(`film_session_opened_${sessionId}`, new Date().toISOString()); } catch { /* */ }
+
         // Use the upload linked to this session (returned inline from the backend)
         if (sessionData.upload) {
           const u = sessionData.upload;
