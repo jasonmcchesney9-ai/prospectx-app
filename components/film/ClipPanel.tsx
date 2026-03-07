@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus,
   Play,
@@ -97,6 +97,51 @@ export default function ClipPanel({
   const [tags, setTags] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Active clip highlight + auto-scroll
+  const [activeClipId, setActiveClipId] = useState<string | null>(null);
+  const userScrolledRef = useRef(false);
+  const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clipListRef = useRef<HTMLDivElement>(null);
+  const clipRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Poll currentTime every 500ms to determine active clip
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const t = getCurrentTime();
+      const active = clips.find((c) => t >= c.start_time_seconds && t <= c.end_time_seconds);
+      setActiveClipId((prev) => {
+        const newId = active?.id || null;
+        if (newId !== prev && newId && !userScrolledRef.current) {
+          // Auto-scroll to active clip
+          const el = clipRowRefs.current[newId];
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+        return newId;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, [clips, getCurrentTime]);
+
+  // Detect manual scroll — pause auto-scroll for 5 seconds
+  useEffect(() => {
+    const container = clipListRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      userScrolledRef.current = true;
+      if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current);
+      userScrollTimerRef.current = setTimeout(() => {
+        userScrolledRef.current = false;
+      }, 5000);
+    };
+    container.addEventListener("scroll", handleScroll);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (userScrollTimerRef.current) clearTimeout(userScrollTimerRef.current);
+    };
+  }, []);
 
   const loadClips = useCallback(async () => {
     try {
@@ -407,7 +452,7 @@ export default function ClipPanel({
       )}
 
       {/* Clip list */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0" ref={clipListRef}>
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 size={16} className="animate-spin text-teal" />
@@ -422,11 +467,19 @@ export default function ClipPanel({
           </p>
         ) : (
           <div>
-            {filteredClips.map((clip, idx) => (
+            {filteredClips.map((clip, idx) => {
+              const isActive = activeClipId === clip.id;
+              return (
               <div
                 key={clip.id}
+                ref={(el) => { clipRowRefs.current[clip.id] = el; }}
                 className="px-2 py-2 transition-colors group cursor-pointer hover:bg-navy/[0.04]"
-                style={{ background: idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC", borderBottom: "1px solid #F0F4F8" }}
+                style={{
+                  background: isActive ? "#EBF7F6" : idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC",
+                  borderBottom: "1px solid #F0F4F8",
+                  borderLeft: isActive ? "3px solid #0D9488" : "3px solid transparent",
+                  transition: "background 0.2s ease, border-left 0.2s ease",
+                }}
                 title={clip.title}
               >
                 <div className="flex items-center justify-between gap-1.5">
@@ -488,7 +541,8 @@ export default function ClipPanel({
                   })()}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
