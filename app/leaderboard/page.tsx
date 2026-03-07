@@ -25,9 +25,21 @@ function getTier(score: number | null) {
   return PXR_TIERS.find((t) => score >= t.min && score <= t.max) || PXR_TIERS[PXR_TIERS.length - 1];
 }
 
-function TierBadge({ score }: { score: number | null }) {
+function TierBadge({ score, scoreType }: { score: number | null; scoreType?: string | null }) {
+  const isEstimated = scoreType === 'estimated';
   const tier = getTier(score);
   if (!tier) return <span className="text-xs text-muted">—</span>;
+  if (isEstimated) {
+    return (
+      <span
+        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider"
+        style={{ backgroundColor: "#F59E0B", color: "#422006" }}
+        title="Estimated PXR — calculated from game stats. Full PXR requires advanced microstat data."
+      >
+        PXR~
+      </span>
+    );
+  }
   return (
     <span
       className="inline-block px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider text-white"
@@ -85,6 +97,7 @@ interface LeaderboardPlayer {
   confidence_tier?: string | null;
   gp?: number | null;
   toi_minutes?: number | null;
+  score_type?: string | null;
 }
 
 interface FilterOptions {
@@ -423,7 +436,7 @@ export default function LeaderboardPage() {
                                   <td className={`px-3 py-2.5 text-xs font-medium ${p.age_modifier != null && p.age_modifier > 0 ? "text-green-600" : p.age_modifier != null && p.age_modifier < 0 ? "text-orange" : "text-muted/40"}`}>
                                     {p.age_modifier != null ? (p.age_modifier > 0 ? `+${p.age_modifier.toFixed(1)}` : p.age_modifier.toFixed(1)) : "0.0"}
                                   </td>
-                                  <td className="px-3 py-2.5"><TierBadge score={p.pxr_score} /></td>
+                                  <td className="px-3 py-2.5"><TierBadge score={p.pxr_score} scoreType={p.score_type} /></td>
                                   <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
                                 </>
                               )}

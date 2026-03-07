@@ -4280,6 +4280,22 @@ def validate_response(
 
 
 # ─────────────────────────────────────────────────────────
+# PXR Tier 2 Context Block — injected for estimated scores
+# ─────────────────────────────────────────────────────────
+PXR_TIER2_CONTEXT_BLOCK = """
+PXR TIER 2 (ESTIMATED) CONTEXT:
+This player has an ESTIMATED PXR score (Tier 2), calculated from basic game
+stats (goals, assists, points per game) rather than full InStat microstat data.
+
+IMPORTANT — Tier 2 scores are directional, not definitive:
+- Do NOT cite pillar breakdowns (P1-P4) — they are not available for Tier 2.
+- Use the composite score and percentiles as rough positioning, not precise rankings.
+- Always qualify with language like "estimated", "directional", "based on available data".
+- If comparing Tier 2 players against Tier 1, explicitly note the data gap.
+- Recommended phrasing: "Based on available game stats, [player] projects as..."
+"""
+
+# ─────────────────────────────────────────────────────────
 # F) build_report_system_prompt — correct injection order
 # ─────────────────────────────────────────────────────────
 def build_report_system_prompt(

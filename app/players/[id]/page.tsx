@@ -1626,16 +1626,18 @@ export default function PlayerDetailPage() {
                 if (score >= 50) return "DEVELOPMENTAL";
                 return "FRINGE";
               };
-              const hasPxr = pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 && pxrData.toi_gate_met;
+              const hasPxr = pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0;
+              const isEstimated = hasPxr && (pxrData as Record<string, unknown>).score_type === 'estimated';
+              const pxrAccent = isEstimated ? "#F59E0B" : "#0D9488";
               return (
-                <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
-                  {/* Teal left stripe */}
-                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#0D9488" }} />
+                <div style={{ background: "white", borderRadius: 14, border: `1.5px solid ${isEstimated ? "rgba(245,158,11,.45)" : "rgba(13,148,136,.45)"}`, boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
+                  {/* Left stripe — teal for full, amber for estimated */}
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: pxrAccent }} />
                   {/* Card band header */}
                   <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXR Score Profile</span>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, letterSpacing: ".06em", textTransform: "uppercase", background: hasPxr ? "rgba(13,148,136,.15)" : "rgba(255,255,255,.08)", color: hasPxr ? "#14B8A8" : "rgba(255,255,255,.4)", border: hasPxr ? "1px solid rgba(13,148,136,.25)" : "1px solid rgba(255,255,255,.1)" }}>
-                      {hasPxr ? pxrTierLabel(pxrData.pxr_score!) : "Needs Data"}
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace" }}>PXR Score Profile{isEstimated ? " (Est.)" : ""}</span>
+                    <span title={isEstimated ? "Estimated PXR — calculated from game stats. Full PXR requires advanced microstat data." : undefined} style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, letterSpacing: ".06em", textTransform: "uppercase", background: hasPxr ? (isEstimated ? "rgba(245,158,11,.15)" : "rgba(13,148,136,.15)") : "rgba(255,255,255,.08)", color: hasPxr ? pxrAccent : "rgba(255,255,255,.4)", border: hasPxr ? `1px solid ${isEstimated ? "rgba(245,158,11,.25)" : "rgba(13,148,136,.25)"}` : "1px solid rgba(255,255,255,.1)" }}>
+                      {hasPxr ? (isEstimated ? "PXR~" : pxrTierLabel(pxrData.pxr_score!)) : "Needs Data"}
                     </span>
                   </div>
 
@@ -1664,8 +1666,8 @@ export default function PlayerDetailPage() {
                       <>
                         {/* Large composite score */}
                         <div style={{ textAlign: "center", marginBottom: 16 }}>
-                          <div style={{ fontSize: 42, fontWeight: 800, color: "#0D9488", lineHeight: 1, letterSpacing: -1 }}>{pxrData.pxr_score!.toFixed(1)}</div>
-                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#5A7291", marginTop: 4 }}>{pxrTierLabel(pxrData.pxr_score!)}</div>
+                          <div style={{ fontSize: 42, fontWeight: 800, color: pxrAccent, lineHeight: 1, letterSpacing: -1 }}>{pxrData.pxr_score!.toFixed(1)}{isEstimated ? <span style={{ fontSize: 16, verticalAlign: "super", opacity: 0.6 }}>~</span> : null}</div>
+                          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#5A7291", marginTop: 4 }}>{isEstimated ? "ESTIMATED" : pxrTierLabel(pxrData.pxr_score!)}</div>
                         </div>
 
                         {/* Four pillar bars */}
@@ -1679,9 +1681,9 @@ export default function PlayerDetailPage() {
                             <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 600, color: "#5A7291", width: 100, flexShrink: 0, letterSpacing: ".04em" }}>{label}</span>
                               <div style={{ flex: 1, height: 8, borderRadius: 4, background: "#EEF3F8", overflow: "hidden" }}>
-                                <div style={{ height: "100%", width: `${Math.min(100, val ?? 0)}%`, borderRadius: 4, background: "#0D9488", transition: "width .3s" }} />
+                                <div style={{ height: "100%", width: `${Math.min(100, val ?? 0)}%`, borderRadius: 4, background: pxrAccent, transition: "width .3s" }} />
                               </div>
-                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, color: "#0D9488", width: 28, textAlign: "right", flexShrink: 0 }}>{val != null ? Math.round(val) : "—"}</span>
+                              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, color: pxrAccent, width: 28, textAlign: "right", flexShrink: 0 }}>{val != null ? Math.round(val) : "—"}</span>
                             </div>
                           ))}
                         </div>

@@ -28801,7 +28801,8 @@ async def pxr_player_score(
             SELECT px.pxr_score, px.p1_offense, px.p2_defense, px.p3_possession,
                    px.p4_physical, px.league_percentile, px.cohort_percentile,
                    px.age_modifier, px.toi_gate_met, px.data_completeness,
-                   px.confidence_tier, px.gp, px.toi_minutes, px.pxr_null_reason
+                   px.confidence_tier, px.gp, px.toi_minutes, px.pxr_null_reason,
+                   px.score_type
             FROM pxr_scores px
             WHERE px.player_id = ? AND px.season = ?
         """, (player_id, season)).fetchone()
@@ -28844,7 +28845,8 @@ async def pxr_draft_board(
                    current_team, current_league, position, birth_year,
                    position_group, pxr_score, league_percentile, cohort_percentile,
                    age_modifier, p1_offense, p2_defense, p3_possession, p4_physical,
-                   data_completeness, season, confidence_tier, gp, toi_minutes
+                   data_completeness, season, confidence_tier, gp, toi_minutes,
+                   score_type
             FROM (
                 SELECT p.id AS player_id,
                        p.first_name, p.last_name,
@@ -28856,6 +28858,7 @@ async def pxr_draft_board(
                        px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
                        px.data_completeness, px.season,
                        px.confidence_tier, px.gp, px.toi_minutes,
+                       px.score_type,
                        ROW_NUMBER() OVER (
                            PARTITION BY p.first_name, p.last_name, p.position
                            ORDER BY px.gp DESC NULLS LAST, px.pxr_score DESC
