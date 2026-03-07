@@ -6,41 +6,18 @@ import Link from "next/link";
 import {
   ArrowLeft,
   User,
-  Activity,
-  Brain,
-  TrendingUp,
-  Shield,
-  Star,
-  Heart,
-  AlertTriangle,
   Printer,
   RefreshCw,
   Loader2,
-  Target,
-  Crosshair,
-  Zap,
-  Users,
-  ChevronDown,
-  ChevronUp,
   FileText,
   Edit3,
   Save,
   X,
-  ExternalLink,
   Search,
-  MoreVertical,
 } from "lucide-react";
-import {
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  Radar,
-  ResponsiveContainer,
-} from "recharts";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import TrendlineChart from "@/components/TrendlineChart";
-import SkillBars from "@/components/SkillBars";
 import api, { assetUrl, hasRealImage } from "@/lib/api";
 import type {
   PlayerCardData_V1,
@@ -288,21 +265,81 @@ export default function PlayerCardPage() {
     })) : [];
   const allZeroRadar = radarData.every(d => d.value === 0);
 
+  // ── PXI average score (average of 6 dimension scores) ──
+  const pxiDimensions = intel ? [
+    { key: "overall_grade", label: "SNP" },
+    { key: "offensive_grade", label: "IQ" },
+    { key: "defensive_grade", label: "PLY" },
+    { key: "skating_grade", label: "TRN" },
+    { key: "compete_grade", label: "DEF" },
+    { key: "hockey_iq_grade", label: "CMP" },
+  ].map(d => ({ ...d, value: gradeToScore(intel[d.key]) })) : [];
+  const pxiScoredDimensions = pxiDimensions.filter(d => d.value > 0);
+  const pxiAvg = pxiScoredDimensions.length > 0
+    ? pxiScoredDimensions.reduce((s, d) => s + d.value, 0) / pxiScoredDimensions.length
+    : 0;
+  const pxiGradeLabel = pxiAvg >= 8.5 ? "ELITE" : pxiAvg >= 7 ? "ABOVE AVERAGE" : pxiAvg >= 5 ? "AVERAGE" : pxiAvg >= 3 ? "BELOW AVERAGE" : "N/A";
+
+  // ── Spider chart SVG helper ──
+  function renderSpiderSVG(size: number, dimensions: { label: string; value: number }[]) {
+    const cx = size / 2, cy = size / 2, r = size * 0.4;
+    const n = dimensions.length;
+    if (n < 3) return null;
+    const angleStep = (2 * Math.PI) / n;
+    const startAngle = -Math.PI / 2;
+    const gridLevels = [0.25, 0.5, 0.75, 1.0];
+    const getPoint = (i: number, scale: number) => {
+      const angle = startAngle + i * angleStep;
+      return { x: cx + r * scale * Math.cos(angle), y: cy + r * scale * Math.sin(angle) };
+    };
+    const hexPath = (scale: number) => dimensions.map((_, i) => {
+      const p = getPoint(i, scale);
+      return `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    }).join(" ") + " Z";
+    const dataPath = dimensions.map((d, i) => {
+      const scale = Math.min(d.value / 10, 1);
+      const p = getPoint(i, scale);
+      return `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    }).join(" ") + " Z";
+
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {gridLevels.map(s => (
+          <path key={s} d={hexPath(s)} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+        ))}
+        {dimensions.map((_, i) => {
+          const p = getPoint(i, 1);
+          return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />;
+        })}
+        <path d={dataPath} fill="rgba(13,148,136,0.2)" stroke="rgba(13,148,136,0.8)" strokeWidth="1.5" />
+        {dimensions.map((d, i) => {
+          const p = getPoint(i, 1.22);
+          return (
+            <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
+              style={{ fontSize: 7, fontFamily: "'JetBrains Mono', monospace", fill: "rgba(255,255,255,0.35)" }}>
+              {d.label}
+            </text>
+          );
+        })}
+      </svg>
+    );
+  }
+
   return (
     <ProtectedRoute>
       <NavBar />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 print:px-2 print:py-2">
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }} className="print:px-2 print:py-2">
         {/* ── Header bar ── */}
         <div className="flex items-center justify-between mb-5 print:hidden">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.back()} className="text-muted hover:text-navy transition-colors">
+            <button onClick={() => router.back()} style={{ color: "#666666" }} className="hover:opacity-70 transition-colors">
               <ArrowLeft size={18} />
             </button>
-            <h1 className="text-xl font-bold text-navy font-oswald uppercase tracking-wider">
+            <h1 style={{ fontSize: 18, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: "#0F2942", textTransform: "uppercase", letterSpacing: "0.04em" }}>
               Player Card
             </h1>
             {league_context && (
-              <span className="text-xs text-muted">
+              <span style={{ fontSize: 11, color: "#666666" }}>
                 {league_context.league} &middot; {league_context.season}
               </span>
             )}
@@ -310,14 +347,16 @@ export default function PlayerCardPage() {
           <div className="flex items-center gap-2">
             <Link
               href={`/players/${playerId}`}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-navy border border-teal/20 rounded-lg hover:bg-navy/[0.03] transition-colors"
+              style={{ fontSize: 11, color: "#0F2942", border: "1px solid #DDE6EF", borderRadius: 7, padding: "6px 12px", fontFamily: "'Oswald', sans-serif", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}
+              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
             >
               <User size={13} />
               Full Profile
             </Link>
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-navy border border-teal/20 rounded-lg hover:bg-navy/[0.03] transition-colors"
+              style={{ fontSize: 11, color: "#0F2942", border: "1px solid #DDE6EF", borderRadius: 7, padding: "6px 12px", fontFamily: "'Oswald', sans-serif", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}
+              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
             >
               <Printer size={13} />
               Print
@@ -325,625 +364,484 @@ export default function PlayerCardPage() {
           </div>
         </div>
 
-        {/* ── 3-Column Grid ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 print:grid-cols-12 print:gap-2">
+        {/* ── 3-Column Grid: 280px | 1fr | 280px ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr 280px", gap: 16, alignItems: "start" }} className="print:block">
 
-          {/* ════════ LEFT COLUMN — Identity (3 cols) ════════ */}
-          <div className="lg:col-span-3 print:col-span-3 space-y-3">
+          {/* ════════ LEFT COLUMN — Identity Panel ════════ */}
+          <div style={{ background: "#0F2942", borderRadius: 10, overflow: "hidden" }}>
 
-            {/* Player photo + name */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <div className="flex items-start gap-3">
-                {/* Avatar / Silhouette */}
+            {/* Hero Banner */}
+            <div style={{ background: "linear-gradient(135deg, #071E33 0%, #162E4A 50%, rgba(13,148,136,0.15) 100%)", padding: "20px 16px 16px", position: "relative", textAlign: "center" }}>
+              {id.jersey_number && (
+                <span style={{ position: "absolute", top: 8, right: 12, fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 48, color: "rgba(255,255,255,0.06)" }}>
+                  {id.jersey_number}
+                </span>
+              )}
+              <div style={{ width: 90, height: 90, borderRadius: "50%", border: "3px solid #0D9488", boxShadow: "0 0 0 4px rgba(13,148,136,0.15)", margin: "0 auto 10px", overflow: "hidden", position: "relative", background: "linear-gradient(145deg, #162E4A 0%, #1A3A56 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {hasRealImage(id.image_url) ? (
-                  <img
-                    src={assetUrl(id.image_url)}
-                    alt={`${id.first_name} ${id.last_name}`}
-                    className="w-16 h-16 rounded-lg object-cover border-2 border-teal/20 shrink-0"
-                  />
+                  <img src={assetUrl(id.image_url)} alt={`${id.first_name} ${id.last_name}`} style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }} />
                 ) : (
-                  <div className="w-16 h-16 rounded-lg bg-navy/[0.06] flex items-center justify-center shrink-0">
-                    {["G", "GK", "Goalie"].includes(id.position) ? (
-                      <svg width={40} height={40} viewBox="0 0 24 24" fill="none" className="text-navy/40">
-                        <circle cx="12" cy="5" r="3" fill="currentColor" opacity="0.6" />
-                        <path d="M6 11h12v2H6z" fill="currentColor" opacity="0.3" />
-                        <path d="M8 13v7h2v-4h4v4h2v-7H8z" fill="currentColor" opacity="0.5" />
-                        <rect x="4" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
-                        <rect x="17" y="11" width="3" height="5" rx="1" fill="currentColor" opacity="0.4" />
-                      </svg>
-                    ) : (
-                      <svg width={40} height={40} viewBox="0 0 24 24" fill="none" className="text-navy/40">
-                        <circle cx="12" cy="4" r="3" fill="currentColor" opacity="0.6" />
-                        <path d="M10 8h4l2 6h-8l2-6z" fill="currentColor" opacity="0.5" />
-                        <path d="M9 14l-2 6h2l2-4 2 4h2l-2-6H9z" fill="currentColor" opacity="0.4" />
-                        <line x1="15" y1="10" x2="19" y2="6" stroke="currentColor" strokeWidth="1.2" opacity="0.35" strokeLinecap="round" />
-                      </svg>
-                    )}
-                  </div>
-                )}
-                {/* Identity lines */}
-                <div className="flex-1 min-w-0">
-                  {id.jersey_number && (
-                    <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">#{id.jersey_number}</span>
-                  )}
-                  <p className="text-sm font-oswald uppercase tracking-wider text-navy leading-tight">{id.first_name}</p>
-                  <h2 className="text-lg font-bold text-navy font-oswald uppercase tracking-wider leading-tight">{id.last_name}</h2>
-                  <p className="text-[11px] text-muted mt-0.5">
-                    {fullPos}{id.shoots ? ` • ${id.shoots}` : ""}{id.current_team ? ` • ${id.current_team}` : ""}
-                  </p>
-                  {(id.current_league || league_context) && (
-                    <p className="text-[10px] text-muted">
-                      {id.current_league || ""}{league_context ? ` • ${league_context.season}` : ""}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {/* Chips row: draft year, archetype, physical */}
-              <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                {id.birth_year && (
-                  <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold bg-navy/[0.06] text-navy/70">
-                    {id.birth_year + 18} Draft
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: "rgba(255,255,255,0.55)", fontSize: 28, position: "relative", zIndex: 1 }}>
+                    {(id.first_name?.[0] || "")}{(id.last_name?.[0] || "")}
                   </span>
                 )}
-                {intel?.archetype ? (
-                  <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold bg-teal/10 text-teal">
+              </div>
+              <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 22, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.04em", lineHeight: 1.1 }}>
+                {id.first_name} {id.last_name}
+              </p>
+              <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.45)", marginTop: 4 }}>
+                {fullPos}{id.shoots ? ` · ${id.shoots}` : ""}{id.current_team ? ` · ${id.current_team}` : ""}
+              </p>
+              <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                {intel?.archetype != null && (
+                  <span style={{ background: "rgba(13,148,136,0.12)", border: "1px solid rgba(13,148,136,0.25)", borderRadius: 20, padding: "2px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "#14B8A8" }}>
                     {String(intel.archetype)}
                   </span>
-                ) : null}
-                {(id.height_cm || id.weight_kg) && (
-                  <span className="text-[10px] text-muted">
-                    {id.height_cm ? `${id.height_cm}cm` : ""}{id.height_cm && id.weight_kg ? " / " : ""}{id.weight_kg ? `${id.weight_kg}kg` : ""}
+                )}
+                {id.birth_year && (
+                  <span style={{ background: "rgba(255,255,255,0.07)", borderRadius: 20, padding: "2px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
+                    {id.birth_year + 18} DRAFT
                   </span>
                 )}
               </div>
-              {/* Scout Now — below photo */}
-              {userRole !== "parent" && (
+            </div>
+
+            {/* PXI Score Strip */}
+            <div style={{ background: "rgba(0,0,0,0.2)", borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>PXI SCORE</p>
+                <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 32, color: "#14B8A8", lineHeight: 1 }}>
+                  {pxiAvg > 0 ? pxiAvg.toFixed(1) : "—"}
+                </p>
+                <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, color: "#0D9488", marginTop: 2 }}>
+                  {pxiAvg > 0 ? pxiGradeLabel : "NEEDS DATA"} {"·"} PXI
+                </p>
+              </div>
+              <div>
+                {pxiDimensions.length >= 3 && pxiAvg > 0
+                  ? renderSpiderSVG(140, pxiDimensions)
+                  : renderSpiderSVG(140, [
+                      { label: "SNP", value: 0 }, { label: "IQ", value: 0 },
+                      { label: "PLY", value: 0 }, { label: "TRN", value: 0 },
+                      { label: "DEF", value: 0 }, { label: "CMP", value: 0 },
+                    ])
+                }
+              </div>
+            </div>
+
+            {/* Physical Details */}
+            <div style={{ padding: "14px 16px" }}>
+              {id.dob && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>DOB</span>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "rgba(255,255,255,0.75)" }}>{id.dob}{id.birth_year ? ` (${new Date().getFullYear() - id.birth_year}y)` : ""}</span>
+                </div>
+              )}
+              {id.height_cm && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>Height</span>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "rgba(255,255,255,0.75)" }}>{id.height_cm} cm</span>
+                </div>
+              )}
+              {id.weight_kg && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>Weight</span>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "rgba(255,255,255,0.75)" }}>{id.weight_kg} kg</span>
+                </div>
+              )}
+              {id.commitment_status && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase" }}>Commitment</span>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "rgba(255,255,255,0.75)", textTransform: "capitalize" }}>{id.commitment_status.replace(/_/g, " ")}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Status Row */}
+            <div style={{ background: id.health_status === "healthy" ? "rgba(30,107,60,0.08)" : "rgba(192,57,43,0.08)", borderTop: id.health_status === "healthy" ? "1px solid rgba(30,107,60,0.15)" : "1px solid rgba(192,57,43,0.15)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: id.health_status === "healthy" ? "#22C55E" : "#C0392B", flexShrink: 0 }} />
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: id.health_status === "healthy" ? "#22C55E" : "#C0392B" }}>
+                {healthStyle.label}
+              </span>
+            </div>
+
+            {/* Scout Now Button */}
+            {userRole !== "parent" && (
+              <div style={{ padding: "0 16px 16px" }} className="print:hidden">
                 <button
                   onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
                     user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
                     page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
                     entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
                   })}
-                  className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/90 transition-colors print:hidden"
+                  style={{ width: "100%", background: "#0D9488", color: "#FFFFFF", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 11, textTransform: "uppercase", padding: "10px", borderRadius: 7, border: "none", cursor: "pointer", marginTop: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                  className="hover:opacity-90 transition-opacity"
                 >
                   <Search size={11} />
                   Scout Now
                 </button>
-              )}
-            </div>
-
-            {/* Bio details */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4 space-y-2">
-              <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Details</h3>
-              {id.dob && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted">DOB</span>
-                  <span className="text-navy">{id.dob}{id.birth_year ? ` (${new Date().getFullYear() - id.birth_year}y)` : ""}</span>
-                </div>
-              )}
-              {id.height_cm && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted">Height</span>
-                  <span className="text-navy">{id.height_cm} cm</span>
-                </div>
-              )}
-              {id.weight_kg && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted">Weight</span>
-                  <span className="text-navy">{id.weight_kg} kg</span>
-                </div>
-              )}
-              {id.commitment_status && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted">Commitment</span>
-                  <span className="text-navy capitalize">{id.commitment_status.replace(/_/g, " ")}</span>
-                </div>
-              )}
-              {id.elite_prospects_url && (
-                <a
-                  href={id.elite_prospects_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-teal hover:underline mt-1"
-                >
-                  <ExternalLink size={11} />
-                  Elite Prospects
-                </a>
-              )}
-            </div>
-
-            {/* Health status */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Status</h3>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-oswald uppercase tracking-wider font-bold ${healthStyle.bg} ${healthStyle.text}`}>
-                <Heart size={10} />
-                {healthStyle.label}
-              </span>
-            </div>
-
-            {/* Role tags */}
-            {roleTags.length > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-2">Role Tags</h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {roleTags.map((tag, i) => {
-                    const tc = ROLE_TAG_COLORS[tag.type] || ROLE_TAG_COLORS.status;
-                    return (
-                      <span key={i} className={`inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider font-bold ${tc.bg} ${tc.text}`}>
-                        {tag.label}
-                      </span>
-                    );
-                  })}
-                </div>
               </div>
             )}
+          </div>
 
-            {/* Intelligence radar */}
-            {radarData.length >= 3 && !allZeroRadar && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">Score Profile</h3>
-                  {pxrConfidence?.confidence_tier && (() => {
-                    const ct = pxrConfidence.confidence_tier;
-                    if (ct === "high") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">High</span>;
-                    if (ct === "moderate") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">Moderate</span>;
-                    return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">Small Sample</span>;
-                  })()}
+          {/* ════════ MIDDLE COLUMN — Stats + PXI ════════ */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* Season Stats Card */}
+            <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+              <div style={{ background: "#162E4A", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Season Stats</span>
+                {league_context && (
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{league_context.season}</span>
+                )}
+              </div>
+              <div style={{ padding: 16 }}>
+                {perf.current_stats ? (() => {
+                  const HIDE_KEYS = new Set(["toi_seconds", "toi"]);
+                  const entries = Object.entries(perf.current_stats!).filter(([k]) => !HIDE_KEYS.has(k.toLowerCase()));
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(entries.length, 7)}, 1fr)`, gap: 0 }}>
+                      {entries.map(([key, val], i) => {
+                        const isHighlight = ["p", "ppg"].includes(key.toLowerCase());
+                        return (
+                          <div key={key} style={{ textAlign: "center", padding: "4px 0", borderRight: i < entries.length - 1 ? "1px solid #DDE6EF" : "none" }}>
+                            <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 24, color: isHighlight ? "#0D9488" : "#0F2942", lineHeight: 1.2 }}>
+                              {typeof val === "number" ? (Number.isInteger(val) ? val : val.toFixed(1)) : val}
+                            </p>
+                            <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#94A3B8", textTransform: "uppercase" }}>{key.toUpperCase()}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })() : (
+                  <p style={{ fontSize: 12, color: "#666666" }}>No stats available.</p>
+                )}
+              </div>
+            </div>
+
+            {/* PXI Scout Summary Card */}
+            <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+              <div style={{ background: "#162E4A", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#0D9488" }} />
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>PXI Scout Summary</span>
                 </div>
-                {intel?.archetype ? (
-                  <p className="text-xs text-teal font-semibold mb-2">{String(intel.archetype)}</p>
-                ) : null}
-                <div className="h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="72%">
-                      <PolarGrid stroke="#E5E7EB" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fontSize: 9, fill: "#6B7280" }} />
-                      <Radar
-                        dataKey="value"
-                        stroke="#18B3A6"
-                        fill="#18B3A6"
-                        fillOpacity={0.2}
-                        strokeWidth={2}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-                {intel?.overall_grade != null && (
-                  <div className="text-center mt-1">
-                    <span className="text-lg font-bold text-teal">{gradeToScore(intel.overall_grade) > 0 ? gradeToScore(intel.overall_grade).toFixed(1) : "—"}</span>
-                    <span className="text-sm text-muted ml-1 font-oswald">/ 10</span>
-                    <span className="text-[10px] text-muted ml-1 font-oswald uppercase tracking-wider">PXI Score</span>
+                {dev.skill_profile.updated_at && (
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>
+                    Updated {new Date(dev.skill_profile.updated_at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <div style={{ padding: 16 }}>
+                {dev.skill_profile.pxi_version ? (
+                  <div>
+                    {intel?.strengths != null && (
+                      <div style={{ display: "flex", gap: 10, marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #DDE6EF" }}>
+                        <span style={{ background: "rgba(30,107,60,0.1)", color: "#1E6B3C", border: "1px solid rgba(30,107,60,0.2)", borderRadius: 4, padding: "2px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0, height: "fit-content" }}>Strengths</span>
+                        <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12.5, lineHeight: 1.6, color: "#2D3748" }}>
+                          {(Array.isArray(intel.strengths) ? intel.strengths : tryParseJson(intel.strengths)).join(", ")}
+                        </p>
+                      </div>
+                    )}
+                    {intel?.development_areas != null && (
+                      <div style={{ display: "flex", gap: 10, marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #DDE6EF" }}>
+                        <span style={{ background: "rgba(230,126,34,0.1)", color: "#E67E22", border: "1px solid rgba(230,126,34,0.2)", borderRadius: 4, padding: "2px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0, height: "fit-content" }}>Develop</span>
+                        <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12.5, lineHeight: 1.6, color: "#2D3748" }}>
+                          {(Array.isArray(intel.development_areas) ? intel.development_areas : tryParseJson(intel.development_areas)).join(", ")}
+                        </p>
+                      </div>
+                    )}
+                    {intel?.stat_signature != null && (
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <span style={{ background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1px solid rgba(13,148,136,0.2)", borderRadius: 4, padding: "2px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0, height: "fit-content" }}>Projection</span>
+                        <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12.5, lineHeight: 1.6, color: "#2D3748" }}>
+                          {String(intel.stat_signature)}
+                        </p>
+                      </div>
+                    )}
+                    {intel?.strengths == null && intel?.development_areas == null && (
+                      <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12.5, lineHeight: 1.6, color: "#2D3748" }}>{dev.skill_profile.pxi_version}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "16px 0" }}>
+                    <p style={{ fontSize: 12, color: "#666666", marginBottom: 8 }}>No PXI profile yet.</p>
+                    <button
+                      onClick={handleGenerateProfile}
+                      disabled={generatingProfile}
+                      style={{ background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1px solid rgba(13,148,136,0.2)", borderRadius: 7, padding: "6px 16px", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", cursor: "pointer" }}
+                      className="hover:opacity-80 transition-opacity print:hidden"
+                    >
+                      {generatingProfile ? <Loader2 size={10} className="animate-spin inline mr-1" /> : <RefreshCw size={10} className="inline mr-1" />}
+                      {generatingProfile ? "Generating..." : "Generate Profile"}
+                    </button>
                   </div>
                 )}
               </div>
-            )}
-            {(radarData.length < 3 || allZeroRadar) && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">Score Profile</h3>
-                  {pxrConfidence?.confidence_tier && (() => {
-                    const ct = pxrConfidence.confidence_tier;
-                    if (ct === "high") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">High</span>;
-                    if (ct === "moderate") return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">Moderate</span>;
-                    return <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">Small Sample</span>;
-                  })()}
-                </div>
-                <div className="flex flex-col items-center justify-center py-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    {["SNP", "IQ", "PLY", "TRN", "DEF", "CMP"].map((label) => (
-                      <div key={label} className="flex flex-col items-center gap-0.5">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center border border-dashed border-navy/20 text-navy/30 text-[9px] font-oswald font-bold">
-                          ?
-                        </div>
-                        <span className="text-[7px] font-oswald uppercase tracking-wider text-muted">{label}</span>
-                      </div>
-                    ))}
+            </div>
+
+            {/* Trendline Card */}
+            <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+              <div style={{ background: "#162E4A", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Trendline</span>
+                <select
+                  value={trendMetric}
+                  onChange={(e) => setTrendMetric(e.target.value)}
+                  style={{ fontSize: 10, padding: "2px 8px", background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 4 }}
+                  className="print:hidden"
+                >
+                  {TRENDLINE_METRICS.map((m) => (
+                    <option key={m.value} value={m.value} style={{ background: "#162E4A", color: "#FFFFFF" }}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ padding: 16 }}>
+                {loadingTrend ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 size={18} className="animate-spin" style={{ color: "#666666" }} />
                   </div>
-                  <span className="px-2.5 py-1 rounded-lg border-2 border-dashed border-orange/40 bg-orange/5 text-orange text-[10px] font-oswald font-bold uppercase tracking-wider mb-2 cursor-help" title="Needs Scouting — This player has no PXI intelligence data yet. Generate a scouting assessment or add scout notes to populate this profile.">
-                    Needs Scouting
-                  </span>
-                  <p className="text-[10px] text-gray-400 mb-3">No intelligence data yet.</p>
+                ) : trendData ? (
+                  <TrendlineChart data={trendData} />
+                ) : (
+                  <p style={{ fontSize: 12, color: "#666666", textAlign: "center", padding: "24px 0" }}>No trendline data.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Event aggregates */}
+            {perf.event_aggregates && perf.event_aggregates.has_event_data && (
+              <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+                <div style={{ background: "#162E4A", padding: "10px 16px" }}>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Event Intelligence</span>
+                </div>
+                <div style={{ padding: 16 }}>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <StatCell label="Zone Entry %" value={`${perf.event_aggregates.zone_entry_pct.toFixed(1)}%`} sub={`${perf.event_aggregates.zone_entries_controlled}/${perf.event_aggregates.zone_entries_total}`} />
+                    <StatCell label="Zone Exit %" value={`${perf.event_aggregates.zone_exit_pct.toFixed(1)}%`} sub={`${perf.event_aggregates.zone_exits_controlled}/${perf.event_aggregates.zone_exits_total}`} />
+                    <StatCell label="Retrievals" value={String(perf.event_aggregates.retrievals)} />
+                    <StatCell label="Shot Attempts" value={String(perf.event_aggregates.shot_attempts)} />
+                    <StatCell label="xG For" value={perf.event_aggregates.xg_for.toFixed(2)} />
+                    <StatCell label="Chances" value={String(perf.event_aggregates.chances_for)} />
+                    {perf.event_aggregates.faceoff_total > 0 && (
+                      <StatCell label="Faceoff %" value={`${perf.event_aggregates.faceoff_pct.toFixed(1)}%`} sub={`${perf.event_aggregates.faceoff_wins}/${perf.event_aggregates.faceoff_total}`} />
+                    )}
+                  </div>
+                  <p style={{ fontSize: 9, color: "#666666", marginTop: 8 }}>
+                    {perf.event_aggregates.total_events} events across {perf.event_aggregates.games_with_events} games
+                  </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* ════════ CENTER COLUMN — Performance (5 cols) ════════ */}
-          <div className="lg:col-span-5 print:col-span-5 space-y-3">
+          {/* ════════ RIGHT COLUMN — Skills + Intelligence ════════ */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {/* Current season stats */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">
-                <Activity size={11} className="inline mr-1" />
-                Season Stats
-              </h3>
-              {perf.current_stats ? (() => {
-                const HIDE_KEYS = new Set(["toi_seconds", "toi"]);
-                const entries = Object.entries(perf.current_stats!).filter(([k]) => !HIDE_KEYS.has(k.toLowerCase()));
-                return (
-                  <div className="grid grid-cols-5 sm:grid-cols-7 gap-2">
-                    {entries.map(([key, val]) => (
-                      <div key={key} className="text-center">
-                        <p className="text-[9px] font-oswald uppercase tracking-wider text-muted">{key.toUpperCase()}</p>
-                        <p className="text-sm font-bold text-navy">
-                          {typeof val === "number" ? (Number.isInteger(val) ? val : val.toFixed(1)) : val}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })() : (
-                <p className="text-xs text-muted">No stats available.</p>
-              )}
-            </div>
-
-            {/* Trendline */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
-                  <TrendingUp size={11} className="inline mr-1" />
-                  Trendline
-                </h3>
-                <select
-                  value={trendMetric}
-                  onChange={(e) => setTrendMetric(e.target.value)}
-                  className="text-[10px] px-2 py-1 border border-teal/20 rounded text-navy bg-white print:hidden"
-                >
-                  {TRENDLINE_METRICS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
+            {/* Skill Profile Card */}
+            <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+              <div style={{ background: "#162E4A", padding: "10px 16px" }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Skill Profile</span>
               </div>
-              {loadingTrend ? (
-                <div className="flex justify-center py-6">
-                  <Loader2 size={18} className="animate-spin text-muted" />
-                </div>
-              ) : trendData ? (
-                <TrendlineChart data={trendData} />
-              ) : (
-                <p className="text-xs text-muted text-center py-6">No trendline data.</p>
-              )}
+              <div style={{ padding: 16 }}>
+                {intel && (() => {
+                  const bars = [
+                    { key: "skating_grade", label: "Skating" },
+                    { key: "hockey_iq_grade", label: "Hockey IQ" },
+                    { key: "compete_grade", label: "Compete" },
+                  ];
+                  const barData = bars.map(b => ({ label: b.label, value: gradeToScore(intel[b.key]) })).filter(b => b.value > 0);
+                  if (barData.length === 0) return null;
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+                      {barData.map(b => {
+                        const pct = Math.max(5, (b.value / 10) * 100);
+                        const tierLabel = b.value >= 8.5 ? "ELITE" : b.value >= 7 ? "ABOVE AVG" : b.value >= 5 ? "AVERAGE" : "BELOW AVG";
+                        const barColor = b.value >= 8.5 ? "#22C55E" : b.value >= 7 ? "#0D9488" : b.value >= 5 ? "#F59E0B" : "#E67E22";
+                        return (
+                          <div key={b.label}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, textTransform: "uppercase", color: "#2D3748" }}>{b.label}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#0F2942" }}>{b.value.toFixed(1)}</span>
+                                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: barColor }}>{tierLabel}</span>
+                              </div>
+                            </div>
+                            <div style={{ height: 5, background: "#E8EFF6", borderRadius: 3, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: 3 }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+                {intel && (() => {
+                  const offense = gradeToScore(intel.offensive_grade);
+                  const defense = gradeToScore(intel.defensive_grade);
+                  if (offense === 0 && defense === 0) return null;
+                  const offLabel = offense >= 8.5 ? "ELITE" : offense >= 7 ? "ABOVE AVG" : offense >= 5 ? "AVERAGE" : "BELOW AVG";
+                  const defLabel = defense >= 8.5 ? "ELITE" : defense >= 7 ? "ABOVE AVG" : defense >= 5 ? "AVERAGE" : "BELOW AVG";
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      {offense > 0 && (
+                        <div style={{ background: "#0F2942", borderRadius: 8, padding: 10, textAlign: "center" }}>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 26, color: "#14B8A8" }}>{offense.toFixed(1)}</p>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Offense</p>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 8, color: "#22C55E", marginTop: 2, textTransform: "uppercase" }}>{offLabel}</p>
+                        </div>
+                      )}
+                      {defense > 0 && (
+                        <div style={{ background: "#0F2942", borderRadius: 8, padding: 10, textAlign: "center" }}>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 26, color: "#14B8A8" }}>{defense.toFixed(1)}</p>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Defense</p>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 8, color: "#22C55E", marginTop: 2, textTransform: "uppercase" }}>{defLabel}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+                {!intel && <p style={{ fontSize: 12, color: "#666666" }}>No skill data available.</p>}
+              </div>
             </div>
 
-            {/* Game log */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">
-                <FileText size={11} className="inline mr-1" />
-                Recent Games
-              </h3>
-              {perf.game_log && perf.game_log.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+            {/* Intelligence Summary Card */}
+            {intel && (
+              <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+                <div style={{ background: "#162E4A", padding: "10px 16px" }}>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Intelligence Summary</span>
+                </div>
+                <div style={{ padding: 16 }}>
+                  {intel.strengths != null && (
+                    <div style={{ marginBottom: 12 }}>
+                      <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "#94A3B8", marginBottom: 6 }}>Strengths</p>
+                      {(Array.isArray(intel.strengths) ? intel.strengths : tryParseJson(intel.strengths)).map((s: string, i: number) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22C55E", flexShrink: 0 }} />
+                          <span style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12, color: "#2D3748" }}>{s}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {intel.development_areas != null && (
+                    <div>
+                      <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "#94A3B8", marginBottom: 6 }}>Development Areas</p>
+                      {(Array.isArray(intel.development_areas) ? intel.development_areas : tryParseJson(intel.development_areas)).map((s: string, i: number) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#E67E22", flexShrink: 0 }} />
+                          <span style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12, color: "#2D3748" }}>{s}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Recent Games Table */}
+            {perf.game_log && perf.game_log.length > 0 && (
+              <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+                <div style={{ background: "#162E4A", padding: "10px 16px" }}>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Recent Games</span>
+                </div>
+                <div>
+                  <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
                     <thead>
-                      <tr className="border-b border-teal/20 bg-navy/[0.03]">
-                        <th className="text-left px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">Date</th>
-                        <th className="text-left px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">Opp</th>
-                        <th className="text-right px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">G</th>
-                        <th className="text-right px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">A</th>
-                        <th className="text-right px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">P</th>
-                        <th className="text-right px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">SOG</th>
-                        <th className="text-right px-2 py-1.5 text-[9px] font-oswald uppercase tracking-wider text-muted">+/-</th>
+                      <tr style={{ background: "#FAFBFC" }}>
+                        <th style={{ textAlign: "left", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>Date</th>
+                        <th style={{ textAlign: "left", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>Opp</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>G</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>A</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>P</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>SOG</th>
+                        <th style={{ textAlign: "right", padding: "6px 8px", fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 9, textTransform: "uppercase", color: "#94A3B8" }}>+/-</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {perf.game_log.map((g, i) => (
-                        <tr key={i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
-                          <td className="px-2 py-1.5 text-muted">{String(g.date || g.game_date || "—")}</td>
-                          <td className="px-2 py-1.5 text-navy">{String(g.opponent || "—")}</td>
-                          <td className="px-2 py-1.5 text-right">{String(g.g ?? g.goals ?? "—")}</td>
-                          <td className="px-2 py-1.5 text-right">{String(g.a ?? g.assists ?? "—")}</td>
-                          <td className="px-2 py-1.5 text-right font-semibold text-navy">{String(g.p ?? g.points ?? "—")}</td>
-                          <td className="px-2 py-1.5 text-right">{String(g.sog ?? g.shots ?? "—")}</td>
-                          <td className="px-2 py-1.5 text-right">{String(g.plus_minus ?? "—")}</td>
+                      {perf.game_log.slice(0, 8).map((g, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid #DDE6EF" }} className="hover:bg-[#F8FBFF]">
+                          <td style={{ padding: "6px 8px", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#94A3B8" }}>{String(g.date || g.game_date || "—")}</td>
+                          <td style={{ padding: "6px 8px", fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12, fontWeight: 600, color: "#0F2942" }}>{String(g.opponent || "—")}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{String(g.g ?? g.goals ?? "—")}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{String(g.a ?? g.assists ?? "—")}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: "#0F2942" }}>{String(g.p ?? g.points ?? "—")}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{String(g.sog ?? g.shots ?? "—")}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{String(g.plus_minus ?? "—")}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <p className="text-xs text-muted">No game log available.</p>
-              )}
-            </div>
-
-            {/* Event aggregates (game file data) */}
-            {perf.event_aggregates && perf.event_aggregates.has_event_data && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">
-                  <Crosshair size={11} className="inline mr-1" />
-                  Event Intelligence
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <StatCell label="Zone Entry %" value={`${perf.event_aggregates.zone_entry_pct.toFixed(1)}%`} sub={`${perf.event_aggregates.zone_entries_controlled}/${perf.event_aggregates.zone_entries_total}`} />
-                  <StatCell label="Zone Exit %" value={`${perf.event_aggregates.zone_exit_pct.toFixed(1)}%`} sub={`${perf.event_aggregates.zone_exits_controlled}/${perf.event_aggregates.zone_exits_total}`} />
-                  <StatCell label="Retrievals" value={String(perf.event_aggregates.retrievals)} />
-                  <StatCell label="Shot Attempts" value={String(perf.event_aggregates.shot_attempts)} />
-                  <StatCell label="xG For" value={perf.event_aggregates.xg_for.toFixed(2)} />
-                  <StatCell label="Chances" value={String(perf.event_aggregates.chances_for)} />
-                  {perf.event_aggregates.faceoff_total > 0 && (
-                    <StatCell label="Faceoff %" value={`${perf.event_aggregates.faceoff_pct.toFixed(1)}%`} sub={`${perf.event_aggregates.faceoff_wins}/${perf.event_aggregates.faceoff_total}`} />
-                  )}
-                </div>
-                <p className="text-[9px] text-muted mt-2">
-                  {perf.event_aggregates.total_events} events across {perf.event_aggregates.games_with_events} games
-                </p>
               </div>
             )}
 
-            {/* Situation splits */}
-            {perf.situation_splits && Object.keys(perf.situation_splits).length > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">
-                  <Shield size={11} className="inline mr-1" />
-                  Situation Splits
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {Object.entries(perf.situation_splits).map(([sit, agg]) => (
-                    <div key={sit} className="bg-navy/[0.03] rounded-lg p-3">
-                      <p className="text-[9px] font-oswald uppercase tracking-wider text-teal mb-1.5">{sit}</p>
-                      <div className="space-y-1 text-[10px]">
-                        {agg.zone_entries_total > 0 && <p className="text-navy">Entry: {agg.zone_entry_pct.toFixed(0)}%</p>}
-                        {agg.shot_attempts > 0 && <p className="text-navy">Shots: {agg.shot_attempts}</p>}
-                        {agg.xg_for > 0 && <p className="text-navy">xG: {agg.xg_for.toFixed(2)}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* Coach Notes */}
+            <div style={{ background: "#FFFFFF", borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+              <div style={{ background: "#162E4A", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Coach Notes</span>
+                {!editingCoachProfile && (
+                  <button
+                    onClick={() => {
+                      setCoachProfileDraft(dev.skill_profile.coach_version || "");
+                      setEditingCoachProfile(true);
+                    }}
+                    style={{ color: "rgba(255,255,255,0.4)", cursor: "pointer", background: "none", border: "none" }}
+                    className="hover:opacity-80 print:hidden"
+                  >
+                    <Edit3 size={11} />
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-
-          {/* ════════ RIGHT COLUMN — Development (4 cols) ════════ */}
-          <div className="lg:col-span-4 print:col-span-4 space-y-3">
-
-            {/* Skill profile */}
-            <div className="bg-white rounded-xl border border-teal/20 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
-                  <Brain size={11} className="inline mr-1" />
-                  Skill Profile
-                </h3>
-                <button
-                  onClick={handleGenerateProfile}
-                  disabled={generatingProfile}
-                  className="flex items-center gap-1 text-[10px] text-teal hover:underline disabled:opacity-50 print:hidden"
-                >
-                  {generatingProfile ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
-                  {generatingProfile ? "Generating..." : "Generate"}
-                </button>
-              </div>
-
-              {/* PXI version */}
-              {dev.skill_profile.pxi_version ? (
-                <div className="mb-3">
-                  <p className="text-[9px] font-oswald uppercase tracking-wider text-teal mb-1">PXI Scout Summary</p>
-                  <p className="text-xs text-navy/80 leading-relaxed whitespace-pre-line">{dev.skill_profile.pxi_version}</p>
-                </div>
-              ) : (
-                <p className="text-xs text-muted mb-3">No PXI profile yet. Click Generate to create one.</p>
-              )}
-
-              {/* Coach version */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[9px] font-oswald uppercase tracking-wider text-orange mb-1">Coach Notes</p>
-                  {!editingCoachProfile && (
-                    <button
-                      onClick={() => {
-                        setCoachProfileDraft(dev.skill_profile.coach_version || "");
-                        setEditingCoachProfile(true);
-                      }}
-                      className="text-muted hover:text-navy print:hidden"
-                    >
-                      <Edit3 size={11} />
-                    </button>
-                  )}
-                </div>
+              <div style={{ padding: 16 }}>
                 {editingCoachProfile ? (
-                  <div className="space-y-2 print:hidden">
+                  <div className="print:hidden" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <textarea
                       value={coachProfileDraft}
                       onChange={(e) => setCoachProfileDraft(e.target.value)}
                       rows={4}
-                      className="w-full text-xs border border-teal/20 rounded-lg p-2 resize-none"
+                      style={{ width: "100%", fontSize: 12, border: "1px solid #DDE6EF", borderRadius: 8, padding: 8, resize: "none", fontFamily: "'Source Serif 4', Georgia, serif" }}
                       placeholder="Add coach assessment..."
                     />
-                    <div className="flex gap-2">
-                      <button onClick={handleSaveCoachProfile} className="flex items-center gap-1 px-2 py-1 bg-teal text-white text-[10px] rounded hover:bg-teal/90">
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={handleSaveCoachProfile} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", background: "#0D9488", color: "#FFFFFF", fontSize: 10, borderRadius: 4, border: "none", cursor: "pointer" }}>
                         <Save size={10} /> Save
                       </button>
-                      <button onClick={() => setEditingCoachProfile(false)} className="flex items-center gap-1 px-2 py-1 text-muted text-[10px] rounded hover:bg-gray-100">
+                      <button onClick={() => setEditingCoachProfile(false)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", color: "#666666", fontSize: 10, borderRadius: 4, border: "none", cursor: "pointer", background: "#F5F5F5" }}>
                         <X size={10} /> Cancel
                       </button>
                     </div>
                   </div>
                 ) : dev.skill_profile.coach_version ? (
-                  <p className="text-xs text-navy/80 leading-relaxed whitespace-pre-line">{dev.skill_profile.coach_version}</p>
+                  <p style={{ fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 12, lineHeight: 1.6, color: "#2D3748" }}>{dev.skill_profile.coach_version}</p>
                 ) : (
-                  <p className="text-xs text-muted">No coach notes yet.</p>
+                  <p style={{ fontSize: 12, color: "#666666" }}>No coach notes yet.</p>
                 )}
               </div>
-
-              {dev.skill_profile.updated_at && (
-                <p className="text-[9px] text-muted mt-2">
-                  Updated {new Date(dev.skill_profile.updated_at).toLocaleDateString()}
-                </p>
-              )}
             </div>
 
-            {/* Skill bars visualization */}
-            {userRole !== "parent" && intel && (
-              <SkillBars intelligence={intel} />
-            )}
-
-            {/* Active objectives — hidden when empty */}
-            {dev.active_objectives.length > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <button
-                  onClick={() => setShowObjectives(!showObjectives)}
-                  className="flex items-center justify-between w-full text-left print:pointer-events-none"
-                >
-                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
-                    <Target size={11} className="inline mr-1" />
-                    Development Objectives ({dev.active_objectives.length})
-                  </h3>
-                  {showObjectives ? <ChevronUp size={12} className="text-muted print:hidden" /> : <ChevronDown size={12} className="text-muted print:hidden" />}
-                </button>
-                {showObjectives && (
-                  <div className="mt-3">
-                    {dev.active_objectives.map((obj) => (
-                      <div key={obj.id} className="flex items-center justify-between py-1.5 border-b border-teal/10 last:border-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs font-semibold text-navy truncate">{obj.title}</span>
-                          {obj.skill_focus.slice(0, 2).map((sf) => (
-                            <span key={sf} className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald uppercase tracking-wider bg-teal/10 text-teal shrink-0">{sf}</span>
-                          ))}
-                        </div>
-                        <span className="text-[10px] text-muted shrink-0 ml-2">{obj.drill_log_count} drills</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Intelligence details */}
-            {intel && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">
-                  <Zap size={11} className="inline mr-1" />
-                  Intelligence Summary
-                </h3>
-
-                {/* Strengths */}
-                {intel.strengths ? (
-                  <div className="mb-3">
-                    <p className="text-[9px] font-oswald uppercase tracking-wider text-green-600 mb-1">Strengths</p>
-                    <div className="flex flex-wrap gap-1">
-                      {(Array.isArray(intel.strengths) ? intel.strengths : tryParseJson(intel.strengths)).map((s: string, i: number) => (
-                        <span key={i} className="inline-flex px-2 py-0.5 rounded text-[10px] bg-green-50 text-green-700">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Development areas */}
-                {intel.development_areas ? (
-                  <div className="mb-3">
-                    <p className="text-[9px] font-oswald uppercase tracking-wider text-orange mb-1">Development Areas</p>
-                    <div className="flex flex-wrap gap-1">
-                      {(Array.isArray(intel.development_areas) ? intel.development_areas : tryParseJson(intel.development_areas)).map((s: string, i: number) => (
-                        <span key={i} className="inline-flex px-2 py-0.5 rounded text-[10px] bg-orange/10 text-orange">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Stat signature */}
-                {intel.stat_signature ? (
-                  <div>
-                    <p className="text-[9px] font-oswald uppercase tracking-wider text-navy/60 mb-1">Stat Signature</p>
-                    <p className="text-xs text-navy/80 leading-relaxed">{String(intel.stat_signature)}</p>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {/* Recent scout notes — hidden when empty */}
-            {dev.recent_notes.length > 0 && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4">
-                <button
-                  onClick={() => setShowNotes(!showNotes)}
-                  className="flex items-center justify-between w-full text-left print:pointer-events-none"
-                >
-                  <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted">
-                    <FileText size={11} className="inline mr-1" />
-                    Recent Scout Notes ({dev.recent_notes.length})
-                  </h3>
-                  {showNotes ? <ChevronUp size={12} className="text-muted print:hidden" /> : <ChevronDown size={12} className="text-muted print:hidden" />}
-                </button>
-                {showNotes && (
-                  <div className="mt-3 space-y-2">
-                    {dev.recent_notes.map((note) => (
-                      <div key={note.id} className="bg-navy/[0.03] rounded-lg p-3">
-                        <p className="text-xs text-navy/80 leading-relaxed mb-1.5">{note.note_text}</p>
-                        <div className="flex items-center gap-2">
-                          {note.tags.map((t) => (
-                            <span key={t} className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-oswald uppercase tracking-wider bg-navy/[0.06] text-navy/60">
-                              {t}
-                            </span>
-                          ))}
-                          <span className="text-[9px] text-muted ml-auto">
-                            {formatRelativeTime(note.created_at)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Quick actions */}
+            {/* Quick Actions */}
             {userRole !== "parent" && (
-              <div className="bg-white rounded-xl border border-teal/20 p-4 print:hidden">
-                <h3 className="text-[10px] font-oswald uppercase tracking-wider text-muted mb-3">Quick Actions</h3>
-                <div className="flex gap-2 mb-2">
-                  <button
-                    onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
-                      user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
-                      page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
-                      entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
-                    })}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-teal/10 text-teal text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-teal/20 transition-colors"
-                  >
-                    <Search size={11} />
-                    Scout
-                  </button>
-                  <Link
-                    href={`/reports/generate?player_id=${playerId}`}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-navy/5 text-navy/70 text-[10px] font-oswald font-bold uppercase tracking-wider hover:bg-navy/10 transition-colors"
-                  >
-                    <FileText size={11} />
-                    Report
-                  </Link>
-                  <div className="relative" ref={overflowRef}>
-                    <button
-                      onClick={() => setOverflowOpen(!overflowOpen)}
-                      className="p-1.5 rounded-lg text-navy/30 hover:text-navy hover:bg-navy/5 transition-colors"
-                      title="More actions"
-                    >
-                      <MoreVertical size={14} />
-                    </button>
-                    {overflowOpen && (
-                      <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1">
-                        <Link
-                          href="/scouting"
-                          onClick={() => setOverflowOpen(false)}
-                          className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] transition-colors"
-                        >
-                          Add to Scouting List
-                        </Link>
-                        <Link
-                          href={`/players/${playerId}`}
-                          onClick={() => setOverflowOpen(false)}
-                          className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] transition-colors"
-                        >
-                          View Full Profile
-                        </Link>
-                        <button
-                          onClick={() => { handlePrint(); setOverflowOpen(false); }}
-                          className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] transition-colors"
-                        >
-                          Print Card
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div style={{ display: "flex", gap: 8 }} className="print:hidden">
+                <button
+                  onClick={() => openBenchTalk(`Scout ${id.first_name} ${id.last_name}. Give me a scouting overview, strengths, weaknesses, and role projection.`, "scout", {
+                    user: { id: getUser()?.id || "", name: getUser()?.first_name || "User", role: "SCOUT", orgId: getUser()?.org_id || "", orgName: "ProspectX" },
+                    page: { id: "PLAYER_CARD", route: `/players/${playerId}/card` },
+                    entity: { type: "PLAYER", id: playerId, name: `${id.first_name} ${id.last_name}`, metadata: { position: id.position || undefined, team: id.current_team || undefined, league: id.current_league || undefined } },
+                  })}
+                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 12px", background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1px solid rgba(13,148,136,0.2)", borderRadius: 7, fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", cursor: "pointer" }}
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  <Search size={11} />
+                  Scout
+                </button>
+                <Link
+                  href={`/reports/generate?player_id=${playerId}`}
+                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 12px", background: "#F5F5F5", color: "#2D3748", border: "1px solid #DDE6EF", borderRadius: 7, fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase" }}
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  <FileText size={11} />
+                  Report
+                </Link>
               </div>
             )}
           </div>
@@ -952,6 +850,7 @@ export default function PlayerCardPage() {
     </ProtectedRoute>
   );
 }
+
 
 // ── Helper components ──
 
