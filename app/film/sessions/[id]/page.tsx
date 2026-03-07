@@ -38,6 +38,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import VideoPlayer, { VideoPlayerHandle } from "@/components/film/VideoPlayer";
 import ClipPanel from "@/components/film/ClipPanel";
 import EventTagger from "@/components/film/EventTagger";
+import ReelBuilder from "@/components/film/ReelBuilder";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import toast from "react-hot-toast";
@@ -282,6 +283,10 @@ export default function FilmSessionViewerPage() {
   const [cinemaMode, setCinemaMode] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
+  // Reel builder modal + session reels
+  const [showReelBuilder, setShowReelBuilder] = useState(false);
+  const [sessionReels, setSessionReels] = useState<{ id: string; title: string; status: string; clip_count: number; created_at: string }[]>([]);
+
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
@@ -347,6 +352,23 @@ export default function FilmSessionViewerPage() {
         } catch {
           // Events may not exist yet
         }
+
+        // Load reels
+        try {
+          const reelsRes = await api.get("/highlight-reels");
+          const all = Array.isArray(reelsRes.data) ? reelsRes.data : [];
+          setSessionReels(
+            all.map((r: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string }) => ({
+              id: r.id,
+              title: r.title,
+              status: r.status || "draft",
+              clip_count: Array.isArray(r.clip_ids) ? r.clip_ids.length : 0,
+              created_at: r.created_at,
+            }))
+          );
+        } catch {
+          // Reels may not exist yet
+        }
       } catch (e: unknown) {
         const msg =
           (e as { response?: { data?: { detail?: string } } }).response?.data
@@ -394,6 +416,25 @@ export default function FilmSessionViewerPage() {
       // Silently fail on comment refresh
     }
   }, [sessionId]);
+
+  const loadSessionReels = useCallback(async () => {
+    try {
+      const res = await api.get("/highlight-reels");
+      const all = Array.isArray(res.data) ? res.data : [];
+      // Filter reels that contain clips from this session (clip_ids populated from this session's clips)
+      // Since the API doesn't filter by session, we show all org reels for now.
+      // A lightweight approach: show reels created from this session (we pass session context at creation).
+      setSessionReels(
+        all.map((r: { id: string; title: string; status: string; clip_ids?: string | string[]; created_at: string }) => ({
+          id: r.id,
+          title: r.title,
+          status: r.status || "draft",
+          clip_count: Array.isArray(r.clip_ids) ? r.clip_ids.length : 0,
+          created_at: r.created_at,
+        }))
+      );
+    } catch { /* */ }
+  }, []);
 
   const loadSessionEvents = useCallback(async () => {
     try {
@@ -688,14 +729,14 @@ export default function FilmSessionViewerPage() {
 
           {/* Generate Analysis + Build Reel buttons */}
           <div className="relative shrink-0 flex items-center gap-2">
-            <Link
-              href={`/highlight-reels/new?session=${sessionId}${session.player_id ? `&player=${session.player_id}` : ""}`}
+            <button
+              onClick={() => setShowReelBuilder(true)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
               style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(234,88,12,0.1)", color: "#EA580C", border: "1.5px solid rgba(234,88,12,0.2)" }}
             >
               <Film size={12} />
               Build Reel
-            </Link>
+            </button>
             <button
               onClick={() => { setShowTypeSelector(!showTypeSelector); setPendingReportType(null); }}
               disabled={generating}
@@ -1526,6 +1567,57 @@ export default function FilmSessionViewerPage() {
               refreshKey={clipRefreshKey}
             />
 
+            {/* Reels Section */}
+            {sessionReels.length > 0 && (
+              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #EA580C" }}>
+                <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: "#EA580C" }} />
+                  <Film size={11} style={{ color: "#EA580C" }} />
+                  <span
+                    className="font-bold uppercase text-white"
+                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
+                  >
+                    REELS
+                  </span>
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                    style={{ fontFamily: "ui-monospace, monospace", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
+                  >
+                    {sessionReels.length}
+                  </span>
+                </div>
+                <div className="bg-white px-4 py-3 space-y-1">
+                  {sessionReels.map((reel) => (
+                    <Link
+                      key={reel.id}
+                      href={`/highlight-reels/${reel.id}`}
+                      className="flex items-center justify-between py-2 px-2 rounded-lg transition-colors hover:bg-navy/[0.03] group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Film size={11} style={{ color: "#EA580C" }} />
+                        <span className="text-sm truncate" style={{ color: "#0F2942" }}>{reel.title}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
+                          style={{
+                            fontFamily: "ui-monospace, monospace",
+                            background: reel.status === "ready" ? "rgba(13,148,136,0.1)" : reel.status === "shared" ? "rgba(234,88,12,0.1)" : "rgba(15,41,66,0.06)",
+                            color: reel.status === "ready" ? "#0D9488" : reel.status === "shared" ? "#EA580C" : "#5A7291",
+                          }}
+                        >
+                          {reel.status}
+                        </span>
+                        <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, color: "#8BA4BB" }}>
+                          {reel.clip_count} clip{reel.clip_count !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Game Plan Links */}
             <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #F97316" }}>
               <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
@@ -1631,6 +1723,16 @@ export default function FilmSessionViewerPage() {
           </div>
         </div>
       </main>
+
+      {/* Reel Builder Modal */}
+      {showReelBuilder && (
+        <ReelBuilder
+          sessionId={sessionId}
+          playerId={session?.player_id || null}
+          onClose={() => setShowReelBuilder(false)}
+          onCreated={() => loadSessionReels()}
+        />
+      )}
     </ProtectedRoute>
   );
 }

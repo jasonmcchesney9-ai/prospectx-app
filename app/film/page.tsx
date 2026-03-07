@@ -37,6 +37,7 @@ interface FilmStats {
   clips: number;
   events: number;
   film_reports: number;
+  reels?: number;
 }
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
@@ -110,7 +111,14 @@ export default function FilmRoomPage() {
       })
       .finally(() => setLoadingUploads(false));
 
-    api.get("/film/stats").then((r) => setStats(r.data)).catch(() => {});
+    api.get("/film/stats").then(async (r) => {
+      const s = r.data;
+      try {
+        const reelsRes = await api.get("/highlight-reels");
+        s.reels = Array.isArray(reelsRes.data) ? reelsRes.data.length : 0;
+      } catch { s.reels = 0; }
+      setStats(s);
+    }).catch(() => {});
   }, []);
 
   const handleDeleteSession = async (id: string) => {
@@ -193,7 +201,7 @@ export default function FilmRoomPage() {
 
         {/* ── Quick Stats Bar ─────────────────────────────────── */}
         {stats && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded bg-navy/5 flex items-center justify-center">
                 <Film size={14} className="text-navy/60" />
@@ -228,6 +236,15 @@ export default function FilmRoomPage() {
               <div>
                 <p className="text-lg font-oswald text-navy">{stats.film_reports}</p>
                 <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Reports</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border border-border px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: "rgba(234,88,12,0.1)" }}>
+                <Film size={14} style={{ color: "#EA580C" }} />
+              </div>
+              <div>
+                <p className="text-lg font-oswald text-navy">{stats.reels ?? 0}</p>
+                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Reels</p>
               </div>
             </div>
           </div>
