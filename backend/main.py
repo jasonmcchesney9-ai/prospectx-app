@@ -126,6 +126,7 @@ from pxi_prompt_core import (
     EMOTION_CONTEXT_MAP,
     AFTER_GAME_SEED_TEMPLATE,
     build_practice_plan_guidelines,
+    PXR_TIER2_CONTEXT_BLOCK,
 )
 
 # Load .env from the backend directory (works regardless of CWD)
@@ -24200,7 +24201,8 @@ def get_player_pxr_context(player_id: str, conn) -> dict:
         row = conn.execute("""
             SELECT pxr_score, league_percentile, cohort_percentile, age_modifier,
                    p1_offense, p2_defense, p3_possession, p4_physical,
-                   data_completeness, season, position_group
+                   data_completeness, season, position_group,
+                   score_type, confidence_tier
             FROM pxr_scores
             WHERE player_id = %s AND pxr_score IS NOT NULL
             ORDER BY season DESC
@@ -24233,6 +24235,8 @@ def get_player_pxr_context(player_id: str, conn) -> dict:
             "data_completeness": round(row["data_completeness"], 1) if row["data_completeness"] is not None else None,
             "season": row["season"],
             "position_group": row["position_group"],
+            "score_type": row["score_type"] if row["score_type"] else "full",
+            "confidence_tier": row["confidence_tier"] if row["confidence_tier"] else "small_sample",
         }
     except Exception as e:
         logger.warning("get_player_pxr_context failed for %s: %s", player_id, e)
@@ -24243,9 +24247,13 @@ def format_pxr_prompt_block(pxr: dict, player_name: str = "", birth_year: str = 
     """Format PXR score data into a human-readable prompt injection block.
 
     Returns empty string if pxr_context_available is False.
+    Handles both Tier 1 (full) and Tier 2 (estimated) scores with appropriate
+    context and guardrails for each.
     """
     if not pxr.get("pxr_context_available"):
         return ""
+
+    is_estimated = pxr.get("score_type") == "estimated"
 
     lp = pxr.get("league_percentile")
     cp = pxr.get("cohort_percentile")
@@ -24261,16 +24269,36 @@ def format_pxr_prompt_block(pxr: dict, player_name: str = "", birth_year: str = 
     else:
         am_str = "0.0 (age-neutral)"
 
+    # Tier 2 estimated: no pillar breakdown, different framing
+    if is_estimated:
+        return f"""
+--- PXR INTELLIGENCE CONTEXT (ESTIMATED — TIER 2) ---
+PXR Score: ~{pxr['pxr_score']} / 100 (Estimated — based on game stats only)
+Score Type: ESTIMATED (Tier 2) — calculated from goals, assists, points per game.
+  Full PXR (Tier 1) requires InStat advanced microstat data.
+League Ranking: {league_pct_str}
+Cohort Ranking: {cohort_pct_str}
+Age Modifier: {am_str}
+Pillar Breakdown: NOT AVAILABLE for Tier 2 scores.
+
+{PXR_TIER2_CONTEXT_BLOCK}
+--- END PXR CONTEXT ---
+"""
+
+    # Tier 1 full: include pillar breakdown and full context
     p1 = pxr.get("p1_offense")
     p2 = pxr.get("p2_defense")
     p3 = pxr.get("p3_possession")
     p4 = pxr.get("p4_physical")
     pillar_str = f"Offense {p1 if p1 is not None else '—'} · Defense {p2 if p2 is not None else '—'} · Possession {p3 if p3 is not None else '—'} · Physical {p4 if p4 is not None else '—'}"
     dc = pxr.get("data_completeness")
+    confidence = pxr.get("confidence_tier", "small_sample")
 
     return f"""
 --- PXR INTELLIGENCE CONTEXT ---
 PXR Score: {pxr['pxr_score']} / 100 (Tier {pxr['tier']} — {pxr['tier_label']})
+Score Type: FULL (Tier 1) — calculated from InStat advanced microstat data.
+Confidence: {confidence}
 League Ranking: {league_pct_str}
 Cohort Ranking: {cohort_pct_str}
 Age Modifier: {am_str}
