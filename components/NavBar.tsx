@@ -318,19 +318,19 @@ export default function NavBar() {
                 {/* Small co-branded ProspectX wordmark */}
                 <span className="hidden lg:flex flex-col leading-none" style={{ gap: 1 }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
                   </span>
-                  <span style={{ fontSize: 7, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
+                  <span style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
                 </span>
               </>
             ) : (
               <span className="flex flex-col leading-none" style={{ gap: 1 }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
                 </span>
-                <span style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
+                <span style={{ fontSize: 9.5, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
               </span>
             )}
           </Link>

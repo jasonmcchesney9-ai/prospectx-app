@@ -273,8 +273,8 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
       {/* ── Body: Spider + PXR + Archetype ── */}
       <div style={{ background: "#FFFFFF", padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
         {/* Spider chart */}
-        <div style={{ width: 68, height: 68, flexShrink: 0 }}>
-          {renderSpiderSVG(68, player.metrics, !!pxrEstimated)}
+        <div style={{ width: 80, height: 80, flexShrink: 0, borderRadius: "50%", background: "#EAF4F3", border: "1px solid rgba(13,148,136,0.15)", padding: 6, display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box" }}>
+          {renderSpiderSVG(66, player.metrics, !!pxrEstimated)}
         </div>
 
         {/* PXR Score + Archetype */}
