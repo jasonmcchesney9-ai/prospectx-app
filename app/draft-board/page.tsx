@@ -52,12 +52,15 @@ interface DraftPlayer {
   player_id: string;
   first_name: string;
   last_name: string;
+  name?: string;
   current_team: string | null;
   current_league: string | null;
   position: string | null;
   birth_year: string | null;
   position_group: string;
   pxr_score: number;
+  score_type?: string | null;
+  pxr_tier?: string | null;
   league_percentile: number | null;
   cohort_percentile: number | null;
   age_modifier: number | null;
@@ -154,6 +157,9 @@ export default function DraftBoardPage() {
   const [position, setPosition] = useState("");
   const [birthYear, setBirthYear] = useState("");
   const [season, setSeason] = useState("2025-26");
+  const [scoreType, setScoreType] = useState("");
+  const [tierFilter, setTierFilter] = useState("");
+  const [unfilteredTotal, setUnfilteredTotal] = useState(0);
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>("pxr_score");
@@ -167,6 +173,8 @@ export default function DraftBoardPage() {
     if (league) params.set("league", league);
     if (position) params.set("position_group", position);
     if (birthYear) params.set("birth_year", birthYear);
+    if (scoreType) params.set("score_type", scoreType);
+    if (tierFilter) params.set("tier", tierFilter);
 
     api
       .get(`/pxr/draft-board?${params.toString()}`)
@@ -180,7 +188,14 @@ export default function DraftBoardPage() {
         setTotal(0);
       })
       .finally(() => setLoading(false));
-  }, [season, league, position, birthYear]);
+  }, [season, league, position, birthYear, scoreType, tierFilter]);
+
+  // Fetch unfiltered total once for results summary
+  useEffect(() => {
+    api.get(`/pxr/draft-board?season=${season}`)
+      .then((res) => setUnfilteredTotal(res.data.total || 0))
+      .catch(() => {});
+  }, [season]);
 
   // Sorted + grouped by tier
   const sorted = useMemo(() => sortPlayers(players, sortKey, sortAsc), [players, sortKey, sortAsc]);
@@ -199,9 +214,11 @@ export default function DraftBoardPage() {
     setPosition("");
     setBirthYear("");
     setSeason("2025-26");
+    setScoreType("");
+    setTierFilter("");
   };
 
-  const hasFilters = league || position || birthYear || season !== "2025-26";
+  const hasFilters = league || position || birthYear || season !== "2025-26" || scoreType || tierFilter;
 
   // Insert tier divider rows into the sorted list
   type TierRow = { type: "tier"; tier: typeof PXR_TIERS[0] };
@@ -298,6 +315,30 @@ export default function DraftBoardPage() {
           </select>
 
           <select
+            value={tierFilter}
+            onChange={(e) => setTierFilter(e.target.value)}
+            className="px-3 py-2 border border-border rounded-lg text-sm bg-white text-navy"
+          >
+            <option value="">All Tiers</option>
+            <option value="1A">1A — Elite (90+)</option>
+            <option value="1B">1B — High Impact (80–89)</option>
+            <option value="2A">2A — Solid Starter (70–79)</option>
+            <option value="2B">2B — Depth (60–69)</option>
+            <option value="3A">3A — Developing (50–59)</option>
+            <option value="3B">3B — Early Stage (&lt;50)</option>
+          </select>
+
+          <select
+            value={scoreType}
+            onChange={(e) => setScoreType(e.target.value)}
+            className="px-3 py-2 border border-border rounded-lg text-sm bg-white text-navy"
+          >
+            <option value="">All Scores</option>
+            <option value="full">Full PXR Only</option>
+            <option value="estimated">Estimated Only</option>
+          </select>
+
+          <select
             value={season}
             onChange={(e) => setSeason(e.target.value)}
             className="px-3 py-2 border border-border rounded-lg text-sm bg-white text-navy"
@@ -321,6 +362,21 @@ export default function DraftBoardPage() {
             </button>
           )}
         </div>
+
+        {/* Print Header (hidden on screen, shown on print) */}
+        <div className="hidden print-only mb-4">
+          <h1 className="text-xl font-bold text-navy font-oswald uppercase tracking-wider">
+            ProspectX Draft Board — {season} — Generated {new Date().toLocaleDateString()}
+          </h1>
+        </div>
+
+        {/* Results Summary */}
+        {!loading && (
+          <p className="text-xs text-muted mb-3 no-print">
+            Showing <span className="font-semibold text-navy">{total.toLocaleString()}</span> players
+            {hasFilters && unfilteredTotal > 0 && ` — filtered from ${unfilteredTotal.toLocaleString()} scored`}
+          </p>
+        )}
 
         {/* Tier Legend */}
         <div className="flex flex-wrap gap-2 mb-4 print-visible">
@@ -387,6 +443,7 @@ export default function DraftBoardPage() {
 
                     const p = row.player;
                     const tier = getTier(p.pxr_score);
+                    const isEstimated = p.score_type === "estimated";
                     const ageMod = p.age_modifier;
                     const ageModStr = ageMod != null && ageMod !== 0 ? (ageMod > 0 ? `+${ageMod.toFixed(1)}` : ageMod.toFixed(1)) : "0.0";
                     const ageModColor = ageMod != null && ageMod > 0 ? "text-green-600" : ageMod != null && ageMod < 0 ? "text-orange" : "text-muted/40";
@@ -395,10 +452,15 @@ export default function DraftBoardPage() {
                       <tr
                         key={`player-${p.player_id}-${idx}`}
                         onClick={() => router.push(`/players/${p.player_id}`)}
-                        className={`cursor-pointer hover:bg-teal/5 transition-colors border-l-3 ${tier?.borderColor || ""} ${
+                        className={`cursor-pointer hover:bg-teal/5 transition-colors ${
                           idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
                         }`}
-                        style={{ borderLeftWidth: "3px", ...(p.confidence_tier === "small_sample" ? { opacity: 0.55 } : {}) }}
+                        style={{
+                          borderLeftWidth: "3px",
+                          borderLeftColor: isEstimated ? "#F59E0B" : tier?.color || "#E2EAF3",
+                          borderLeftStyle: "solid",
+                          ...(p.confidence_tier === "small_sample" ? { opacity: 0.55 } : {}),
+                        }}
                       >
                         <td className="px-3 py-2.5 text-xs text-muted font-oswald">{row.rank}</td>
                         <td className="px-3 py-2.5">
@@ -416,8 +478,19 @@ export default function DraftBoardPage() {
                         <td className="px-3 py-2.5 text-xs text-muted">{p.current_team || "—"}</td>
                         <td className="px-3 py-2.5 text-xs text-muted">{p.current_league || "—"}</td>
                         <td className="px-3 py-2.5">
-                          <span className="text-sm font-bold text-teal font-oswald">{p.pxr_score?.toFixed(1)}</span>
-                          {p.gp != null && p.gp < 15 && (
+                          <span className={`text-sm font-bold font-oswald ${isEstimated ? "" : "text-teal"}`} style={isEstimated ? { color: "#F59E0B" } : {}}>
+                            {isEstimated ? "~" : ""}{p.pxr_score?.toFixed(1)}
+                          </span>
+                          {isEstimated && (
+                            <span
+                              className="ml-1 inline-flex items-center px-1 py-0.5 rounded text-[8px] font-oswald font-bold uppercase tracking-wider"
+                              style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
+                              title="Estimated PXR — calculated from game stats. Full PXR requires advanced microstat data."
+                            >
+                              Est.
+                            </span>
+                          )}
+                          {!isEstimated && p.gp != null && p.gp < 15 && (
                             <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                           )}
                         </td>
@@ -451,6 +524,8 @@ export default function DraftBoardPage() {
         @media print {
           .no-print { display: none !important; }
           .print-visible { display: flex !important; }
+          .print-only { display: block !important; }
+          .hidden.print-only { display: block !important; }
           nav { display: none !important; }
           main { max-width: 100% !important; padding: 0 !important; }
           table { font-size: 9px !important; }
