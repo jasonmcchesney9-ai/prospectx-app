@@ -703,86 +703,77 @@ export default function FilmSessionViewerPage() {
 
   return (
     <ProtectedRoute>
-      <NavBar />
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Full-viewport dark shell */}
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#060E1A", overflow: "hidden" }}>
+
         {/* ═══════════════════════════════════════════════════════
-            SESSION HEADER — navy bar (war room style)
+            TOPBAR — 38px, darkest background
             ═══════════════════════════════════════════════════════ */}
-        <div className="px-5 py-4 flex items-center justify-between mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942" }}>
-          <div className="flex items-center gap-3">
+        <div style={{ height: 38, minHeight: 38, background: "#040C17", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Link
-              href="/film/sessions"
+              href="/film"
               className="hover:opacity-70 transition-opacity"
-              style={{ color: "rgba(255,255,255,0.6)" }}
+              style={{ color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center" }}
             >
-              <ArrowLeft size={20} />
+              <ArrowLeft size={14} />
             </Link>
             <span
-              className="px-2.5 py-1 rounded-md text-white font-bold uppercase"
-              style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
+              style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#14B8A8" }}
             >
               FILM ROOM
             </span>
-            <div>
-              <h1 className="text-lg font-bold text-white">
-                {session.title}
-              </h1>
-              <div className="flex items-center gap-2">
-                <span
-                  className="px-2 py-0.5 rounded text-white font-bold uppercase"
-                  style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.4)" }}
-                >
-                  {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
-                </span>
-                {upload && (upload.upload_source === "youtube" || upload.upload_source === "vimeo" || upload.upload_source === "external_link") && (
-                  <span
-                    style={{
-                      fontFamily: "'Oswald', sans-serif",
-                      fontWeight: 600,
-                      fontSize: 9,
-                      background: "rgba(255,255,255,0.1)",
-                      color: "rgba(255,255,255,0.5)",
-                      borderRadius: 4,
-                      padding: "2px 6px",
-                      textTransform: "uppercase" as const,
-                      letterSpacing: "0.05em",
-                    }}
-                  >
-                    EXTERNAL
-                  </span>
-                )}
-                <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
-                  {formatDate(session.created_at)}
-                </span>
-                <span className="text-xs hidden sm:inline" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  — Watch, tag, clip, and analyse game footage.
-                </span>
-              </div>
-            </div>
+            <span style={{ width: 1, height: 16, background: "rgba(255,255,255,0.1)" }} />
+            <span
+              style={{ fontSize: 12, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "#FFFFFF", letterSpacing: "0.04em", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            >
+              {session.title}
+            </span>
+            <span
+              style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", background: "rgba(13,148,136,0.25)", borderRadius: 3, padding: "1px 5px" }}
+            >
+              {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
+            </span>
+            {upload && (upload.upload_source === "youtube" || upload.upload_source === "vimeo" || upload.upload_source === "external_link") && (
+              <span
+                style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 8, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)", borderRadius: 3, padding: "1px 5px", textTransform: "uppercase", letterSpacing: "0.05em" }}
+              >
+                EXTERNAL
+              </span>
+            )}
+            <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.35)" }}>
+              {formatDate(session.created_at)}
+            </span>
           </div>
 
           {/* Generate Analysis + Build Reel buttons */}
-          <div className="relative shrink-0 flex items-center gap-2">
+          <div className="relative" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button
               onClick={() => setShowReelBuilder(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
-              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(234,88,12,0.1)", color: "#EA580C", border: "1.5px solid rgba(234,88,12,0.2)" }}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(234,88,12,0.15)", color: "#E67E22", border: "1px solid rgba(234,88,12,0.25)", cursor: "pointer" }}
             >
-              <Film size={12} />
+              <Film size={10} />
               Build Reel
             </button>
             <button
               onClick={() => { setShowTypeSelector(!showTypeSelector); setPendingReportType(null); }}
               disabled={generating}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 disabled:opacity-50"
-              style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1.5px solid rgba(13,148,136,0.2)" }}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(13,148,136,0.15)", color: "#14B8A8", border: "1px solid rgba(13,148,136,0.25)", cursor: "pointer", opacity: generating ? 0.5 : 1 }}
             >
               {generating ? (
-                <Loader2 size={12} className="animate-spin" />
+                <Loader2 size={10} className="animate-spin" />
               ) : (
-                <Sparkles size={12} />
+                <Sparkles size={10} />
               )}
-              {generating ? "Generating..." : generatedReport ? "Regenerate" : "Generate Analysis"}
+              {generating ? "Generating..." : generatedReport ? "Regenerate" : "Analyze"}
+            </button>
+            <button
+              onClick={() => setCinemaMode(!cinemaMode)}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "transparent", color: cinemaMode ? "#14B8A8" : "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }}
+              title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
+            >
+              {cinemaMode ? <Minimize2 size={10} /> : <Maximize2 size={10} />}
+              Cinema
             </button>
 
             {/* Report type dropdown — grouped */}
@@ -997,12 +988,43 @@ export default function FilmSessionViewerPage() {
           </div>
         </div>
 
-        {/* Split layout — 65/35 on desktop, stacked on mobile */}
-        <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
-          {/* LEFT TOP — Video + Event Tagger (order-1 on mobile) */}
-          <div className={`w-full flex flex-col gap-3 order-1 ${cinemaMode ? "lg:w-full" : "lg:w-[70%]"}`}>
-            {/* Video Player — edge-to-edge, no card wrapper */}
-            <div className="relative" style={{ borderRadius: 8, overflow: "hidden", minHeight: "50vh" }}>
+        {/* ═══════════════════════════════════════════════════════
+            GRID WORKSPACE — 3-column + timeline row
+            ═══════════════════════════════════════════════════════ */}
+        <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: cinemaMode ? "0px 1fr 0px" : "220px 1fr 260px", gridTemplateRows: "1fr 108px", overflow: "hidden", transition: "grid-template-columns 0.3s ease" }}>
+
+          {/* ── COL 1 — Code Window (EventTagger) ──────────────── */}
+          <div style={{ gridColumn: 1, gridRow: 1, background: "#0A1929", borderRight: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1 }}>
+            {/* Code Window header */}
+            <div style={{ padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#14B8A8" }} />
+              <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
+                CODE WINDOW
+              </span>
+            </div>
+            {/* EventTagger — props unchanged */}
+            <div style={{ flex: 1, overflow: "auto", padding: 6 }}>
+              {upload?.playback_id && (
+                <EventTagger
+                  sessionId={sessionId}
+                  uploadId={upload.id}
+                  getCurrentTime={getCurrentTime}
+                  cinemaMode={cinemaMode}
+                />
+              )}
+            </div>
+            {/* Keyboard shortcut hint */}
+            <div style={{ padding: "4px 10px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+              <p style={{ fontSize: 8, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap", margin: 0 }}>
+                1–9: Tag shortcuts · Space: Play/Pause
+              </p>
+            </div>
+          </div>
+
+          {/* ── COL 2 — Video + Transport ──────────────────────── */}
+          <div style={{ gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#060E1A" }}>
+            {/* Video Player area */}
+            <div className="relative" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
               {/* Mux player — when playback_id exists */}
               {upload?.playback_id && (
                 <VideoPlayer
@@ -1020,13 +1042,13 @@ export default function FilmSessionViewerPage() {
                     src={embedUrl}
                     allow="autoplay; fullscreen; picture-in-picture"
                     allowFullScreen
-                    style={{ width: "100%", aspectRatio: "16/9", border: "none", borderRadius: 8 }}
+                    style={{ width: "100%", height: "100%", border: "none" }}
                   />
                 ) : null;
               })()}
               {/* Generic external link — no embed possible */}
               {!upload?.playback_id && upload?.source_url && upload.upload_source === "external_link" && (
-                <div style={{ width: "100%", aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A2540", borderRadius: 8 }}>
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A1929" }}>
                   <a
                     href={upload.source_url}
                     target="_blank"
@@ -1046,62 +1068,32 @@ export default function FilmSessionViewerPage() {
                   startTime={startTime}
                 />
               )}
-              {upload?.playback_id && (
-                <>
-                  <button
-                    onClick={() => setCinemaMode(!cinemaMode)}
-                    className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-lg transition-colors"
-                    title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
-                  >
-                    {cinemaMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  </button>
-                  {playbackSpeed !== 1 && (
-                    <span
-                      className="absolute top-3 left-3 z-10 px-2 py-1 rounded-md text-white font-bold"
-                      style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", background: "#0D9488" }}
-                    >
-                      {playbackSpeed}x
-                    </span>
-                  )}
-                </>
+              {/* Speed overlay badge */}
+              {upload?.playback_id && playbackSpeed !== 1 && (
+                <span
+                  className="absolute top-3 left-3 z-10 px-2 py-1 rounded-md text-white font-bold"
+                  style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", background: "#0D9488" }}
+                >
+                  {playbackSpeed}x
+                </span>
               )}
             </div>
 
-            {/* Keyboard shortcut hint bar */}
+            {/* Transport bar — Mark In/Out + Frame step + Speed + Cinema */}
             {upload?.playback_id && (
-              <p
-                style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "#8BA4BB", whiteSpace: "nowrap", margin: 0, padding: "0 2px" }}
-              >
-                Space: Play/Pause &middot; &larr; &rarr;: Frame step &middot; N / P: Next / Prev clip &middot; 1&ndash;4: Tag shortcuts
-              </p>
-            )}
-
-            {/* Event Tag Bar */}
-            {upload?.playback_id && (
-              <EventTagger
-                sessionId={sessionId}
-                uploadId={upload.id}
-                getCurrentTime={getCurrentTime}
-                cinemaMode={cinemaMode}
-              />
-            )}
-
-            {/* Mark In / Mark Out control bar */}
-            {upload?.playback_id && (
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
+              <div style={{ flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0D2037" }}>
                 {/* Row 1 — Mark In / timestamps / Mark Out / title / Save */}
-                <div className="flex flex-wrap items-center gap-3 px-4 py-3" style={{ background: "#FFFFFF" }}>
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2">
                   {/* Mark In */}
                   <button
                     onClick={() => setClipStart(Math.floor(currentTimeRef.current))}
-                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
+                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", background: "transparent", border: "1px solid rgba(20,184,166,0.3)", cursor: "pointer" }}
                   >
-                    <Scissors size={13} />
-                    Mark In
+                    <Scissors size={11} />
+                    In
                   </button>
                   <span
-                    className="font-bold min-w-[60px]"
-                    style={{ fontSize: 13, fontFamily: "ui-monospace, monospace", color: clipStart !== null ? "#0D9488" : "#CCD6E0" }}
+                    style={{ fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: clipStart !== null ? "#14B8A8" : "rgba(255,255,255,0.2)", minWidth: 40 }}
                   >
                     {clipStart !== null ? formatTimestamp(clipStart) : "--:--"}
                   </span>
@@ -1109,20 +1101,19 @@ export default function FilmSessionViewerPage() {
                   {/* Mark Out */}
                   <button
                     onClick={() => setClipEnd(Math.floor(currentTimeRef.current))}
-                    className="flex items-center gap-1.5 border border-teal text-teal px-3 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider hover:bg-teal/5 transition-colors"
+                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", background: "transparent", border: "1px solid rgba(20,184,166,0.3)", cursor: "pointer" }}
                   >
-                    <Scissors size={13} />
-                    Mark Out
+                    <Scissors size={11} />
+                    Out
                   </button>
                   <span
-                    className="font-bold min-w-[60px]"
-                    style={{ fontSize: 13, fontFamily: "ui-monospace, monospace", color: clipEnd !== null ? "#0D9488" : "#CCD6E0" }}
+                    style={{ fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: clipEnd !== null ? "#14B8A8" : "rgba(255,255,255,0.2)", minWidth: 40 }}
                   >
                     {clipEnd !== null ? formatTimestamp(clipEnd) : "--:--"}
                   </span>
 
                   {/* Divider */}
-                  <div className="w-px h-6 hidden sm:block" style={{ background: "#DDE6EF" }} />
+                  <span style={{ width: 1, height: 14, background: "rgba(255,255,255,0.1)" }} />
 
                   {/* Title input */}
                   <input
@@ -1130,266 +1121,153 @@ export default function FilmSessionViewerPage() {
                     value={clipTitle}
                     onChange={(e) => setClipTitle(e.target.value)}
                     placeholder="Clip title..."
-                    className="flex-1 min-w-[120px] border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
-                    style={{ borderColor: "#DDE6EF" }}
+                    style={{ flex: 1, minWidth: 80, padding: "4px 8px", borderRadius: 5, fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#FFFFFF", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", outline: "none" }}
                   />
 
                   {/* Save Clip */}
                   <button
                     onClick={handleSaveClip}
                     disabled={clipStart === null || clipEnd === null || savingClip}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors ${
-                      clipStart !== null && clipEnd !== null && !savingClip
-                        ? "bg-teal text-white hover:bg-teal/90"
-                        : "bg-border text-muted/50 cursor-not-allowed"
-                    }`}
+                    style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: clipStart !== null && clipEnd !== null && !savingClip ? "#FFFFFF" : "rgba(255,255,255,0.3)", background: clipStart !== null && clipEnd !== null && !savingClip ? "#0D9488" : "rgba(255,255,255,0.05)", border: "none", cursor: clipStart !== null && clipEnd !== null && !savingClip ? "pointer" : "not-allowed" }}
                   >
                     {savingClip ? (
-                      <Loader2 size={13} className="animate-spin" />
+                      <Loader2 size={11} className="animate-spin" />
                     ) : (
-                      <Save size={13} />
+                      <Save size={11} />
                     )}
-                    Save Clip
+                    Save
                   </button>
                 </div>
 
-                {/* Row 2 — Frame step (left) | Speed selector (center) | Cinema mode (right) */}
-                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5" style={{ borderTop: "1px solid #DDE6EF", background: "#F8FAFC" }}>
-                  {/* Frame stepping — larger buttons */}
-                  <div className="flex items-center gap-1.5">
+                {/* Row 2 — Frame step + Speed buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                  {/* Frame stepping */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(-5)}
-                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
-                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
+                      style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", cursor: "pointer" }}
                       title="Back 5s"
                     >
-                      <Rewind size={14} />
+                      <Rewind size={11} />
                     </button>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(-0.033)}
-                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
-                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
+                      style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", cursor: "pointer" }}
                       title="Back 1 frame"
                     >
-                      <SkipBack size={14} />
+                      <SkipBack size={11} />
                     </button>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(0.033)}
-                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
-                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
+                      style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", cursor: "pointer" }}
                       title="Forward 1 frame"
                     >
-                      <SkipForward size={14} />
+                      <SkipForward size={11} />
                     </button>
                     <button
                       onClick={() => videoPlayerRef.current?.seekBy(5)}
-                      className="px-3 py-2 rounded-lg transition-colors hover:opacity-80 text-sm"
-                      style={{ border: "1.5px solid #DDE6EF", color: "#0F2942", background: "#FFFFFF" }}
+                      style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.5)", cursor: "pointer" }}
                       title="Forward 5s"
                     >
-                      <FastForward size={14} />
+                      <FastForward size={11} />
                     </button>
                   </div>
 
-                  {/* Playback speed — larger buttons */}
-                  <div className="flex items-center gap-1.5">
-                    <Gauge size={14} style={{ color: "#5A7291" }} />
-                    {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                  {/* Playback speed */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <Gauge size={11} style={{ color: "rgba(255,255,255,0.3)" }} />
+                    {[0.25, 0.5, 1, 1.5, 2].map((rate) => (
                       <button
                         key={rate}
                         onClick={() => handleSpeedChange(rate)}
-                        className="px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
-                        style={playbackSpeed === rate
-                          ? { fontFamily: "ui-monospace, monospace", background: "#0D9488", color: "#FFFFFF" }
-                          : { fontFamily: "ui-monospace, monospace", color: "#5A7291", border: "1.5px solid #DDE6EF", background: "#FFFFFF" }
-                        }
+                        style={{
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          fontSize: 9,
+                          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                          fontWeight: 700,
+                          color: playbackSpeed === rate ? "#FFFFFF" : "rgba(255,255,255,0.4)",
+                          background: playbackSpeed === rate ? "#0D9488" : "transparent",
+                          border: playbackSpeed === rate ? "none" : "1px solid rgba(255,255,255,0.08)",
+                          cursor: "pointer",
+                        }}
                         title={`${rate}x speed`}
                       >
                         {rate}x
                       </button>
                     ))}
                   </div>
-
-                  {/* Cinema mode toggle */}
-                  <button
-                    onClick={() => setCinemaMode(!cinemaMode)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-80"
-                    style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: cinemaMode ? "#FFFFFF" : "#5A7291", background: cinemaMode ? "#0D9488" : "#FFFFFF", border: "1.5px solid #DDE6EF" }}
-                    title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
-                  >
-                    {cinemaMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                    {cinemaMode ? "Exit" : "Cinema"}
-                  </button>
                 </div>
               </div>
             )}
 
-            {/* Event Timeline */}
-            {sessionEvents.length > 0 && (() => {
-              const filteredEvents = eventFilter === "all"
-                ? sessionEvents
-                : sessionEvents.filter((ev) => getEventCategory(ev.event_type) === eventFilter);
-              return (
-                <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-                  <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
-                      <span
-                        className="font-bold uppercase text-white"
-                        style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                      >
-                        EVENT TIMELINE
-                      </span>
-                      <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
-                        ({filteredEvents.length === sessionEvents.length
-                          ? `${sessionEvents.length} events`
-                          : `${filteredEvents.length} of ${sessionEvents.length}`})
-                      </span>
-                    </div>
-                  </div>
-                  <div className="bg-white px-5 py-4">
-                    {/* Filter buttons */}
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {EVENT_CATEGORY_LABELS.map((cat) => (
-                        <button
-                          key={cat.value}
-                          onClick={() => setEventFilter(cat.value)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors ${
-                            eventFilter === cat.value
-                              ? "text-white"
-                              : "hover:opacity-80"
-                          }`}
-                          style={eventFilter === cat.value
-                            ? { fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }
-                            : { fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px solid #DDE6EF" }
-                          }
-                        >
-                          {cat.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Scrollable event list */}
-                    <div className="max-h-[300px] overflow-y-auto space-y-1">
-                      {filteredEvents.length === 0 ? (
-                        <p className="text-[11px] text-center py-4" style={{ color: "#8BA4BB" }}>
-                          No events match this filter. Try selecting a different category above.
-                        </p>
-                      ) : (
-                        filteredEvents.map((ev) => {
-                          const cat = getEventCategory(ev.event_type);
-                          const colorClass = EVENT_CATEGORY_COLORS[cat];
-                          return (
-                            <button
-                              key={ev.id}
-                              onClick={() => setStartTime(ev.time_seconds)}
-                              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-navy/[0.03] transition-colors text-left group"
-                            >
-                              {/* Timestamp */}
-                              <span className="text-[11px] shrink-0 min-w-[40px]" style={{ fontFamily: "ui-monospace, monospace", color: "#0D9488" }}>
-                                {formatTimestamp(ev.time_seconds)}
-                              </span>
-
-                              {/* Event badge + label */}
-                              <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                                <span className={`text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${colorClass}`}>
-                                  {ev.event_type.replace(/_/g, " ")}
-                                </span>
-                                {ev.event_label && ev.event_label !== ev.event_type && (
-                                  <span className="text-[11px] truncate" style={{ color: "#0F2942" }}>{ev.event_label}</span>
-                                )}
-                              </div>
-
-                              {/* Play button */}
-                              <span className="shrink-0 text-muted/30 group-hover:text-teal transition-colors">
-                                <Play size={11} />
-                              </span>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* PXI Report Display (generating spinner or completed report) */}
+            {/* PXI Report Display — below transport, inside col 2 */}
             {generating && (
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF" }}>
-                <div className="bg-white px-5 py-6 flex items-center justify-center gap-3">
-                  <Loader2 size={20} className="animate-spin" style={{ color: "#0D9488" }} />
-                  <span className="font-bold uppercase" style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}>Generating analysis...</span>
+              <div style={{ flexShrink: 0, padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0A1929" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <Loader2 size={16} className="animate-spin" style={{ color: "#14B8A8" }} />
+                  <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Generating analysis...</span>
                 </div>
               </div>
             )}
 
             {generatedReport && !generating && (
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #F97316" }}>
+              <div style={{ flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0A1929" }}>
                 <button
                   onClick={toggleReportExpanded}
-                  className="w-full flex items-center justify-between px-5 py-3 transition-colors"
-                  style={{ background: "#0F2942" }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", background: "#0D2037", border: "none", cursor: "pointer" }}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
-                    <Sparkles size={12} style={{ color: "#F97316" }} />
-                    <span
-                      className="font-bold uppercase text-white"
-                      style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                    >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F97316" }} />
+                    <Sparkles size={10} style={{ color: "#F97316" }} />
+                    <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#FFFFFF" }}>
                       {generatedReport.title}
                     </span>
                     {generatedReport.created_at && (
-                      <span
-                        className="px-2 py-0.5 rounded"
-                        style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", color: "rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.08)" }}
-                      >
+                      <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)", borderRadius: 3, padding: "1px 5px" }}>
                         {formatDate(generatedReport.created_at)}
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowTypeSelector(true);
                         setPendingReportType(null);
                       }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase transition-colors hover:opacity-80"
-                      style={{ fontFamily: "ui-monospace, monospace", fontSize: 9, letterSpacing: 1, color: "#0D9488", background: "rgba(13,148,136,0.15)" }}
+                      style={{ display: "flex", alignItems: "center", gap: 3, padding: "2px 6px", borderRadius: 3, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#14B8A8", background: "rgba(13,148,136,0.15)", border: "none", cursor: "pointer" }}
                       title="Regenerate with a different report type"
                     >
-                      <RefreshCw size={10} />
-                      Regenerate
+                      <RefreshCw size={8} />
+                      Redo
                     </button>
                     <ChevronDown
-                      size={14}
-                      style={{ color: "rgba(255,255,255,0.5)", transition: "transform 0.3s ease", transform: reportExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      size={12}
+                      style={{ color: "rgba(255,255,255,0.4)", transition: "transform 0.3s ease", transform: reportExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
                     />
                   </div>
                 </button>
                 <div
                   style={{
-                    maxHeight: reportExpanded ? 2000 : 0,
-                    overflow: "hidden",
+                    maxHeight: reportExpanded ? 400 : 0,
+                    overflow: "auto",
                     transition: "max-height 0.3s ease",
                   }}
                 >
-                  <div className="bg-white px-5 py-4" style={{ borderTop: "1px solid #DDE6EF" }}>
+                  <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                     <div className="flex justify-end mb-2">
                       <ListenButton text={generatedReport.output_text || ""} label="Listen" />
                     </div>
-                    <div className="pl-4 text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#0F2942", borderLeft: "3px solid #0D9488" }}>
+                    <div style={{ paddingLeft: 10, fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "rgba(255,255,255,0.8)", borderLeft: "2px solid #0D9488" }}>
                       {generatedReport.output_text}
                     </div>
-                    <div className="mt-3 flex justify-end">
+                    <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
                       <Link
                         href={`/reports/${generatedReport.id}`}
-                        className="flex items-center gap-1 text-xs font-bold uppercase transition-colors hover:opacity-80"
-                        style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, letterSpacing: 1, color: "#0D9488" }}
+                        style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", textDecoration: "none" }}
                       >
-                        <FileText size={10} />
+                        <FileText size={9} />
                         View Full Report
                       </Link>
                     </div>
@@ -1400,47 +1278,180 @@ export default function FilmSessionViewerPage() {
 
             {/* No analysis yet — collapsed CTA */}
             {!generatedReport && !generating && (
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #F97316" }}>
+              <div style={{ flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
                 <button
                   onClick={() => { setShowTypeSelector(true); setPendingReportType(null); }}
-                  className="w-full flex items-center justify-between px-5 py-3 transition-colors hover:opacity-90"
-                  style={{ background: "#0F2942" }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", background: "#0D2037", border: "none", cursor: "pointer" }}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
-                    <Sparkles size={12} style={{ color: "#F97316" }} />
-                    <span
-                      className="font-bold uppercase text-white"
-                      style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                    >
-                      PLAYER FILM ANALYSIS
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F97316" }} />
+                    <Sparkles size={10} style={{ color: "#F97316" }} />
+                    <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
+                      PXI FILM ANALYSIS
                     </span>
                   </div>
-                  <span
-                    className="text-xs font-bold uppercase"
-                    style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, letterSpacing: 1, color: "#0D9488" }}
-                  >
-                    Generate PXI Report
+                  <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8" }}>
+                    Generate
                   </span>
                 </button>
               </div>
             )}
+          </div>
 
-            {/* Comments (hidden on mobile — shown via order-3 block below) */}
-            <div className="hidden lg:block">
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-                <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
-                  <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
-                  <span
-                    className="font-bold uppercase text-white"
-                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                  >
-                    COMMENTS
+          {/* ── COL 3 — Clips Panel + Reels + Comments ─────────── */}
+          <div style={{ gridColumn: 3, gridRow: 1, background: "#0A1929", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1 }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+              {/* Session info — compact */}
+              <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14B8A8" }} />
+                    <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>SESSION</span>
+                  </div>
+                  <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", background: "rgba(13,148,136,0.2)", borderRadius: 3, padding: "1px 4px" }}>
+                    {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
                   </span>
                 </div>
-                <div className="bg-white px-5 py-4">
+                <div style={{ padding: "6px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)" }}>
+                    <span>{formatDate(session.created_at)}</span>
+                    <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
+                    <span style={{ textTransform: "capitalize" }}>{session.status || "active"}</span>
+                  </div>
+                  {session.description && (
+                    <p style={{ fontSize: 10, marginTop: 3, color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={session.description}>{session.description}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Import Event Data */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xml,.csv"
+                onChange={handleFileSelected}
+                className="hidden"
+              />
+              {(sessionEvents.length === 0 || importingEvents || showReplaceConfirm || importResult) && (
+                <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14B8A8" }} />
+                    <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>IMPORT EVENTS</span>
+                  </div>
+                  <div style={{ padding: "8px 10px" }}>
+                    {importingEvents ? (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 0" }}>
+                        <Loader2 size={12} className="animate-spin" style={{ color: "#14B8A8" }} />
+                        <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Importing...</span>
+                      </div>
+                    ) : showReplaceConfirm ? (
+                      <div>
+                        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.7)", marginBottom: 6 }}>Replace existing events?</p>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button
+                            onClick={() => {
+                              if (pendingImportFile) executeEventImport(pendingImportFile, true);
+                            }}
+                            style={{ flex: 1, padding: "4px 8px", borderRadius: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#FFFFFF", background: "#EA580C", border: "none", cursor: "pointer" }}
+                          >
+                            Replace
+                          </button>
+                          <button
+                            onClick={() => { setShowReplaceConfirm(false); setPendingImportFile(null); }}
+                            style={{ padding: "4px 8px", borderRadius: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.5)", background: "transparent", border: "none", cursor: "pointer" }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        {importResult && (
+                          <div style={{ marginBottom: 6, fontSize: 10, borderRadius: 4, padding: "4px 8px", color: "#14B8A8", background: "rgba(13,148,136,0.1)" }}>
+                            Imported {importResult.events_created} events, {importResult.clips_created} clips
+                            {importResult.player_matches > 0 && ` · ${importResult.player_matches} matched`}
+                            {importResult.unmatched_players.length > 0 && (
+                              <span style={{ display: "block", marginTop: 2, color: "rgba(255,255,255,0.4)" }}>
+                                Unmatched: {importResult.unmatched_players.slice(0, 5).join(", ")}
+                                {importResult.unmatched_players.length > 5 && ` +${importResult.unmatched_players.length - 5} more`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 8px", borderRadius: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", background: "transparent", border: "1px dashed rgba(255,255,255,0.15)", cursor: "pointer" }}
+                        >
+                          {session?.event_data_source ? (
+                            <>
+                              <RefreshCw size={10} />
+                              Re-import
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={10} />
+                              Import Event Data
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Clip Panel — props unchanged */}
+              <ClipPanel
+                sessionId={sessionId}
+                uploadId={upload?.id || ""}
+                getCurrentTime={getCurrentTime}
+                refreshKey={clipRefreshKey}
+              />
+
+              {/* Reels Section */}
+              {sessionReels.length > 0 && (
+                <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#EA580C" }} />
+                    <Film size={10} style={{ color: "#EA580C" }} />
+                    <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>REELS</span>
+                    <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", borderRadius: 3, padding: "0 4px" }}>{sessionReels.length}</span>
+                  </div>
+                  <div style={{ padding: "4px 6px" }}>
+                    {sessionReels.map((reel) => (
+                      <Link
+                        key={reel.id}
+                        href={`/reels/${reel.id}`}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 6px", borderRadius: 4, textDecoration: "none", transition: "background 0.15s" }}
+                        className="hover:bg-white/[0.03]"
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                          <Film size={9} style={{ color: "#EA580C", flexShrink: 0 }} />
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reel.title}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, textTransform: "uppercase", background: reel.status === "ready" ? "rgba(13,148,136,0.15)" : reel.status === "shared" ? "rgba(234,88,12,0.15)" : "rgba(255,255,255,0.06)", color: reel.status === "ready" ? "#14B8A8" : reel.status === "shared" ? "#EA580C" : "rgba(255,255,255,0.4)", borderRadius: 3, padding: "0 4px" }}>
+                            {reel.status}
+                          </span>
+                          <span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>
+                            {reel.clip_count} clip{reel.clip_count !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Comments */}
+              <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14B8A8" }} />
+                  <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>COMMENTS</span>
+                </div>
+                <div style={{ padding: "8px 10px" }}>
                   {/* Comment input */}
-                  <div className="flex gap-2 mb-4">
+                  <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
                     <input
                       type="text"
                       value={commentText}
@@ -1452,57 +1463,55 @@ export default function FilmSessionViewerPage() {
                         }
                       }}
                       placeholder="Add a comment..."
-                      className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
-                      style={{ color: "#0F2942", border: "1.5px solid #DDE6EF" }}
+                      style={{ flex: 1, padding: "4px 8px", borderRadius: 4, fontSize: 11, color: "#FFFFFF", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", outline: "none" }}
                     />
                     <MicButton onTranscript={(t) => setCommentText((p) => (p ? p + " " + t : t))} />
                     <button
                       onClick={handleSubmitComment}
                       disabled={submittingComment || !commentText.trim()}
-                      className="px-3 py-2 rounded-lg text-white transition-colors disabled:opacity-40"
-                      style={{ background: "#0D9488" }}
+                      style={{ padding: "4px 8px", borderRadius: 4, background: "#0D9488", color: "#FFFFFF", border: "none", cursor: "pointer", opacity: submittingComment || !commentText.trim() ? 0.4 : 1 }}
                     >
                       {submittingComment ? (
-                        <Loader2 size={14} className="animate-spin" />
+                        <Loader2 size={12} className="animate-spin" />
                       ) : (
-                        <Send size={14} />
+                        <Send size={12} />
                       )}
                     </button>
                   </div>
 
                   {/* Comment list */}
                   {comments.length === 0 ? (
-                    <p className="text-[11px] text-center py-4" style={{ color: "#8BA4BB" }}>
-                      No comments yet. Type a note above and click the send button.
+                    <p style={{ fontSize: 10, textAlign: "center", padding: "10px 0", color: "rgba(255,255,255,0.3)" }}>
+                      No comments yet.
                     </p>
                   ) : (
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    <div style={{ maxHeight: 200, overflowY: "auto" }}>
                       {comments.map((c) => (
                         <div
                           key={c.id}
-                          className="flex items-start justify-between gap-2 py-2"
-                          style={{ borderBottom: "1px solid #DDE6EF" }}
+                          style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
                         >
-                          <div className="min-w-0">
-                            <p className="text-sm" style={{ color: "#0F2942" }}>{c.comment_text}</p>
-                            <div className="flex items-center gap-2 mt-1">
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", margin: 0 }}>{c.comment_text}</p>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                               {c.timestamp_seconds !== null && (
-                                <span className="flex items-center gap-1 text-[10px]" style={{ fontFamily: "ui-monospace, monospace", color: "#0D9488" }}>
-                                  <Clock size={10} />
+                                <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#14B8A8" }}>
+                                  <Clock size={8} />
                                   {formatTimestamp(c.timestamp_seconds)}
                                 </span>
                               )}
-                              <span className="text-[10px]" style={{ color: "#5A7291" }}>
+                              <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)" }}>
                                 {formatDate(c.created_at)}
                               </span>
                             </div>
                           </div>
                           <button
                             onClick={() => handleDeleteComment(c.id)}
-                            className="text-muted/30 hover:text-red-500 transition-colors shrink-0 mt-0.5"
+                            style={{ color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer", flexShrink: 0, marginTop: 2 }}
+                            className="hover:text-red-400 transition-colors"
                             title="Delete comment"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={10} />
                           </button>
                         </div>
                       ))}
@@ -1513,288 +1522,84 @@ export default function FilmSessionViewerPage() {
             </div>
           </div>
 
-          {/* RIGHT PANEL — 35% (order-2 on mobile — between video and comments) */}
-          <div className={`w-full lg:w-[30%] flex flex-col gap-4 order-2 ${cinemaMode ? "hidden" : ""}`}>
-            {/* Session info — compact */}
-            <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-              <div className="flex items-center justify-between px-4 py-2.5" style={{ background: "#0F2942" }}>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
-                  <span
-                    className="font-bold uppercase text-white"
-                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                  >
-                    SESSION
-                  </span>
-                </div>
-                <span
-                  className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
-                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.3)", color: "#FFFFFF" }}
-                >
-                  {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
+          {/* ── TIMELINE ROW — spans all 3 columns ──────────────── */}
+          <div style={{ gridColumn: "1 / 4", gridRow: 2, background: "#070F1C", borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Timeline header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14B8A8" }} />
+                <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>
+                  EVENT TIMELINE
+                </span>
+                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)" }}>
+                  ({sessionEvents.length} events)
                 </span>
               </div>
-              <div className="bg-white px-4 py-2.5">
-                <div className="flex items-center gap-2 text-[11px]" style={{ color: "#5A7291" }}>
-                  <span>{formatDate(session.created_at)}</span>
-                  <span style={{ color: "#DDE6EF" }}>·</span>
-                  <span className="capitalize">{session.status || "active"}</span>
-                </div>
-                {session.description && (
-                  <p className="text-xs mt-1 truncate" style={{ color: "#0F2942" }} title={session.description}>{session.description}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Import Event Data — hidden once events exist (show re-import only if importing/confirming) */}
-            {/* Hidden file input (always rendered) */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xml,.csv"
-              onChange={handleFileSelected}
-              className="hidden"
-            />
-            {(sessionEvents.length === 0 || importingEvents || showReplaceConfirm || importResult) && (
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-                <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: "#0F2942" }}>
-                  <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
-                  <span
-                    className="font-bold uppercase text-white"
-                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                  >
-                    IMPORT EVENTS
-                  </span>
-                </div>
-                <div className="bg-white px-4 py-3">
-                  {importingEvents ? (
-                    <div className="flex items-center justify-center gap-2 py-2">
-                      <Loader2 size={14} className="animate-spin" style={{ color: "#0D9488" }} />
-                      <span className="text-[11px] font-bold uppercase" style={{ color: "#5A7291", fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}>Importing events...</span>
-                    </div>
-                  ) : showReplaceConfirm ? (
-                    <div className="py-1">
-                      <p className="text-[11px] mb-2" style={{ color: "#0F2942" }}>Replace existing events?</p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            if (pendingImportFile) executeEventImport(pendingImportFile, true);
-                          }}
-                          className="flex-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase text-white transition-colors hover:opacity-90"
-                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#EA580C" }}
-                        >
-                          Replace
-                        </button>
-                        <button
-                          onClick={() => { setShowReplaceConfirm(false); setPendingImportFile(null); }}
-                          className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-colors hover:opacity-80"
-                          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291" }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      {importResult && (
-                        <div className="mb-2 text-[11px] rounded-lg px-3 py-2" style={{ color: "#0D9488", background: "rgba(13,148,136,0.06)" }}>
-                          Imported {importResult.events_created} events, {importResult.clips_created} clips
-                          {importResult.player_matches > 0 && ` · ${importResult.player_matches} matched`}
-                          {importResult.unmatched_players.length > 0 && (
-                            <span className="block mt-1" style={{ color: "#5A7291" }}>
-                              Unmatched: {importResult.unmatched_players.slice(0, 5).join(", ")}
-                              {importResult.unmatched_players.length > 5 && ` +${importResult.unmatched_players.length - 5} more`}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold uppercase transition-colors hover:opacity-80"
-                        style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px dashed #DDE6EF" }}
-                      >
-                        {session?.event_data_source ? (
-                          <>
-                            <RefreshCw size={12} />
-                            Re-import Event Data
-                          </>
-                        ) : (
-                          <>
-                            <Upload size={12} />
-                            Import Event Data
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Clip Panel */}
-            <ClipPanel
-              sessionId={sessionId}
-              uploadId={upload?.id || ""}
-              getCurrentTime={getCurrentTime}
-              refreshKey={clipRefreshKey}
-            />
-
-            {/* Reels Section */}
-            {sessionReels.length > 0 && (
-              <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #EA580C" }}>
-                <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
-                  <span className="w-2 h-2 rounded-full" style={{ background: "#EA580C" }} />
-                  <Film size={11} style={{ color: "#EA580C" }} />
-                  <span
-                    className="font-bold uppercase text-white"
-                    style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                  >
-                    REELS
-                  </span>
-                  <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                    style={{ fontFamily: "ui-monospace, monospace", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
-                  >
-                    {sessionReels.length}
-                  </span>
-                </div>
-                <div className="bg-white px-4 py-3 space-y-1">
-                  {sessionReels.map((reel) => (
-                    <Link
-                      key={reel.id}
-                      href={`/reels/${reel.id}`}
-                      className="flex items-center justify-between py-2 px-2 rounded-lg transition-colors hover:bg-navy/[0.03] group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Film size={11} style={{ color: "#EA580C" }} />
-                        <span className="text-sm truncate" style={{ color: "#0F2942" }}>{reel.title}</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
-                          style={{
-                            fontFamily: "ui-monospace, monospace",
-                            background: reel.status === "ready" ? "rgba(13,148,136,0.1)" : reel.status === "shared" ? "rgba(234,88,12,0.1)" : "rgba(15,41,66,0.06)",
-                            color: reel.status === "ready" ? "#0D9488" : reel.status === "shared" ? "#EA580C" : "#5A7291",
-                          }}
-                        >
-                          {reel.status}
-                        </span>
-                        <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, color: "#8BA4BB" }}>
-                          {reel.clip_count} clip{reel.clip_count !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Game Plan Links */}
-            <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #F97316" }}>
-              <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: "#F97316" }} />
-                <span
-                  className="font-bold uppercase text-white"
-                  style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                >
-                  GAME PLAN LINKS
-                </span>
-              </div>
-              <div className="bg-white px-5 py-4">
-                <p className="text-[11px] text-center py-4" style={{ color: "#8BA4BB" }}>
-                  No linked game plans yet.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* MOBILE COMMENTS — order-3 (only visible below lg) */}
-          <div className="lg:hidden order-3 w-full">
-            <div className="overflow-hidden" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488" }}>
-              <div className="flex items-center gap-2 px-5 py-3" style={{ background: "#0F2942" }}>
-                <span className="w-2 h-2 rounded-full" style={{ background: "#0D9488" }} />
-                <span
-                  className="font-bold uppercase text-white"
-                  style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-                >
-                  COMMENTS
-                </span>
-              </div>
-              <div className="bg-white px-5 py-4">
-                {/* Comment input */}
-                <div className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSubmitComment();
-                      }
-                    }}
-                    placeholder="Add a comment..."
-                    className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
-                    style={{ color: "#0F2942", border: "1.5px solid #DDE6EF" }}
-                  />
+              {/* Category filter tabs */}
+              <div style={{ display: "flex", gap: 3 }}>
+                {EVENT_CATEGORY_LABELS.map((cat) => (
                   <button
-                    onClick={handleSubmitComment}
-                    disabled={submittingComment || !commentText.trim()}
-                    className="px-3 py-2 rounded-lg text-white transition-colors disabled:opacity-40"
-                    style={{ background: "#0D9488" }}
+                    key={cat.value}
+                    onClick={() => setEventFilter(cat.value)}
+                    style={{
+                      padding: "2px 6px",
+                      borderRadius: 3,
+                      fontSize: 8,
+                      fontFamily: "'Oswald', sans-serif",
+                      fontWeight: 600,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      color: eventFilter === cat.value ? "#FFFFFF" : "rgba(255,255,255,0.35)",
+                      background: eventFilter === cat.value ? "#0D9488" : "transparent",
+                      border: eventFilter === cat.value ? "none" : "1px solid rgba(255,255,255,0.08)",
+                      cursor: "pointer",
+                    }}
                   >
-                    {submittingComment ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Send size={14} />
-                    )}
+                    {cat.label}
                   </button>
-                </div>
-
-                {/* Comment list */}
-                {comments.length === 0 ? (
-                  <p className="text-[11px] text-center py-4" style={{ color: "#8BA4BB" }}>
-                    No comments yet.
+                ))}
+              </div>
+            </div>
+            {/* Scrollable event list (placeholder — Commit 3 will replace with track view) */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px" }}>
+              {(() => {
+                const filteredEvents = eventFilter === "all"
+                  ? sessionEvents
+                  : sessionEvents.filter((ev) => getEventCategory(ev.event_type) === eventFilter);
+                return filteredEvents.length === 0 ? (
+                  <p style={{ fontSize: 10, textAlign: "center", padding: "16px 0", color: "rgba(255,255,255,0.25)" }}>
+                    {sessionEvents.length === 0 ? "No events yet — tag events from the Code Window." : "No events match this filter."}
                   </p>
                 ) : (
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {comments.map((c) => (
-                      <div
-                        key={c.id}
-                        className="flex items-start justify-between gap-2 py-2"
-                        style={{ borderBottom: "1px solid #DDE6EF" }}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm" style={{ color: "#0F2942" }}>{c.comment_text}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {c.timestamp_seconds !== null && (
-                              <span className="flex items-center gap-1 text-[10px]" style={{ fontFamily: "ui-monospace, monospace", color: "#0D9488" }}>
-                                <Clock size={10} />
-                                {formatTimestamp(c.timestamp_seconds)}
-                              </span>
-                            )}
-                            <span className="text-[10px]" style={{ color: "#5A7291" }}>
-                              {formatDate(c.created_at)}
-                            </span>
-                          </div>
-                        </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                    {filteredEvents.map((ev) => {
+                      const cat = getEventCategory(ev.event_type);
+                      const dotColor = cat === "offensive" ? "#14B8A8" : cat === "defensive" ? "#E67E22" : cat === "special_teams" ? "#818CF8" : "rgba(255,255,255,0.3)";
+                      return (
                         <button
-                          onClick={() => handleDeleteComment(c.id)}
-                          className="text-muted/30 hover:text-red-500 transition-colors shrink-0 mt-0.5"
-                          title="Delete comment"
+                          key={ev.id}
+                          onClick={() => setStartTime(ev.time_seconds)}
+                          style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.04)", border: "none", cursor: "pointer", transition: "background 0.15s" }}
+                          className="hover:bg-white/[0.08]"
+                          title={`${ev.event_type.replace(/_/g, " ")} at ${formatTimestamp(ev.time_seconds)}`}
                         >
-                          <Trash2 size={12} />
+                          <span style={{ width: 4, height: 4, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+                          <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#14B8A8" }}>
+                            {formatTimestamp(ev.time_seconds)}
+                          </span>
+                          <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>
+                            {ev.event_type.replace(/_/g, " ")}
+                          </span>
                         </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Reel Builder Modal */}
       {showReelBuilder && (
