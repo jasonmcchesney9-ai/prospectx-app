@@ -165,6 +165,20 @@ function formatDate(iso: string): string {
   }
 }
 
+function getEmbedUrl(sourceUrl: string, uploadSource: string): string | null {
+  if (uploadSource === "youtube") {
+    // youtube.com/watch?v=X → youtube.com/embed/X
+    const match = sourceUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+    if (match) return `https://www.youtube.com/embed/${match[1]}?autoplay=1&rel=0`;
+  }
+  if (uploadSource === "vimeo") {
+    // vimeo.com/X → player.vimeo.com/video/X
+    const match = sourceUrl.match(/vimeo\.com\/(\d+)/);
+    if (match) return `https://player.vimeo.com/video/${match[1]}?autoplay=1`;
+  }
+  return null;
+}
+
 interface FilmReportType {
   value: string;
   label: string;
@@ -720,6 +734,23 @@ export default function FilmSessionViewerPage() {
                 >
                   {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
                 </span>
+                {upload && (upload.upload_source === "youtube" || upload.upload_source === "vimeo" || upload.upload_source === "external_link") && (
+                  <span
+                    style={{
+                      fontFamily: "'Oswald', sans-serif",
+                      fontWeight: 600,
+                      fontSize: 9,
+                      background: "rgba(255,255,255,0.1)",
+                      color: "rgba(255,255,255,0.5)",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                      textTransform: "uppercase" as const,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    EXTERNAL
+                  </span>
+                )}
                 <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
                   {formatDate(session.created_at)}
                 </span>
@@ -972,12 +1003,49 @@ export default function FilmSessionViewerPage() {
           <div className={`w-full flex flex-col gap-3 order-1 ${cinemaMode ? "lg:w-full" : "lg:w-[70%]"}`}>
             {/* Video Player — edge-to-edge, no card wrapper */}
             <div className="relative" style={{ borderRadius: 8, overflow: "hidden", minHeight: "50vh" }}>
-              <VideoPlayer
-                ref={videoPlayerRef}
-                playbackId={upload?.playback_id || null}
-                onTimeUpdate={handleTimeUpdate}
-                startTime={startTime}
-              />
+              {/* Mux player — when playback_id exists */}
+              {upload?.playback_id && (
+                <VideoPlayer
+                  ref={videoPlayerRef}
+                  playbackId={upload.playback_id}
+                  onTimeUpdate={handleTimeUpdate}
+                  startTime={startTime}
+                />
+              )}
+              {/* YouTube/Vimeo iframe — when external source, no playback_id */}
+              {!upload?.playback_id && upload?.source_url && (upload.upload_source === "youtube" || upload.upload_source === "vimeo") && (() => {
+                const embedUrl = getEmbedUrl(upload.source_url, upload.upload_source);
+                return embedUrl ? (
+                  <iframe
+                    src={embedUrl}
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    style={{ width: "100%", aspectRatio: "16/9", border: "none", borderRadius: 8 }}
+                  />
+                ) : null;
+              })()}
+              {/* Generic external link — no embed possible */}
+              {!upload?.playback_id && upload?.source_url && upload.upload_source === "external_link" && (
+                <div style={{ width: "100%", aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A2540", borderRadius: 8 }}>
+                  <a
+                    href={upload.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0D9488", textDecoration: "none", textTransform: "uppercase", letterSpacing: "0.08em" }}
+                  >
+                    External video — click to open ↗
+                  </a>
+                </div>
+              )}
+              {/* No video at all */}
+              {!upload?.playback_id && !upload?.source_url && (
+                <VideoPlayer
+                  ref={videoPlayerRef}
+                  playbackId={null}
+                  onTimeUpdate={handleTimeUpdate}
+                  startTime={startTime}
+                />
+              )}
               {upload?.playback_id && (
                 <>
                   <button

@@ -42171,8 +42171,11 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
     """
     from mux_client import create_asset_from_url as mux_from_url
     from urllib.parse import urlparse
+    import re as _re
 
     _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+    _YOUTUBE_RE = _re.compile(r'(youtube\.com/watch\?v=|youtu\.be/)')
+    _VIMEO_RE = _re.compile(r'vimeo\.com/\d+')
 
     org_id = token_data["org_id"]
     user_id = token_data["user_id"]
@@ -42190,10 +42193,19 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
     if not url:
         raise HTTPException(status_code=400, detail="url is required")
 
-    # Detect URL type: direct video file vs external link
+    # Detect URL type: direct video file, YouTube, Vimeo, or unsupported
     parsed_path = urlparse(url).path.lower()
     is_direct_video = any(parsed_path.endswith(ext) for ext in _VIDEO_EXTENSIONS)
-    logger.info("[from-url] url=%s is_direct_video=%s user=%s", url, is_direct_video, user_id)
+    is_youtube = bool(_YOUTUBE_RE.search(url))
+    is_vimeo = bool(_VIMEO_RE.search(url))
+
+    if not is_direct_video and not is_youtube and not is_vimeo:
+        raise HTTPException(
+            status_code=400,
+            detail="Only direct video files, YouTube, or Vimeo links are supported",
+        )
+
+    logger.info("[from-url] url=%s is_direct_video=%s is_youtube=%s is_vimeo=%s user=%s", url, is_direct_video, is_youtube, is_vimeo, user_id)
 
     upload_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -42253,8 +42265,9 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
         finally:
             conn.close()
     else:
-        # ── External link (streaming platform, etc.) → store as reference ──
-        logger.info("[from-url] Storing as external_link — url=%s title=%s", url, title)
+        # ── YouTube / Vimeo / external link → store as reference, no Mux ──
+        ext_source = "youtube" if is_youtube else "vimeo" if is_vimeo else "external_link"
+        logger.info("[from-url] Storing as %s — url=%s title=%s", ext_source, url, title)
         conn = get_db()
         try:
             conn.execute("""
@@ -42266,7 +42279,7 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
             """, (
                 upload_id, org_id, user_id, title, body.get("description"),
                 body.get("game_id"), body.get("team_id"), body.get("player_id"),
-                "external_link", url,
+                ext_source, url,
                 None, None, None,
                 "ready",
                 body.get("visibility", "org"), user_id, now, now,
@@ -42275,7 +42288,7 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
             _increment_tracking(user_id, "uploads", conn)
             return {
                 "id": upload_id,
-                "source_type": "external_link",
+                "source_type": ext_source,
                 "external_url": url,
                 "title": title,
                 "status": "ready",

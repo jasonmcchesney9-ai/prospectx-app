@@ -276,8 +276,8 @@ export default function FilmUploadPage() {
       setUploadId(id);
       setStep("uploading");
 
-      if (res.data.source_type === "external_link") {
-        // External link — already "ready", no Mux processing needed
+      if (res.data.source_type === "external_link" || res.data.source_type === "youtube" || res.data.source_type === "vimeo") {
+        // External link / YouTube / Vimeo — already "ready", no Mux processing needed
         setUploadStatus("ready");
         toast.success("Video link saved!");
       } else {
@@ -501,6 +501,9 @@ export default function FilmUploadPage() {
                 Link Video
               </button>
             </div>
+            <p style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 10, color: "rgba(90,114,145,0.6)", marginTop: 4 }}>
+              YouTube, Vimeo, or direct .mp4 / .mov links supported
+            </p>
 
             <div className="flex justify-between">
               <button
