@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Film, Upload, Video, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw, ExternalLink, Plus, BarChart3, Tag, FileText, CheckCircle2 } from "lucide-react";
 import NavBar from "@/components/NavBar";
@@ -131,6 +131,8 @@ export default function FilmRoomPage() {
   });
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [loadingReels, setLoadingReels] = useState(true);
+  const [reelsPulse, setReelsPulse] = useState(false);
+  const reelsPulsed = useRef(false);
 
   useEffect(() => {
     api
@@ -173,6 +175,16 @@ export default function FilmRoomPage() {
       setLoadingReels(false);
     }).catch(() => { setLoadingReels(false); });
   }, []);
+
+  // Pulse the reels badge once on first load when reel_count > 0
+  useEffect(() => {
+    if (stats && (stats.reels ?? 0) > 0 && !reelsPulsed.current) {
+      reelsPulsed.current = true;
+      setReelsPulse(true);
+      const t = setTimeout(() => setReelsPulse(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [stats]);
 
   const handleDeleteSession = async (id: string) => {
     if (!confirm("Delete this film session? This cannot be undone.")) return;
@@ -275,93 +287,133 @@ export default function FilmRoomPage() {
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {([
-              { key: "all" as StatsFilter, label: "Sessions", value: stats.sessions, icon: <Film size={14} />, iconBg: "rgba(15,41,66,0.05)", iconColor: "rgba(15,41,66,0.6)" },
-              { key: "clips" as StatsFilter, label: "Clips", value: stats.clips, icon: <Scissors size={14} />, iconBg: "rgba(13,148,136,0.1)", iconColor: "#0D9488" },
-              { key: "events" as StatsFilter, label: "Events", value: stats.events, icon: <Tag size={14} />, iconBg: "rgba(234,88,12,0.1)", iconColor: "#EA580C" },
-              { key: "reports" as StatsFilter, label: "Reports", value: stats.film_reports, icon: <FileText size={14} />, iconBg: "rgba(147,51,234,0.1)", iconColor: "#9333EA" },
-            ]).map((pill) => {
-              const isActive = activeFilter === pill.key && pill.key !== "all";
-              return (
-                <button
-                  key={pill.key}
-                  onClick={() => {
-                    const next = activeFilter === pill.key ? "all" : pill.key;
-                    setActiveFilter(next);
-                    if (next !== "all") setActiveTab("sessions");
-                    try { sessionStorage.setItem("film_hub_filter", next); } catch { /* */ }
-                  }}
-                  className="rounded-lg px-4 py-3 flex items-center gap-3 transition-colors text-left"
-                  style={{
-                    background: isActive ? "#0D9488" : "#FFFFFF",
-                    border: isActive ? "1px solid #0D9488" : "1px solid #E2EAF3",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: isActive ? "rgba(255,255,255,0.2)" : pill.iconBg, color: isActive ? "#FFFFFF" : pill.iconColor }}>
-                    {pill.icon}
-                  </div>
-                  <div>
-                    <p className="text-lg font-oswald" style={{ color: isActive ? "#FFFFFF" : "#0F2942" }}>{pill.value}</p>
-                    <p className="text-[10px] font-oswald uppercase tracking-wider" style={{ color: isActive ? "rgba(255,255,255,0.7)" : "#5A7291" }}>{pill.label}</p>
-                  </div>
-                </button>
-              );
-            })}
+              { key: "all" as StatsFilter, label: "Sessions", value: stats.sessions, valueColor: "#F97316" },
+              { key: "clips" as StatsFilter, label: "Clips", value: stats.clips, valueColor: "#22D3EE" },
+              { key: "events" as StatsFilter, label: "Events", value: stats.events, valueColor: "#A5B4FC" },
+              { key: "reports" as StatsFilter, label: "Reports", value: stats.film_reports, valueColor: "#34D399" },
+            ]).map((pill) => (
+              <button
+                key={pill.key}
+                onClick={() => {
+                  const next = activeFilter === pill.key ? "all" : pill.key;
+                  setActiveFilter(next);
+                  if (next !== "all") setActiveTab("sessions");
+                  try { sessionStorage.setItem("film_hub_filter", next); } catch { /* */ }
+                }}
+                style={{
+                  background: "#0F2942",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  cursor: "pointer",
+                  border: "none",
+                  textAlign: "left",
+                  transition: "background 0.15s, box-shadow 0.15s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#102C4A"; e.currentTarget.style.boxShadow = "0 0 0 1px rgba(20,184,166,0.5)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#0F2942"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
+                  {pill.label}
+                </span>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 22, color: pill.valueColor }}>
+                  {pill.value}
+                </span>
+              </button>
+            ))}
             <button
               onClick={() => {
                 setActiveTab("reels");
                 setActiveFilter("all");
                 try { sessionStorage.setItem("film_hub_tab", "reels"); sessionStorage.setItem("film_hub_filter", "all"); } catch { /* */ }
               }}
-              className="rounded-lg px-4 py-3 flex items-center gap-3 transition-colors text-left"
               style={{
-                background: activeTab === "reels" ? "#0D9488" : "#FFFFFF",
-                border: activeTab === "reels" ? "1px solid #0D9488" : "1px solid #E2EAF3",
+                background: "#0F2942",
+                borderRadius: 10,
+                padding: "12px 16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
                 cursor: "pointer",
+                border: "none",
+                textAlign: "left",
+                transition: "background 0.15s, box-shadow 0.15s",
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#102C4A"; e.currentTarget.style.boxShadow = "0 0 0 1px rgba(20,184,166,0.5)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#0F2942"; e.currentTarget.style.boxShadow = "none"; }}
             >
-              <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: activeTab === "reels" ? "rgba(255,255,255,0.2)" : "rgba(234,88,12,0.1)", color: activeTab === "reels" ? "#FFFFFF" : "#EA580C" }}>
-                <Film size={14} />
-              </div>
-              <div>
-                <p className="text-lg font-oswald" style={{ color: activeTab === "reels" ? "#FFFFFF" : "#0F2942" }}>{stats.reels ?? 0}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider" style={{ color: activeTab === "reels" ? "rgba(255,255,255,0.7)" : "#5A7291" }}>Reels</p>
-              </div>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
+                Reels
+              </span>
+              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 22, color: "#F97316" }}>
+                {stats.reels ?? 0}
+              </span>
             </button>
           </div>
         )}
 
         {/* ── Tab Bar ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-1" style={{ borderBottom: "2px solid #E2EAF3" }}>
+        <style>{`@keyframes reels-pulse { 0%,100% { box-shadow: 0 0 0 2px rgba(249,115,22,0.5) } 50% { box-shadow: 0 0 0 4px rgba(249,115,22,0.8) } }`}</style>
+        <div className="flex items-center gap-1" style={{ background: "transparent", borderBottom: "1px solid rgba(15,41,66,0.6)", padding: "0 16px" }}>
           {([
             { key: "sessions" as HubTab, label: "Sessions" },
             { key: "uploads" as HubTab, label: "Uploads" },
             { key: "reels" as HubTab, label: "Reels" },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => {
-                setActiveTab(tab.key);
-                if (tab.key !== "sessions") { setActiveFilter("all"); try { sessionStorage.setItem("film_hub_filter", "all"); } catch { /* */ } }
-                try { sessionStorage.setItem("film_hub_tab", tab.key); } catch { /* */ }
-              }}
-              className="px-4 py-2.5 text-xs font-oswald uppercase tracking-widest transition-colors"
-              style={{
-                color: activeTab === tab.key ? "#0D9488" : "#5A7291",
-                fontWeight: activeTab === tab.key ? 700 : 400,
-                borderBottom: activeTab === tab.key ? "2px solid #0D9488" : "2px solid transparent",
-                marginBottom: -2,
-                background: "none",
-                border: "none",
-                borderBottomWidth: 2,
-                borderBottomStyle: "solid",
-                borderBottomColor: activeTab === tab.key ? "#0D9488" : "transparent",
-                cursor: "pointer",
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+          ]).map((tab) => {
+            const isActive = activeTab === tab.key;
+            const reelCount = stats?.reels ?? 0;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  setActiveTab(tab.key);
+                  if (tab.key !== "sessions") { setActiveFilter("all"); try { sessionStorage.setItem("film_hub_filter", "all"); } catch { /* */ } }
+                  try { sessionStorage.setItem("film_hub_tab", tab.key); } catch { /* */ }
+                }}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  fontFamily: "'Oswald', sans-serif",
+                  fontWeight: 600,
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.55)",
+                  background: isActive ? "#0F2942" : "transparent",
+                  boxShadow: isActive ? "0 0 0 1px #14B8A8" : "none",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "background 0.15s, color 0.15s, box-shadow 0.15s",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = "rgba(15,41,66,0.7)"; e.currentTarget.style.color = "rgba(255,255,255,0.85)"; } }}
+                onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.55)"; } }}
+              >
+                {tab.label}
+                {tab.key === "reels" && reelCount > 0 && (
+                  <span
+                    style={{
+                      background: "#F97316",
+                      color: "#0F172A",
+                      borderRadius: 999,
+                      padding: "0 6px",
+                      fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      lineHeight: "16px",
+                      animation: reelsPulse ? "reels-pulse 0.6s ease-in-out infinite" : "none",
+                    }}
+                  >
+                    {reelCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* ── Sessions Tab ──────────────────────────────────────── */}
