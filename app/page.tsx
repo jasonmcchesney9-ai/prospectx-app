@@ -27,6 +27,7 @@ import {
   Pin,
   Calendar,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -35,7 +36,7 @@ import ReportCard from "@/components/ReportCard";
 import TeamContextBar from "@/components/TeamContextBar";
 import BenchTalkUsage from "@/components/BenchTalkUsage";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
-import api from "@/lib/api";
+import api, { assetUrl } from "@/lib/api";
 import { formatLeague } from "@/lib/leagues";
 import { getUser, isAuthenticated } from "@/lib/auth";
 import type { Team, Player, Report, GamePlan, SeriesPlan, ScoutingListItem, AgentClient, HTGame, HTStandings, ScoringLeader } from "@/types/api";
@@ -204,6 +205,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [teamDataLoading, setTeamDataLoading] = useState(true);
   const [error, setError] = useState("");
+  const [heroSyncing, setHeroSyncing] = useState(false);
 
   // ── Dashboard layout (widget visibility) ──────────────────
   const [dashboardWidgets, setDashboardWidgets] = useState<string[] | null>(null);
@@ -377,36 +379,133 @@ function Dashboard() {
           </div>
         )}
 
-        {/* ═══ DASHBOARD Header — navy bar (war room style) ═══ */}
-        <div className="px-5 py-4 flex items-center justify-between mb-4" style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#0F2942" }}>
-          <div className="flex items-center gap-3">
-            <span
-              className="px-2.5 py-1 rounded-md text-white font-bold uppercase flex items-center gap-1.5"
-              style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2, background: "#0D9488" }}
-            >
-              <Sparkles size={10} />
-              PXI
-            </span>
-            <div>
-              <h1 className="text-lg font-bold text-white font-oswald tracking-wider uppercase">
-                DASHBOARD
-              </h1>
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
-                {user?.first_name ? `Welcome back, ${user.first_name}. Your personalized hockey operations overview.` : "Your personalized hockey operations overview. Widgets update automatically."}
-              </p>
+        {/* ═══ Team Hero Banner ═══ */}
+        {(() => {
+          const teamName = activeTeam?.name || "";
+          const lowerName = teamName.toLowerCase();
+          const ts = standings.find((s) => s.name.toLowerCase().includes(lowerName) || lowerName.includes(s.name.toLowerCase())) || null;
+          const record = ts ? `${ts.wins ?? 0}-${ts.losses ?? 0}-${ts.otl ?? 0}` : null;
+          const standingPts = ts?.points;
+          const gf = ts?.gf;
+          const ga = ts?.ga;
+          const diff = ts?.diff;
+          return (
+            <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(135deg, #071E33 0%, #162E4A 60%, rgba(13,148,136,0.08) 100%)", borderRadius: 12, marginBottom: 18, minHeight: 110, padding: "0 28px", display: "flex", alignItems: "center" }}>
+              {/* Rink SVG Watermark */}
+              <svg viewBox="0 0 200 120" style={{ position: "absolute", right: 0, top: 0, height: "100%", opacity: 0.04 }} preserveAspectRatio="xMaxYMid meet">
+                <rect x="10" y="10" width="180" height="100" rx="40" ry="40" fill="none" stroke="#FFFFFF" strokeWidth="2" />
+                <line x1="100" y1="10" x2="100" y2="110" stroke="#FFFFFF" strokeWidth="1.5" />
+                <circle cx="100" cy="60" r="18" fill="none" stroke="#FFFFFF" strokeWidth="1.5" />
+                <circle cx="50" cy="40" r="8" fill="none" stroke="#FFFFFF" strokeWidth="1" />
+                <circle cx="150" cy="40" r="8" fill="none" stroke="#FFFFFF" strokeWidth="1" />
+                <circle cx="50" cy="80" r="8" fill="none" stroke="#FFFFFF" strokeWidth="1" />
+                <circle cx="150" cy="80" r="8" fill="none" stroke="#FFFFFF" strokeWidth="1" />
+              </svg>
+
+              {/* Left: Team Logo + Info */}
+              <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1, position: "relative", zIndex: 1, padding: "20px 0" }}>
+                {/* Team Logo */}
+                {activeTeam?.logo_url ? (
+                  <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: "2px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", flexShrink: 0 }}>
+                    <img src={assetUrl(activeTeam.logo_url)} alt={teamName} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  </div>
+                ) : activeTeam ? (
+                  <div style={{ width: 56, height: 56, borderRadius: 10, background: "rgba(255,255,255,0.08)", border: "2px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 18, color: "rgba(255,255,255,0.5)" }}>
+                      {activeTeam.abbreviation || teamName.slice(0, 3).toUpperCase()}
+                    </span>
+                  </div>
+                ) : null}
+
+                <div>
+                  {/* Team Name */}
+                  {activeTeam ? (
+                    <Link href={`/teams/${encodeURIComponent(teamName)}`} style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 26, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.04em", textDecoration: "none", lineHeight: 1.1 }} className="hover:underline hover:text-teal transition-colors">
+                      {teamName}
+                    </Link>
+                  ) : (
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 26, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.04em" }}>DASHBOARD</span>
+                  )}
+                  {/* League line */}
+                  {activeTeam?.league && (
+                    <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
+                      {activeTeam.league}{record ? ` — ${record}` : ""}
+                    </p>
+                  )}
+                  {/* Stats strip */}
+                  {ts && (
+                    <div style={{ display: "flex", gap: 20, marginTop: 8 }}>
+                      {record && (
+                        <div>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 18, color: "#FFFFFF", lineHeight: 1 }}>{record}</p>
+                          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>Record</p>
+                        </div>
+                      )}
+                      {standingPts != null && (
+                        <div>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 18, color: "#FFFFFF", lineHeight: 1 }}>{standingPts}</p>
+                          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>Points</p>
+                        </div>
+                      )}
+                      {gf != null && (
+                        <div>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 18, color: "#FFFFFF", lineHeight: 1 }}>{gf}</p>
+                          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>GF</p>
+                        </div>
+                      )}
+                      {ga != null && (
+                        <div>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 18, color: "#FFFFFF", lineHeight: 1 }}>{ga}</p>
+                          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>GA</p>
+                        </div>
+                      )}
+                      {diff != null && (
+                        <div>
+                          <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 18, color: diff > 0 ? "#14B8A8" : diff < 0 ? "#C0392B" : "#FFFFFF", lineHeight: 1 }}>{diff > 0 ? `+${diff}` : diff}</p>
+                          <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>Diff</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Sync + Team Selector */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", zIndex: 1 }}>
+                {activeTeam && (
+                  <button
+                    onClick={async () => {
+                      if (heroSyncing) return;
+                      setHeroSyncing(true);
+                      try { await loadTeamData(activeTeam); } finally { setHeroSyncing(false); }
+                    }}
+                    disabled={heroSyncing}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 7, background: "rgba(13,148,136,0.15)", border: "1.5px solid rgba(13,148,136,0.3)", color: "#14B8A8", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", cursor: "pointer" }}
+                    className="hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {heroSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    {heroSyncing ? "Syncing..." : "\u21BB Sync"}
+                  </button>
+                )}
+                {teams.length > 1 && (
+                  <select
+                    value={activeTeam?.name || ""}
+                    onChange={(e) => {
+                      const t = teams.find((tm) => tm.name === e.target.value);
+                      if (t) handleTeamChange(t);
+                    }}
+                    style={{ appearance: "none", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#FFFFFF", fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", borderRadius: 7, padding: "8px 28px 8px 12px", cursor: "pointer" }}
+                    className="focus:outline-none focus:ring-1 focus:ring-teal"
+                  >
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.name} style={{ background: "#0F2942", color: "#FFFFFF" }}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {activeTeam && (
-              <span
-                className="font-bold uppercase text-white"
-                style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
-              >
-                {activeTeam.name}
-              </span>
-            )}
-          </div>
-        </div>
+          );
+        })()}
 
         {/* ── Team Context Bar ─────────────────────────────── */}
         <TeamContextBar
