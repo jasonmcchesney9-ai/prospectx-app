@@ -144,7 +144,7 @@ export default function HighlightReelsPage() {
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full" style={{ background: "#EA580C" }} />
                       <Link
-                        href={`/highlight-reels/${reel.id}`}
+                        href={`/reels/${reel.id}`}
                         className="font-bold uppercase text-white hover:underline"
                         style={{ fontSize: 10, fontFamily: "ui-monospace, monospace", letterSpacing: 2 }}
                       >
@@ -186,7 +186,7 @@ export default function HighlightReelsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/highlight-reels/${reel.id}`}
+                        href={`/reels/${reel.id}`}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 text-white"
                         style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488" }}
                       >

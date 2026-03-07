@@ -271,7 +271,7 @@ function NewHighlightReelPage() {
         status: "draft",
       });
       toast.success("Highlight reel created!");
-      router.push(`/highlight-reels/${res.data.id}`);
+      router.push(`/reels/${res.data.id}`);
     } catch {
       toast.error("Failed to create highlight reel");
     } finally {

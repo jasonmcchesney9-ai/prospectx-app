@@ -1594,7 +1594,7 @@ export default function FilmSessionViewerPage() {
                   {sessionReels.map((reel) => (
                     <Link
                       key={reel.id}
-                      href={`/highlight-reels/${reel.id}`}
+                      href={`/reels/${reel.id}`}
                       className="flex items-center justify-between py-2 px-2 rounded-lg transition-colors hover:bg-navy/[0.03] group"
                     >
                       <div className="flex items-center gap-2 min-w-0">
