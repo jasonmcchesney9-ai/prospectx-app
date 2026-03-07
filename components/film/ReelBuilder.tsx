@@ -187,7 +187,7 @@ export default function ReelBuilder({ sessionId, playerId, onClose, onCreated }:
             Reel created
             <button
               onClick={() => {
-                window.open(`/highlight-reels/${res.data.id}`, "_blank");
+                window.open(`/reels/${res.data.id}`, "_blank");
                 toast.dismiss(t.id);
               }}
               style={{ fontWeight: 700, color: "#0D9488", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}

@@ -639,7 +639,7 @@ export default function FilmRoomPage() {
                         <Film size={14} style={{ color: "#EA580C", flexShrink: 0 }} />
                         <div className="min-w-0">
                           <Link
-                            href={`/highlight-reels/${reel.id}`}
+                            href={`/reels/${reel.id}`}
                             className="text-sm font-medium truncate block transition-colors"
                             style={{ color: "#0F2942" }}
                           >
