@@ -955,6 +955,15 @@ export default function FilmSessionViewerPage() {
               )}
             </div>
 
+            {/* Keyboard shortcut hint bar */}
+            {upload?.playback_id && (
+              <p
+                style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "#8BA4BB", whiteSpace: "nowrap", margin: 0, padding: "0 2px" }}
+              >
+                Space: Play/Pause &middot; &larr; &rarr;: Frame step &middot; N / P: Next / Prev clip &middot; 1&ndash;4: Tag shortcuts
+              </p>
+            )}
+
             {/* Event Tag Bar */}
             {upload?.playback_id && (
               <EventTagger
