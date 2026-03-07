@@ -100,6 +100,13 @@ export default function EventTagger({
   const [miniToast, setMiniToast] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const miniToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeTagTab, setActiveTagTab] = useState<"all" | "offensive" | "defensive" | "special_teams">(() => {
+    try {
+      const stored = sessionStorage.getItem(`tag_tab_${sessionId}`);
+      if (stored === "offensive" || stored === "defensive" || stored === "special_teams") return stored;
+    } catch { /* */ }
+    return "all";
+  });
 
   // Group buttons by category
   const buttonsByCategory = CATEGORY_GROUPS.map((g) => ({
@@ -221,16 +228,45 @@ export default function EventTagger({
       </div>
 
       <div className="bg-white px-4 py-3">
-        {/* All 22 buttons grouped by category */}
+        {/* Category tab bar */}
+        <div className="flex items-center gap-1 mb-3">
+          {([
+            { value: "all" as const, label: "All" },
+            { value: "offensive" as const, label: "Offensive" },
+            { value: "defensive" as const, label: "Defensive" },
+            { value: "special_teams" as const, label: "Special Teams" },
+          ]).map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => {
+                setActiveTagTab(tab.value);
+                try { sessionStorage.setItem(`tag_tab_${sessionId}`, tab.value); } catch { /* */ }
+              }}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-colors"
+              style={activeTagTab === tab.value
+                ? { fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }
+                : { fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#5A7291", border: "1.5px solid #DDE6EF", background: "transparent" }
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Buttons grouped by category, filtered by active tab */}
         <div className="space-y-2">
-          {buttonsByCategory.map((group) => (
+          {buttonsByCategory
+            .filter((group) => activeTagTab === "all" ? true : group.key === activeTagTab)
+            .map((group) => (
             <div key={group.key}>
-              <p
-                className="font-bold uppercase mb-1"
-                style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}
-              >
-                {group.label}
-              </p>
+              {activeTagTab === "all" && (
+                <p
+                  className="font-bold uppercase mb-1"
+                  style={{ fontSize: 9, fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#8BA4BB" }}
+                >
+                  {group.label}
+                </p>
+              )}
               <div className="flex items-center gap-1 flex-wrap">
                 {group.buttons.map((btn) => {
                   const isFlashing = flashType === btn.type;
