@@ -92,6 +92,9 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           ref={playerRef}
           playbackId={playbackId}
           streamType="on-demand"
+          volume={1}
+          muted={false}
+          defaultShowRemainingTime
           accentColor="#14B8A6"
           className="w-full aspect-video"
         />

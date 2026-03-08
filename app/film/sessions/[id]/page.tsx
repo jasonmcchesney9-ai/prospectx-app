@@ -1261,13 +1261,13 @@ export default function FilmSessionViewerPage() {
                   </span>
                 </div>
                 <div style={{ padding: "6px 10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)" }}>
                     <span>{formatDate(session.created_at)}</span>
                     <span style={{ color: "rgba(255,255,255,0.15)" }}>·</span>
                     <span style={{ textTransform: "capitalize" }}>{session.status || "active"}</span>
                   </div>
                   {session.description && (
-                    <p style={{ fontSize: 10, marginTop: 3, color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={session.description}>{session.description}</p>
+                    <p style={{ fontSize: 12, marginTop: 3, color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={session.description}>{session.description}</p>
                   )}
                 </div>
               </div>
@@ -1294,7 +1294,7 @@ export default function FilmSessionViewerPage() {
                       </div>
                     ) : showReplaceConfirm ? (
                       <div>
-                        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.7)", marginBottom: 6 }}>Replace existing events?</p>
+                        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginBottom: 6 }}>Replace existing events?</p>
                         <div style={{ display: "flex", gap: 4 }}>
                           <button
                             onClick={() => {
@@ -1315,7 +1315,7 @@ export default function FilmSessionViewerPage() {
                     ) : (
                       <div>
                         {importResult && (
-                          <div style={{ marginBottom: 6, fontSize: 10, borderRadius: 4, padding: "4px 8px", color: "#14B8A8", background: "rgba(13,148,136,0.1)" }}>
+                          <div style={{ marginBottom: 6, fontSize: 12, borderRadius: 4, padding: "4px 8px", color: "#14B8A8", background: "rgba(13,148,136,0.1)" }}>
                             Imported {importResult.events_created} events, {importResult.clips_created} clips
                             {importResult.player_matches > 0 && ` · ${importResult.player_matches} matched`}
                             {importResult.unmatched_players.length > 0 && (
@@ -1375,7 +1375,7 @@ export default function FilmSessionViewerPage() {
                         >
                           <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
                             <Film size={9} style={{ color: "#EA580C", flexShrink: 0 }} />
-                            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reel.title}</span>
+                            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reel.title}</span>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
                             <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, textTransform: "uppercase", background: reel.status === "ready" ? "rgba(13,148,136,0.15)" : reel.status === "shared" ? "rgba(234,88,12,0.15)" : "rgba(255,255,255,0.06)", color: reel.status === "ready" ? "#14B8A8" : reel.status === "shared" ? "#EA580C" : "rgba(255,255,255,0.4)", borderRadius: 3, padding: "0 4px" }}>
@@ -1441,7 +1441,7 @@ export default function FilmSessionViewerPage() {
                 <div style={{ background: "#0D2037", borderRadius: 6, padding: "12px 10px" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     <Loader2 size={16} className="animate-spin" style={{ color: "#14B8A8" }} />
-                    <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Generating analysis...</span>
+                    <span style={{ fontSize: 12, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Generating analysis...</span>
                   </div>
                 </div>
               )}
@@ -1546,7 +1546,7 @@ export default function FilmSessionViewerPage() {
                         }
                       }}
                       placeholder="Add a comment..."
-                      style={{ flex: 1, padding: "4px 8px", borderRadius: 4, fontSize: 11, color: "#FFFFFF", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", outline: "none" }}
+                      style={{ flex: 1, padding: "4px 8px", borderRadius: 4, fontSize: 13, color: "#FFFFFF", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", outline: "none" }}
                     />
                     <MicButton onTranscript={(t) => setCommentText((p) => (p ? p + " " + t : t))} />
                     <button
@@ -1564,7 +1564,7 @@ export default function FilmSessionViewerPage() {
 
                   {/* Comment list */}
                   {comments.length === 0 ? (
-                    <p style={{ fontSize: 10, textAlign: "center", padding: "10px 0", color: "rgba(255,255,255,0.3)" }}>
+                    <p style={{ fontSize: 12, textAlign: "center", padding: "10px 0", color: "rgba(255,255,255,0.3)" }}>
                       No comments yet.
                     </p>
                   ) : (
@@ -1575,7 +1575,7 @@ export default function FilmSessionViewerPage() {
                           style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
                         >
                           <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", margin: 0 }}>{c.body}</p>
+                            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", margin: 0 }}>{c.body}</p>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                               {c.timestamp_seconds !== null && (
                                 <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#14B8A8" }}>
