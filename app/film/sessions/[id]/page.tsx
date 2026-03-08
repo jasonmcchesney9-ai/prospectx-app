@@ -320,11 +320,43 @@ export default function FilmSessionViewerPage() {
   // P2-C2: Film summaries for tagged players
   const [filmSummaries, setFilmSummaries] = useState<FilmSummary[]>([]);
 
+  // Multi-video session: period tabs
+  const [uploads, setUploads] = useState<{ id: string; mux_playback_id?: string; period_number?: number; period_label?: string; source_url?: string; upload_source?: string; status?: string; duration_seconds?: number; title?: string }[]>([]);
+  const [activeUploadIdx, setActiveUploadIdx] = useState(0);
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [addVideoPeriod, setAddVideoPeriod] = useState<number | null>(null);
+  const [addVideoFile, setAddVideoFile] = useState<File | null>(null);
+  const [addingVideo, setAddingVideo] = useState(false);
+  const addVideoFileRef = useRef<HTMLInputElement>(null);
+
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
 
   const getCurrentTime = useCallback(() => currentTimeRef.current, []);
+
+  // Switch active upload by index (for period tabs + clip auto-switch)
+  const switchUpload = useCallback((idx: number) => {
+    if (idx < 0 || idx >= uploads.length) return;
+    setActiveUploadIdx(idx);
+    const u = uploads[idx];
+    setUpload({
+      id: u.id,
+      playback_id: u.mux_playback_id || null,
+      status: u.status || "ready",
+      title: u.title || "",
+      upload_source: u.upload_source || "mux",
+      source_url: u.source_url || undefined,
+    });
+  }, [uploads]);
+
+  // Callback for ClipPanel: switch to the upload that owns a clip, then seek
+  const handleClipPeriodSwitch = useCallback((uploadId: string) => {
+    const idx = uploads.findIndex((u) => u.id === uploadId);
+    if (idx >= 0 && idx !== activeUploadIdx) {
+      switchUpload(idx);
+    }
+  }, [uploads, activeUploadIdx, switchUpload]);
 
   // TODO: totalDuration should come from upload.duration when available; using 3600s fallback
   const totalDuration = 3600;
@@ -346,16 +378,19 @@ export default function FilmSessionViewerPage() {
         // Track last opened for Film Hub hints
         try { localStorage.setItem(`film_session_opened_${sessionId}`, new Date().toISOString()); } catch { /* */ }
 
-        // Use the upload linked to this session (returned inline from the backend)
-        if (sessionData.upload) {
-          const u = sessionData.upload;
+        // Multi-video: use uploads[] array from backend (C2)
+        const uploadsArr = sessionData.uploads || [];
+        setUploads(uploadsArr);
+        // Set active upload to first in list (or legacy single upload)
+        const firstUpload = uploadsArr[0] || sessionData.upload;
+        if (firstUpload) {
           setUpload({
-            id: u.id,
-            playback_id: u.mux_playback_id || u.playback_id || null,
-            status: u.status,
-            title: u.title,
-            upload_source: u.upload_source,
-            source_url: u.source_url,
+            id: firstUpload.id,
+            playback_id: firstUpload.mux_playback_id || firstUpload.playback_id || null,
+            status: firstUpload.status,
+            title: firstUpload.title,
+            upload_source: firstUpload.upload_source,
+            source_url: firstUpload.source_url,
           });
         }
 
@@ -791,6 +826,43 @@ export default function FilmSessionViewerPage() {
     );
   }
 
+  // ── Add Video to Session handler ──
+  const handleAddVideo = useCallback(async () => {
+    if (addVideoPeriod === null || !addVideoFile) return;
+    setAddingVideo(true);
+    try {
+      const periodLabel = addVideoPeriod <= 3 ? `Period ${addVideoPeriod}` : addVideoPeriod === 4 ? "OT" : "SO";
+      const res = await api.post(`/film/sessions/${sessionId}/add-upload`, {
+        period_number: addVideoPeriod,
+        period_label: periodLabel,
+        title: `${periodLabel} — ${session?.title || "Session"}`,
+        cors_origin: window.location.origin,
+      });
+      const uploadUrl = res.data.upload_url;
+      const newUploadId = res.data.upload_id;
+      if (!uploadUrl) throw new Error("No upload URL returned");
+
+      // Upload file directly to Mux
+      await fetch(uploadUrl, { method: "PUT", body: addVideoFile, headers: { "Content-Type": "video/*" } });
+      toast.success(`${periodLabel} video uploading — it will appear when processing completes`);
+
+      // Add to local uploads list immediately (processing state)
+      setUploads((prev) => [...prev, {
+        id: newUploadId, mux_playback_id: undefined, period_number: addVideoPeriod,
+        period_label: periodLabel, status: "processing", title: `${periodLabel}`,
+      }].sort((a, b) => (a.period_number || 99) - (b.period_number || 99)));
+
+      setShowAddVideoModal(false);
+      setAddVideoPeriod(null);
+      setAddVideoFile(null);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail || "Failed to add video";
+      toast.error(msg);
+    } finally {
+      setAddingVideo(false);
+    }
+  }, [addVideoPeriod, addVideoFile, sessionId, session?.title]);
+
   return (
     <ProtectedRoute>
       {/* Full-viewport dark shell */}
@@ -836,8 +908,18 @@ export default function FilmSessionViewerPage() {
             </span>
           </div>
 
-          {/* Generate Analysis + Build Reel buttons */}
+          {/* Generate Analysis + Build Reel + Add Video buttons */}
           <div className="relative" style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            {uploads.length <= 1 && (
+              <button
+                onClick={() => { setShowAddVideoModal(true); setAddVideoPeriod(null); setAddVideoFile(null); }}
+                style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)", border: "1px dashed rgba(255,255,255,0.15)", cursor: "pointer" }}
+                title="Add period video to this session"
+              >
+                <Plus size={10} />
+                Add Video
+              </button>
+            )}
             <button
               onClick={() => setShowReelBuilder(true)}
               style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "rgba(234,88,12,0.15)", color: "#E67E22", border: "1px solid rgba(234,88,12,0.25)", cursor: "pointer" }}
@@ -1122,6 +1204,34 @@ export default function FilmSessionViewerPage() {
 
           {/* ── COL 2 — Video + Transport ──────────────────────── */}
           <div style={{ gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#060E1A" }}>
+            {/* Period tabs — only when multiple uploads */}
+            {uploads.length > 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "4px 8px", background: "#0A1929", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+                {uploads.map((u, idx) => (
+                  <button
+                    key={u.id}
+                    onClick={() => switchUpload(idx)}
+                    style={{
+                      padding: "3px 10px", borderRadius: 4, border: "none", cursor: "pointer",
+                      fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600,
+                      letterSpacing: "0.08em", textTransform: "uppercase", transition: "all 0.15s",
+                      background: idx === activeUploadIdx ? "#0D9488" : "rgba(255,255,255,0.06)",
+                      color: idx === activeUploadIdx ? "#FFFFFF" : "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    {u.period_label || (u.period_number ? `Period ${u.period_number}` : u.title || `Video ${idx + 1}`)}
+                    {u.status === "processing" && " ⏳"}
+                  </button>
+                ))}
+                <button
+                  onClick={() => { setShowAddVideoModal(true); setAddVideoPeriod(null); setAddVideoFile(null); }}
+                  style={{ padding: "3px 8px", borderRadius: 4, border: "1px dashed rgba(255,255,255,0.2)", background: "transparent", cursor: "pointer", fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", transition: "all 0.15s" }}
+                  title="Add another period video"
+                >
+                  + Add Video
+                </button>
+              </div>
+            )}
             {/* Video Player area */}
             <div className="relative" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
               {/* Mux player — when playback_id exists */}
@@ -1467,6 +1577,8 @@ export default function FilmSessionViewerPage() {
                 uploadId={upload?.id || ""}
                 getCurrentTime={getCurrentTime}
                 refreshKey={clipRefreshKey}
+                uploads={uploads}
+                onPeriodSwitch={handleClipPeriodSwitch}
               />
 
               {/* Reels Section */}
@@ -1867,6 +1979,73 @@ export default function FilmSessionViewerPage() {
           </div>
         </div>
       </div>
+
+      {/* Add Video Period Modal */}
+      {showAddVideoModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowAddVideoModal(false)}>
+          <div style={{ background: "#0D2037", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", padding: 24, width: 340, maxWidth: "90vw" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: 14, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#FFFFFF", margin: "0 0 16px" }}>
+              Add Period Video
+            </h3>
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: "0 0 12px" }}>Which period is this video for?</p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+              {[
+                { num: 1, label: "Period 1" },
+                { num: 2, label: "Period 2" },
+                { num: 3, label: "Period 3" },
+                { num: 4, label: "OT" },
+                { num: 5, label: "SO" },
+              ].map((p) => {
+                const taken = uploads.some((u) => u.period_number === p.num);
+                return (
+                  <button
+                    key={p.num}
+                    onClick={() => !taken && setAddVideoPeriod(p.num)}
+                    disabled={taken}
+                    style={{
+                      padding: "6px 14px", borderRadius: 5, border: "none", cursor: taken ? "not-allowed" : "pointer",
+                      fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
+                      background: addVideoPeriod === p.num ? "#0D9488" : taken ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+                      color: addVideoPeriod === p.num ? "#FFF" : taken ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.6)",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {p.label}{taken ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+            {addVideoPeriod !== null && (
+              <>
+                <input
+                  ref={addVideoFileRef}
+                  type="file"
+                  accept="video/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => setAddVideoFile(e.target.files?.[0] || null)}
+                />
+                <button
+                  onClick={() => addVideoFileRef.current?.click()}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px dashed rgba(255,255,255,0.2)", background: "transparent", cursor: "pointer", fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)", marginBottom: 12, transition: "all 0.15s" }}
+                >
+                  <Upload size={12} style={{ display: "inline", marginRight: 6, verticalAlign: "middle" }} />
+                  {addVideoFile ? addVideoFile.name : "Select Video File"}
+                </button>
+              </>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button onClick={() => setShowAddVideoModal(false)} style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)" }}>Cancel</button>
+              <button
+                onClick={handleAddVideo}
+                disabled={addVideoPeriod === null || !addVideoFile || addingVideo}
+                style={{ padding: "6px 14px", borderRadius: 5, border: "none", cursor: addVideoPeriod !== null && addVideoFile && !addingVideo ? "pointer" : "not-allowed", fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", background: addVideoPeriod !== null && addVideoFile ? "#0D9488" : "rgba(255,255,255,0.06)", color: addVideoPeriod !== null && addVideoFile ? "#FFF" : "rgba(255,255,255,0.3)", transition: "all 0.15s" }}
+              >
+                {addingVideo ? "Uploading..." : "Upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reel Builder Modal */}
       {showReelBuilder && (

@@ -22,15 +22,27 @@ interface Clip {
   tags: string | null;
   tagged_player_name: string | null;
   created_at: string;
+  upload_id?: string;
+  upload_playback_id?: string;
+  upload_period_number?: number;
 }
 
 type ClipCategory = "all" | "teal" | "navy" | "orange" | "gray";
+
+interface UploadInfo {
+  id: string;
+  mux_playback_id?: string;
+  period_number?: number;
+  period_label?: string;
+}
 
 interface ClipPanelProps {
   sessionId: string;
   uploadId: string;
   getCurrentTime: () => number;
   refreshKey?: number;
+  uploads?: UploadInfo[];
+  onPeriodSwitch?: (uploadId: string) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -81,6 +93,8 @@ export default function ClipPanel({
   uploadId,
   getCurrentTime,
   refreshKey,
+  uploads = [],
+  onPeriodSwitch,
 }: ClipPanelProps) {
   const [clips, setClips] = useState<Clip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -481,10 +495,17 @@ export default function ClipPanel({
           <div>
             {filteredClips.map((clip, idx) => {
               const isActive = activeClipId === clip.id;
+              // Resolve period number: from clip's upload_period_number, or lookup from uploads array
+              const clipPeriod = clip.upload_period_number ?? uploads.find((u) => u.id === clip.upload_id)?.period_number;
+              const periodBadge = clipPeriod ? (clipPeriod <= 3 ? `P${clipPeriod}` : clipPeriod === 4 ? "OT" : "SO") : null;
               return (
               <div
                 key={clip.id}
                 ref={(el) => { clipRowRefs.current[clip.id] = el; }}
+                onClick={() => {
+                  // Auto-switch to correct period upload then seek
+                  if (clip.upload_id && onPeriodSwitch) onPeriodSwitch(clip.upload_id);
+                }}
                 className="px-2 py-2 transition-colors group cursor-pointer hover:bg-navy/[0.04]"
                 style={{
                   background: isActive ? "#EBF7F6" : idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC",
@@ -497,6 +518,11 @@ export default function ClipPanel({
                 <div className="flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${getClipDotColor(clip)}`} />
+                    {periodBadge && (
+                      <span style={{ fontSize: 8, fontFamily: "ui-monospace, monospace", fontWeight: 700, background: "rgba(15,41,66,0.08)", color: "#5A7291", borderRadius: 3, padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>
+                        {periodBadge}
+                      </span>
+                    )}
                     <span className="text-sm text-navy truncate" style={{ maxWidth: "100%" }}>
                       {cleanClipTitle(clip.title)}
                     </span>
