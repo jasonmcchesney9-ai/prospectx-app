@@ -238,6 +238,15 @@ const FILM_REPORT_GROUPS: FilmReportGroup[] = [
 // Flat list for lookups (used by handleSelectReportType)
 const FILM_REPORT_TYPES = FILM_REPORT_GROUPS.flatMap((g) => g.types);
 
+interface FilmSummary {
+  id: string;
+  player_id: string;
+  player_name: string;
+  summary: string;
+  session_id: string;
+  created_at: string;
+}
+
 export default function FilmSessionViewerPage() {
   const params = useParams();
   const router = useRouter();
@@ -307,6 +316,9 @@ export default function FilmSessionViewerPage() {
   const [showReelBuilder, setShowReelBuilder] = useState(false);
   const [sessionReels, setSessionReels] = useState<{ id: string; title: string; status: string; clip_count: number; created_at: string; share_token?: string; share_enabled?: boolean }[]>([]);
   const [copiedReelId, setCopiedReelId] = useState<string | null>(null);
+
+  // P2-C2: Film summaries for tagged players
+  const [filmSummaries, setFilmSummaries] = useState<FilmSummary[]>([]);
 
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
@@ -399,6 +411,54 @@ export default function FilmSessionViewerPage() {
           );
         } catch {
           // Reels may not exist yet
+        }
+
+        // P2-C2: Load film summaries for players tagged in this session
+        try {
+          const clipsRes = await api.get("/film/clips", { params: { session_id: sessionId, limit: 200 } });
+          const clipArr = Array.isArray(clipsRes.data) ? clipsRes.data : [];
+          // Extract unique player IDs from clips
+          const playerIdSet = new Set<string>();
+          for (const clip of clipArr) {
+            const pids = Array.isArray(clip.player_ids) ? clip.player_ids : [];
+            for (const pid of pids) {
+              if (pid) playerIdSet.add(String(pid));
+            }
+          }
+          // Fetch intelligence history for each player, filter for film_summary
+          const summaries: FilmSummary[] = [];
+          for (const pid of playerIdSet) {
+            try {
+              const intelRes = await api.get(`/players/${pid}/intelligence/history`);
+              const allIntel = Array.isArray(intelRes.data) ? intelRes.data : [];
+              // Find film_summary for THIS session
+              const match = allIntel.find(
+                (i: { trigger?: string; session_id?: string; summary?: string }) =>
+                  i.trigger === "film_summary" && i.session_id === sessionId && i.summary
+              );
+              if (match) {
+                // Get player name
+                let playerName = "Player";
+                try {
+                  const playerRes = await api.get(`/players/${pid}`);
+                  playerName = `${playerRes.data.first_name || ""} ${playerRes.data.last_name || ""}`.trim() || "Player";
+                } catch { /* fallback */ }
+                summaries.push({
+                  id: match.id,
+                  player_id: pid,
+                  player_name: playerName,
+                  summary: match.summary,
+                  session_id: match.session_id,
+                  created_at: match.created_at,
+                });
+              }
+            } catch { /* Non-critical */ }
+          }
+          // Sort by created_at desc, limit to 3
+          summaries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          setFilmSummaries(summaries.slice(0, 3));
+        } catch {
+          // Film summaries non-critical
         }
       } catch (e: unknown) {
         const msg =
@@ -1550,6 +1610,51 @@ export default function FilmSessionViewerPage() {
                         </Link>
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── P2-C2: Film Summaries for tagged players ── */}
+              {filmSummaries.length > 0 && (
+                <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F97316" }} />
+                    <Sparkles size={10} style={{ color: "#F97316" }} />
+                    <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
+                      POST-GAME SUMMARIES
+                    </span>
+                  </div>
+                  <div style={{ padding: "6px 10px" }}>
+                    {filmSummaries.map((fs, idx) => (
+                      <div
+                        key={fs.id}
+                        style={{
+                          paddingBottom: idx < filmSummaries.length - 1 ? 8 : 0,
+                          marginBottom: idx < filmSummaries.length - 1 ? 8 : 0,
+                          borderBottom: idx < filmSummaries.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+                          <Users size={9} style={{ color: "#14B8A8" }} />
+                          <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.8)" }}>
+                            {fs.player_name}
+                          </span>
+                          <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)" }}>
+                            {new Date(fs.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 11, lineHeight: 1.5, color: "rgba(255,255,255,0.65)", margin: 0 }}>
+                          {fs.summary}
+                        </p>
+                        <Link
+                          href={`/players/${fs.player_id}?tab=player`}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", textDecoration: "none", marginTop: 3 }}
+                        >
+                          View Full Analysis
+                          <ChevronRight size={8} />
+                        </Link>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

@@ -473,6 +473,9 @@ export default function PlayerDetailPage() {
   const [statTrendsLoading, setStatTrendsLoading] = useState(false);
   const [filmSuggestions, setFilmSuggestions] = useState<{ stat_name: string; label: string; coaching_note: string; severity: string; trigger_reason: string; event_type_filter: string | null }[]>([]);
 
+  // P2-C2: Post-game film summaries
+  const [filmSummaries, setFilmSummaries] = useState<{ id: string; summary: string; session_id: string; created_at: string; data_sources_used?: Record<string, unknown> }[]>([]);
+
   const loadFilmClips = useCallback(async () => {
     setFilmClipsLoading(true);
     try {
@@ -940,6 +943,22 @@ export default function PlayerDetailPage() {
           }
         } catch { /* Non-critical */ }
         finally { setStatTrendsLoading(false); }
+
+        // P2-C2: Load film summaries from intelligence history
+        try {
+          const intelRes = await api.get(`/players/${playerId}/intelligence/history`);
+          const allIntel = Array.isArray(intelRes.data) ? intelRes.data : [];
+          const summaries = allIntel
+            .filter((i: { trigger?: string; summary?: string; session_id?: string }) => i.trigger === "film_summary" && i.summary && i.session_id)
+            .map((i: { id: string; summary: string; session_id: string; created_at: string; data_sources_used?: Record<string, unknown> }) => ({
+              id: i.id,
+              summary: i.summary,
+              session_id: i.session_id,
+              created_at: i.created_at,
+              data_sources_used: i.data_sources_used,
+            }));
+          setFilmSummaries(summaries);
+        } catch { /* Non-critical */ }
 
         // Load transfer history (non-blocking)
         try {
@@ -2668,6 +2687,34 @@ export default function PlayerDetailPage() {
                       Review Clips
                     </Link>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* ── P2-C2: Recent Film Summaries ──────────────────── */}
+            {filmSummaries.length > 0 && (
+              <div style={{ background: "white", borderRadius: 14, overflow: "hidden", borderLeft: "4px solid #F97316", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
+                <div style={{ background: "linear-gradient(135deg, #F97316 0%, #FB923C 100%)", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <Sparkles size={13} style={{ color: "white" }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "white", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em", textTransform: "uppercase" }}>Recent Film Summary</span>
+                </div>
+                <div style={{ padding: "12px 16px" }}>
+                  {filmSummaries.slice(0, 3).map((fs) => (
+                    <div key={fs.id} style={{ marginBottom: filmSummaries.indexOf(fs) < Math.min(filmSummaries.length, 3) - 1 ? 10 : 0, paddingBottom: filmSummaries.indexOf(fs) < Math.min(filmSummaries.length, 3) - 1 ? 10 : 0, borderBottom: filmSummaries.indexOf(fs) < Math.min(filmSummaries.length, 3) - 1 ? "1px solid rgba(0,0,0,0.06)" : "none" }}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/50">
+                          {new Date(fs.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-navy/80 leading-relaxed">{fs.summary}</p>
+                      <Link
+                        href={`/film/sessions/${fs.session_id}`}
+                        className="inline-flex items-center gap-1 text-[10px] font-oswald uppercase tracking-wider text-teal hover:text-teal/80 mt-1"
+                      >
+                        View Full Analysis <ExternalLink size={9} />
+                      </Link>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
