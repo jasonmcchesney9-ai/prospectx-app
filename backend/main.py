@@ -15701,6 +15701,191 @@ async def get_player_stat_trends(
         conn.close()
 
 
+# ── P1-C2: PXI Film Suggestion Generator ────────────────────
+
+
+@app.post("/players/{player_id}/film-suggestions")
+async def generate_film_suggestions(
+    player_id: str,
+    request: Request,
+    token_data: dict = Depends(verify_token),
+):
+    """
+    Generate PXI coaching notes from stat trend triggers.
+    Takes stat_trends array as input (or auto-fetches from stat-trends endpoint).
+    Calls PXI to produce 1 sentence per triggered stat with specific coaching focus.
+    Stores result in player_intelligence with trigger='film_suggestion'.
+    Max 3 suggestions per call — highest severity triggers only.
+    """
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    stat_trends = body.get("stat_trends")
+
+    conn = get_db()
+    try:
+        # ── 1. Verify player exists ──
+        player_row = conn.execute(
+            "SELECT id, first_name, last_name, position, team_name FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not player_row:
+            raise HTTPException(status_code=404, detail="Player not found")
+        player = dict(player_row)
+
+        # ── 2. If no stat_trends provided, fetch them live ──
+        if not stat_trends or not isinstance(stat_trends, list):
+            # Call stat-trends logic inline to avoid circular HTTP call
+            trends_resp = await get_player_stat_trends(player_id, last_n=5, token_data=token_data)
+            stat_trends = trends_resp.get("triggers", [])
+
+        if not stat_trends:
+            return {
+                "player_id": player_id,
+                "suggestions": [],
+                "message": "No stat decline triggers detected — no film suggestions needed",
+            }
+
+        # ── 3. Limit to top 3 highest-severity triggers ──
+        severity_order = {"high": 0, "medium": 1}
+        sorted_trends = sorted(stat_trends, key=lambda t: severity_order.get(t.get("severity", "medium"), 2))
+        top_triggers = sorted_trends[:3]
+
+        # ── 4. Build PXI prompt ──
+        player_name = f"{player.get('first_name', '')} {player.get('last_name', '')}".strip()
+        position = player.get("position") or "Unknown"
+        team = player.get("team_name") or "Unknown"
+
+        trigger_lines = []
+        for i, t in enumerate(top_triggers, 1):
+            trigger_lines.append(
+                f"{i}. {t.get('label', t.get('stat_name', 'Unknown'))}: "
+                f"{t.get('trigger_reason', 'Decline detected')} "
+                f"(current: {t.get('current_value', 'N/A')}, season avg: {t.get('season_avg', 'N/A')})"
+            )
+
+        triggers_text = "\n".join(trigger_lines)
+
+        system_prompt = """You are ProspectX Intelligence (PXI) — an elite hockey coaching assistant that produces specific, actionable film review coaching notes.
+
+Given a player's stat decline triggers, produce exactly one coaching suggestion per trigger. Each suggestion must:
+- Be exactly 1 sentence
+- Reference a specific on-ice action or technique to review in film
+- Be actionable for a coach watching game clips
+- Use proper hockey terminology (gap control, stick positioning, board battles, slot positioning, cycle support, net-front presence, etc.)
+
+Return ONLY valid JSON — no markdown, no code fences, no explanation.
+
+JSON SCHEMA:
+{
+  "suggestions": [
+    {
+      "stat_name": "the stat that triggered this",
+      "coaching_note": "One sentence coaching suggestion referencing specific film focus"
+    }
+  ]
+}"""
+
+        user_prompt = f"""Player: {player_name} ({position}, {team})
+
+Stat decline triggers detected:
+{triggers_text}
+
+Generate one specific coaching note per trigger — focus on what to look for in game film."""
+
+        # ── 5. Call PXI (Claude) ──
+        client = get_anthropic_client()
+        suggestions = []
+
+        if client:
+            try:
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=500,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                raw_text = response.content[0].text.strip()
+                # Strip code fences if present
+                if raw_text.startswith("```"):
+                    raw_text = re.sub(r"^```(?:json)?\s*\n?", "", raw_text)
+                    raw_text = re.sub(r"\n?```\s*$", "", raw_text)
+
+                result_data = json.loads(raw_text)
+                suggestions = result_data.get("suggestions", [])
+            except json.JSONDecodeError as e:
+                logger.error("Film suggestion JSON parse error for player %s: %s", player_id, str(e))
+            except Exception as e:
+                logger.error("Film suggestion LLM call failed for player %s: %s", player_id, str(e))
+
+        if not suggestions:
+            # Fallback: generate rule-based suggestions without LLM
+            for t in top_triggers:
+                fallback_notes = {
+                    "faceoff_pct": "Review faceoff clips for stick positioning on the draw and body leverage — identify if losses are concentrated in a specific zone.",
+                    "shots_on_goal": "Review offensive zone clips for shot lane selection and release timing — look for hesitation or blocked shooting lanes.",
+                    "xg_per_game": "Review scoring chance clips for slot positioning and net-front presence — check if the player is getting to high-danger areas.",
+                    "plus_minus": "Review defensive zone clips for gap control and positioning away from the puck — check for breakdowns in coverage assignments.",
+                    "toi": "Review shift length and line deployment patterns — identify if reduced ice time correlates with specific game situations.",
+                    "p1_offense": "Review offensive zone entries and shot generation — look for puck touches in the slot and one-timer opportunities.",
+                    "p2_defense": "Review defensive zone coverage and transition play — focus on gap control, stick-on-puck, and breakout support.",
+                    "p3_possession": "Review zone entry and puck retrieval clips — check carry-in success rate and board battle outcomes.",
+                    "p4_physical": "Review board battle and net-front clips — assess compete level, body positioning, and puck protection.",
+                }
+                stat_name = t.get("stat_name", "")
+                suggestions.append({
+                    "stat_name": stat_name,
+                    "coaching_note": fallback_notes.get(stat_name, f"Review {t.get('label', stat_name)} clips for technique and decision-making patterns."),
+                })
+
+        # ── 6. Merge suggestions with trigger data for richer response ──
+        enriched = []
+        for i, sug in enumerate(suggestions[:3]):
+            trigger_data = top_triggers[i] if i < len(top_triggers) else {}
+            enriched.append({
+                "stat_name": sug.get("stat_name", trigger_data.get("stat_name", "")),
+                "label": trigger_data.get("label", sug.get("stat_name", "")),
+                "coaching_note": sug.get("coaching_note", ""),
+                "severity": trigger_data.get("severity", "medium"),
+                "trigger_reason": trigger_data.get("trigger_reason", ""),
+                "event_type_filter": trigger_data.get("event_type_filter"),
+                "current_value": trigger_data.get("current_value"),
+                "season_avg": trigger_data.get("season_avg"),
+            })
+
+        # ── 7. Store in player_intelligence ──
+        intel_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        summary_text = " | ".join(
+            f"{s['label']}: {s['coaching_note']}" for s in enriched
+        )
+
+        conn.execute("""
+            INSERT INTO player_intelligence
+            (id, player_id, org_id, summary, trigger, version, data_sources_used, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            intel_id, player_id, org_id, summary_text, "film_suggestion",
+            1, json.dumps({"source": "stat_trends", "triggers": len(top_triggers), "llm": client is not None}), now,
+        ))
+        conn.commit()
+
+        return {
+            "player_id": player_id,
+            "intelligence_id": intel_id,
+            "suggestions": enriched,
+            "triggers_analyzed": len(top_triggers),
+        }
+    finally:
+        conn.close()
+
+
 # ── PXR v1 — Unified Player Card Endpoints ──────────────────
 
 def _build_player_card(player_id: str, org_id: str, conn) -> dict:
