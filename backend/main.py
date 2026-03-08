@@ -4119,11 +4119,45 @@ def init_db():
         ("original_filename", "TEXT"),
         ("thumbnail_url", "TEXT"),
         ("external_provider", "TEXT"),
+        ("session_id", "TEXT REFERENCES video_sessions(id) ON DELETE SET NULL"),
+        ("period_number", "INTEGER"),
+        ("period_label", "TEXT"),
     ]:
         if col_name not in vu_cols:
             conn.execute(f"ALTER TABLE video_uploads ADD COLUMN {col_name} {col_def}")
             conn.commit()
             logger.info("Migration: added %s column to video_uploads", col_name)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_video_uploads_session ON video_uploads(session_id)")
+
+    # ── Multi-video session backfill: populate video_uploads.session_id from video_sessions.upload_id ──
+    try:
+        backfill_count = conn.execute("""
+            UPDATE video_uploads SET session_id = (
+                SELECT vs.id FROM video_sessions vs WHERE vs.upload_id = video_uploads.id
+            )
+            WHERE session_id IS NULL
+              AND id IN (SELECT upload_id FROM video_sessions WHERE upload_id IS NOT NULL)
+        """).rowcount
+        conn.commit()
+        if backfill_count:
+            logger.info("Migration: backfilled session_id on %d video_uploads rows", backfill_count)
+    except Exception as e:
+        logger.warning("video_uploads session_id backfill skipped: %s", e)
+
+    # ── Multi-video session backfill: populate video_clips.upload_id from video_sessions.upload_id ──
+    try:
+        clip_backfill_count = conn.execute("""
+            UPDATE video_clips SET upload_id = (
+                SELECT vs.upload_id FROM video_sessions vs WHERE vs.id = video_clips.session_id
+            )
+            WHERE upload_id IS NULL
+              AND session_id IN (SELECT id FROM video_sessions WHERE upload_id IS NOT NULL)
+        """).rowcount
+        conn.commit()
+        if clip_backfill_count:
+            logger.info("Migration: backfilled upload_id on %d video_clips rows", clip_backfill_count)
+    except Exception as e:
+        logger.warning("video_clips upload_id backfill skipped: %s", e)
 
     # ── Film Room Phase 1: video_clips table ──
     conn.execute("""
