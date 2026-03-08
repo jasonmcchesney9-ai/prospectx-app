@@ -44690,6 +44690,7 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
         event_summary, event_details = _summarize_events(events)
 
         # Resolve org team name + opponent team name for context
+        film_team_name = None
         _film_org_team = film_team_name  # already resolved from session.team_id above
         if not _film_org_team:
             _org_row = conn.execute("SELECT name FROM organizations WHERE id = ?", (org_id,)).fetchone()
