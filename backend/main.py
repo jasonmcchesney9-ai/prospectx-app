@@ -15925,12 +15925,28 @@ async def _generate_post_game_film_summary(player_id: str, session_id: str, org_
 
         # ── 3. Get session metadata ──
         session_row = conn.execute(
-            "SELECT id, name, match_title, match_date, source_type FROM video_sessions WHERE id = ?",
+            "SELECT id, name, match_title, match_date, source_type, team_id, opponent_team_id FROM video_sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
         if not session_row:
             return
         session = dict(session_row)
+
+        # ── 3b. Resolve org team name + opponent team name ──
+        org_team_name = None
+        org_row = conn.execute("SELECT name FROM organizations WHERE id = ?", (org_id,)).fetchone()
+        if org_row:
+            org_team_name = org_row["name"] if hasattr(org_row, "keys") else org_row[0]
+        # Session team_id overrides org name if set
+        if session.get("team_id"):
+            team_row = conn.execute("SELECT name FROM teams WHERE id = ?", (session["team_id"],)).fetchone()
+            if team_row:
+                org_team_name = team_row["name"] if hasattr(team_row, "keys") else team_row[0]
+        opponent_team_name = None
+        if session.get("opponent_team_id"):
+            opp_row = conn.execute("SELECT name FROM teams WHERE id = ?", (session["opponent_team_id"],)).fetchone()
+            if opp_row:
+                opponent_team_name = opp_row["name"] if hasattr(opp_row, "keys") else opp_row[0]
 
         # ── 4. Get clips for this player in this session ──
         clip_rows = conn.execute(
@@ -15996,7 +16012,8 @@ async def _generate_post_game_film_summary(player_id: str, session_id: str, org_
         }
 
         match_metadata = {
-            "opponent": session.get("match_title", session.get("name", "")),
+            "our_team": org_team_name or player.get("team_name", "Unknown"),
+            "opponent": opponent_team_name or session.get("match_title", session.get("name", "")),
             "date": session.get("match_date", ""),
             "league": player.get("current_league", ""),
         }
@@ -16022,8 +16039,11 @@ Rules:
 
 Return ONLY the 3 sentences as plain text. No JSON, no formatting, no labels."""
 
-            user_prompt = f"""Player: {player_name} ({player.get('position', 'Unknown')}, {player.get('team_name', 'Unknown')})
-Match: {match_metadata.get('opponent', 'Unknown')} — {match_metadata.get('date', 'Unknown')}
+            user_prompt = f"""Player: {player_name} ({player.get('position', 'Unknown')}, {match_metadata['our_team']})
+Our Team: {match_metadata['our_team']}
+Opponent: {match_metadata['opponent']}
+Match Date: {match_metadata.get('date', 'Unknown')}
+League: {match_metadata.get('league', 'Unknown')}
 
 Clips tagged ({len(clips_context)} total):
 {json.dumps(clips_context, indent=2)}
@@ -44669,10 +44689,25 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
         session_name = session.get("name") or session.get("title") or "Untitled Session"
         event_summary, event_details = _summarize_events(events)
 
+        # Resolve org team name + opponent team name for context
+        _film_org_team = film_team_name  # already resolved from session.team_id above
+        if not _film_org_team:
+            _org_row = conn.execute("SELECT name FROM organizations WHERE id = ?", (org_id,)).fetchone()
+            if _org_row:
+                _film_org_team = _org_row["name"] if hasattr(_org_row, "keys") else _org_row[0]
+        _film_opponent = None
+        _opp_tid = session.get("opponent_team_id")
+        if _opp_tid:
+            _opp_row = conn.execute("SELECT name FROM teams WHERE id = ?", (_opp_tid,)).fetchone()
+            if _opp_row:
+                _film_opponent = _opp_row["name"] if hasattr(_opp_row, "keys") else _opp_row[0]
+
         film_context = f"""FILM SESSION CONTEXT:
 Session: {session_name}
 Type: {session.get('session_type', 'general')}
 Date: {session.get('created_at', 'Unknown')}
+Our Team: {_film_org_team or 'Not specified'}
+Opponent: {_film_opponent or session.get('match_title') or 'Not specified'}
 Description: {session.get('description') or 'None provided'}
 
 TAGGED CLIPS ({len(clips)} total):
