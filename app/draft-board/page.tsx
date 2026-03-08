@@ -420,7 +420,7 @@ export default function DraftBoardPage() {
                   Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                 ) : rowsWithTiers.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-12 text-center text-muted text-sm">
+                    <td colSpan={14} className="px-4 py-12 text-center text-muted text-sm">
                       No players match these filters. Try adjusting your criteria.
                     </td>
                   </tr>
@@ -429,7 +429,7 @@ export default function DraftBoardPage() {
                     if (row.type === "tier") {
                       return (
                         <tr key={`tier-${row.tier.id}`} className="border-t-2" style={{ borderColor: row.tier.color }}>
-                          <td colSpan={13} className={`px-4 py-1.5 ${row.tier.bgColor}`}>
+                          <td colSpan={14} className={`px-4 py-1.5 ${row.tier.bgColor}`}>
                             <span
                               className="text-[10px] font-oswald font-bold uppercase tracking-widest"
                               style={{ color: row.tier.color }}
