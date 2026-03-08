@@ -58,6 +58,10 @@ interface SessionData {
   pxi_output?: string | null;
   pxi_status?: string | null;
   event_data_source?: string | null;
+  source_type?: string | null;
+  source_url?: string | null;
+  match_title?: string | null;
+  match_date?: string | null;
 }
 
 interface RosterPlayer {
@@ -755,13 +759,13 @@ export default function FilmSessionViewerPage() {
             >
               {SESSION_TYPE_LABELS[session.session_type] || session.session_type}
             </span>
-            {upload && (upload.upload_source === "youtube" || upload.upload_source === "vimeo" || upload.upload_source === "external_link") && (
+            {(upload && (upload.upload_source === "youtube" || upload.upload_source === "vimeo" || upload.upload_source === "external_link")) || session.source_type === "instat_url" ? (
               <span
                 style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 8, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)", borderRadius: 3, padding: "1px 5px", textTransform: "uppercase", letterSpacing: "0.05em" }}
               >
                 EXTERNAL
               </span>
-            )}
+            ) : null}
             <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.35)" }}>
               {formatDate(session.created_at)}
             </span>
@@ -1100,8 +1104,41 @@ export default function FilmSessionViewerPage() {
                   </a>
                 </div>
               )}
+              {/* Video platform import — external placeholder */}
+              {!upload?.playback_id && !upload?.source_url && session.source_type === "instat_url" && session.source_url && (
+                <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A1929" }}>
+                  <div style={{ textAlign: "center", maxWidth: 340, padding: "24px 16px" }}>
+                    <Film size={32} style={{ color: "#14B8A8", margin: "0 auto 12px" }} />
+                    {session.match_title && (
+                      <p style={{ fontSize: 15, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "#FFFFFF", letterSpacing: "0.04em", margin: "0 0 4px" }}>
+                        {session.match_title}
+                      </p>
+                    )}
+                    {session.match_date && (
+                      <p style={{ fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)", margin: "0 0 16px" }}>
+                        {session.match_date}
+                      </p>
+                    )}
+                    <a
+                      href={session.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 18px", borderRadius: 6,
+                        fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase",
+                        color: "#FFFFFF", background: "#0D9488", textDecoration: "none", cursor: "pointer",
+                      }}
+                    >
+                      Open Video Platform ↗
+                    </a>
+                    <p style={{ fontSize: 10, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.25)", marginTop: 12 }}>
+                      Clips imported from external platform — click above to view video
+                    </p>
+                  </div>
+                </div>
+              )}
               {/* No video at all */}
-              {!upload?.playback_id && !upload?.source_url && (
+              {!upload?.playback_id && !upload?.source_url && session.source_type !== "instat_url" && (
                 <VideoPlayer
                   ref={videoPlayerRef}
                   playbackId={null}
