@@ -4414,6 +4414,7 @@ def init_db():
         ("pxr_null_reason", "TEXT"),
         ("prev_pxr_score", "NUMERIC(5,1)"),
         ("score_type", "TEXT DEFAULT 'full'"),
+        ("pxi_intelligence", "REAL"),
     ]:
         if col_name not in pxr_cols:
             conn.execute(f"ALTER TABLE pxr_scores ADD COLUMN {col_name} {col_def}")
