@@ -15394,6 +15394,313 @@ async def get_player_trendline(
         conn.close()
 
 
+# ── P1-C1: Stat Trend Detection ─────────────────────────────
+
+
+@app.get("/players/{player_id}/stat-trends")
+async def get_player_stat_trends(
+    player_id: str,
+    last_n: int = Query(5, ge=3, le=20),
+    token_data: dict = Depends(verify_token),
+):
+    """
+    Detect stat declines vs season average for a player.
+    Returns triggered declines with severity, plus film clip counts per stat category.
+    Used by the Film → Dev Plan bridge (P1) to surface coaching recommendations.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # ── 1. Verify player exists ──
+        player = conn.execute(
+            "SELECT id, first_name, last_name, position FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id, org_id),
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        # ── 2. Get season averages from player_stats ──
+        season_row = conn.execute("""
+            SELECT gp, g, a, p, plus_minus, pim, shots, sog, toi_seconds
+            FROM player_stats
+            WHERE player_id = ? AND stat_type = 'season'
+            ORDER BY season DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        season_gp = 0
+        season_gpg = 0.0
+        season_apg = 0.0
+        season_ppg_stat = 0.0
+        season_sog_pg = 0.0
+        season_pm_pg = 0.0
+        season_toi_min = 0.0
+        if season_row:
+            sd = dict(season_row)
+            season_gp = sd.get("gp") or 0
+            if season_gp > 0:
+                season_gpg = (sd.get("g") or 0) / season_gp
+                season_apg = (sd.get("a") or 0) / season_gp
+                season_ppg_stat = (sd.get("p") or 0) / season_gp
+                season_sog_pg = (sd.get("sog") or sd.get("shots") or 0) / season_gp
+                season_pm_pg = (sd.get("plus_minus") or 0) / season_gp
+                season_toi_min = ((sd.get("toi_seconds") or 0) / 60) / season_gp
+
+        # ── 3. Get InStat season averages (faceoffs, xG) ──
+        instat_row = conn.execute("""
+            SELECT fo_pct, xg, gp, shots_on_goal, toi_per_game
+            FROM instat_player_stats
+            WHERE player_id = ? ORDER BY season DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        season_fo_pct = None
+        season_xg_pg = None
+        if instat_row:
+            isd = dict(instat_row)
+            season_fo_pct = isd.get("fo_pct")
+            instat_gp = isd.get("gp") or 0
+            if isd.get("xg") is not None and instat_gp > 0:
+                season_xg_pg = (isd.get("xg") or 0) / instat_gp
+
+        # ── 4. Get recent N games from player_game_stats ──
+        recent_games = conn.execute("""
+            SELECT game_date, opponent, goals, assists, points, plus_minus,
+                   shots, toi_seconds
+            FROM player_game_stats
+            WHERE player_id = ?
+            ORDER BY game_date DESC
+            LIMIT ?
+        """, (player_id, last_n)).fetchall()
+
+        if not recent_games:
+            # Fallback: try player_stats game rows
+            recent_games = conn.execute("""
+                SELECT created_at AS game_date, '' AS opponent, g AS goals, a AS assists,
+                       p AS points, plus_minus, sog AS shots, toi_seconds
+                FROM player_stats
+                WHERE player_id = ? AND stat_type = 'game'
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (player_id, last_n)).fetchall()
+
+        games = [dict(r) for r in recent_games]
+        n_games = len(games)
+
+        if n_games == 0:
+            return {
+                "player_id": player_id,
+                "games_analyzed": 0,
+                "season_gp": season_gp,
+                "triggers": [],
+                "clip_counts": {},
+                "message": "No game data available for trend analysis",
+            }
+
+        # ── 5. Compute recent averages ──
+        recent_goals = [g.get("goals") or 0 for g in games]
+        recent_assists = [g.get("assists") or 0 for g in games]
+        recent_points = [g.get("points") or 0 for g in games]
+        recent_pm = [g.get("plus_minus") or 0 for g in games]
+        recent_shots = [g.get("shots") or 0 for g in games]
+        recent_toi = [(g.get("toi_seconds") or 0) / 60 for g in games]
+
+        recent_sog_pg = sum(recent_shots) / n_games if n_games > 0 else 0
+        recent_pm_avg = sum(recent_pm) / n_games if n_games > 0 else 0
+        recent_toi_avg = sum(recent_toi) / n_games if n_games > 0 else 0
+
+        # ── 6. Get PXR pillar percentiles ──
+        pxr_row = conn.execute("""
+            SELECT p1_offense, p2_defense, p3_possession, p4_physical,
+                   cohort_percentile, league_percentile, pxr_score, confidence_tier
+            FROM pxr_scores WHERE player_id = ? ORDER BY season DESC LIMIT 1
+        """, (player_id,)).fetchone()
+
+        pxr = dict(pxr_row) if pxr_row else {}
+
+        # ── 7. Evaluate trigger conditions ──
+        triggers = []
+
+        # Trigger: Faceoff win % — below 45% OR dropped 10%+ in last 5 games
+        if season_fo_pct is not None and season_fo_pct > 0:
+            if season_fo_pct < 45:
+                triggers.append({
+                    "stat_name": "faceoff_pct",
+                    "label": "Faceoff Win %",
+                    "current_value": round(season_fo_pct, 1),
+                    "season_avg": round(season_fo_pct, 1),
+                    "pct_change": 0,
+                    "severity": "high" if season_fo_pct < 40 else "medium",
+                    "trigger_reason": f"Faceoff win % at {round(season_fo_pct, 1)}% — below 45% threshold",
+                    "event_type_filter": "faceoff",
+                })
+
+        # Trigger: Shot attempts on goal — below 1.5/game OR dropped 30%+ vs season avg
+        if season_sog_pg > 0 and n_games >= 3:
+            sog_change = ((recent_sog_pg - season_sog_pg) / season_sog_pg) * 100 if season_sog_pg > 0 else 0
+            if recent_sog_pg < 1.5:
+                triggers.append({
+                    "stat_name": "shots_on_goal",
+                    "label": "Shots on Goal",
+                    "current_value": round(recent_sog_pg, 2),
+                    "season_avg": round(season_sog_pg, 2),
+                    "pct_change": round(sog_change, 1),
+                    "severity": "high" if recent_sog_pg < 1.0 else "medium",
+                    "trigger_reason": f"SOG at {round(recent_sog_pg, 2)}/game — below 1.5 threshold",
+                    "event_type_filter": "shot",
+                })
+            elif sog_change <= -30:
+                triggers.append({
+                    "stat_name": "shots_on_goal",
+                    "label": "Shots on Goal",
+                    "current_value": round(recent_sog_pg, 2),
+                    "season_avg": round(season_sog_pg, 2),
+                    "pct_change": round(sog_change, 1),
+                    "severity": "high" if sog_change <= -50 else "medium",
+                    "trigger_reason": f"SOG dropped {abs(round(sog_change, 1))}% vs season average",
+                    "event_type_filter": "shot",
+                })
+
+        # Trigger: xG per game — below 0.15 OR dropped 25%+ in last 5 games
+        if season_xg_pg is not None and season_xg_pg > 0:
+            # We don't have per-game xG from boxscore — use season InStat as proxy
+            if season_xg_pg < 0.15:
+                triggers.append({
+                    "stat_name": "xg_per_game",
+                    "label": "xG per Game",
+                    "current_value": round(season_xg_pg, 3),
+                    "season_avg": round(season_xg_pg, 3),
+                    "pct_change": 0,
+                    "severity": "high" if season_xg_pg < 0.10 else "medium",
+                    "trigger_reason": f"xG at {round(season_xg_pg, 3)}/game — below 0.15 threshold",
+                    "event_type_filter": "chance",
+                })
+
+        # Trigger: Plus/minus trend — 3+ consecutive negative games
+        consecutive_negative = 0
+        for pm in recent_pm:
+            if pm < 0:
+                consecutive_negative += 1
+            else:
+                break
+        if consecutive_negative >= 3:
+            triggers.append({
+                "stat_name": "plus_minus",
+                "label": "Plus/Minus",
+                "current_value": round(recent_pm_avg, 2),
+                "season_avg": round(season_pm_pg, 2),
+                "pct_change": 0,
+                "severity": "high" if consecutive_negative >= 5 else "medium",
+                "trigger_reason": f"{consecutive_negative} consecutive games with negative +/- rating",
+                "event_type_filter": "defensive",
+            })
+
+        # Trigger: TOI — dropped 3+ minutes vs season average
+        if season_toi_min > 0 and recent_toi_avg > 0:
+            toi_drop = season_toi_min - recent_toi_avg
+            if toi_drop >= 3:
+                triggers.append({
+                    "stat_name": "toi",
+                    "label": "Time on Ice",
+                    "current_value": round(recent_toi_avg, 1),
+                    "season_avg": round(season_toi_min, 1),
+                    "pct_change": round((-toi_drop / season_toi_min) * 100, 1),
+                    "severity": "high" if toi_drop >= 5 else "medium",
+                    "trigger_reason": f"TOI dropped {round(toi_drop, 1)} min/game vs season average",
+                    "event_type_filter": None,
+                })
+
+        # Trigger: PXR pillar below 25th percentile
+        pillar_map = {
+            "p1_offense": ("Offensive", "offensive"),
+            "p2_defense": ("Defensive", "defensive"),
+            "p3_possession": ("Possession", "zone_entry"),
+            "p4_physical": ("Compete/Physical", "battle"),
+        }
+        for pillar_key, (pillar_label, event_filter) in pillar_map.items():
+            pillar_val = pxr.get(pillar_key)
+            if pillar_val is not None and pillar_val < 25:
+                triggers.append({
+                    "stat_name": pillar_key,
+                    "label": f"PXR {pillar_label} Pillar",
+                    "current_value": round(pillar_val, 1),
+                    "season_avg": None,
+                    "pct_change": None,
+                    "severity": "high" if pillar_val < 15 else "medium",
+                    "trigger_reason": f"{pillar_label} pillar at {round(pillar_val, 1)} — below 25th percentile",
+                    "event_type_filter": event_filter,
+                })
+
+        # ── 8. Get clip counts per stat category from video_clips ──
+        clip_counts = {}
+        like_pattern = f"%{player_id}%"
+        clip_rows = conn.execute("""
+            SELECT clip_type, tags, COUNT(*) AS cnt
+            FROM video_clips
+            WHERE player_ids LIKE ? AND org_id = ?
+            GROUP BY clip_type, tags
+        """, (like_pattern, org_id)).fetchall()
+
+        total_clips = 0
+        for cr in clip_rows:
+            cd = dict(cr)
+            cnt = cd.get("cnt") or 0
+            total_clips += cnt
+            clip_type = cd.get("clip_type") or "other"
+
+            # Aggregate by clip_type
+            clip_counts[clip_type] = clip_counts.get(clip_type, 0) + cnt
+
+            # Also parse tags JSON to aggregate by tag
+            tags_raw = cd.get("tags") or "[]"
+            try:
+                tags = json.loads(tags_raw) if isinstance(tags_raw, str) else tags_raw
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+            if isinstance(tags, list):
+                for tag in tags:
+                    if isinstance(tag, str) and tag.strip():
+                        clip_counts[tag.strip().lower()] = clip_counts.get(tag.strip().lower(), 0) + cnt
+
+        clip_counts["total"] = total_clips
+
+        # ── 9. Sort triggers by severity (high first) ──
+        severity_order = {"high": 0, "medium": 1}
+        triggers.sort(key=lambda t: severity_order.get(t["severity"], 2))
+
+        return {
+            "player_id": player_id,
+            "games_analyzed": n_games,
+            "season_gp": season_gp,
+            "triggers": triggers,
+            "clip_counts": clip_counts,
+            "season_averages": {
+                "gpg": round(season_gpg, 2),
+                "apg": round(season_apg, 2),
+                "ppg": round(season_ppg_stat, 2),
+                "sog_pg": round(season_sog_pg, 2),
+                "pm_pg": round(season_pm_pg, 2),
+                "toi_min": round(season_toi_min, 1),
+                "fo_pct": round(season_fo_pct, 1) if season_fo_pct is not None else None,
+                "xg_pg": round(season_xg_pg, 3) if season_xg_pg is not None else None,
+            },
+            "recent_averages": {
+                "sog_pg": round(recent_sog_pg, 2),
+                "pm_avg": round(recent_pm_avg, 2),
+                "toi_min": round(recent_toi_avg, 1),
+            },
+            "pxr_context": {
+                "pxr_score": pxr.get("pxr_score"),
+                "confidence_tier": pxr.get("confidence_tier"),
+                "p1_offense": pxr.get("p1_offense"),
+                "p2_defense": pxr.get("p2_defense"),
+                "p3_possession": pxr.get("p3_possession"),
+                "p4_physical": pxr.get("p4_physical"),
+                "cohort_percentile": pxr.get("cohort_percentile"),
+            },
+        }
+    finally:
+        conn.close()
+
+
 # ── PXR v1 — Unified Player Card Endpoints ──────────────────
 
 def _build_player_card(player_id: str, org_id: str, conn) -> dict:
