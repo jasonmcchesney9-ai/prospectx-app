@@ -141,7 +141,7 @@ export default function LeaderboardPage() {
 
   // View 1 filters
   const [selectedLeague, setSelectedLeague] = useState("");
-  const [selectedPosition, setSelectedPosition] = useState("");
+  const [selectedPosition, setSelectedPosition] = useState("S");
 
   // View 2 filter
   const [selectedBirthYear, setSelectedBirthYear] = useState("");
@@ -210,7 +210,7 @@ export default function LeaderboardPage() {
     if (ppgFallbackMode) {
       let filtered = [...allPlayers];
       if (selectedPosition) {
-        filtered = filtered.filter((p) => p.position_group === selectedPosition);
+        filtered = filtered.filter((p) => selectedPosition === "S" ? p.position_group !== "G" : p.position_group === selectedPosition);
       }
       return filtered
         .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
@@ -219,9 +219,9 @@ export default function LeaderboardPage() {
     if (!selectedLeague) return [];
     const leaguePlayers = allPlayers.filter((p) => p.current_league === selectedLeague);
     if (selectedPosition) {
-      // Single position selected — top 25 in that position
+      // Single position or Skaters selected — top 25 in that group
       return leaguePlayers
-        .filter((p) => p.position_group === selectedPosition)
+        .filter((p) => selectedPosition === "S" ? p.position_group !== "G" : p.position_group === selectedPosition)
         .sort((a, b) => (b.pxr_score ?? 0) - (a.pxr_score ?? 0))
         .slice(0, 25);
     }
@@ -362,6 +362,7 @@ export default function LeaderboardPage() {
                     onChange={(e) => setSelectedPosition(e.target.value)}
                     className="px-3 py-2 border border-border rounded-lg text-sm bg-white text-navy"
                   >
+                    <option value="S">Skaters</option>
                     <option value="">All Positions</option>
                     <option value="F">F</option>
                     <option value="D">D</option>
