@@ -16052,6 +16052,28 @@ async def _generate_post_game_film_summary(player_id: str, session_id: str, org_
             "league": player.get("current_league", ""),
         }
 
+        # ── 5b. Fetch all uploads for multi-video context ──
+        _sum_uploads = conn.execute(
+            "SELECT period_number, period_label, duration_seconds FROM video_uploads WHERE session_id = ? ORDER BY period_number ASC NULLS LAST",
+            (session_id,),
+        ).fetchall()
+        _sum_upload_list = [dict(r) if hasattr(r, "keys") else r for r in _sum_uploads]
+        if _sum_upload_list:
+            _sum_parts = []
+            _sum_total = 0
+            for vu in _sum_upload_list:
+                dur = vu.get("duration_seconds") or 0
+                _sum_total += dur
+                label = vu.get("period_label") or (f"Period {vu.get('period_number')}" if vu.get("period_number") else "Full Game")
+                minutes = dur // 60
+                secs = dur % 60
+                _sum_parts.append(f"{label} ({minutes}:{secs:02d})" if dur > 0 else label)
+            _sum_total_min = _sum_total // 60
+            _sum_total_sec = _sum_total % 60
+            match_metadata["videos"] = f"{', '.join(_sum_parts)} — total {_sum_total_min}:{_sum_total_sec:02d}"
+        else:
+            match_metadata["videos"] = "None attached"
+
         # ── 6. Call PXI (Claude) ──
         client = get_anthropic_client()
         summary_text = None
@@ -16078,6 +16100,7 @@ Our Team: {match_metadata['our_team']}
 Opponent: {match_metadata['opponent']}
 Match Date: {match_metadata.get('date', 'Unknown')}
 League: {match_metadata.get('league', 'Unknown')}
+Videos: {match_metadata.get('videos', 'None attached')}
 
 Clips tagged ({len(clips_context)} total):
 {json.dumps(clips_context, indent=2)}
@@ -43619,12 +43642,19 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
                 d["pxi_output"] = json.loads(d["pxi_output"])
             except (json.JSONDecodeError, TypeError):
                 pass
-        # Include clips for this session
+        # Include clips for this session — JOIN video_uploads for playback context
         clips = conn.execute(
-            "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY created_at",
+            """SELECT vc.*, vu.mux_playback_id AS upload_playback_id, vu.period_number AS upload_period_number
+               FROM video_clips vc
+               LEFT JOIN video_uploads vu ON vc.upload_id = vu.id
+               WHERE vc.session_id = ? AND vc.org_id = ?
+               ORDER BY vc.created_at""",
             (session_id, org_id),
         ).fetchall()
         clip_list = []
+        # Determine session's first upload for fallback
+        first_upload_playback_id = None
+        first_upload_id = None
         for c in clips:
             cd = dict(c) if hasattr(c, "keys") else c
             if isinstance(cd, dict):
@@ -43636,7 +43666,6 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
                             pass
             clip_list.append(cd)
         if isinstance(d, dict):
-            d["clips"] = clip_list
             # Include uploads[] array — multi-video session support
             upload_rows = conn.execute(
                 "SELECT id, title, status, mux_playback_id, mux_asset_id, upload_source, source_url, duration_seconds, period_number, period_label FROM video_uploads WHERE session_id = ? AND org_id = ? ORDER BY period_number ASC NULLS LAST, created_at ASC",
@@ -43657,6 +43686,14 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
             d["upload_count"] = len(uploads_list)
             # Backward compat: d["upload"] = first upload or None
             d["upload"] = uploads_list[0] if uploads_list else None
+            # Apply fallback playback_id to clips with NULL upload_id
+            first_upload = uploads_list[0] if uploads_list else None
+            if first_upload:
+                for clip in clip_list:
+                    if isinstance(clip, dict) and not clip.get("upload_playback_id"):
+                        clip["upload_playback_id"] = first_upload.get("mux_playback_id")
+                        clip["upload_period_number"] = first_upload.get("period_number")
+            d["clips"] = clip_list
         return d
     finally:
         conn.close()
@@ -44856,12 +44893,35 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
             if _opp_row:
                 _film_opponent = _opp_row["name"] if hasattr(_opp_row, "keys") else _opp_row[0]
 
+        # Fetch all uploads for multi-video context
+        _film_uploads = conn.execute(
+            "SELECT period_number, period_label, duration_seconds FROM video_uploads WHERE session_id = ? AND org_id = ? ORDER BY period_number ASC NULLS LAST",
+            (session_id, org_id),
+        ).fetchall()
+        _film_upload_list = [dict(r) if hasattr(r, "keys") else r for r in _film_uploads]
+        if _film_upload_list:
+            _vid_parts = []
+            _total_dur = 0
+            for vu in _film_upload_list:
+                dur = vu.get("duration_seconds") or 0
+                _total_dur += dur
+                label = vu.get("period_label") or (f"Period {vu.get('period_number')}" if vu.get("period_number") else "Full Game")
+                minutes = dur // 60
+                secs = dur % 60
+                _vid_parts.append(f"{label} ({minutes}:{secs:02d})" if dur > 0 else label)
+            _total_min = _total_dur // 60
+            _total_sec = _total_dur % 60
+            _videos_line = f"Videos: {', '.join(_vid_parts)} — total {_total_min}:{_total_sec:02d}"
+        else:
+            _videos_line = "Videos: None attached"
+
         film_context = f"""FILM SESSION CONTEXT:
 Session: {session_name}
 Type: {session.get('session_type', 'general')}
 Date: {session.get('created_at', 'Unknown')}
 Our Team: {_film_org_team or 'Not specified'}
 Opponent: {_film_opponent or session.get('match_title') or 'Not specified'}
+{_videos_line}
 Description: {session.get('description') or 'None provided'}
 
 TAGGED CLIPS ({len(clips)} total):
