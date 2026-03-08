@@ -14223,45 +14223,111 @@ async def compare_players(
 
 @app.get("/players/duplicates")
 async def find_duplicate_players(token_data: dict = Depends(verify_token)):
-    """Detect potential duplicate player profiles.
-    Groups players by exact match on ALL THREE: first name + last name + DOB.
-    Players without DOB are excluded (can't confirm duplicate)."""
+    """Detect potential duplicate player profiles using 2-step query pattern.
+    Step 1: Lightweight GROUP BY to find duplicate name groups (no subqueries).
+    Step 2: Fetch full details + counts only for players in those groups (~50 vs 12k).
+    High confidence = same first_name + last_name + DOB.
+    Medium confidence = same first_name + last_name, DOB missing/null."""
     org_id = token_data["org_id"]
     conn = get_db()
 
-    rows = conn.execute("""
+    # ── Step 1a: High confidence — exact name + DOB match ───────────
+    high_groups = conn.execute("""
+        SELECT LOWER(TRIM(first_name)) as fn, LOWER(TRIM(last_name)) as ln, dob, COUNT(*) as cnt
+        FROM players
+        WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+          AND dob IS NOT NULL AND dob != '' AND dob != '-'
+        GROUP BY LOWER(TRIM(first_name)), LOWER(TRIM(last_name)), dob
+        HAVING COUNT(*) > 1
+        LIMIT 100
+    """, (org_id,)).fetchall()
+
+    # ── Step 1b: Medium confidence — same name, DOB missing ─────────
+    medium_groups = conn.execute("""
+        SELECT LOWER(TRIM(first_name)) as fn, LOWER(TRIM(last_name)) as ln, COUNT(*) as cnt
+        FROM players
+        WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+          AND (dob IS NULL OR dob = '' OR dob = '-')
+        GROUP BY LOWER(TRIM(first_name)), LOWER(TRIM(last_name))
+        HAVING COUNT(*) > 1
+        LIMIT 50
+    """, (org_id,)).fetchall()
+
+    # Collect all player IDs we need to fetch details for
+    # Build lookup keys for grouping
+    high_keys = set()
+    for g in high_groups:
+        high_keys.add((g["fn"], g["ln"], g["dob"]))
+
+    medium_keys = set()
+    for g in medium_groups:
+        medium_keys.add((g["fn"], g["ln"]))
+
+    # ── Step 2: Fetch full details only for players in duplicate groups ──
+    # Build WHERE clause to match duplicate players
+    conditions = []
+    params = [org_id]
+
+    for fn, ln, dob in high_keys:
+        conditions.append("(LOWER(TRIM(p.first_name)) = ? AND LOWER(TRIM(p.last_name)) = ? AND p.dob = ?)")
+        params.extend([fn, ln, dob])
+
+    for fn, ln in medium_keys:
+        conditions.append("(LOWER(TRIM(p.first_name)) = ? AND LOWER(TRIM(p.last_name)) = ? AND (p.dob IS NULL OR p.dob = '' OR p.dob = '-'))")
+        params.extend([fn, ln])
+
+    if not conditions:
+        conn.close()
+        return {"total_groups": 0, "total_duplicate_players": 0, "groups": []}
+
+    where_clause = " OR ".join(conditions)
+    rows = conn.execute(f"""
         SELECT p.id, p.first_name, p.last_name, p.current_team, p.current_league,
                p.position, p.dob, p.shoots, p.created_at,
                (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
                (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
                (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count,
                (SELECT COUNT(*) FROM player_intelligence pi WHERE pi.player_id = p.id) as intel_count
-        FROM players p WHERE p.org_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+        FROM players p
+        WHERE p.org_id = ? AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+          AND ({where_clause})
         ORDER BY p.last_name, p.first_name
-    """, (org_id,)).fetchall()
+    """, tuple(params)).fetchall()
 
-    # Group by ALL THREE: normalized first name + normalized last name + exact DOB
-    # Players without DOB are skipped (can't confirm duplicate without DOB)
+    # ── Group results ──────────────────────────────────────────────
     from collections import defaultdict
-    by_name_dob = defaultdict(list)
+    high_buckets = defaultdict(list)
+    medium_buckets = defaultdict(list)
     for r in rows:
+        fn = r["first_name"].lower().strip()
+        ln = r["last_name"].lower().strip()
         dob = r["dob"] or ""
-        if dob and dob not in ("-", ""):
-            key = (r['first_name'].lower().strip(), r['last_name'].lower().strip(), dob)
-            by_name_dob[key].append(dict(r))
+        player = dict(r)
+        if dob and dob not in ("-", "") and (fn, ln, dob) in high_keys:
+            high_buckets[(fn, ln, dob)].append(player)
+        elif (fn, ln) in medium_keys and (not dob or dob in ("-", "")):
+            medium_buckets[(fn, ln)].append(player)
 
     duplicate_groups = []
-    for (first, last, dob), group in by_name_dob.items():
+    for (fn, ln, dob), group in high_buckets.items():
         if len(group) > 1:
             duplicate_groups.append({
                 "match_type": "exact_name_dob",
-                "match_key": f"{first} {last} ({dob})",
+                "match_key": f"{fn} {ln} ({dob})",
                 "confidence": "high",
                 "players": group,
             })
+    for (fn, ln), group in medium_buckets.items():
+        if len(group) > 1:
+            duplicate_groups.append({
+                "match_type": "name_only",
+                "match_key": f"{fn} {ln} (no DOB)",
+                "confidence": "medium",
+                "players": group,
+            })
 
-    # Sort by player count descending
-    duplicate_groups.sort(key=lambda g: -len(g["players"]))
+    # Sort: high confidence first, then by player count descending
+    duplicate_groups.sort(key=lambda g: (0 if g["confidence"] == "high" else 1, -len(g["players"])))
 
     conn.close()
     return {
