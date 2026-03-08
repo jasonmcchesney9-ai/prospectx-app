@@ -380,8 +380,8 @@ export default function FilmRoomPage() {
                   fontSize: 11,
                   textTransform: "uppercase",
                   letterSpacing: "0.12em",
-                  color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.85)",
-                  background: isActive ? "#0F2942" : "transparent",
+                  color: "#FFFFFF",
+                  background: isActive ? "#0F2942" : "#14B8A8",
                   boxShadow: isActive ? "0 0 0 1px #14B8A8" : "none",
                   border: "none",
                   cursor: "pointer",
@@ -390,8 +390,8 @@ export default function FilmRoomPage() {
                   alignItems: "center",
                   gap: 6,
                 }}
-                onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = "rgba(15,41,66,0.7)"; e.currentTarget.style.color = "rgba(255,255,255,0.85)"; } }}
-                onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.85)"; } }}
+                onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = "#0F8C82"; } }}
+                onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = "#14B8A8"; } }}
               >
                 {tab.label}
                 {tab.key === "reels" && reelCount > 0 && (
