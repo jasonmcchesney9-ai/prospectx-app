@@ -460,10 +460,8 @@ export default function PlayerDetailPage() {
   const [linkingParent, setLinkingParent] = useState(false);
 
   // Film Room clips for this player
-  const [filmClips, setFilmClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; created_at: string }[]>([]);
+  const [filmClips, setFilmClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; created_at: string; session_title?: string; session_upload_count?: number }[]>([]);
   const [filmClipsLoading, setFilmClipsLoading] = useState(false);
-  // Multi-video: session upload counts for Video tab grouping
-  const [sessionUploadCounts, setSessionUploadCounts] = useState<Record<string, { title: string; upload_count: number }>>({});
 
   // Player reels
   const [playerReels, setPlayerReels] = useState<{ id: string; title: string; clip_ids?: string[]; status?: string; share_enabled?: boolean; share_token?: string; created_at: string }[]>([]);
@@ -483,19 +481,23 @@ export default function PlayerDetailPage() {
     try {
       const { data } = await api.get("/film/clips", { params: { player_id: playerId, limit: 50 } });
       const clips = Array.isArray(data) ? data : [];
-      setFilmClips(clips);
       // Fetch session metadata for multi-video grouping
       const uniqueSessionIds = [...new Set(clips.map((c: { session_id?: string }) => c.session_id).filter(Boolean))] as string[];
+      const sessionMeta: Record<string, { title: string; upload_count: number }> = {};
       if (uniqueSessionIds.length > 0) {
-        const counts: Record<string, { title: string; upload_count: number }> = {};
         await Promise.all(uniqueSessionIds.map(async (sid) => {
           try {
             const { data: sData } = await api.get(`/film/sessions/${sid}`);
-            counts[sid] = { title: sData.title || "Session", upload_count: sData.upload_count || 1 };
+            sessionMeta[sid] = { title: sData.title || "Session", upload_count: sData.upload_count || 1 };
           } catch { /* non-critical */ }
         }));
-        setSessionUploadCounts(counts);
       }
+      // Enrich clips with session metadata
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setFilmClips(clips.map((c: any) => {
+        const meta = c.session_id ? sessionMeta[c.session_id] : undefined;
+        return { ...c, session_title: meta?.title, session_upload_count: meta?.upload_count };
+      }));
     } catch {
       /* non-critical */
     } finally {
@@ -3501,9 +3503,9 @@ export default function PlayerDetailPage() {
                 return (
                   <div className="space-y-3">
                     {sessionIds.map((sid) => {
-                      const sessionMeta = sessionUploadCounts[sid];
-                      const uploadCount = sessionMeta?.upload_count || 1;
-                      const sessionTitle = sessionMeta?.title || "Session";
+                      const firstClip = grouped[sid][0];
+                      const uploadCount = firstClip?.session_upload_count || 1;
+                      const sessionTitle = firstClip?.session_title || "Session";
                       return (
                         <div key={sid}>
                           {/* Session header */}
