@@ -98,6 +98,7 @@ interface LeaderboardPlayer {
   gp?: number | null;
   toi_minutes?: number | null;
   score_type?: string | null;
+  pxi_intelligence?: number | null;
 }
 
 interface FilterOptions {
@@ -430,7 +431,7 @@ export default function LeaderboardPage() {
                                       <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>—</td>
+                                  <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                                   <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                                   <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                   <td className={`px-3 py-2.5 text-xs font-medium ${p.age_modifier != null && p.age_modifier > 0 ? "text-green-600" : p.age_modifier != null && p.age_modifier < 0 ? "text-orange" : "text-muted/40"}`}>
@@ -528,7 +529,7 @@ export default function LeaderboardPage() {
                                     <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>—</td>
+                                <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                                 <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
@@ -606,7 +607,7 @@ export default function LeaderboardPage() {
                                   <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>—</td>
+                              <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">+{Math.round(p.gap)}</td>
@@ -682,7 +683,7 @@ export default function LeaderboardPage() {
                                   <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>—</td>
+                              <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-semibold text-green-600">
                                 +{p.age_modifier?.toFixed(1)}

@@ -29734,7 +29734,7 @@ async def pxr_draft_board(
                    position_group, pxr_score, league_percentile, cohort_percentile,
                    age_modifier, p1_offense, p2_defense, p3_possession, p4_physical,
                    data_completeness, season, confidence_tier, gp, toi_minutes,
-                   score_type, pxr_null_reason, pxr_tier
+                   score_type, pxr_null_reason, pxr_tier, pxi_intelligence
             FROM (
                 SELECT p.id AS player_id,
                        p.first_name, p.last_name,
@@ -29746,7 +29746,7 @@ async def pxr_draft_board(
                        px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
                        px.data_completeness, px.season,
                        px.confidence_tier, px.gp, px.toi_minutes,
-                       px.score_type, px.pxr_null_reason,
+                       px.score_type, px.pxr_null_reason, px.pxi_intelligence,
                        CASE
                            WHEN px.pxr_score >= 90 THEN '1A'
                            WHEN px.pxr_score >= 80 THEN '1B'
