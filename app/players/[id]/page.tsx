@@ -52,6 +52,8 @@ import {
   Scissors,
   Phone,
   Mail,
+  Film,
+  Share2,
 } from "lucide-react";
 import {
   RadarChart,
@@ -460,6 +462,10 @@ export default function PlayerDetailPage() {
   // Film Room clips for this player
   const [filmClips, setFilmClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; created_at: string }[]>([]);
   const [filmClipsLoading, setFilmClipsLoading] = useState(false);
+
+  // Player reels
+  const [playerReels, setPlayerReels] = useState<{ id: string; title: string; clip_ids?: string[]; status?: string; share_enabled?: boolean; share_token?: string; created_at: string }[]>([]);
+  const [reelsLoading, setReelsLoading] = useState(false);
 
   const loadFilmClips = useCallback(async () => {
     setFilmClipsLoading(true);
@@ -1031,12 +1037,19 @@ export default function PlayerDetailPage() {
     }
   }, [statsSubView, playerId, progression, gameLog, loadingProgression, loadingGameLog]);
 
-  // Load film clips when Video tab is active
+  // Load film clips + reels when Video tab is active
   useEffect(() => {
     if (activeTab === "video" && filmClips.length === 0 && !filmClipsLoading) {
       loadFilmClips();
     }
-  }, [activeTab, filmClips.length, filmClipsLoading, loadFilmClips]);
+    if (activeTab === "video" && playerReels.length === 0 && !reelsLoading) {
+      setReelsLoading(true);
+      api.get("/highlight-reels", { params: { player_id: playerId, limit: 50 } })
+        .then(({ data }) => setPlayerReels(Array.isArray(data) ? data : []))
+        .catch(() => { /* non-critical */ })
+        .finally(() => setReelsLoading(false));
+    }
+  }, [activeTab, filmClips.length, filmClipsLoading, loadFilmClips, playerReels.length, reelsLoading, playerId]);
 
   // Handle game log pagination
   const handleGameLogPageChange = (newOffset: number) => {
@@ -3163,6 +3176,70 @@ export default function PlayerDetailPage() {
         {activeTab === "video" && (
           <section className="space-y-4">
             <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Video sessions, game film clips, and tagged highlights.</p>
+
+            {/* ── Recruitment Reel Section ──────────────────────── */}
+            <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-0">
+                  <Film size={14} className="text-teal" /> Recruitment Reels
+                </h3>
+                <Link
+                  href={`/players/${playerId}/reels/build`}
+                  className="flex items-center gap-1.5 bg-teal text-white px-3 py-1.5 rounded-lg font-oswald uppercase tracking-wider text-[11px] hover:bg-teal/90 transition-colors"
+                >
+                  <Film size={12} /> Build Recruitment Reel
+                </Link>
+              </div>
+              <p className="text-xs text-muted mb-3">
+                Pull clips across all sessions to build a cross-season recruitment reel.
+              </p>
+
+              {reelsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 size={16} className="animate-spin text-teal" />
+                  <span className="ml-2 text-xs text-muted">Loading reels...</span>
+                </div>
+              ) : playerReels.length === 0 ? (
+                <div className="text-center py-4">
+                  <Film size={28} className="mx-auto text-muted/20 mb-2" />
+                  <p className="text-sm text-muted">No reels yet — build one above.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {playerReels.map((reel) => {
+                    const clipCount = Array.isArray(reel.clip_ids) ? reel.clip_ids.length : 0;
+                    return (
+                      <div
+                        key={reel.id}
+                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-navy truncate">{reel.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-muted font-mono">{clipCount} clip{clipCount !== 1 ? "s" : ""}</span>
+                            <span className="text-[10px] text-muted/60">{new Date(reel.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                            {reel.share_enabled ? (
+                              <span className="flex items-center gap-1 text-[9px] font-oswald uppercase tracking-wider bg-teal/10 text-teal px-1.5 py-0.5 rounded">
+                                <Share2 size={8} /> Shared
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/40 px-1.5 py-0.5">Draft</span>
+                            )}
+                          </div>
+                        </div>
+                        <Link
+                          href={`/reels/${reel.id}`}
+                          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider rounded-lg hover:bg-teal hover:text-white transition-colors"
+                        >
+                          <Eye size={10} /> View
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
               <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
                 <Video size={14} className="text-teal" /> Game Film

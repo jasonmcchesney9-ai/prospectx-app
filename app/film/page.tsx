@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Film, Upload, Video, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw, ExternalLink, Plus, BarChart3, Tag, FileText, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Film, Upload, Video, Scissors, Eye, Loader2, AlertCircle, Trash2, RefreshCw, ExternalLink, Plus, BarChart3, Tag, FileText, CheckCircle2, Search, User } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -134,6 +135,15 @@ export default function FilmRoomPage() {
   const [reelsPulse, setReelsPulse] = useState(false);
   const reelsPulsed = useRef(false);
 
+  // Player Reels search
+  const router = useRouter();
+  const [showPlayerSearch, setShowPlayerSearch] = useState(false);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const [playerSearchResults, setPlayerSearchResults] = useState<{ id: string; first_name: string; last_name: string; position?: string; current_team?: string }[]>([]);
+  const [playerSearchLoading, setPlayerSearchLoading] = useState(false);
+  const playerSearchRef = useRef<HTMLDivElement>(null);
+  const playerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     api
       .get("/film/sessions")
@@ -231,6 +241,41 @@ export default function FilmRoomPage() {
     }
   }, []);
 
+  // Player Reels search handler
+  const handlePlayerSearch = useCallback((query: string) => {
+    setPlayerSearchQuery(query);
+    if (playerSearchTimer.current) clearTimeout(playerSearchTimer.current);
+    if (query.trim().length < 2) {
+      setPlayerSearchResults([]);
+      return;
+    }
+    setPlayerSearchLoading(true);
+    playerSearchTimer.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get("/players", { params: { search: query.trim(), limit: 20 } });
+        setPlayerSearchResults(Array.isArray(data) ? data : []);
+      } catch {
+        setPlayerSearchResults([]);
+      } finally {
+        setPlayerSearchLoading(false);
+      }
+    }, 300);
+  }, []);
+
+  // Close player search on outside click
+  useEffect(() => {
+    if (!showPlayerSearch) return;
+    const handler = (e: MouseEvent) => {
+      if (playerSearchRef.current && !playerSearchRef.current.contains(e.target as Node)) {
+        setShowPlayerSearch(false);
+        setPlayerSearchQuery("");
+        setPlayerSearchResults([]);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showPlayerSearch]);
+
   const filteredSessions = activeFilter === "all"
     ? sessions
     : activeFilter === "clips"
@@ -279,6 +324,67 @@ export default function FilmRoomPage() {
                 <Plus size={14} />
                 Create Session
               </Link>
+              {/* Player Reels button + search dropdown */}
+              <div className="relative" ref={playerSearchRef}>
+                <button
+                  onClick={() => { setShowPlayerSearch(!showPlayerSearch); setPlayerSearchQuery(""); setPlayerSearchResults([]); }}
+                  className="flex items-center gap-1.5 border border-orange/40 text-orange px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-xs hover:bg-orange/10 transition-colors"
+                  style={{ borderColor: "rgba(230,126,34,0.4)", color: "#E67E22" }}
+                >
+                  <Film size={14} />
+                  Player Reels
+                </button>
+                {showPlayerSearch && (
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", width: 320, background: "white", borderRadius: 12, border: "1.5px solid rgba(13,148,136,0.35)", boxShadow: "0 8px 24px rgba(9,28,48,0.15)", zIndex: 50, overflow: "hidden" }}>
+                    <div style={{ padding: "10px 12px", borderBottom: "1px solid #E2EAF3", display: "flex", alignItems: "center", gap: 8 }}>
+                      <Search size={14} style={{ color: "#6B7280", flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        autoFocus
+                        value={playerSearchQuery}
+                        onChange={(e) => handlePlayerSearch(e.target.value)}
+                        placeholder="Search player name..."
+                        style={{ flex: 1, border: "none", outline: "none", fontFamily: "'Source Serif 4', serif", fontSize: 13, color: "#0F2942" }}
+                      />
+                      {playerSearchLoading && <Loader2 size={14} className="animate-spin" style={{ color: "#0D9488" }} />}
+                    </div>
+                    <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                      {playerSearchQuery.trim().length < 2 ? (
+                        <div style={{ padding: "16px 12px", textAlign: "center" }}>
+                          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: 12, color: "#6B7280" }}>Type at least 2 characters to search...</p>
+                        </div>
+                      ) : playerSearchResults.length === 0 && !playerSearchLoading ? (
+                        <div style={{ padding: "16px 12px", textAlign: "center" }}>
+                          <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: 12, color: "#6B7280" }}>No players found.</p>
+                        </div>
+                      ) : (
+                        playerSearchResults.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => { setShowPlayerSearch(false); router.push(`/players/${p.id}/reels/build`); }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left", borderBottom: "1px solid rgba(226,234,243,0.5)" }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(13,148,136,0.04)"; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                          >
+                            <div style={{ width: 32, height: 32, borderRadius: 8, background: "#0F2942", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <User size={14} style={{ color: "white" }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0F2942", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                                {p.first_name} {p.last_name}
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1 }}>
+                                {p.position && <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "#0D9488", textTransform: "uppercase" }}>{p.position}</span>}
+                                {p.current_team && <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: 11, color: "#6B7280" }}>{p.current_team}</span>}
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
