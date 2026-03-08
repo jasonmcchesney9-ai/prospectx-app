@@ -462,6 +462,8 @@ export default function PlayerDetailPage() {
   // Film Room clips for this player
   const [filmClips, setFilmClips] = useState<{ id: string; title: string; description?: string | null; start_time_seconds: number; end_time_seconds: number; session_id?: string; created_at: string }[]>([]);
   const [filmClipsLoading, setFilmClipsLoading] = useState(false);
+  // Multi-video: session upload counts for Video tab grouping
+  const [sessionUploadCounts, setSessionUploadCounts] = useState<Record<string, { title: string; upload_count: number }>>({});
 
   // Player reels
   const [playerReels, setPlayerReels] = useState<{ id: string; title: string; clip_ids?: string[]; status?: string; share_enabled?: boolean; share_token?: string; created_at: string }[]>([]);
@@ -480,7 +482,20 @@ export default function PlayerDetailPage() {
     setFilmClipsLoading(true);
     try {
       const { data } = await api.get("/film/clips", { params: { player_id: playerId, limit: 50 } });
-      setFilmClips(Array.isArray(data) ? data : []);
+      const clips = Array.isArray(data) ? data : [];
+      setFilmClips(clips);
+      // Fetch session metadata for multi-video grouping
+      const uniqueSessionIds = [...new Set(clips.map((c: { session_id?: string }) => c.session_id).filter(Boolean))] as string[];
+      if (uniqueSessionIds.length > 0) {
+        const counts: Record<string, { title: string; upload_count: number }> = {};
+        await Promise.all(uniqueSessionIds.map(async (sid) => {
+          try {
+            const { data: sData } = await api.get(`/film/sessions/${sid}`);
+            counts[sid] = { title: sData.title || "Session", upload_count: sData.upload_count || 1 };
+          } catch { /* non-critical */ }
+        }));
+        setSessionUploadCounts(counts);
+      }
     } catch {
       /* non-critical */
     } finally {
@@ -3465,45 +3480,100 @@ export default function PlayerDetailPage() {
                     Tag clips to this player in the Film Room to see them here.
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {filmClips.map((clip) => {
-                    const fmtTime = (s: number) => {
-                      const m = Math.floor(s / 60);
-                      const sec = Math.floor(s % 60);
-                      return `${m}:${sec.toString().padStart(2, "0")}`;
-                    };
-                    return (
-                      <div
-                        key={clip.id}
-                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-navy truncate">{clip.title}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
-                              <Clock size={10} />
-                              {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
-                            </span>
-                            {clip.description && (
-                              <span className="text-[10px] text-muted truncate">{clip.description}</span>
+              ) : (() => {
+                const fmtTime = (s: number) => {
+                  const m = Math.floor(s / 60);
+                  const sec = Math.floor(s % 60);
+                  return `${m}:${sec.toString().padStart(2, "0")}`;
+                };
+                // Group clips by session_id
+                const grouped: Record<string, typeof filmClips> = {};
+                const noSession: typeof filmClips = [];
+                filmClips.forEach((clip) => {
+                  if (clip.session_id) {
+                    if (!grouped[clip.session_id]) grouped[clip.session_id] = [];
+                    grouped[clip.session_id].push(clip);
+                  } else {
+                    noSession.push(clip);
+                  }
+                });
+                const sessionIds = Object.keys(grouped);
+                return (
+                  <div className="space-y-3">
+                    {sessionIds.map((sid) => {
+                      const sessionMeta = sessionUploadCounts[sid];
+                      const uploadCount = sessionMeta?.upload_count || 1;
+                      const sessionTitle = sessionMeta?.title || "Session";
+                      return (
+                        <div key={sid}>
+                          {/* Session header */}
+                          <div className="flex items-center gap-2 mb-1.5 px-1">
+                            <span className="text-[11px] font-oswald uppercase tracking-wider text-navy/70 font-semibold truncate">{sessionTitle}</span>
+                            {uploadCount > 1 && (
+                              <>
+                                <span className="text-[9px] font-oswald uppercase tracking-wider text-teal bg-teal/10 px-1.5 py-0.5 rounded">Full Game ({uploadCount} periods)</span>
+                                <span className="text-[9px] font-mono text-muted/50">{uploadCount} videos</span>
+                              </>
                             )}
                           </div>
+                          <div className="space-y-2">
+                            {grouped[sid].map((clip) => (
+                              <div
+                                key={clip.id}
+                                className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-navy truncate">{clip.title}</p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
+                                      <Clock size={10} />
+                                      {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
+                                    </span>
+                                    {clip.description && (
+                                      <span className="text-[10px] text-muted truncate">{clip.description}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <Link
+                                  href={`/film-room/sessions/${sid}?seek=${clip.start_time_seconds}`}
+                                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider rounded-lg hover:bg-teal hover:text-white transition-colors"
+                                >
+                                  <Play size={10} />
+                                  Watch
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        {clip.session_id && (
-                          <Link
-                            href={`/film-room/sessions/${clip.session_id}?seek=${clip.start_time_seconds}`}
-                            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider rounded-lg hover:bg-teal hover:text-white transition-colors"
+                      );
+                    })}
+                    {/* Clips without a session */}
+                    {noSession.length > 0 && (
+                      <div className="space-y-2">
+                        {noSession.map((clip) => (
+                          <div
+                            key={clip.id}
+                            className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
                           >
-                            <Play size={10} />
-                            Watch
-                          </Link>
-                        )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-navy truncate">{clip.title}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
+                                  <Clock size={10} />
+                                  {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
+                                </span>
+                                {clip.description && (
+                                  <span className="text-[10px] text-muted truncate">{clip.description}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </section>
         )}

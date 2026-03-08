@@ -21,6 +21,7 @@ interface ReelClip {
   tags: string[] | string | null;
   mux_playback_id: string;
   upload_id: string;
+  period_number?: number;
 }
 
 interface ReelData {
@@ -138,6 +139,7 @@ export default function ReelViewerPage() {
         // Collect unique upload_ids and fetch playback_ids
         const uniqueUploadIds = [...new Set(reel.clips.map((c) => c.upload_id).filter(Boolean))];
         const playbackMap: Record<string, string> = {};
+        const periodMap: Record<string, number> = {};
 
         await Promise.all(
           uniqueUploadIds.map(async (uid) => {
@@ -145,6 +147,9 @@ export default function ReelViewerPage() {
               const { data: upload } = await api.get(`/film/uploads/${uid}`);
               if (upload.mux_playback_id) {
                 playbackMap[uid] = upload.mux_playback_id;
+              }
+              if (upload.period_number) {
+                periodMap[uid] = upload.period_number;
               }
             } catch {
               // Skip uploads that can't be fetched
@@ -166,6 +171,7 @@ export default function ReelViewerPage() {
             tags: c.tags,
             upload_id: c.upload_id,
             mux_playback_id: playbackMap[c.upload_id],
+            period_number: periodMap[c.upload_id],
           }));
 
         if (enrichedClips.length === 0) {
@@ -531,6 +537,12 @@ export default function ReelViewerPage() {
                           </span>
                           {/* Category dot */}
                           <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
+                          {/* Period badge */}
+                          {clip.period_number && (
+                            <span style={{ fontSize: 8, fontFamily: "ui-monospace, monospace", fontWeight: 700, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)", borderRadius: 3, padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>
+                              {clip.period_number <= 3 ? `P${clip.period_number}` : clip.period_number === 4 ? "OT" : "SO"}
+                            </span>
+                          )}
                           {/* Title + timecode */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 12, color: "#FFFFFF", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
