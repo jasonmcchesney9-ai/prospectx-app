@@ -43070,6 +43070,88 @@ async def get_film_clip(clip_id: str, token_data: dict = Depends(verify_token)):
         conn.close()
 
 
+@app.get("/film/players/{player_id}/clips")
+async def get_player_clips_cross_session(
+    player_id: str,
+    request: Request,
+    event_type: Optional[str] = Query(None, description="Comma-separated clip_type or tag filter, e.g. goal,shot"),
+    limit: int = Query(200, ge=1, le=500),
+    token_data: dict = Depends(verify_token),
+):
+    """Cross-session clip query: all clips for a player across all sessions.
+    Returns clips with session context (session name, date, type).
+    FAMILY/PLAYER roles can only access clips for their own linked player."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    hockey_role = _get_effective_hockey_role(request, token_data)
+
+    # FAMILY/PLAYER role gate: only allow access to their own linked player
+    if hockey_role in ("player", "parent"):
+        conn_check = get_db()
+        try:
+            # Check if this user has a linked player record matching the requested player_id
+            linked = conn_check.execute(
+                "SELECT id FROM players WHERE id = ? AND org_id = ? AND (created_by = ? OR id IN (SELECT player_id FROM users WHERE id = ?))",
+                (player_id, org_id, user_id, user_id),
+            ).fetchone()
+            if not linked:
+                raise HTTPException(status_code=403, detail="You can only view clips for your own player profile")
+        finally:
+            conn_check.close()
+
+    conn = get_db()
+    try:
+        where = ["vc.org_id = ?", "vc.player_ids LIKE ?"]
+        params: list = [org_id, f"%{player_id}%"]
+
+        # Optional event_type filter — matches clip_type or tags
+        if event_type:
+            type_list = [t.strip().lower() for t in event_type.split(",") if t.strip()]
+            if type_list:
+                type_conditions = []
+                for t in type_list:
+                    type_conditions.append("(LOWER(vc.clip_type) = ? OR LOWER(vc.tags) LIKE ?)")
+                    params.extend([t, f"%{t}%"])
+                where.append(f"({' OR '.join(type_conditions)})")
+
+        params.append(limit)
+        rows = conn.execute(f"""
+            SELECT vc.id AS clip_id, vc.title, vc.description,
+                   vc.start_time_seconds, vc.end_time_seconds,
+                   vc.clip_type, vc.tags, vc.category,
+                   vc.session_id, vc.upload_id, vc.created_at AS clip_created_at,
+                   vs.name AS session_title, vs.session_type,
+                   vs.created_at AS session_date, vs.game_id,
+                   g.game_date, g.home_team, g.away_team
+            FROM video_clips vc
+            LEFT JOIN video_sessions vs ON vc.session_id = vs.id
+            LEFT JOIN games g ON vs.game_id = g.id
+            WHERE {' AND '.join(where)}
+            ORDER BY COALESCE(g.game_date, vs.created_at) DESC, vc.start_time_seconds ASC
+            LIMIT ?
+        """, tuple(params)).fetchall()
+
+        results = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else r
+            if isinstance(d, dict):
+                # Parse JSON fields
+                if d.get("tags"):
+                    try:
+                        d["tags"] = json.loads(d["tags"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                # Build opponent string from game data if available
+                if d.get("game_date") and d.get("home_team") and d.get("away_team"):
+                    d["opponent"] = f"{d['home_team']} vs {d['away_team']}"
+                else:
+                    d["opponent"] = None
+            results.append(d)
+        return results
+    finally:
+        conn.close()
+
+
 @app.patch("/film/clips/{clip_id}")
 async def update_film_clip(clip_id: str, request: Request, token_data: dict = Depends(verify_token)):
     """Update a video clip."""
