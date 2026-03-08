@@ -467,6 +467,12 @@ export default function PlayerDetailPage() {
   const [playerReels, setPlayerReels] = useState<{ id: string; title: string; clip_ids?: string[]; status?: string; share_enabled?: boolean; share_token?: string; created_at: string }[]>([]);
   const [reelsLoading, setReelsLoading] = useState(false);
 
+  // Film → Dev Plan bridge (P1): stat trends + PXI film suggestions
+  const [statTrends, setStatTrends] = useState<{ stat_name: string; label: string; current_value: number | null; season_avg: number | null; pct_change: number | null; severity: string; trigger_reason: string; event_type_filter: string | null }[]>([]);
+  const [statTrendsClipCounts, setStatTrendsClipCounts] = useState<Record<string, number>>({});
+  const [statTrendsLoading, setStatTrendsLoading] = useState(false);
+  const [filmSuggestions, setFilmSuggestions] = useState<{ stat_name: string; label: string; coaching_note: string; severity: string; trigger_reason: string; event_type_filter: string | null }[]>([]);
+
   const loadFilmClips = useCallback(async () => {
     setFilmClipsLoading(true);
     try {
@@ -917,6 +923,23 @@ export default function PlayerDetailPage() {
           const dlRes = await api.get<PlayerDrillLogsResponse>(`/players/${playerId}/drill-logs?limit=20`);
           setDrillLogData(dlRes.data);
         } catch { /* Non-critical */ }
+
+        // Load stat trends for Film → Dev Plan bridge (P1)
+        try {
+          setStatTrendsLoading(true);
+          const trendsRes = await api.get(`/players/${playerId}/stat-trends`);
+          const triggers = trendsRes.data?.triggers || [];
+          setStatTrends(triggers);
+          setStatTrendsClipCounts(trendsRes.data?.clip_counts || {});
+          // If triggers found, fetch PXI film suggestions
+          if (triggers.length > 0) {
+            try {
+              const sugRes = await api.post(`/players/${playerId}/film-suggestions`, { stat_trends: triggers });
+              setFilmSuggestions(sugRes.data?.suggestions || []);
+            } catch { /* PXI suggestion non-critical */ }
+          }
+        } catch { /* Non-critical */ }
+        finally { setStatTrendsLoading(false); }
 
         // Load transfer history (non-blocking)
         try {
@@ -2585,6 +2608,70 @@ export default function PlayerDetailPage() {
         {activeTab === "player" && (
           <section className="space-y-4">
             <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Player card, development plan, and long-term projection tools.</p>
+
+            {/* ── Film Review Recommended Card (P1 Film → Dev Plan Bridge) ── */}
+            {statTrends.length > 0 && !statTrendsLoading && (
+              <div style={{ background: "white", borderRadius: 14, overflow: "hidden", borderLeft: "4px solid #0D9488", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
+                <div style={{ background: "linear-gradient(135deg, #0D9488 0%, #14B8A8 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div className="flex items-center gap-2">
+                    <Film size={14} style={{ color: "white" }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "white", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em", textTransform: "uppercase" }}>Film Review Recommended</span>
+                  </div>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", background: "rgba(255,255,255,0.2)", borderRadius: 4, padding: "2px 6px" }}>
+                    {statTrends.length} {statTrends.length === 1 ? "trigger" : "triggers"}
+                  </span>
+                </div>
+                <div style={{ padding: "12px 16px" }}>
+                  {/* Trigger summaries */}
+                  <div className="space-y-2 mb-3">
+                    {statTrends.slice(0, 3).map((t, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, flexShrink: 0, background: t.severity === "high" ? "#EF4444" : "#F59E0B" }} />
+                        <div>
+                          <span className="text-xs font-oswald uppercase tracking-wider text-navy font-bold">{t.label}</span>
+                          <p className="text-[11px] text-muted/70 leading-snug">{t.trigger_reason}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Clip count */}
+                  {(statTrendsClipCounts.total || 0) > 0 ? (
+                    <p className="text-[11px] text-teal font-medium mb-3">
+                      {statTrendsClipCounts.total} clip{statTrendsClipCounts.total !== 1 ? "s" : ""} available for review
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted/50 mb-3">No film tagged yet — import game footage to enable clip review</p>
+                  )}
+
+                  {/* PXI coaching suggestions */}
+                  {filmSuggestions.length > 0 && (
+                    <div className="mb-3 space-y-1.5">
+                      {filmSuggestions.slice(0, 3).map((s, idx) => (
+                        <div key={idx} style={{ background: "rgba(13,148,136,0.05)", borderRadius: 6, padding: "6px 10px" }}>
+                          <p className="text-[11px] text-navy/80 leading-snug">
+                            <span className="font-bold text-teal">{s.label}:</span> {s.coaching_note}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Review Clips button */}
+                  {(statTrendsClipCounts.total || 0) > 0 && (
+                    <Link
+                      href={`/film?player_id=${playerId}${statTrends[0]?.event_type_filter ? `&event_type=${statTrends[0].event_type_filter}` : ""}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider text-white transition-colors"
+                      style={{ background: "#0D9488" }}
+                    >
+                      <Play size={12} />
+                      Review Clips
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* ── Section 1: Player Card ──────────────────────────── */}
             {player && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative", display: "flex", alignItems: "center", gap: 16 }}>
