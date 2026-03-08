@@ -4046,6 +4046,11 @@ def init_db():
         ("updated_at", "TEXT"),
         ("upload_id", "TEXT"),
         ("event_data_source", "VARCHAR(50)"),
+        ("source_type", "VARCHAR(50)"),
+        ("source_url", "TEXT"),
+        ("match_id", "VARCHAR(50)"),
+        ("match_title", "TEXT"),
+        ("match_date", "TEXT"),
     ]:
         if col_name not in vs_cols:
             conn.execute(f"ALTER TABLE video_sessions ADD COLUMN {col_name} {col_def}")
@@ -42953,6 +42958,165 @@ async def delete_film_session(session_id: str, token_data: dict = Depends(verify
         conn.execute("DELETE FROM video_sessions WHERE id = ?", (session_id,))
         conn.commit()
         return {"status": "deleted", "id": session_id}
+    finally:
+        conn.close()
+
+
+# ── Film Session URL Import ──────────────────────────────────
+
+
+def parse_video_platform_url(url: str) -> dict:
+    """Fetch a video platform playlist URL and extract clip data from gon.episodes JSON."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    try:
+        resp = httpx.get(url, headers=headers, timeout=15.0, follow_redirects=True)
+        resp.raise_for_status()
+    except Exception:
+        return {"error": "fetch_failed"}
+
+    html = resp.text
+
+    # Extract gon.episodes JSON array from page source
+    m = re.search(r"gon\.episodes\s*=\s*(\[.*?\]);", html, re.DOTALL)
+    if not m:
+        return {"error": "no_episodes"}
+
+    try:
+        episodes = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {"error": "no_episodes"}
+
+    if not episodes or not isinstance(episodes, list):
+        return {"error": "empty_episodes"}
+
+    # Extract match metadata from first episode
+    first = episodes[0] if episodes else {}
+    match_title = first.get("match_title_en") or first.get("match_title") or ""
+    match_date = first.get("match_date") or ""
+    match_id = str(first.get("match_id", "")) if first.get("match_id") else ""
+
+    parsed_clips = []
+    for ep in episodes:
+        parsed_clips.append({
+            "id": str(ep.get("id", "")),
+            "title": ep.get("title") or ep.get("name") or "Untitled clip",
+            "from": float(ep.get("from", 0)),
+            "to": float(ep.get("to", 0)),
+            "match_title_en": ep.get("match_title_en") or "",
+            "match_subtitle_en": ep.get("match_subtitle_en") or "",
+            "match_id": str(ep.get("match_id", "")),
+            "fname": ep.get("fname") or "",
+        })
+
+    return {
+        "episodes": parsed_clips,
+        "match_title": match_title,
+        "match_date": match_date,
+        "match_id": match_id,
+    }
+
+
+@app.post("/film/sessions/import-from-url", status_code=201)
+async def import_film_session_from_url(request: Request, token_data: dict = Depends(verify_token)):
+    """Import a film session + clips from a video platform playlist URL."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+
+    url = (body.get("url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+
+    session_title = (body.get("session_title") or "").strip() or None
+    player_id = (body.get("player_id") or "").strip() or None
+
+    # Step 1: Parse the URL
+    result = parse_video_platform_url(url)
+
+    if result.get("error") == "fetch_failed":
+        raise HTTPException(
+            status_code=400,
+            detail="Could not fetch this link. It may have expired or require login.",
+        )
+    if result.get("error") == "no_episodes":
+        raise HTTPException(
+            status_code=400,
+            detail="No clip data found at this URL. Try a playlist or player link.",
+        )
+    if result.get("error") == "empty_episodes":
+        raise HTTPException(
+            status_code=400,
+            detail="No clips found in this playlist.",
+        )
+
+    episodes = result["episodes"]
+    match_title = result.get("match_title", "")
+    match_date = result.get("match_date", "")
+    match_id = result.get("match_id", "")
+
+    # Step 2: Create video_sessions record
+    session_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    final_title = session_title or match_title or "Imported Session"
+
+    player_ids_json = json.dumps([player_id]) if player_id else "[]"
+
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_sessions
+                (id, org_id, name, description, created_by, created_at,
+                 session_type, source_type, source_url, match_id, match_title,
+                 match_date, player_id, pxi_status, visibility, status, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            session_id, org_id, final_title, f"Imported from URL: {match_title}",
+            user_id, now, "film_review", "instat_url", url, match_id, match_title,
+            match_date, player_id, "pending", "org", "active", now,
+        ))
+
+        # Step 3: Create video_clips for each episode
+        clip_count = 0
+        for idx, ep in enumerate(episodes):
+            clip_id = str(uuid.uuid4())
+
+            # Derive period tag from fname suffix (_1, _2, _3)
+            tags = []
+            fname = ep.get("fname", "")
+            period_match = re.search(r"_(\d+)(?:\.\w+)?$", fname)
+            if period_match:
+                tags.append(f"period_{period_match.group(1)}")
+
+            # Build description from match context
+            desc_parts = []
+            if ep.get("match_title_en"):
+                desc_parts.append(ep["match_title_en"])
+            if ep.get("match_subtitle_en"):
+                desc_parts.append(ep["match_subtitle_en"])
+            clip_description = " — ".join(desc_parts) if desc_parts else None
+
+            conn.execute("""
+                INSERT INTO video_clips
+                    (id, org_id, session_id, title, description, start_time_seconds,
+                     end_time_seconds, clip_type, player_ids, tags,
+                     created_by, created_at, sort_order)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                clip_id, org_id, session_id, ep["title"], clip_description,
+                ep["from"], ep["to"], "instat_url", player_ids_json,
+                json.dumps(tags), user_id, now, idx,
+            ))
+            clip_count += 1
+
+        conn.commit()
+        return {
+            "session_id": session_id,
+            "clip_count": clip_count,
+            "match_title": match_title,
+            "match_date": match_date,
+        }
     finally:
         conn.close()
 
