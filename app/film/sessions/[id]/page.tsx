@@ -84,8 +84,9 @@ interface UploadData {
 
 interface Comment {
   id: string;
-  user_id: string;
-  comment_text: string;
+  author_id: string;
+  author_email?: string;
+  body: string;
   timestamp_seconds: number | null;
   created_at: string;
 }
@@ -487,7 +488,7 @@ export default function FilmSessionViewerPage() {
     setSubmittingComment(true);
     try {
       await api.post(`/film/sessions/${sessionId}/comments`, {
-        comment_text: commentText.trim(),
+        body: commentText.trim(),
         timestamp_seconds: Math.floor(currentTimeRef.current) || null,
       });
       setCommentText("");
@@ -1574,7 +1575,7 @@ export default function FilmSessionViewerPage() {
                           style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
                         >
                           <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", margin: 0 }}>{c.comment_text}</p>
+                            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", margin: 0 }}>{c.body}</p>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                               {c.timestamp_seconds !== null && (
                                 <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#14B8A8" }}>
