@@ -32762,7 +32762,8 @@ def _parse_ht_height_to_cm(height_str: str) -> int | None:
     m = re.match(r"(\d+)-(\d+)", height_str)
     if m:
         feet, inches = int(m.group(1)), int(m.group(2))
-        return round((feet * 12 + inches) * 2.54)
+        result = round((feet * 12 + inches) * 2.54)
+        return result if result > 0 else None
     return None
 
 def _parse_ht_weight_to_kg(weight_str: str) -> int | None:
@@ -32872,10 +32873,12 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                 continue
 
             position = _normalize_position(rp.get("position", ""))
+            position = position if position and position != "F" else None
             dob = _normalize_dob(rp.get("dob", ""))
             height_cm = _parse_ht_height_to_cm(rp.get("height", ""))
             weight_kg = _parse_ht_weight_to_kg(rp.get("weight", ""))
             shoots = (rp.get("shoots") or "")[:1].upper()
+            shoots = shoots if shoots in ("L", "R") else None
             team_name = rp.get("team_name", "")
             photo_url = rp.get("photo", "")
             # Filter out HockeyTech "no photo" placeholders — treat as empty
@@ -32932,7 +32935,8 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     # Update bio fields
                     conn.execute("""
                         UPDATE players SET
-                            current_team = ?, current_league = ?, position = ?, shoots = ?,
+                            current_team = COALESCE(NULLIF(?, ''), current_team), current_league = ?,
+                            position = COALESCE(?, position), shoots = COALESCE(?, shoots),
                             height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
                             dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
                             birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
@@ -33002,7 +33006,8 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     conn.execute("""
                         UPDATE players SET
                             hockeytech_id = ?, hockeytech_league = ?,
-                            current_team = ?, current_league = ?, position = ?, shoots = ?,
+                            current_team = COALESCE(NULLIF(?, ''), current_team), current_league = ?,
+                            position = COALESCE(?, position), shoots = COALESCE(?, shoots),
                             height_cm = COALESCE(?, height_cm), weight_kg = COALESCE(?, weight_kg),
                             dob = COALESCE(?, dob), image_url = COALESCE(NULLIF(?, ''), image_url),
                             birth_year = COALESCE(?, birth_year), age_group = COALESCE(?, age_group),
