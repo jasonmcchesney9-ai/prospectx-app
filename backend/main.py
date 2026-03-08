@@ -42,6 +42,7 @@ import glob
 import httpx
 import jwt
 import shutil
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, Form, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -687,6 +688,52 @@ os.makedirs(_IMAGES_DIR, exist_ok=True)
 
 # Serve uploaded player images as static files
 app.mount("/uploads", StaticFiles(directory=_IMAGES_DIR), name="uploads")
+
+# ── Cached HockeyTech assets (logos, headshots) ──────────────────────
+_ASSETS_DIR = os.path.join(_DATA_DIR, "assets")
+os.makedirs(_ASSETS_DIR, exist_ok=True)
+STATIC_ASSETS_URL = "/static/assets"
+app.mount("/static/assets", StaticFiles(directory=_ASSETS_DIR), name="static_assets")
+
+
+async def cache_remote_asset(url: str, prefix: str = "asset") -> str | None:
+    """Download a remote asset URL and save to local static dir.
+
+    Returns the local /static/assets/... URL, or None on failure.
+    Uses URL hash as filename to avoid duplicates and re-downloading.
+    """
+    if not url or not url.startswith("http"):
+        return None
+    try:
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+        ext = url.split(".")[-1].split("?")[0].lower()
+        if ext not in ("png", "jpg", "jpeg", "gif", "webp", "svg"):
+            ext = "png"
+        filename = f"{prefix}_{url_hash}.{ext}"
+        filepath = Path(_ASSETS_DIR) / filename
+        local_url = f"{STATIC_ASSETS_URL}/{filename}"
+        # Skip if already cached
+        if filepath.exists():
+            return local_url
+        # Download
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as dl_client:
+            resp = await dl_client.get(url, headers={
+                "User-Agent": "ProspectX/1.0",
+                "Referer": "https://lscluster.hockeytech.com/",
+            })
+            if resp.status_code != 200:
+                logger.warning("Asset download failed %s: HTTP %d", url, resp.status_code)
+                return None
+            content = resp.content
+            if len(content) < 100:  # skip empty/error responses
+                return None
+        filepath.write_bytes(content)
+        logger.debug("Cached asset: %s → %s", url, local_url)
+        return local_url
+    except Exception as e:
+        logger.warning("Asset cache error for %s: %s", url, e)
+        return None
+
 
 _allowed_origins = [
     "https://prospectxintelligence.com",
@@ -29385,6 +29432,63 @@ async def recalculate_pxr(
     }
 
 
+@app.post("/admin/assets/backfill")
+async def backfill_assets(token_data: dict = Depends(verify_token)):
+    """Admin: download + cache all existing HockeyTech CDN assets.
+
+    Run once after deploying to fix existing records pointing to HT CDN URLs.
+    Safe to re-run — cache_remote_asset() skips already-downloaded files.
+    """
+    _require_admin(token_data)
+    conn = get_db()
+    updated_players = 0
+    updated_teams = 0
+    errors = []
+    try:
+        # Backfill player headshots
+        players = conn.execute("""
+            SELECT id, image_url FROM players
+            WHERE image_url IS NOT NULL
+            AND image_url LIKE 'http%'
+            AND image_url NOT LIKE '/static/%'
+            LIMIT 2000
+        """).fetchall()
+        for p in players:
+            try:
+                local_url = await cache_remote_asset(p["image_url"], prefix="player")
+                if local_url:
+                    conn.execute("UPDATE players SET image_url = ? WHERE id = ?",
+                                 (local_url, p["id"]))
+                    updated_players += 1
+            except Exception as e:
+                errors.append(f"player {p['id']}: {e}")
+        # Backfill team logos
+        teams = conn.execute("""
+            SELECT id, logo_url FROM teams
+            WHERE logo_url IS NOT NULL
+            AND logo_url LIKE 'http%'
+            AND logo_url NOT LIKE '/static/%'
+        """).fetchall()
+        for t in teams:
+            try:
+                local_url = await cache_remote_asset(t["logo_url"], prefix="logo")
+                if local_url:
+                    conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
+                                 (local_url, t["id"]))
+                    updated_teams += 1
+            except Exception as e:
+                errors.append(f"team {t['id']}: {e}")
+        conn.commit()
+        return {
+            "status": "ok",
+            "updated_players": updated_players,
+            "updated_teams": updated_teams,
+            "errors": len(errors),
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/admin/pxr/leaderboard")
 async def pxr_leaderboard(
     season: str = Query(default="2025-26"),
@@ -32881,10 +32985,14 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
             shoots = (rp.get("shoots") or "")[:1].upper()
             shoots = shoots if shoots in ("L", "R") else None
             team_name = rp.get("team_name", "")
-            photo_url = rp.get("photo", "")
+            raw_photo = rp.get("photo", "")
             # Filter out HockeyTech "no photo" placeholders — treat as empty
-            if photo_url and "nophoto" in photo_url.lower():
-                photo_url = ""
+            if raw_photo and "nophoto" in raw_photo.lower():
+                raw_photo = ""
+            # Download and cache headshot locally
+            photo_url = await cache_remote_asset(raw_photo, prefix="player") if raw_photo else ""
+            if not photo_url:
+                photo_url = raw_photo  # fall back to original URL if cache fails
             jersey = rp.get("jersey", "")
 
             # Derive fields
@@ -33080,8 +33188,10 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                         # Check if this team exists in our DB and needs a logo
                         team_row = _find_team_row_for_sync(conn, names_to_try, org_id, "id, logo_url", ht_team_id=team_id)
                         if team_row:
-                            # Always use HockeyTech CDN URL directly (no local download)
-                            saved_url = ht_logo_url
+                            # Download and cache logo locally
+                            saved_url = await cache_remote_asset(ht_logo_url, prefix="logo")
+                            if not saved_url:
+                                saved_url = ht_logo_url  # fall back to CDN URL
                             conn.execute("UPDATE teams SET logo_url = ? WHERE id = ?",
                                          (saved_url, team_row["id"]))
                             logo_synced = saved_url
