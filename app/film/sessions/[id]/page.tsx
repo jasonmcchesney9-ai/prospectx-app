@@ -168,8 +168,9 @@ function formatDate(iso: string): string {
 
 function getEmbedUrl(sourceUrl: string, uploadSource: string): string | null {
   if (uploadSource === "youtube") {
-    // youtube.com/watch?v=X → youtube.com/embed/X
-    const match = sourceUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+    // Handles: youtube.com/watch?v=X, youtu.be/X, youtube.com/embed/X,
+    //          youtube.com/v/X, youtube.com/shorts/X, youtube.com/live/X
+    const match = sourceUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|live\/)|youtu\.be\/)([\w-]+)/);
     if (match) return `https://www.youtube.com/embed/${match[1]}?autoplay=1&rel=0`;
   }
   if (uploadSource === "vimeo") {
@@ -1073,7 +1074,18 @@ export default function FilmSessionViewerPage() {
                     allowFullScreen
                     style={{ width: "100%", height: "100%", border: "none" }}
                   />
-                ) : null;
+                ) : (
+                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A1929" }}>
+                    <a
+                      href={upload.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0D9488", textDecoration: "none", textTransform: "uppercase", letterSpacing: "0.08em" }}
+                    >
+                      Could not embed video — click to open ↗
+                    </a>
+                  </div>
+                );
               })()}
               {/* Generic external link — no embed possible */}
               {!upload?.playback_id && upload?.source_url && upload.upload_source === "external_link" && (
