@@ -652,7 +652,6 @@ export default function FilmSessionViewerPage() {
           `/film/sessions/${sessionId}/generate-report`,
           payload
         );
-        toast.success("Report generated!");
 
         // Load the generated report content inline
         try {
@@ -666,9 +665,15 @@ export default function FilmSessionViewerPage() {
             });
             setReportExpanded(true);
             try { localStorage.setItem(`film_analysis_expanded_${sessionId}`, "true"); } catch { /* */ }
+            toast.success("Report generated!");
+          } else {
+            console.error("Film report content empty — report_id:", res.data.report_id);
+            toast.error("Report generated but content is empty. Try again.");
           }
-        } catch {
-          // Fallback: still show success
+        } catch (fetchErr: unknown) {
+          const fetchMsg = (fetchErr as { response?: { data?: { detail?: string } } }).response?.data?.detail || "Failed to load report content after generation";
+          console.error("Film report content fetch failed:", fetchMsg, fetchErr);
+          toast.error(fetchMsg);
         }
       } catch (e: unknown) {
         const msg =
