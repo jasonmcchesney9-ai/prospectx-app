@@ -494,6 +494,104 @@ class HockeyTechClient:
             })
         return games
 
+    # ── Full Schedule + Team Stats ─────────────────────────────────────
+
+    async def get_full_schedule(self, season_id: int) -> list[dict]:
+        """Fetch complete season schedule — all games, all teams.
+
+        Returns every game (played + upcoming) with dates, teams, scores, and venue.
+        Used by nightly cron to populate game_schedule table for Monte Carlo.
+        """
+        data = await self._modulekit("schedule", season_id=str(season_id))
+        games = data.get("Schedule", [])
+        if isinstance(games, dict):
+            games = [games]
+        result = []
+        for g in games:
+            if not isinstance(g, dict):
+                continue
+            result.append({
+                "ht_game_id": _safe_int(g.get("id") or g.get("game_id")),
+                "game_date": g.get("date_played", g.get("date_with_day", "")),
+                "game_date_display": g.get("date_with_day", ""),
+                "home_team": g.get("home_team_name", g.get("home_team", "")),
+                "away_team": g.get("visiting_team_name", g.get("visiting_team", "")),
+                "home_team_id": _safe_int(g.get("home_team") or g.get("home_team_id")),
+                "away_team_id": _safe_int(g.get("visiting_team") or g.get("away_team_id")),
+                "venue": g.get("venue_name", g.get("location", "")),
+                "status": g.get("game_status", g.get("status", "Scheduled")),
+                "home_score": _safe_int(g.get("home_goal_count") or g.get("home_score")),
+                "away_score": _safe_int(g.get("visiting_goal_count") or g.get("away_score")),
+            })
+        return result
+
+    async def get_team_stats(self, season_id: int) -> list[dict]:
+        """Fetch team-level aggregate stats for Monte Carlo and League Hub.
+
+        Re-uses get_standings() data which already returns GF, GA, PP%, PK%, streak.
+        """
+        standings = await self.get_standings(season_id)
+        result = []
+        for s in standings:
+            result.append({
+                "team_name": s.get("name", ""),
+                "team_id": s.get("team_id"),
+                "gp": s.get("gp", 0),
+                "wins": s.get("wins", 0),
+                "losses": s.get("losses", 0),
+                "otl": s.get("otl", 0),
+                "points": s.get("points", 0),
+                "points_pct": s.get("pct", 0),
+                "gf": s.get("gf", 0),
+                "ga": s.get("ga", 0),
+                "goal_diff": s.get("diff", 0),
+                "pp_pct": s.get("pp_pct", 0),
+                "pk_pct": s.get("pk_pct", 0),
+                "reg_wins": s.get("regulation_wins", 0),
+                "streak": s.get("streak", ""),
+            })
+        return result
+
+    async def get_team_season_results(self, team_id: int, season_id: int) -> list[dict]:
+        """Fetch all completed game results for a team this season.
+
+        Drives the Last 10 form strip, home/away splits in League Hub,
+        and provides historical win rate input for Monte Carlo.
+        """
+        data = await self._modulekit("schedule",
+                                      team_id=str(team_id), season_id=str(season_id))
+        games = data.get("Schedule", [])
+        if isinstance(games, dict):
+            games = [games]
+        result = []
+        for g in games:
+            if not isinstance(g, dict):
+                continue
+            # Skip unplayed games — check 'final' flag or game_status
+            game_status = g.get("game_status", "")
+            is_final = g.get("final") == "1" or "Final" in str(game_status)
+            if not is_final:
+                continue
+            home_score = _safe_int(g.get("home_goal_count") or g.get("home_score"))
+            away_score = _safe_int(g.get("visiting_goal_count") or g.get("away_score"))
+            if home_score is None:
+                continue  # safety fallback
+            # home_team field contains team ID (number), not name
+            is_home = str(g.get("home_team", "")) == str(team_id)
+            team_score = home_score if is_home else away_score
+            opp_score = away_score if is_home else home_score
+            result.append({
+                "ht_game_id": _safe_int(g.get("id") or g.get("game_id")),
+                "game_date": g.get("date_played", g.get("date_with_day", "")),
+                "opponent": g.get("visiting_team_name" if is_home else "home_team_name", ""),
+                "home_away": "home" if is_home else "away",
+                "team_score": int(team_score or 0),
+                "opp_score": int(opp_score or 0),
+                "result": "W" if int(team_score or 0) > int(opp_score or 0) else "L",
+                "status": g.get("game_status", "Final"),
+            })
+        return result
+
     # ── Player Profile ────────────────────────────────────────────────
 
     async def get_player_profile(self, player_id: int) -> dict:
