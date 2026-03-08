@@ -5,6 +5,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import { MessageSquare, ArrowLeft } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import NavBar from "@/components/NavBar";
 import SafetyBanner from "@/components/messages/SafetyBanner";
 import ConversationList from "@/components/messages/ConversationList";
 import MessageThread from "@/components/messages/MessageThread";
@@ -238,6 +239,7 @@ export default function MessagesPage() {
 
   return (
     <ProtectedRoute>
+      <NavBar />
       <main className="h-[calc(100vh-64px)] flex flex-col">
         <div className="px-4 pt-3 pb-0">
           <Link

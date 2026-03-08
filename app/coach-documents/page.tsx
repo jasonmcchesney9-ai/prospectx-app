@@ -1,6 +1,7 @@
 "use client";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
+import NavBar from "@/components/NavBar";
 import {
   ClipboardList,
   FileText,
@@ -76,6 +77,7 @@ const DOCUMENTS = [
 export default function CoachDocumentsPage() {
   return (
     <ProtectedRoute>
+      <NavBar />
       <div style={{ minHeight: "100vh", background: "#F0F4F8" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 16px" }}>
           {/* ── Page Header ── */}
