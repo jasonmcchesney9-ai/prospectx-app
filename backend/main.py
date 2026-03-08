@@ -1927,6 +1927,13 @@ def init_db():
         )
     """)
 
+    # ── player_intelligence: add session_id for film summaries ──
+    pi_cols = _get_table_columns(conn, "player_intelligence")
+    if "session_id" not in pi_cols:
+        conn.execute("ALTER TABLE player_intelligence ADD COLUMN session_id TEXT")
+        conn.commit()
+        logger.info("Migration: added session_id column to player_intelligence")
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS team_intelligence (
             id TEXT PRIMARY KEY,
@@ -15882,6 +15889,195 @@ Generate one specific coaching note per trigger — focus on what to look for in
             "suggestions": enriched,
             "triggers_analyzed": len(top_triggers),
         }
+    finally:
+        conn.close()
+
+
+# ── P2-C1: Post-Game Film Summary Generator ─────────────────
+
+
+async def _generate_post_game_film_summary(player_id: str, session_id: str, org_id: str) -> None:
+    """Generate a 3-sentence PXI film summary for a player in a film session.
+
+    Called async via asyncio.create_task after clip import.
+    Stores result in player_intelligence with trigger='film_summary'.
+    Idempotent: skips if summary already exists for (player_id, session_id).
+    """
+    conn = get_db()
+    try:
+        # ── 1. Idempotency check ──
+        existing = conn.execute(
+            "SELECT id FROM player_intelligence WHERE player_id = ? AND session_id = ? AND trigger = 'film_summary'",
+            (player_id, session_id),
+        ).fetchone()
+        if existing:
+            return  # Already generated — skip
+
+        # ── 2. Get player info ──
+        player_row = conn.execute(
+            "SELECT id, first_name, last_name, position, team_name, current_league FROM players WHERE id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+            (player_id,),
+        ).fetchone()
+        if not player_row:
+            return
+        player = dict(player_row)
+        player_name = f"{player.get('first_name', '')} {player.get('last_name', '')}".strip()
+
+        # ── 3. Get session metadata ──
+        session_row = conn.execute(
+            "SELECT id, name, match_title, match_date, source_type FROM video_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if not session_row:
+            return
+        session = dict(session_row)
+
+        # ── 4. Get clips for this player in this session ──
+        clip_rows = conn.execute(
+            "SELECT title, description, start_time_seconds, end_time_seconds, clip_type, tags FROM video_clips WHERE session_id = ? AND player_ids LIKE ?",
+            (session_id, f"%{player_id}%"),
+        ).fetchall()
+        clips = [dict(r) for r in clip_rows]
+        if not clips:
+            return  # No clips tagged to this player — nothing to summarize
+
+        # Build clips context
+        clips_context = []
+        for c in clips:
+            clip_tags = []
+            if c.get("tags"):
+                try:
+                    clip_tags = json.loads(c["tags"]) if isinstance(c["tags"], str) else c["tags"]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            duration = None
+            if c.get("start_time_seconds") is not None and c.get("end_time_seconds") is not None:
+                duration = int(c["end_time_seconds"]) - int(c["start_time_seconds"])
+            clips_context.append({
+                "title": c.get("title", ""),
+                "event_type": c.get("clip_type", ""),
+                "duration_seconds": duration,
+                "tags": clip_tags,
+            })
+
+        # ── 5. Get player season stats ──
+        stats_row = conn.execute(
+            "SELECT gp, g, a, p, plus_minus, pim, shots, toi_seconds, shooting_pct FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        season_stats = dict(stats_row) if stats_row else {}
+
+        # Get InStat extended stats if available
+        instat_row = conn.execute(
+            "SELECT fo_pct, fo_total, fo_won, xg, shots_on_goal FROM instat_player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+            (player_id,),
+        ).fetchone()
+        instat_stats = dict(instat_row) if instat_row else {}
+
+        # Compute season PPG
+        gp = season_stats.get("gp") or 0
+        pts = season_stats.get("p") or 0
+        season_ppg = round(pts / gp, 2) if gp > 0 else 0
+
+        # Format TOI
+        toi_sec = season_stats.get("toi_seconds") or 0
+        toi_min = toi_sec // 60
+        toi_remainder = toi_sec % 60
+        toi_str = f"{toi_min}:{toi_remainder:02d}" if toi_sec > 0 else "N/A"
+
+        player_stats_context = {
+            "goals": season_stats.get("g", 0),
+            "assists": season_stats.get("a", 0),
+            "shots": season_stats.get("shots", 0),
+            "season_ppg": season_ppg,
+            "season_faceoff_pct": instat_stats.get("fo_pct"),
+            "xg": instat_stats.get("xg"),
+            "toi": toi_str,
+        }
+
+        match_metadata = {
+            "opponent": session.get("match_title", session.get("name", "")),
+            "date": session.get("match_date", ""),
+            "league": player.get("current_league", ""),
+        }
+
+        # ── 6. Call PXI (Claude) ──
+        client = get_anthropic_client()
+        summary_text = None
+
+        if client:
+            system_prompt = """You are ProspectX Intelligence (PXI) — an elite hockey analytics engine producing post-game film summaries.
+
+Given a player's clip data and season stats, produce exactly 3 sentences:
+1. TOI/scoring line summary (time played, G-A, key counting stat)
+2. One key performance metric compared to season average (e.g., faceoff win %, xG, shooting %)
+3. One development note or highlight (e.g., "struggled in D-zone faceoffs" or "elite xG generation")
+
+Rules:
+- Exactly 3 sentences, no more, no less
+- Use proper hockey terminology
+- Reference specific stats when available
+- If a stat is unavailable, skip it and focus on available data
+- Be direct and analytical — this is for coaching staff
+
+Return ONLY the 3 sentences as plain text. No JSON, no formatting, no labels."""
+
+            user_prompt = f"""Player: {player_name} ({player.get('position', 'Unknown')}, {player.get('team_name', 'Unknown')})
+Match: {match_metadata.get('opponent', 'Unknown')} — {match_metadata.get('date', 'Unknown')}
+
+Clips tagged ({len(clips_context)} total):
+{json.dumps(clips_context, indent=2)}
+
+Season stats:
+{json.dumps(player_stats_context, indent=2)}
+
+Generate the 3-sentence post-game film summary."""
+
+            try:
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=300,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                summary_text = response.content[0].text.strip()
+            except Exception as exc:
+                logger.warning("PXI film summary call failed for player=%s session=%s: %s", player_id, session_id, exc)
+
+        # ── 7. Fallback rule-based summary if LLM unavailable ──
+        if not summary_text:
+            g = season_stats.get("g", 0)
+            a = season_stats.get("a", 0)
+            shots = season_stats.get("shots", 0)
+            fo_pct = instat_stats.get("fo_pct")
+
+            line1 = f"{player_name} had {len(clips_context)} clips tagged in this session."
+            line2 = f"Season line: {g}G-{a}A in {gp} GP ({season_ppg} PPG) on {shots} shots."
+            if fo_pct is not None:
+                line3 = f"Faceoff win rate at {fo_pct}% — review clips for draw technique and positioning."
+            else:
+                line3 = "Review tagged clips for development opportunities and tactical adjustments."
+            summary_text = f"{line1} {line2} {line3}"
+
+        # ── 8. Store in player_intelligence ──
+        intel_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute("""
+            INSERT INTO player_intelligence
+                (id, player_id, org_id, summary, trigger, session_id, version,
+                 data_sources_used, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        """, (
+            intel_id, player_id, org_id, summary_text, "film_summary",
+            session_id, 1,
+            json.dumps({"session_id": session_id, "clip_count": len(clips_context), "source": "post_game_film_summary"}),
+            now,
+        ))
+        conn.commit()
+        logger.info("Film summary generated: player=%s session=%s intel_id=%s", player_id, session_id, intel_id)
+
+    except Exception as exc:
+        logger.error("Film summary generation failed: player=%s session=%s error=%s", player_id, session_id, exc)
     finally:
         conn.close()
 
@@ -43603,6 +43799,11 @@ async def import_film_session_from_url(request: Request, token_data: dict = Depe
             clip_count += 1
 
         conn.commit()
+
+        # ── P2-C1: Async film summary generation for tagged player ──
+        if player_id:
+            asyncio.create_task(_generate_post_game_film_summary(player_id, session_id, org_id))
+
         return {
             "session_id": session_id,
             "clip_count": clip_count,
@@ -43648,6 +43849,15 @@ async def create_film_clip(request: Request, token_data: dict = Depends(verify_t
             user_id, now, now,
         ))
         conn.commit()
+
+        # ── P2-C1: Async film summary for each tagged player ──
+        clip_session_id = body.get("session_id")
+        clip_player_ids = body.get("player_ids", [])
+        if clip_session_id and clip_player_ids:
+            for pid in clip_player_ids:
+                if pid:
+                    asyncio.create_task(_generate_post_game_film_summary(str(pid), str(clip_session_id), org_id))
+
         return {"id": clip_id, "title": title, "start_time_seconds": start, "end_time_seconds": end, "created_at": now}
     finally:
         conn.close()
@@ -44804,11 +45014,13 @@ async def import_film_session_events(
         clips_created = 0
         player_matches = 0
         unmatched_players: list = []
+        matched_player_ids_set: set = set()  # P2-C1: track unique matched players for film summary
 
         for ev in parsed_events:
             matched_player_id = _match_player(ev["player_number"], ev["player_name_raw"])
             if matched_player_id:
                 player_matches += 1
+                matched_player_ids_set.add(matched_player_id)  # P2-C1
             elif ev["player_name_raw"] or ev["player_number"] is not None:
                 desc = f"#{ev['player_number']} {ev['player_name_raw']}".strip() if ev["player_number"] else ev["player_name_raw"]
                 if desc and desc not in unmatched_players:
@@ -44862,6 +45074,10 @@ async def import_film_session_events(
             ("xml_import", session_id, org_id),
         )
         conn.commit()
+
+        # ── P2-C1: Async film summary for each matched player ──
+        for pid in matched_player_ids_set:
+            asyncio.create_task(_generate_post_game_film_summary(pid, session_id, org_id))
 
         logger.info(
             "Film event import: session=%s events=%d clips=%d matched=%d unmatched=%d",
