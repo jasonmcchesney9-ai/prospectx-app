@@ -44745,11 +44745,18 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
             raise HTTPException(status_code=404, detail="Film session not found")
         session = dict(session_row) if hasattr(session_row, "keys") else session_row
 
-        # 2. Get clips for this session
-        clip_rows = conn.execute(
-            "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY start_time_seconds",
-            (session_id, org_id),
-        ).fetchall()
+        # 2. Get clips for this session (filter by player if specified)
+        film_player_id = body.get("player_id") or session.get("player_id") or None
+        if film_player_id:
+            clip_rows = conn.execute(
+                "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? AND player_ids LIKE ? ORDER BY start_time_seconds",
+                (session_id, org_id, f'%"{film_player_id}"%'),
+            ).fetchall()
+        else:
+            clip_rows = conn.execute(
+                "SELECT * FROM video_clips WHERE session_id = ? AND org_id = ? ORDER BY start_time_seconds",
+                (session_id, org_id),
+            ).fetchall()
         clips = [dict(c) if hasattr(c, "keys") else c for c in clip_rows]
 
         # 3. Get events (via any uploads linked to clips, or session-level events)
@@ -44793,6 +44800,9 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
         def _format_clips(clips_list):
             if not clips_list:
                 return "  (no clips tagged)"
+            MAX_CLIPS = 75
+            truncated = max(0, len(clips_list) - MAX_CLIPS)
+            clips_list = clips_list[:MAX_CLIPS]
             lines = []
             for i, c in enumerate(clips_list, 1):
                 raw_tags = c.get("tags") or ""
@@ -44817,6 +44827,8 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
                     f"({c.get('start_time_seconds', 0)}s → {c.get('end_time_seconds', 0)}s) "
                     f"Type: {c.get('clip_type', 'manual')} | Tags: {tags} | Player: {player}"
                 )
+            if truncated > 0:
+                lines.append(f"  ... ({truncated} additional clips not shown — filter by player or clip type to reduce scope)")
             return "\n".join(lines)
 
         # ── Event summarisation (avoid dumping 1000+ raw events into the prompt) ──
@@ -44955,7 +44967,6 @@ KEY EVENTS ({min(len(events), MAX_INDIVIDUAL_EVENTS)} of {len(events)} shown):
         # 6. Create report record — link player_id and team_name from session/request
         report_id = gen_id()
         title = f"{template_name} — {session_name}"
-        film_player_id = body.get("player_id") or session.get("player_id") or None
         film_team_name = None
         film_team_id = session.get("team_id")
         if film_team_id:
