@@ -1243,101 +1243,6 @@ export default function FilmSessionViewerPage() {
               </div>
             )}
 
-            {/* PXI Report Display — below transport, inside col 2 */}
-            {generating && (
-              <div style={{ flexShrink: 0, padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0A1929" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  <Loader2 size={16} className="animate-spin" style={{ color: "#14B8A8" }} />
-                  <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Generating analysis...</span>
-                </div>
-              </div>
-            )}
-
-            {generatedReport && !generating && (
-              <div style={{ flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0A1929" }}>
-                <button
-                  onClick={toggleReportExpanded}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", background: "#0D2037", border: "none", cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F97316" }} />
-                    <Sparkles size={10} style={{ color: "#F97316" }} />
-                    <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#FFFFFF" }}>
-                      {generatedReport.title}
-                    </span>
-                    {generatedReport.created_at && (
-                      <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)", borderRadius: 3, padding: "1px 5px" }}>
-                        {formatDate(generatedReport.created_at)}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowTypeSelector(true);
-                        setPendingReportType(null);
-                      }}
-                      style={{ display: "flex", alignItems: "center", gap: 3, padding: "2px 6px", borderRadius: 3, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#14B8A8", background: "rgba(13,148,136,0.15)", border: "none", cursor: "pointer" }}
-                      title="Regenerate with a different report type"
-                    >
-                      <RefreshCw size={8} />
-                      Redo
-                    </button>
-                    <ChevronDown
-                      size={12}
-                      style={{ color: "rgba(255,255,255,0.4)", transition: "transform 0.3s ease", transform: reportExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-                    />
-                  </div>
-                </button>
-                <div
-                  style={{
-                    maxHeight: reportExpanded ? 400 : 0,
-                    overflow: "auto",
-                    transition: "max-height 0.3s ease",
-                  }}
-                >
-                  <div style={{ padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div className="flex justify-end mb-2">
-                      <ListenButton text={generatedReport.output_text || ""} label="Listen" />
-                    </div>
-                    <div style={{ paddingLeft: 10, fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "rgba(255,255,255,0.8)", borderLeft: "2px solid #0D9488" }}>
-                      {generatedReport.output_text}
-                    </div>
-                    <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-                      <Link
-                        href={`/reports/${generatedReport.id}`}
-                        style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", textDecoration: "none" }}
-                      >
-                        <FileText size={9} />
-                        View Full Report
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* No analysis yet — collapsed CTA */}
-            {!generatedReport && !generating && (
-              <div style={{ flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-                <button
-                  onClick={() => { setShowTypeSelector(true); setPendingReportType(null); }}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", background: "#0D2037", border: "none", cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F97316" }} />
-                    <Sparkles size={10} style={{ color: "#F97316" }} />
-                    <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
-                      PXI FILM ANALYSIS
-                    </span>
-                  </div>
-                  <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8" }}>
-                    Generate
-                  </span>
-                </button>
-              </div>
-            )}
           </div>
 
           {/* ── COL 3 — Clips Panel + Reels + Comments ─────────── */}
@@ -1527,6 +1432,96 @@ export default function FilmSessionViewerPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* PXI Report Display — moved from Col 2 for accessibility */}
+              {generating && (
+                <div style={{ background: "#0D2037", borderRadius: 6, padding: "12px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <Loader2 size={16} className="animate-spin" style={{ color: "#14B8A8" }} />
+                    <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Generating analysis...</span>
+                  </div>
+                </div>
+              )}
+
+              {generatedReport && !generating && (
+                <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                  <button
+                    onClick={toggleReportExpanded}
+                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", background: "#0D2037", border: "none", borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F97316" }} />
+                      <Sparkles size={10} style={{ color: "#F97316" }} />
+                      <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#FFFFFF" }}>
+                        {generatedReport.title}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowTypeSelector(true);
+                          setPendingReportType(null);
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 3, padding: "1px 5px", borderRadius: 3, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#14B8A8", background: "rgba(13,148,136,0.15)", border: "none", cursor: "pointer" }}
+                        title="Regenerate with a different report type"
+                      >
+                        <RefreshCw size={8} />
+                        Redo
+                      </button>
+                      <ChevronDown
+                        size={12}
+                        style={{ color: "rgba(255,255,255,0.4)", transition: "transform 0.3s ease", transform: reportExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                    </div>
+                  </button>
+                  <div
+                    style={{
+                      maxHeight: reportExpanded ? 400 : 0,
+                      overflow: "auto",
+                      transition: "max-height 0.3s ease",
+                    }}
+                  >
+                    <div style={{ padding: "8px 10px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <div className="flex justify-end mb-2">
+                        <ListenButton text={generatedReport.output_text || ""} label="Listen" />
+                      </div>
+                      <div style={{ paddingLeft: 10, fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "rgba(255,255,255,0.8)", borderLeft: "2px solid #0D9488" }}>
+                        {generatedReport.output_text}
+                      </div>
+                      <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                        <Link
+                          href={`/reports/${generatedReport.id}`}
+                          style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8", textDecoration: "none" }}
+                        >
+                          <FileText size={9} />
+                          View Full Report
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!generatedReport && !generating && (
+                <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                  <button
+                    onClick={() => { setShowTypeSelector(true); setPendingReportType(null); }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", background: "#0D2037", border: "none", cursor: "pointer", borderRadius: 6 }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#F97316" }} />
+                      <Sparkles size={10} style={{ color: "#F97316" }} />
+                      <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.6)" }}>
+                        PXI FILM ANALYSIS
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#14B8A8" }}>
+                      Generate
+                    </span>
+                  </button>
                 </div>
               )}
 
