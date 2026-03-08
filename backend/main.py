@@ -4786,6 +4786,59 @@ def init_db():
             logger.info("Migration: added %s column to players (contact fields)", col_name)
     conn.commit()
 
+    # ── HockeyTech stored data tables ─────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_schedule (
+            id TEXT PRIMARY KEY,
+            league TEXT NOT NULL,
+            season_id TEXT NOT NULL,
+            ht_game_id INTEGER,
+            game_date TEXT,
+            game_date_display TEXT,
+            home_team TEXT,
+            away_team TEXT,
+            home_team_id INTEGER,
+            away_team_id INTEGER,
+            venue TEXT,
+            status TEXT DEFAULT 'Scheduled',
+            home_score INTEGER,
+            away_score INTEGER,
+            synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_league ON game_schedule(league)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_date ON game_schedule(game_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_ht_game ON game_schedule(ht_game_id)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_game_schedule_league_game ON game_schedule(league, ht_game_id)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ht_team_stats (
+            id TEXT PRIMARY KEY,
+            league TEXT NOT NULL,
+            season_id TEXT NOT NULL,
+            team_name TEXT,
+            team_id INTEGER,
+            gp INTEGER DEFAULT 0,
+            wins INTEGER DEFAULT 0,
+            losses INTEGER DEFAULT 0,
+            otl INTEGER DEFAULT 0,
+            points INTEGER DEFAULT 0,
+            points_pct REAL DEFAULT 0,
+            gf INTEGER DEFAULT 0,
+            ga INTEGER DEFAULT 0,
+            goal_diff INTEGER DEFAULT 0,
+            pp_pct REAL DEFAULT 0,
+            pk_pct REAL DEFAULT 0,
+            reg_wins INTEGER DEFAULT 0,
+            streak TEXT,
+            synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ht_team_stats_league ON ht_team_stats(league)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ht_team_stats_league_team ON ht_team_stats(league, season_id, team_id)")
+    conn.commit()
+    logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats)")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -10511,6 +10564,116 @@ def cleanup_stuck_reports():
         conn.close()
 
 
+def sync_hockeytech_data_cron():
+    """Nightly cron: sync game_schedule + ht_team_stats for all active HockeyTech leagues."""
+    import asyncio
+    import time as _time
+
+    logger.info("[HT SYNC CRON] Starting nightly HockeyTech data sync")
+    start = _time.time()
+
+    try:
+        from hockeytech import HockeyTechClient, LEAGUES as _HT_LEAGUES
+    except ImportError:
+        logger.warning("[HT SYNC CRON] hockeytech module not available — skipping")
+        return
+
+    async def _run_sync():
+        conn = get_db()
+        total_games = 0
+        total_teams = 0
+        synced_leagues = []
+        now = datetime.utcnow().isoformat()
+
+        for code in _HT_LEAGUES:
+            try:
+                client = HockeyTechClient(code)
+                season_id = await client.get_current_season_id()
+                if not season_id:
+                    logger.warning("[HT SYNC CRON] %s: no current season found, skipping", code)
+                    continue
+
+                # ── Sync game_schedule ──
+                games = await client.get_full_schedule(season_id)
+                for g in games:
+                    ht_game_id = g.get("ht_game_id")
+                    if not ht_game_id:
+                        continue
+                    # Upsert: delete + insert (safe for SQLite + PG)
+                    conn.execute(
+                        "DELETE FROM game_schedule WHERE league = ? AND ht_game_id = ?",
+                        (code, ht_game_id),
+                    )
+                    conn.execute(
+                        """INSERT INTO game_schedule
+                           (id, league, season_id, ht_game_id, game_date, game_date_display,
+                            home_team, away_team, home_team_id, away_team_id,
+                            venue, status, home_score, away_score, synced_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            gen_id(), code, str(season_id), ht_game_id,
+                            g.get("game_date", ""), g.get("game_date_display", ""),
+                            g.get("home_team", ""), g.get("away_team", ""),
+                            g.get("home_team_id"), g.get("away_team_id"),
+                            g.get("venue", ""), g.get("status", "Scheduled"),
+                            g.get("home_score"), g.get("away_score"),
+                            now,
+                        ),
+                    )
+                    total_games += 1
+
+                # ── Sync ht_team_stats ──
+                team_stats = await client.get_team_stats(season_id)
+                for ts in team_stats:
+                    team_id = ts.get("team_id")
+                    if not team_id:
+                        continue
+                    # Upsert: delete + insert
+                    conn.execute(
+                        "DELETE FROM ht_team_stats WHERE league = ? AND season_id = ? AND team_id = ?",
+                        (code, str(season_id), team_id),
+                    )
+                    conn.execute(
+                        """INSERT INTO ht_team_stats
+                           (id, league, season_id, team_name, team_id,
+                            gp, wins, losses, otl, points, points_pct,
+                            gf, ga, goal_diff, pp_pct, pk_pct, reg_wins, streak, synced_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            gen_id(), code, str(season_id),
+                            ts.get("team_name", ""), team_id,
+                            ts.get("gp", 0), ts.get("wins", 0), ts.get("losses", 0),
+                            ts.get("otl", 0), ts.get("points", 0), ts.get("points_pct", 0),
+                            ts.get("gf", 0), ts.get("ga", 0), ts.get("goal_diff", 0),
+                            ts.get("pp_pct", 0), ts.get("pk_pct", 0),
+                            ts.get("reg_wins", 0), ts.get("streak", ""),
+                            now,
+                        ),
+                    )
+                    total_teams += 1
+
+                conn.commit()
+                synced_leagues.append(code)
+                logger.info("[HT SYNC CRON] %s: %d games, %d teams synced",
+                            code, len(games), len(team_stats))
+
+            except Exception as e:
+                logger.error("[HT SYNC CRON] %s failed: %s", code, e)
+                continue
+
+        conn.close()
+        return {"leagues": synced_leagues, "total_games": total_games, "total_teams": total_teams}
+
+    try:
+        result = asyncio.run(_run_sync())
+        duration = _time.time() - start
+        logger.info("[HT SYNC CRON] Complete: %d leagues, %d games, %d teams in %.2fs",
+                    len(result["leagues"]), result["total_games"], result["total_teams"], duration)
+    except Exception as e:
+        duration = _time.time() - start
+        logger.error("[HT SYNC CRON] Failed after %.2fs: %s", duration, e)
+
+
 # ── APScheduler: Nightly PXR recalculation (2:00 AM UTC) + hourly report cleanup ────
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BGScheduler
@@ -10531,8 +10694,17 @@ try:
         id='cleanup_stuck_reports',
         replace_existing=True,
     )
+    _pxr_scheduler.add_job(
+        sync_hockeytech_data_cron,
+        'cron',
+        hour=3,
+        minute=0,
+        timezone='UTC',
+        id='ht_nightly_sync',
+        replace_existing=True,
+    )
     _pxr_scheduler.start()
-    logger.info("APScheduler started — PXR nightly recalc at 02:00 UTC, report cleanup hourly")
+    logger.info("APScheduler started — PXR nightly recalc at 02:00 UTC, HT sync at 03:00 UTC, report cleanup hourly")
 except ImportError:
     logger.warning("APScheduler not installed — PXR nightly cron disabled")
     _pxr_scheduler = None
@@ -29487,6 +29659,120 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
         }
     finally:
         conn.close()
+
+
+@app.post("/admin/ht/sync-full")
+async def admin_ht_sync_full(token_data: dict = Depends(verify_token)):
+    """Admin: manually trigger full HockeyTech data sync for all leagues.
+
+    Syncs game_schedule and ht_team_stats tables for every configured league.
+    Same logic as the nightly cron but invoked on demand.
+    """
+    _require_admin(token_data)
+    import time as _time
+
+    try:
+        from hockeytech import HockeyTechClient, LEAGUES as _HT_LEAGUES
+    except ImportError:
+        raise HTTPException(status_code=500, detail="hockeytech module not available")
+
+    start = _time.time()
+    conn = get_db()
+    total_games = 0
+    total_teams = 0
+    synced_leagues = []
+    errors = []
+    now = datetime.utcnow().isoformat()
+
+    for code in _HT_LEAGUES:
+        try:
+            client = HockeyTechClient(code)
+            season_id = await client.get_current_season_id()
+            if not season_id:
+                errors.append(f"{code}: no current season found")
+                continue
+
+            # ── Sync game_schedule ──
+            games = await client.get_full_schedule(season_id)
+            league_games = 0
+            for g in games:
+                ht_game_id = g.get("ht_game_id")
+                if not ht_game_id:
+                    continue
+                conn.execute(
+                    "DELETE FROM game_schedule WHERE league = ? AND ht_game_id = ?",
+                    (code, ht_game_id),
+                )
+                conn.execute(
+                    """INSERT INTO game_schedule
+                       (id, league, season_id, ht_game_id, game_date, game_date_display,
+                        home_team, away_team, home_team_id, away_team_id,
+                        venue, status, home_score, away_score, synced_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        gen_id(), code, str(season_id), ht_game_id,
+                        g.get("game_date", ""), g.get("game_date_display", ""),
+                        g.get("home_team", ""), g.get("away_team", ""),
+                        g.get("home_team_id"), g.get("away_team_id"),
+                        g.get("venue", ""), g.get("status", "Scheduled"),
+                        g.get("home_score"), g.get("away_score"),
+                        now,
+                    ),
+                )
+                league_games += 1
+
+            # ── Sync ht_team_stats ──
+            ht_stats = await client.get_team_stats(season_id)
+            league_teams = 0
+            for ts in ht_stats:
+                team_id = ts.get("team_id")
+                if not team_id:
+                    continue
+                conn.execute(
+                    "DELETE FROM ht_team_stats WHERE league = ? AND season_id = ? AND team_id = ?",
+                    (code, str(season_id), team_id),
+                )
+                conn.execute(
+                    """INSERT INTO ht_team_stats
+                       (id, league, season_id, team_name, team_id,
+                        gp, wins, losses, otl, points, points_pct,
+                        gf, ga, goal_diff, pp_pct, pk_pct, reg_wins, streak, synced_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        gen_id(), code, str(season_id),
+                        ts.get("team_name", ""), team_id,
+                        ts.get("gp", 0), ts.get("wins", 0), ts.get("losses", 0),
+                        ts.get("otl", 0), ts.get("points", 0), ts.get("points_pct", 0),
+                        ts.get("gf", 0), ts.get("ga", 0), ts.get("goal_diff", 0),
+                        ts.get("pp_pct", 0), ts.get("pk_pct", 0),
+                        ts.get("reg_wins", 0), ts.get("streak", ""),
+                        now,
+                    ),
+                )
+                league_teams += 1
+
+            conn.commit()
+            total_games += league_games
+            total_teams += league_teams
+            synced_leagues.append({"league": code, "games": league_games, "teams": league_teams})
+            logger.info("[HT SYNC] %s: %d games, %d teams synced", code, league_games, league_teams)
+
+        except Exception as e:
+            errors.append(f"{code}: {str(e)[:200]}")
+            logger.error("[HT SYNC] %s failed: %s", code, e)
+            continue
+
+    conn.close()
+    duration = _time.time() - start
+
+    return {
+        "status": "ok",
+        "duration_seconds": round(duration, 2),
+        "total_games": total_games,
+        "total_teams": total_teams,
+        "synced_leagues": synced_leagues,
+        "errors": errors,
+    }
 
 
 @app.get("/admin/pxr/leaderboard")
