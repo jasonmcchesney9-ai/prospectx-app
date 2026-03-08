@@ -42076,18 +42076,25 @@ async def create_film_upload(request: Request, token_data: dict = Depends(verify
 
 @app.get("/film/uploads")
 async def list_film_uploads(
+    request: Request,
     team_id: Optional[str] = Query(None),
     game_id: Optional[str] = Query(None),
     player_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     token_data: dict = Depends(verify_token),
 ):
-    """List video uploads for the org."""
+    """List video uploads for the org. FAMILY/PLAYER roles see only their own."""
     org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    hockey_role = _get_effective_hockey_role(request, token_data)
     conn = get_db()
     try:
         where = ["org_id = ?"]
         params: list = [org_id]
+        # FAMILY/PLAYER: scope to uploads they created
+        if hockey_role in ("player", "parent"):
+            where.append("uploaded_by = ?")
+            params.append(user_id)
         if team_id:
             where.append("team_id = ?"); params.append(team_id)
         if game_id:
@@ -42764,6 +42771,7 @@ async def create_film_session(request: Request, token_data: dict = Depends(verif
 
 @app.get("/film/sessions")
 async def list_film_sessions(
+    request: Request,
     session_type: Optional[str] = Query(None),
     team_id: Optional[str] = Query(None),
     game_id: Optional[str] = Query(None),
@@ -42772,12 +42780,18 @@ async def list_film_sessions(
     limit: int = Query(50, ge=1, le=200),
     token_data: dict = Depends(verify_token),
 ):
-    """List film sessions for the org."""
+    """List film sessions for the org. FAMILY/PLAYER roles see only their own."""
     org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    hockey_role = _get_effective_hockey_role(request, token_data)
     conn = get_db()
     try:
         where = ["org_id = ?"]
         params: list = [org_id]
+        # FAMILY/PLAYER: scope to sessions they created
+        if hockey_role in ("player", "parent"):
+            where.append("created_by = ?")
+            params.append(user_id)
         if session_type:
             where.append("session_type = ?"); params.append(session_type)
         if team_id:
@@ -42817,15 +42831,24 @@ async def list_film_sessions(
 
 
 @app.get("/film/stats")
-async def get_film_stats(token_data: dict = Depends(verify_token)):
-    """Return aggregate film hub stats for the org."""
+async def get_film_stats(request: Request, token_data: dict = Depends(verify_token)):
+    """Return aggregate film hub stats for the org. FAMILY/PLAYER roles see only their own."""
     org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    hockey_role = _get_effective_hockey_role(request, token_data)
     conn = get_db()
     try:
-        sessions = conn.execute("SELECT COUNT(*) FROM video_sessions WHERE org_id = ?", (org_id,)).fetchone()[0]
-        clips = conn.execute("SELECT COUNT(*) FROM video_clips WHERE org_id = ?", (org_id,)).fetchone()[0]
-        events = conn.execute("SELECT COUNT(*) FROM video_events WHERE org_id = ?", (org_id,)).fetchone()[0]
-        film_reports = conn.execute("SELECT COUNT(*) FROM reports WHERE org_id = ? AND source_type = 'film_analysis' AND status = 'complete'", (org_id,)).fetchone()[0]
+        # FAMILY/PLAYER: scope stats to their own content
+        if hockey_role in ("player", "parent"):
+            sessions = conn.execute("SELECT COUNT(*) FROM video_sessions WHERE org_id = ? AND created_by = ?", (org_id, user_id)).fetchone()[0]
+            clips = conn.execute("SELECT COUNT(*) FROM video_clips WHERE org_id = ? AND session_id IN (SELECT id FROM video_sessions WHERE org_id = ? AND created_by = ?)", (org_id, org_id, user_id)).fetchone()[0]
+            events = conn.execute("SELECT COUNT(*) FROM video_events WHERE org_id = ? AND session_id IN (SELECT id FROM video_sessions WHERE org_id = ? AND created_by = ?)", (org_id, org_id, user_id)).fetchone()[0]
+            film_reports = conn.execute("SELECT COUNT(*) FROM reports WHERE org_id = ? AND source_type = 'film_analysis' AND status = 'complete' AND created_by = ?", (org_id, user_id)).fetchone()[0]
+        else:
+            sessions = conn.execute("SELECT COUNT(*) FROM video_sessions WHERE org_id = ?", (org_id,)).fetchone()[0]
+            clips = conn.execute("SELECT COUNT(*) FROM video_clips WHERE org_id = ?", (org_id,)).fetchone()[0]
+            events = conn.execute("SELECT COUNT(*) FROM video_events WHERE org_id = ?", (org_id,)).fetchone()[0]
+            film_reports = conn.execute("SELECT COUNT(*) FROM reports WHERE org_id = ? AND source_type = 'film_analysis' AND status = 'complete'", (org_id,)).fetchone()[0]
         return {"sessions": sessions, "clips": clips, "events": events, "film_reports": film_reports}
     finally:
         conn.close()
