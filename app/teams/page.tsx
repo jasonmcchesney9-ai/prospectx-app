@@ -167,8 +167,10 @@ export default function TeamsPage() {
   const loadData = useCallback(async () => {
     try {
       setError("");
+      // Players loaded at max limit for roster count aggregation — not a search.
+      // TODO: replace with a dedicated GET /teams/counts endpoint to avoid loading all players.
       const [playersRes, refRes, leaguesRes] = await Promise.all([
-        api.get<Player[]>("/players?limit=2000"),
+        api.get<Player[]>("/players?limit=5000"),
         api.get<TeamReference[]>("/teams/reference"),
         api.get<League[]>("/leagues"),
       ]);

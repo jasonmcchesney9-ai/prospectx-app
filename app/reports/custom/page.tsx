@@ -68,6 +68,7 @@ function CustomReportContent() {
   // Subject selection
   const [subjectMode, setSubjectMode] = useState<SubjectMode>(preselectedTeam ? "team" : "player");
   const [selectedPlayer, setSelectedPlayer] = useState(preselectedPlayer);
+  const [selectedPlayerCache, setSelectedPlayerCache] = useState<Player | null>(null);
   const [selectedTeam, setSelectedTeam] = useState(preselectedTeam);
   const [playerSearch, setPlayerSearch] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
@@ -94,16 +95,14 @@ function CustomReportContent() {
   const [upgradeModal, setUpgradeModal] = useState<{ open: boolean; used: number; limit: number }>({ open: false, used: 0, limit: 0 });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load data
+  // Load teams + options (not players — those are searched server-side)
   useEffect(() => {
     async function load() {
       try {
-        const [playersRes, teamsRes, optionsRes] = await Promise.all([
-          api.get<Player[]>("/players?limit=2000"),
+        const [teamsRes, optionsRes] = await Promise.all([
           api.get<TeamReference[]>("/teams/reference"),
           api.get<CustomReportOptions>("/reports/custom-options"),
         ]);
-        setPlayers(playersRes.data);
         setTeams(teamsRes.data);
         setOptions(optionsRes.data);
       } catch (err: unknown) {
@@ -118,6 +117,21 @@ function CustomReportContent() {
     load();
   }, []);
 
+  // Server-side player search — debounced, min 2 chars
+  useEffect(() => {
+    if (playerSearch.trim().length < 2) {
+      setPlayers([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get<Player[]>("/players", { params: { search: playerSearch.trim(), limit: 50 } });
+        setPlayers(data);
+      } catch { setPlayers([]); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [playerSearch]);
+
   // Cleanup polling
   useEffect(() => {
     return () => {
@@ -125,16 +139,8 @@ function CustomReportContent() {
     };
   }, []);
 
-  // Filtered lists
-  const filteredPlayers = players.filter((p) => {
-    if (!playerSearch) return true;
-    const q = playerSearch.toLowerCase();
-    return (
-      p.first_name.toLowerCase().includes(q) ||
-      p.last_name.toLowerCase().includes(q) ||
-      (p.current_team || "").toLowerCase().includes(q)
-    );
-  });
+  // Players come from server-side search
+  const filteredPlayers = players;
 
   const filteredTeams = teams.filter((t) => {
     if (!teamSearch) return true;
@@ -241,7 +247,7 @@ function CustomReportContent() {
     }
   };
 
-  const selectedPlayerObj = players.find((p) => p.id === selectedPlayer);
+  const selectedPlayerObj = selectedPlayerCache || players.find((p) => p.id === selectedPlayer);
   const isGenerating = genState === "submitting" || genState === "polling";
   const canGenerate =
     (subjectMode === "player" ? !!selectedPlayer : !!selectedTeam) &&
@@ -323,14 +329,14 @@ function CustomReportContent() {
                     <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                       {filteredPlayers.length === 0 ? (
                         <div className="px-3 py-4 text-center text-muted text-sm">
-                          {players.length === 0 ? "No players yet." : "No matching players."}
+                          {playerSearch.trim().length < 2 ? "Type a name to search..." : "No matching players."}
                         </div>
                       ) : (
                         filteredPlayers.map((p) => (
                           <button
                             key={p.id}
                             type="button"
-                            onClick={() => setSelectedPlayer(p.id)}
+                            onClick={() => { setSelectedPlayer(p.id); setSelectedPlayerCache(p); }}
                             className="w-full text-left px-3 py-2.5 hover:bg-navy/[0.03] transition-colors flex items-center gap-3"
                           >
                             <span className="font-semibold text-navy text-sm">
@@ -367,7 +373,7 @@ function CustomReportContent() {
                       )}
                     </div>
                     <button
-                      onClick={() => { setSelectedPlayer(""); setPlayerSearch(""); }}
+                      onClick={() => { setSelectedPlayer(""); setSelectedPlayerCache(null); setPlayerSearch(""); }}
                       disabled={isGenerating}
                       className="text-xs text-muted hover:text-red-600 transition-colors"
                     >

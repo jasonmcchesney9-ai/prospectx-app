@@ -104,6 +104,7 @@ function GenerateReportContent() {
   const [loading, setLoading] = useState(true);
 
   const [selectedPlayer, setSelectedPlayer] = useState(preselectedPlayer);
+  const [selectedPlayerCache, setSelectedPlayerCache] = useState<Player | null>(null);
   const [selectedTeam, setSelectedTeam] = useState(preselectedTeam);
   const [selectedType, setSelectedType] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
@@ -132,16 +133,14 @@ function GenerateReportContent() {
   // Determine if current selection is a team report type
   const isTeamReportType = (TEAM_REPORT_TYPES as readonly string[]).includes(selectedType);
 
-  // Load players, teams, and templates
+  // Load teams and templates (not players — those are searched server-side)
   useEffect(() => {
     async function load() {
       try {
-        const [playersRes, templatesRes, teamsRes] = await Promise.all([
-          api.get<Player[]>("/players?limit=2000"),
+        const [templatesRes, teamsRes] = await Promise.all([
           api.get<ReportTemplate[]>("/templates"),
           api.get<TeamReference[]>("/teams/reference"),
         ]);
-        setPlayers(playersRes.data);
         setTemplates(templatesRes.data);
         setTeams(teamsRes.data);
 
@@ -166,6 +165,21 @@ function GenerateReportContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Server-side player search — debounced, min 2 chars
+  useEffect(() => {
+    if (playerSearch.trim().length < 2) {
+      setPlayers([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get<Player[]>("/players", { params: { search: playerSearch.trim(), limit: 50 } });
+        setPlayers(data);
+      } catch { setPlayers([]); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [playerSearch]);
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
@@ -173,40 +187,8 @@ function GenerateReportContent() {
     };
   }, []);
 
-  // Filter and sort players by search relevance
-  const filteredPlayers = players
-    .filter((p) => {
-      if (!playerSearch) return true;
-      const q = playerSearch.toLowerCase();
-      const fullName = `${p.first_name} ${p.last_name}`.toLowerCase();
-      return (
-        fullName.includes(q) ||
-        p.first_name.toLowerCase().includes(q) ||
-        p.last_name.toLowerCase().includes(q) ||
-        (p.current_team || "").toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => {
-      if (!playerSearch) {
-        // Default: alphabetical by last name, then first name
-        const ln = a.last_name.localeCompare(b.last_name);
-        return ln !== 0 ? ln : a.first_name.localeCompare(b.first_name);
-      }
-      const q = playerSearch.toLowerCase();
-      // Score: full name match = 0 (best), first name start = 1, last name start = 2, contains = 3
-      const score = (p: Player) => {
-        const fullName = `${p.first_name} ${p.last_name}`.toLowerCase();
-        if (fullName.startsWith(q)) return 0;
-        if (p.first_name.toLowerCase().startsWith(q)) return 1;
-        if (p.last_name.toLowerCase().startsWith(q)) return 2;
-        return 3;
-      };
-      const sa = score(a), sb = score(b);
-      if (sa !== sb) return sa - sb;
-      // Tie-break: alphabetical by last name, then first name
-      const ln = a.last_name.localeCompare(b.last_name);
-      return ln !== 0 ? ln : a.first_name.localeCompare(b.first_name);
-    });
+  // Players come from server-side search
+  const filteredPlayers = players;
 
   // Filter teams by search
   const filteredTeams = teams.filter((t) => {
@@ -309,7 +291,7 @@ function GenerateReportContent() {
     }
   };
 
-  const selectedPlayerObj = players.find((p) => p.id === selectedPlayer);
+  const selectedPlayerObj = selectedPlayerCache || players.find((p) => p.id === selectedPlayer);
   const isGenerating = genState === "submitting" || genState === "polling";
 
   // Determine if generate button should be enabled
@@ -431,13 +413,8 @@ function GenerateReportContent() {
                     <div className="max-h-48 overflow-y-auto border border-teal/20 rounded-lg divide-y divide-border/50">
                       {filteredPlayers.length === 0 ? (
                         <div className="px-3 py-4 text-center text-muted text-sm">
-                          {players.length === 0 ? (
-                            <>
-                              No players yet.{" "}
-                              <Link href="/players/new" className="text-teal hover:underline">
-                                Add a player first
-                              </Link>
-                            </>
+                          {playerSearch.trim().length < 2 ? (
+                            "Type a name to search..."
                           ) : (
                             "No matching players."
                           )}
@@ -447,7 +424,7 @@ function GenerateReportContent() {
                           <button
                             key={p.id}
                             type="button"
-                            onClick={() => setSelectedPlayer(p.id)}
+                            onClick={() => { setSelectedPlayer(p.id); setSelectedPlayerCache(p); }}
                             className="w-full text-left px-3 py-2.5 hover:bg-navy/[0.03] transition-colors flex items-center gap-3"
                           >
                             <span className="font-semibold text-navy text-sm">
@@ -488,7 +465,7 @@ function GenerateReportContent() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => { setSelectedPlayer(""); setPlayerSearch(""); }}
+                      onClick={() => { setSelectedPlayer(""); setSelectedPlayerCache(null); setPlayerSearch(""); }}
                       className="text-xs text-muted hover:text-red-600 transition-colors"
                       disabled={isGenerating}
                     >

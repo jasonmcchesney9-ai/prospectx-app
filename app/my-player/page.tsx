@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -86,30 +86,46 @@ export default function MyPlayerPage() {
   const router = useRouter();
   const { openBenchTalk, roleOverride } = useBenchTalk();
   // Player selection
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [playersLoading, setPlayersLoading] = useState(true);
+  const [searchResults, setSearchResults] = useState<Player[]>([]);
+  const [playersLoading, setPlayersLoading] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedPlayerData, setSelectedPlayerData] = useState<Player | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
 
-  // Load players + restore
+  // Restore saved player on mount
   useEffect(() => {
-    async function load() {
+    try {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) {
+        setSelectedPlayerId(saved);
+        // Fetch the saved player by ID so we have their data
+        api.get(`/players/${saved}`)
+          .then((res) => setSelectedPlayerData(res.data))
+          .catch(() => {});
+      }
+    } catch { /* SSR guard */ }
+  }, []);
+
+  // Server-side search — debounced, min 2 chars
+  useEffect(() => {
+    if (pickerSearch.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setPlayersLoading(true);
+    const timer = setTimeout(async () => {
       try {
-        const { data } = await api.get<Player[]>("/players", { params: { limit: 2000 } });
+        const { data } = await api.get<Player[]>("/players", { params: { search: pickerSearch.trim(), limit: 50 } });
         const sorted = data.sort((a, b) =>
           `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
         );
-        setPlayers(sorted);
-      } catch { /* silent */ }
+        setSearchResults(sorted);
+      } catch { setSearchResults([]); }
       finally { setPlayersLoading(false); }
-    }
-    load();
-    try {
-      const saved = localStorage.getItem(LS_KEY);
-      if (saved) setSelectedPlayerId(saved);
-    } catch { /* SSR guard */ }
-  }, []);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pickerSearch]);
 
   // Persist selection
   useEffect(() => {
@@ -118,10 +134,7 @@ export default function MyPlayerPage() {
     }
   }, [selectedPlayerId]);
 
-  const selectedPlayer = useMemo(
-    () => players.find((p) => p.id === selectedPlayerId) || null,
-    [selectedPlayerId, players]
-  );
+  const selectedPlayer = selectedPlayerData;
 
   // Dashboard data for selected player
   const [dashboard, setDashboard] = useState<FamilyDashboard | null>(null);
@@ -224,19 +237,12 @@ export default function MyPlayerPage() {
     } catch { return null; }
   }
 
-  const filteredPlayers = useMemo(() => {
-    if (!pickerSearch.trim()) return players.slice(0, 50);
-    const q = pickerSearch.toLowerCase().trim();
-    return players.filter(
-      (p) =>
-        `${p.first_name} ${p.last_name}`.toLowerCase().includes(q) ||
-        `${p.last_name}, ${p.first_name}`.toLowerCase().includes(q) ||
-        (p.current_team || "").toLowerCase().includes(q)
-    ).slice(0, 50);
-  }, [players, pickerSearch]);
+  const filteredPlayers = searchResults;
 
   function handleSelectPlayer(pid: string) {
     setSelectedPlayerId(pid);
+    const found = searchResults.find((p) => p.id === pid);
+    if (found) setSelectedPlayerData(found);
     setPickerOpen(false);
     setPickerSearch("");
   }
@@ -341,7 +347,7 @@ export default function MyPlayerPage() {
                 {playersLoading ? (
                   <div className="px-3 py-4 text-center text-xs text-gray-400">Loading...</div>
                 ) : filteredPlayers.length === 0 ? (
-                  <div className="px-3 py-4 text-center text-xs text-gray-400">No players match your search</div>
+                  <div className="px-3 py-4 text-center text-xs text-gray-400">{pickerSearch.trim().length < 2 ? "Type a name to search..." : "No players match your search"}</div>
                 ) : (
                   filteredPlayers.map((p) => (
                     <button
