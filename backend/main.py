@@ -43637,16 +43637,26 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
             clip_list.append(cd)
         if isinstance(d, dict):
             d["clips"] = clip_list
-            # Include linked upload data so the viewer can find the playback_id
-            linked_upload_id = d.get("upload_id")
-            if linked_upload_id:
-                upload_row = conn.execute(
-                    "SELECT id, title, status, mux_playback_id, mux_asset_id, upload_source, source_url FROM video_uploads WHERE id = ? AND org_id = ?",
-                    (linked_upload_id, org_id),
-                ).fetchone()
-                if upload_row:
-                    ud = dict(upload_row) if hasattr(upload_row, "keys") else upload_row
-                    d["upload"] = ud
+            # Include uploads[] array — multi-video session support
+            upload_rows = conn.execute(
+                "SELECT id, title, status, mux_playback_id, mux_asset_id, upload_source, source_url, duration_seconds, period_number, period_label FROM video_uploads WHERE session_id = ? AND org_id = ? ORDER BY period_number ASC NULLS LAST, created_at ASC",
+                (session_id, org_id),
+            ).fetchall()
+            uploads_list = [dict(r) if hasattr(r, "keys") else r for r in upload_rows]
+            # Fallback: if no uploads linked via session_id, try legacy upload_id
+            if not uploads_list:
+                linked_upload_id = d.get("upload_id")
+                if linked_upload_id:
+                    legacy_row = conn.execute(
+                        "SELECT id, title, status, mux_playback_id, mux_asset_id, upload_source, source_url, duration_seconds, period_number, period_label FROM video_uploads WHERE id = ? AND org_id = ?",
+                        (linked_upload_id, org_id),
+                    ).fetchone()
+                    if legacy_row:
+                        uploads_list = [dict(legacy_row) if hasattr(legacy_row, "keys") else legacy_row]
+            d["uploads"] = uploads_list
+            d["upload_count"] = len(uploads_list)
+            # Backward compat: d["upload"] = first upload or None
+            d["upload"] = uploads_list[0] if uploads_list else None
         return d
     finally:
         conn.close()
@@ -43700,6 +43710,115 @@ async def delete_film_session(session_id: str, token_data: dict = Depends(verify
         conn.execute("DELETE FROM video_sessions WHERE id = ?", (session_id,))
         conn.commit()
         return {"status": "deleted", "id": session_id}
+    finally:
+        conn.close()
+
+
+# ── Multi-Video Session: Add Upload to Session ──────────────
+@app.post("/film/sessions/{session_id}/add-upload", status_code=201)
+async def add_upload_to_session(session_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Link an existing upload to a session, or create a new Mux upload URL for this session."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+
+    conn = get_db()
+    try:
+        # Verify session exists
+        sess = conn.execute("SELECT id FROM video_sessions WHERE id = ? AND org_id = ?", (session_id, org_id)).fetchone()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Film session not found")
+
+        # Validate: max 5 uploads per session
+        current_count = conn.execute(
+            "SELECT COUNT(*) FROM video_uploads WHERE session_id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()[0]
+        if current_count >= 5:
+            raise HTTPException(status_code=400, detail="Maximum 5 uploads per session")
+
+        period_number = body.get("period_number")
+        period_label = body.get("period_label")
+
+        # Validate: period numbers must be unique per session
+        if period_number is not None:
+            existing_period = conn.execute(
+                "SELECT id FROM video_uploads WHERE session_id = ? AND org_id = ? AND period_number = ?",
+                (session_id, org_id, period_number),
+            ).fetchone()
+            if existing_period:
+                raise HTTPException(status_code=400, detail=f"Period {period_number} already has an upload in this session")
+
+        upload_id = body.get("upload_id")
+
+        if upload_id:
+            # Link an existing upload to this session
+            upload_row = conn.execute(
+                "SELECT id FROM video_uploads WHERE id = ? AND org_id = ?",
+                (upload_id, org_id),
+            ).fetchone()
+            if not upload_row:
+                raise HTTPException(status_code=404, detail="Upload not found")
+            conn.execute(
+                "UPDATE video_uploads SET session_id = ?, period_number = ?, period_label = ?, updated_at = ? WHERE id = ? AND org_id = ?",
+                (session_id, period_number, period_label, now_iso(), upload_id, org_id),
+            )
+            conn.commit()
+            return {"upload_id": upload_id, "session_id": session_id, "period_number": period_number}
+        else:
+            # Create a new Mux upload URL linked to this session
+            from mux_client import create_direct_upload as mux_create_upload
+
+            # Tier limit check
+            limit_conn = get_db()
+            try:
+                _check_tier_limit(user_id, "uploads", limit_conn)
+            finally:
+                limit_conn.close()
+
+            title = (body.get("title") or "").strip()
+            if not title:
+                title = f"Period {period_number}" if period_number else "Video Upload"
+            cors_origin = body.get("cors_origin", "*")
+
+            try:
+                mux_result = mux_create_upload(cors_origin=cors_origin)
+            except Exception as e:
+                logger.error("Mux create_direct_upload error: %s", e, exc_info=True)
+                raise HTTPException(status_code=502, detail=f"Mux API error: {str(e)}")
+
+            new_upload_id = str(uuid.uuid4())
+            now = now_iso()
+            conn.execute("""
+                INSERT INTO video_uploads
+                    (id, org_id, uploaded_by, title, description, game_id, team_id, player_id,
+                     upload_source, source_url, mux_asset_id, mux_playback_id,
+                     duration_seconds, status, visibility, created_by, created_at, updated_at,
+                     session_id, period_number, period_label)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                new_upload_id, org_id, user_id, title, body.get("description"),
+                body.get("game_id"), body.get("team_id"), body.get("player_id"),
+                "mux", None, None, None, None, "processing",
+                body.get("visibility", "org"), user_id, now, now,
+                session_id, period_number, period_label,
+            ))
+            # Store the Mux upload_id in source_url for later lookup
+            conn.execute(
+                "UPDATE video_uploads SET source_url = ? WHERE id = ?",
+                (mux_result["upload_id"], new_upload_id),
+            )
+            conn.commit()
+            _increment_tracking(user_id, "uploads", conn)
+            return {
+                "upload_id": new_upload_id,
+                "session_id": session_id,
+                "period_number": period_number,
+                "upload_url": mux_result["upload_url"],
+                "mux_upload_id": mux_result["upload_id"],
+                "title": title,
+                "status": "processing",
+            }
     finally:
         conn.close()
 
