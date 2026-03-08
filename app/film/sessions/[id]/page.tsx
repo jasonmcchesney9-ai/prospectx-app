@@ -1389,7 +1389,7 @@ export default function FilmSessionViewerPage() {
                 onChange={handleFileSelected}
                 className="hidden"
               />
-              {(sessionEvents.length === 0 || importingEvents || showReplaceConfirm || importResult) && (
+              {/* Import Event Data — always visible so coaches can add XML events to any session */}
                 <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                     <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14B8A8" }} />
@@ -1455,7 +1455,6 @@ export default function FilmSessionViewerPage() {
                     )}
                   </div>
                 </div>
-              )}
 
               {/* Clip Panel — props unchanged */}
               <ClipPanel
