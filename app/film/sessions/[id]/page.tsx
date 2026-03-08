@@ -1396,10 +1396,9 @@ export default function FilmSessionViewerPage() {
                                 setSessionReels((prev) => prev.map((r) => r.id === reel.id ? { ...r, share_enabled: res.data.share_enabled, share_token: res.data.share_token } : r));
                               } catch { toast.error("Failed to update share"); }
                             }}
-                            style={{ display: "flex", alignItems: "center", gap: 3, padding: "1px 5px", borderRadius: 3, fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: reel.share_enabled ? "#14B8A8" : "rgba(255,255,255,0.3)", background: reel.share_enabled ? "rgba(13,148,136,0.15)" : "transparent", border: reel.share_enabled ? "1px solid rgba(13,148,136,0.3)" : "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}
+                            style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", minHeight: 28, borderRadius: 4, fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#FFFFFF", background: reel.share_enabled ? "#0F2942" : "#14B8A8", border: reel.share_enabled ? "1px solid #14B8A8" : "1px solid transparent", cursor: "pointer" }}
                           >
-                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: reel.share_enabled ? "#14B8A8" : "rgba(255,255,255,0.2)" }} />
-                            {reel.share_enabled ? "Shared" : "Share"}
+                            {reel.share_enabled ? "Share On" : "Share Off"}
                           </button>
                           {/* Copy link + Regenerate — only when share_enabled */}
                           {reel.share_enabled && reel.share_token && (
@@ -1411,7 +1410,7 @@ export default function FilmSessionViewerPage() {
                                     setTimeout(() => setCopiedReelId(null), 2000);
                                   }).catch(() => toast.error("Failed to copy"));
                                 }}
-                                style={{ padding: "1px 5px", borderRadius: 3, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: copiedReelId === reel.id ? "#14B8A8" : "rgba(255,255,255,0.4)", background: copiedReelId === reel.id ? "rgba(13,148,136,0.15)" : "rgba(255,255,255,0.04)", border: "none", cursor: "pointer" }}
+                                style={{ padding: "4px 10px", minHeight: 28, borderRadius: 4, fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#FFFFFF", background: copiedReelId === reel.id ? "#0F2942" : "#14B8A8", border: copiedReelId === reel.id ? "1px solid #14B8A8" : "1px solid transparent", cursor: "pointer" }}
                               >
                                 {copiedReelId === reel.id ? "Copied!" : "Copy Link"}
                               </button>
