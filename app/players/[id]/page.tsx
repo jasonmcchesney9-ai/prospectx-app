@@ -3893,10 +3893,9 @@ export default function PlayerDetailPage() {
 // Simple performance indices calculated from available season stats.
 // These give scouts a fast snapshot before diving into full reports.
 function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: string }) {
-  // Use the most recent season stats (highest GP)
   const season = stats
-    .filter((s) => s.stat_type === "season" || s.gp >= 5)
-    .sort((a, b) => b.gp - a.gp)[0] || stats[0];
+    .filter((s) => s.stat_type === "season")
+    .sort((a, b) => parseInt((b.season || "0").slice(0, 4), 10) - parseInt((a.season || "0").slice(0, 4), 10))[0] || stats[0];
 
   if (!season) return null;
 
