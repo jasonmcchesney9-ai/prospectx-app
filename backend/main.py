@@ -28732,6 +28732,224 @@ async def admin_player_dedup_execute(
     return summary
 
 
+@app.post("/admin/players/bulk-dedup")
+async def admin_players_bulk_dedup(
+    dry_run: bool = True,
+    token_data: dict = Depends(verify_token),
+):
+    """Bulk deduplicate players using hockeytech_id as the primary indicator.
+
+    Logic:
+    - Finds all duplicate name groups (same first_name + last_name, not deleted)
+    - For each group: if exactly 1 record has a hockeytech_id, that's the primary
+    - All other records in that group are duplicates
+    - Repoints all FK data from each duplicate → primary via _repoint_player_data()
+    - Soft-deletes each duplicate (is_deleted=1, is_merged=1, merged_into=primary)
+    - Creates a player_merges audit record per group
+    - If dry_run=True (default), rolls back all changes and returns preview
+
+    Safety rules:
+    - Groups with 0 HT records → skipped, logged in skipped[]
+    - Groups with 2+ HT records → skipped, logged in skipped[]
+    - Entire operation is wrapped in a transaction
+    - dry_run=True prevents any actual changes
+
+    Query params:
+        dry_run: if True (default), preview only — no changes committed
+    """
+    import json as _json
+
+    _require_admin(token_data)
+
+    conn = get_db()
+    user_id = token_data["user_id"]
+
+    # ── Find all duplicate name groups (non-deleted players) ──
+    dupe_groups = conn.execute("""
+        SELECT first_name, last_name, COUNT(*) as cnt
+        FROM players
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+        GROUP BY first_name, last_name
+        HAVING COUNT(*) > 1
+        ORDER BY COUNT(*) DESC, last_name, first_name
+    """).fetchall()
+
+    summary = {
+        "dry_run": dry_run,
+        "total_dupe_groups_found": len(dupe_groups),
+        "groups_processed": 0,
+        "records_merged": 0,
+        "stats_moved": 0,
+        "notes_moved": 0,
+        "reports_moved": 0,
+        "intel_moved": 0,
+        "other_moved": 0,
+        "merge_records_created": 0,
+        "skipped_no_ht": 0,
+        "skipped_multi_ht": 0,
+        "skipped": [],
+        "errors": [],
+        "samples": [],
+    }
+
+    # ── Outer savepoint: allows full rollback for dry_run ──
+    # RELEASE SAVEPOINT merges into the parent transaction, so per-group
+    # savepoints cannot be undone by a final conn.rollback().  Wrapping
+    # everything in an outer savepoint lets us ROLLBACK TO it for dry_run.
+    conn.execute("SAVEPOINT bulk_dedup_outer")
+
+    for idx, dg in enumerate(dupe_groups):
+        fn = dg["first_name"] if hasattr(dg, 'keys') else dg[0]
+        ln = dg["last_name"] if hasattr(dg, 'keys') else dg[1]
+
+        try:
+            conn.execute(f"SAVEPOINT bulk_dedup_{idx}")
+
+            # Fetch all live rows for this name
+            rows = conn.execute("""
+                SELECT p.id, p.org_id, p.current_team, p.current_league,
+                       p.hockeytech_id, p.created_at,
+                       (SELECT COUNT(*) FROM player_stats ps WHERE ps.player_id = p.id) as stat_count,
+                       (SELECT COUNT(*) FROM scout_notes sn WHERE sn.player_id = p.id) as note_count,
+                       (SELECT COUNT(*) FROM reports r WHERE r.player_id = p.id) as report_count
+                FROM players p
+                WHERE p.first_name = ? AND p.last_name = ?
+                  AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+                ORDER BY p.created_at
+            """, (fn, ln)).fetchall()
+            rows_dicts = [dict(r) for r in rows]
+
+            if len(rows_dicts) < 2:
+                conn.execute(f"RELEASE SAVEPOINT bulk_dedup_{idx}")
+                continue
+
+            # ── Safety check: exactly 1 record must have hockeytech_id ──
+            ht_records = [r for r in rows_dicts if r.get("hockeytech_id") and r["hockeytech_id"] not in ("", "no_ht", None)]
+            non_ht_records = [r for r in rows_dicts if r["id"] not in [h["id"] for h in ht_records]]
+
+            if len(ht_records) == 0:
+                # No HT record — skip
+                summary["skipped_no_ht"] += 1
+                if len(summary["skipped"]) < 50:
+                    summary["skipped"].append({
+                        "name": f"{fn} {ln}",
+                        "reason": "no_hockeytech_id",
+                        "count": len(rows_dicts),
+                    })
+                conn.execute(f"RELEASE SAVEPOINT bulk_dedup_{idx}")
+                continue
+
+            if len(ht_records) > 1:
+                # Multiple HT records — skip
+                summary["skipped_multi_ht"] += 1
+                if len(summary["skipped"]) < 50:
+                    summary["skipped"].append({
+                        "name": f"{fn} {ln}",
+                        "reason": "multiple_hockeytech_ids",
+                        "count": len(rows_dicts),
+                        "ht_ids": [r["hockeytech_id"] for r in ht_records],
+                    })
+                conn.execute(f"RELEASE SAVEPOINT bulk_dedup_{idx}")
+                continue
+
+            if len(non_ht_records) == 0:
+                # Only 1 record total (the HT one) — nothing to merge
+                conn.execute(f"RELEASE SAVEPOINT bulk_dedup_{idx}")
+                continue
+
+            # ── Primary = the one with hockeytech_id ──
+            primary = ht_records[0]
+            primary_id = primary["id"]
+            dup_ids = [r["id"] for r in non_ht_records]
+
+            group_stats = 0
+            group_notes = 0
+            group_reports = 0
+            group_intel = 0
+            group_other = 0
+
+            for dup_id in dup_ids:
+                # Repoint all FK data from duplicate → primary
+                rc = _repoint_player_data(conn, dup_id, primary_id)
+                group_stats += rc["stats_moved"]
+                group_notes += rc["notes_moved"]
+                group_reports += rc["reports_moved"]
+                group_intel += rc["intel_moved"]
+                group_other += rc["other_moved"]
+
+                # Soft-delete the duplicate
+                conn.execute("""
+                    UPDATE players SET
+                        is_deleted = 1,
+                        is_merged = 1,
+                        merged_into = ?,
+                        merged_at = CURRENT_TIMESTAMP,
+                        deleted_at = CURRENT_TIMESTAMP,
+                        deleted_reason = 'bulk_dedup_merge'
+                    WHERE id = ?
+                """, (primary_id, dup_id))
+
+            # Create audit record in player_merges
+            merge_id = str(uuid.uuid4())
+            grp_org = primary.get("org_id", "")
+            conn.execute("""
+                INSERT INTO player_merges (id, org_id, primary_player_id, duplicate_player_ids,
+                    stats_moved, notes_moved, reports_moved, intel_moved, merged_by, merged_at,
+                    can_undo, undo_before)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+            """, (merge_id, grp_org, primary_id, _json.dumps(dup_ids),
+                  group_stats, group_notes, group_reports, group_intel,
+                  user_id,
+                  (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()))
+
+            summary["groups_processed"] += 1
+            summary["records_merged"] += len(dup_ids)
+            summary["stats_moved"] += group_stats
+            summary["notes_moved"] += group_notes
+            summary["reports_moved"] += group_reports
+            summary["intel_moved"] += group_intel
+            summary["other_moved"] += group_other
+            summary["merge_records_created"] += 1
+
+            # Keep first 20 samples for verification
+            if len(summary["samples"]) < 20:
+                summary["samples"].append({
+                    "name": f"{fn} {ln}",
+                    "primary_id": primary_id,
+                    "primary_ht_id": primary.get("hockeytech_id"),
+                    "duplicates_merged": len(dup_ids),
+                    "stats_moved": group_stats,
+                    "notes_moved": group_notes,
+                    "reports_moved": group_reports,
+                })
+
+            conn.execute(f"RELEASE SAVEPOINT bulk_dedup_{idx}")
+
+        except Exception as e:
+            import traceback as _tb
+            err_detail = _tb.format_exc()
+            try:
+                conn.execute(f"ROLLBACK TO SAVEPOINT bulk_dedup_{idx}")
+            except Exception:
+                pass
+            if len(summary["errors"]) < 100:
+                summary["errors"].append(f"{fn} {ln}: {err_detail[-500:]}")
+            elif len(summary["errors"]) == 100:
+                summary["errors"].append("... (further errors truncated)")
+
+    # ── Commit or rollback based on dry_run ──
+    if dry_run:
+        conn.execute("ROLLBACK TO SAVEPOINT bulk_dedup_outer")
+        summary["message"] = "DRY RUN — no changes committed. Review summary and re-run with dry_run=false to execute."
+    else:
+        conn.execute("RELEASE SAVEPOINT bulk_dedup_outer")
+        conn.commit()
+        summary["message"] = f"EXECUTED — {summary['groups_processed']} groups merged, {summary['records_merged']} duplicate records soft-deleted."
+
+    conn.close()
+    return summary
+
+
 @app.get("/admin/league-aliases")
 async def admin_league_aliases(token_data: dict = Depends(verify_token)):
     """Scan all tables with league columns and report distinct values + counts.
