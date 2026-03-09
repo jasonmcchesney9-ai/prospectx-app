@@ -10792,6 +10792,17 @@ def calculate_monte_carlo(conn, league: str, season_id: str, simulations: int = 
     num_teams = len(teams)
     playoff_spots = min(8, max(4, num_teams // 2))
 
+    # ── Strength-of-schedule adjustment ──
+    league_avg_pct = sum(t["points_pct"] for t in teams.values()) / len(teams)
+    for name, t_data in teams.items():
+        opp_pcts = [
+            teams.get(g["away_team"] if g["home_team"] == name else g["home_team"], {}).get("points_pct", league_avg_pct)
+            for g in remaining_games
+            if g["home_team"] == name or g["away_team"] == name
+        ]
+        sos = (sum(opp_pcts) / len(opp_pcts) - league_avg_pct) if opp_pcts else 0
+        t_data["adjusted_win_prob"] = min(0.95, max(0.05, t_data["points_pct"] * (1 + sos * 0.3)))
+
     # ── Run simulations ──
     # Track per-team: list of final points, list of final rank, playoff count
     sim_points = {name: [] for name in teams}
@@ -10807,9 +10818,9 @@ def calculate_monte_carlo(conn, league: str, season_id: str, simulations: int = 
             home = game["home_team"]
             away = game["away_team"]
 
-            # Get points_pct for each team (default 0.5 if unknown)
-            home_pct = teams.get(home, {}).get("points_pct", 0.5)
-            away_pct = teams.get(away, {}).get("points_pct", 0.5)
+            # Get SOS-adjusted win probability for each team (default 0.5 if unknown)
+            home_pct = teams.get(home, {}).get("adjusted_win_prob", 0.5)
+            away_pct = teams.get(away, {}).get("adjusted_win_prob", 0.5)
 
             # Normalize to head-to-head probability
             total_pct = home_pct + away_pct
