@@ -4787,56 +4787,67 @@ def init_db():
     conn.commit()
 
     # ── HockeyTech stored data tables ─────────────────────────
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS game_schedule (
-            id TEXT PRIMARY KEY,
-            league TEXT NOT NULL,
-            season_id TEXT NOT NULL,
-            ht_game_id INTEGER,
-            game_date TEXT,
-            game_date_display TEXT,
-            home_team TEXT,
-            away_team TEXT,
-            home_team_id INTEGER,
-            away_team_id INTEGER,
-            venue TEXT,
-            status TEXT DEFAULT 'Scheduled',
-            home_score INTEGER,
-            away_score INTEGER,
-            synced_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_league ON game_schedule(league)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_date ON game_schedule(game_date)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_ht_game ON game_schedule(ht_game_id)")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_game_schedule_league_game ON game_schedule(league, ht_game_id)")
+    # Wrapped in try/except to prevent PostgreSQL InFailedSqlTransaction cascade
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS game_schedule (
+                id TEXT PRIMARY KEY,
+                league TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                ht_game_id INTEGER,
+                game_date TEXT,
+                game_date_display TEXT,
+                home_team TEXT,
+                away_team TEXT,
+                home_team_id INTEGER,
+                away_team_id INTEGER,
+                venue TEXT,
+                status TEXT DEFAULT 'Scheduled',
+                home_score INTEGER,
+                away_score INTEGER,
+                synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_league ON game_schedule(league)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_date ON game_schedule(game_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_game_schedule_ht_game ON game_schedule(ht_game_id)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_game_schedule_league_game ON game_schedule(league, ht_game_id)")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.warning("game_schedule table DDL skipped (already exists or PG error): %s", e)
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS ht_team_stats (
-            id TEXT PRIMARY KEY,
-            league TEXT NOT NULL,
-            season_id TEXT NOT NULL,
-            team_name TEXT,
-            team_id INTEGER,
-            gp INTEGER DEFAULT 0,
-            wins INTEGER DEFAULT 0,
-            losses INTEGER DEFAULT 0,
-            otl INTEGER DEFAULT 0,
-            points INTEGER DEFAULT 0,
-            points_pct REAL DEFAULT 0,
-            gf INTEGER DEFAULT 0,
-            ga INTEGER DEFAULT 0,
-            goal_diff INTEGER DEFAULT 0,
-            pp_pct REAL DEFAULT 0,
-            pk_pct REAL DEFAULT 0,
-            reg_wins INTEGER DEFAULT 0,
-            streak TEXT,
-            synced_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_ht_team_stats_league ON ht_team_stats(league)")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ht_team_stats_league_team ON ht_team_stats(league, season_id, team_id)")
-    conn.commit()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ht_team_stats (
+                id TEXT PRIMARY KEY,
+                league TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                team_name TEXT,
+                team_id INTEGER,
+                gp INTEGER DEFAULT 0,
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                otl INTEGER DEFAULT 0,
+                points INTEGER DEFAULT 0,
+                points_pct REAL DEFAULT 0,
+                gf INTEGER DEFAULT 0,
+                ga INTEGER DEFAULT 0,
+                goal_diff INTEGER DEFAULT 0,
+                pp_pct REAL DEFAULT 0,
+                pk_pct REAL DEFAULT 0,
+                reg_wins INTEGER DEFAULT 0,
+                streak TEXT,
+                synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ht_team_stats_league ON ht_team_stats(league)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ht_team_stats_league_team ON ht_team_stats(league, season_id, team_id)")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.warning("ht_team_stats table DDL skipped (already exists or PG error): %s", e)
+
     logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats)")
 
     conn.close()
