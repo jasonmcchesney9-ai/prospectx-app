@@ -29786,6 +29786,266 @@ async def admin_ht_sync_full(token_data: dict = Depends(verify_token)):
     }
 
 
+# ── League Hub — stored-data endpoints (DB-first, live HT fallback) ────────
+#
+# These endpoints serve from game_schedule and ht_team_stats tables
+# (populated by nightly sync_hockeytech_data_cron).  If the DB tables
+# are empty for the requested league, they fall back to a live
+# HockeyTech API fetch so the League Hub never shows blank data.
+
+
+@app.get("/league-hub/{league}/standings-stored")
+async def league_hub_standings_stored(league: str, token_data: dict = Depends(verify_token)):
+    """Standings from ht_team_stats table, mapped to HTStandings shape.
+
+    Falls back to live HockeyTech get_standings() if no stored data exists.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT team_name, team_id, gp, wins, losses, otl, points,
+                      points_pct, gf, ga, goal_diff, pp_pct, pk_pct,
+                      reg_wins, streak
+               FROM ht_team_stats
+               WHERE league = ?
+               ORDER BY points DESC, gp ASC""",
+            (league,),
+        ).fetchall()
+
+        if rows:
+            result = []
+            for r in rows:
+                result.append({
+                    "team_id": r["team_id"],
+                    "name": r["team_name"] or "",
+                    "team_code": "",
+                    "city": "",
+                    "gp": r["gp"],
+                    "wins": r["wins"],
+                    "losses": r["losses"],
+                    "otl": r["otl"],
+                    "points": r["points"],
+                    "gf": r["gf"],
+                    "ga": r["ga"],
+                    "diff": r["goal_diff"],
+                    "pct": str(r["points_pct"] or ""),
+                    "streak": r["streak"] or "",
+                    "pp_pct": str(r["pp_pct"] or ""),
+                    "pk_pct": str(r["pk_pct"] or ""),
+                    "regulation_wins": r["reg_wins"],
+                })
+            return result
+    finally:
+        conn.close()
+
+    # Fallback: live HockeyTech fetch
+    logger.info("[League Hub] standings-stored: no stored data for %s — falling back to live HT", league)
+    try:
+        client = HockeyTechClient(league)
+        season_id = await client.get_current_season_id()
+        if season_id:
+            return await client.get_standings(season_id)
+    except Exception as e:
+        logger.warning("[League Hub] live standings fallback failed for %s: %s", league, e)
+    return []
+
+
+@app.get("/league-hub/{league}/scores")
+async def league_hub_scores(
+    league: str,
+    days_back: int = Query(default=7, ge=1, le=30),
+    days_ahead: int = Query(default=3, ge=0, le=14),
+    token_data: dict = Depends(verify_token),
+):
+    """Recent scores + upcoming games from game_schedule, mapped to HTGame shape.
+
+    Falls back to live HockeyTech scorebar if no stored data exists.
+    """
+    conn = get_db()
+    try:
+        from datetime import timedelta
+        now = datetime.utcnow().date()
+        start_date = (now - timedelta(days=days_back)).isoformat()
+        end_date = (now + timedelta(days=days_ahead)).isoformat()
+
+        rows = conn.execute(
+            """SELECT ht_game_id, game_date, game_date_display,
+                      home_team, away_team, home_team_id, away_team_id,
+                      venue, status, home_score, away_score
+               FROM game_schedule
+               WHERE league = ?
+                 AND game_date >= ?
+                 AND game_date <= ?
+               ORDER BY game_date ASC""",
+            (league, start_date, end_date),
+        ).fetchall()
+
+        if rows:
+            result = []
+            for r in rows:
+                status = r["status"] or ""
+                result.append({
+                    "game_id": r["ht_game_id"],
+                    "date": r["game_date_display"] or r["game_date"] or "",
+                    "game_date": r["game_date"] or "",
+                    "time": "",
+                    "home_id": r["home_team_id"],
+                    "home_team": r["home_team"] or "",
+                    "home_code": "",
+                    "home_score": str(r["home_score"]) if r["home_score"] is not None else "",
+                    "home_logo": "",
+                    "away_id": r["away_team_id"],
+                    "away_team": r["away_team"] or "",
+                    "away_code": "",
+                    "away_score": str(r["away_score"]) if r["away_score"] is not None else "",
+                    "away_logo": "",
+                    "status": status,
+                    "period": "",
+                    "game_clock": "",
+                    "venue": r["venue"] or "",
+                })
+            return result
+    finally:
+        conn.close()
+
+    # Fallback: live scorebar
+    logger.info("[League Hub] scores: no stored data for %s — falling back to live HT scorebar", league)
+    try:
+        client = HockeyTechClient(league)
+        return await client.get_scorebar(days_back=days_back, days_ahead=days_ahead)
+    except Exception as e:
+        logger.warning("[League Hub] live scorebar fallback failed for %s: %s", league, e)
+    return []
+
+
+@app.get("/league-hub/{league}/schedule")
+async def league_hub_schedule(
+    league: str,
+    team_id: Optional[int] = None,
+    token_data: dict = Depends(verify_token),
+):
+    """Full season schedule from game_schedule, mapped to HTGame shape.
+
+    Falls back to live HockeyTech scorebar (±15 days) if no stored data exists.
+    """
+    conn = get_db()
+    try:
+        if team_id:
+            rows = conn.execute(
+                """SELECT ht_game_id, game_date, game_date_display,
+                          home_team, away_team, home_team_id, away_team_id,
+                          venue, status, home_score, away_score
+                   FROM game_schedule
+                   WHERE league = ?
+                     AND (home_team_id = ? OR away_team_id = ?)
+                   ORDER BY game_date ASC""",
+                (league, team_id, team_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT ht_game_id, game_date, game_date_display,
+                          home_team, away_team, home_team_id, away_team_id,
+                          venue, status, home_score, away_score
+                   FROM game_schedule
+                   WHERE league = ?
+                   ORDER BY game_date ASC""",
+                (league,),
+            ).fetchall()
+
+        if rows:
+            result = []
+            for r in rows:
+                status = r["status"] or ""
+                result.append({
+                    "game_id": r["ht_game_id"],
+                    "date": r["game_date_display"] or r["game_date"] or "",
+                    "game_date": r["game_date"] or "",
+                    "time": "",
+                    "home_id": r["home_team_id"],
+                    "home_team": r["home_team"] or "",
+                    "home_code": "",
+                    "home_score": str(r["home_score"]) if r["home_score"] is not None else "",
+                    "home_logo": "",
+                    "away_id": r["away_team_id"],
+                    "away_team": r["away_team"] or "",
+                    "away_code": "",
+                    "away_score": str(r["away_score"]) if r["away_score"] is not None else "",
+                    "away_logo": "",
+                    "status": status,
+                    "period": "",
+                    "game_clock": "",
+                    "venue": r["venue"] or "",
+                })
+            return result
+    finally:
+        conn.close()
+
+    # Fallback: live scorebar (limited to ±15 days — best available)
+    logger.info("[League Hub] schedule: no stored data for %s — falling back to live HT scorebar", league)
+    try:
+        client = HockeyTechClient(league)
+        return await client.get_scorebar(days_back=15, days_ahead=15)
+    except Exception as e:
+        logger.warning("[League Hub] live schedule fallback failed for %s: %s", league, e)
+    return []
+
+
+@app.get("/league-hub/{league}/team-stats")
+async def league_hub_team_stats(league: str, token_data: dict = Depends(verify_token)):
+    """Team stats from ht_team_stats table, mapped to HTStandings shape.
+
+    Falls back to live HockeyTech get_standings() if no stored data exists.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT team_name, team_id, gp, wins, losses, otl, points,
+                      points_pct, gf, ga, goal_diff, pp_pct, pk_pct,
+                      reg_wins, streak
+               FROM ht_team_stats
+               WHERE league = ?
+               ORDER BY points DESC, gp ASC""",
+            (league,),
+        ).fetchall()
+
+        if rows:
+            result = []
+            for r in rows:
+                result.append({
+                    "team_id": r["team_id"],
+                    "name": r["team_name"] or "",
+                    "team_code": "",
+                    "city": "",
+                    "gp": r["gp"],
+                    "wins": r["wins"],
+                    "losses": r["losses"],
+                    "otl": r["otl"],
+                    "points": r["points"],
+                    "gf": r["gf"],
+                    "ga": r["ga"],
+                    "diff": r["goal_diff"],
+                    "pct": str(r["points_pct"] or ""),
+                    "streak": r["streak"] or "",
+                    "pp_pct": str(r["pp_pct"] or ""),
+                    "pk_pct": str(r["pk_pct"] or ""),
+                    "regulation_wins": r["reg_wins"],
+                })
+            return result
+    finally:
+        conn.close()
+
+    # Fallback: live HockeyTech standings
+    logger.info("[League Hub] team-stats: no stored data for %s — falling back to live HT", league)
+    try:
+        client = HockeyTechClient(league)
+        season_id = await client.get_current_season_id()
+        if season_id:
+            return await client.get_standings(season_id)
+    except Exception as e:
+        logger.warning("[League Hub] live team-stats fallback failed for %s: %s", league, e)
+    return []
+
+
 @app.get("/admin/pxr/leaderboard")
 async def pxr_leaderboard(
     season: str = Query(default="2025-26"),

@@ -90,6 +90,8 @@ export default function LeagueHubPage() {
   const [loadingStandings, setLoadingStandings] = useState(true);
   const [loadingLeaders, setLoadingLeaders] = useState(true);
   const [loadingGames, setLoadingGames] = useState(true);
+  const [loadingSchedule, setLoadingSchedule] = useState(true);
+  const [loadingTeamStats, setLoadingTeamStats] = useState(true);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [failedSections, setFailedSections] = useState<Set<string>>(new Set());
 
@@ -97,6 +99,8 @@ export default function LeagueHubPage() {
   const [standings, setStandings] = useState<HTStandings[]>([]);
   const [leaders, setLeaders] = useState<HTSkaterStats[]>([]);
   const [games, setGames] = useState<HTGame[]>([]);
+  const [schedule, setSchedule] = useState<HTGame[]>([]);
+  const [teamStats, setTeamStats] = useState<HTStandings[]>([]);
   const [teams, setTeams] = useState<HTTeam[]>([]);
 
   // Goalies (lazy loaded on demand)
@@ -115,6 +119,8 @@ export default function LeagueHubPage() {
     setLoadingStandings(true);
     setLoadingLeaders(true);
     setLoadingGames(true);
+    setLoadingSchedule(true);
+    setLoadingTeamStats(true);
     setLoadingTeams(true);
     setFailedSections(new Set());
     // Reset goalie cache on league change
@@ -123,25 +129,37 @@ export default function LeagueHubPage() {
 
     const failed = new Set<string>();
 
-    // Fetch 1: Standings
-    api.get<HTStandings[]>(`/hockeytech/${league}/standings`)
+    // Fetch 1: Standings (stored data, with live HT fallback)
+    api.get<HTStandings[]>(`/league-hub/${league}/standings-stored`)
       .then((res) => setStandings(res.data))
       .catch(() => { setStandings([]); failed.add("standings"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingStandings(false));
 
-    // Fetch 2: Player Stats (leaders)
+    // Fetch 2: Player Stats (leaders — still live HT, no stored endpoint yet)
     api.get<HTSkaterStats[]>(`/hockeytech/${league}/stats/leaders?limit=100`)
       .then((res) => setLeaders(res.data))
       .catch(() => { setLeaders([]); failed.add("leaders"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingLeaders(false));
 
-    // Fetch 3: Schedule (scorebar)
-    api.get<HTGame[]>(`/hockeytech/${league}/scorebar?days_back=15&days_ahead=15`)
+    // Fetch 3: Scores (recent results, stored data with live HT fallback)
+    api.get<HTGame[]>(`/league-hub/${league}/scores?days_back=15&days_ahead=3`)
       .then((res) => setGames(res.data))
       .catch(() => { setGames([]); failed.add("games"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingGames(false));
 
-    // Fetch 4: Teams
+    // Fetch 4: Full season schedule (stored data with live HT fallback)
+    api.get<HTGame[]>(`/league-hub/${league}/schedule`)
+      .then((res) => setSchedule(res.data))
+      .catch(() => { setSchedule([]); failed.add("schedule"); setFailedSections(new Set(failed)); })
+      .finally(() => setLoadingSchedule(false));
+
+    // Fetch 5: Team Stats (stored data with live HT fallback)
+    api.get<HTStandings[]>(`/league-hub/${league}/team-stats`)
+      .then((res) => setTeamStats(res.data))
+      .catch(() => { setTeamStats([]); failed.add("team-stats"); setFailedSections(new Set(failed)); })
+      .finally(() => setLoadingTeamStats(false));
+
+    // Fetch 6: Teams (still live HT)
     api.get<HTTeam[]>(`/hockeytech/${league}/teams`)
       .then((res) => setTeams(res.data))
       .catch(() => { setTeams([]); failed.add("teams"); setFailedSections(new Set(failed)); })
@@ -299,12 +317,12 @@ export default function LeagueHubPage() {
           )
         )}
         {tab === "schedule" && (
-          loadingGames || loadingTeams ? (
+          loadingSchedule || loadingTeams ? (
             <SectionLoader label="schedule" />
-          ) : failedSections.has("games") ? (
+          ) : failedSections.has("schedule") ? (
             <EmptyState text="Data temporarily unavailable" />
           ) : (
-            <ScheduleTab games={games} teams={teams} />
+            <ScheduleTab games={schedule} teams={teams} />
           )
         )}
         {tab === "player-stats" && (
@@ -323,12 +341,12 @@ export default function LeagueHubPage() {
           )
         )}
         {tab === "team-stats" && (
-          loadingStandings ? (
+          loadingTeamStats ? (
             <SectionLoader label="team stats" />
-          ) : failedSections.has("standings") ? (
+          ) : failedSections.has("team-stats") ? (
             <EmptyState text="Data temporarily unavailable" />
           ) : (
-            <TeamStatsTab standings={standings} />
+            <TeamStatsTab standings={teamStats} />
           )
         )}
         {tab === "teams" && (
