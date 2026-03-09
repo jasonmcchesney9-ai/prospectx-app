@@ -383,6 +383,20 @@ export default function NavBar() {
           <div className="hidden md:flex items-center gap-3 ml-8 shrink-0">
             {user && (
               <>
+                {/* Settings gear — visible to all except PLAYER and FAMILY */}
+                {roleGroup !== "PLAYER" && roleGroup !== "FAMILY" && (
+                  <Link
+                    href="/settings"
+                    className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+                      pathname.startsWith("/settings")
+                        ? "bg-white/10 text-teal"
+                        : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                    }`}
+                    title="Settings"
+                  >
+                    <Settings size={16} />
+                  </Link>
+                )}
                 <span className="text-sm text-white/60">
                   {user.first_name} {user.last_name}
                 </span>
@@ -728,6 +742,22 @@ export default function NavBar() {
                     {unreadMsgCount}
                   </span>
                 )}
+              </Link>
+            </div>
+          )}
+
+          {/* Settings (all roles except PLAYER and FAMILY) */}
+          {roleGroup !== "PLAYER" && roleGroup !== "FAMILY" && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <Link
+                href="/settings"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                  pathname.startsWith("/settings") ? "text-teal" : "text-white/70"
+                }`}
+              >
+                <Settings size={16} />
+                Settings
               </Link>
             </div>
           )}

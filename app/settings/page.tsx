@@ -1,0 +1,521 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import {
+  Users,
+  Mail,
+  Shield,
+  UserPlus,
+  ChevronDown,
+  Loader2,
+  X,
+  CheckCircle,
+  AlertTriangle,
+} from "lucide-react";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import api, { extractApiError } from "@/lib/api";
+import { getUser } from "@/lib/auth";
+
+// ── Types ────────────────────────────────────────────────────────
+interface TeamMember {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  role: string;
+  hockey_role: string;
+  subscription_tier: string;
+  status?: string;
+  created_at: string;
+  last_login?: string | null;
+}
+
+interface PendingInvite {
+  id: string;
+  email: string;
+  hockey_role: string;
+  created_at: string;
+  status: string;
+}
+
+interface UsageData {
+  tier: string;
+  seats_used: number;
+  seats_limit: number;
+  reports_used: number;
+  reports_limit: number;
+  bench_talks_used: number;
+  bench_talks_limit: number;
+}
+
+// ── Constants ────────────────────────────────────────────────────
+type SettingsTab = "team" | "billing" | "org";
+
+const HOCKEY_ROLES = [
+  { value: "scout", label: "Scout" },
+  { value: "coach", label: "Coach" },
+  { value: "gm", label: "General Manager" },
+  { value: "analyst", label: "Analyst" },
+  { value: "admin", label: "Admin" },
+  { value: "broadcaster", label: "Broadcaster" },
+  { value: "agent", label: "Agent" },
+];
+
+const ROLE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
+  scout: { bg: "rgba(13,148,136,0.12)", text: "#0D9488" },
+  coach: { bg: "rgba(59,130,246,0.12)", text: "#3B82F6" },
+  gm: { bg: "rgba(230,126,34,0.12)", text: "#E67E22" },
+  analyst: { bg: "rgba(139,92,246,0.12)", text: "#8B5CF6" },
+  admin: { bg: "rgba(239,68,68,0.12)", text: "#EF4444" },
+  broadcaster: { bg: "rgba(245,158,11,0.12)", text: "#F59E0B" },
+  producer: { bg: "rgba(245,158,11,0.12)", text: "#F59E0B" },
+  agent: { bg: "rgba(107,114,128,0.12)", text: "#6B7280" },
+  player: { bg: "rgba(16,185,129,0.12)", text: "#10B981" },
+  parent: { bg: "rgba(236,72,153,0.12)", text: "#EC4899" },
+};
+
+// ── Main Component ───────────────────────────────────────────────
+export default function SettingsPage() {
+  return (
+    <ProtectedRoute>
+      <SettingsContent />
+    </ProtectedRoute>
+  );
+}
+
+function SettingsContent() {
+  const user = getUser();
+  const [activeTab, setActiveTab] = useState<SettingsTab>("team");
+
+  // ── Team tab state ──
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invites, setInvites] = useState<PendingInvite[]>([]);
+  const [usage, setUsage] = useState<UsageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("scout");
+  const [inviting, setInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [roleChanging, setRoleChanging] = useState<string | null>(null);
+
+  // ── Load data ──
+  const loadTeamData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [membersRes, usageRes] = await Promise.allSettled([
+        api.get<TeamMember[]>("/admin/users"),
+        api.get("/subscription/usage"),
+      ]);
+      if (membersRes.status === "fulfilled") setMembers(membersRes.value.data);
+      if (usageRes.status === "fulfilled") setUsage(usageRes.value.data);
+
+      // Try to load pending invites
+      try {
+        const invitesRes = await api.get<PendingInvite[]>("/org/invites");
+        setInvites(invitesRes.data);
+      } catch {
+        // Endpoint may not exist yet — silently skip
+        setInvites([]);
+      }
+    } catch {
+      // Handled per-section
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTeamData();
+  }, [loadTeamData]);
+
+  // ── Invite handler ──
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    setInviteError("");
+    setInviteSuccess("");
+    try {
+      await api.post("/org/invite", { email: inviteEmail.trim(), hockey_role: inviteRole });
+      setInviteSuccess(`Invite sent to ${inviteEmail.trim()}`);
+      setInviteEmail("");
+      setInviteRole("scout");
+      loadTeamData();
+    } catch (err) {
+      setInviteError(extractApiError(err, "Failed to send invite"));
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  // ── Role change handler ──
+  const handleRoleChange = async (userId: string, newRole: string) => {
+    setRoleChanging(userId);
+    try {
+      await api.put(`/admin/users/${userId}/role`, { hockey_role: newRole });
+      loadTeamData();
+    } catch {
+      // silently fail
+    } finally {
+      setRoleChanging(null);
+    }
+  };
+
+  // ── Deactivate handler ──
+  const handleDeactivate = async (userId: string) => {
+    if (!confirm("Are you sure you want to deactivate this user?")) return;
+    try {
+      await api.put(`/admin/users/${userId}/status`, { status: "inactive" });
+      loadTeamData();
+    } catch {
+      // silently fail
+    }
+  };
+
+  // ── Revoke invite handler ──
+  const handleRevokeInvite = async (inviteId: string) => {
+    try {
+      await api.delete(`/org/invites/${inviteId}`);
+      loadTeamData();
+    } catch {
+      // silently fail
+    }
+  };
+
+  // ── Seat usage bar ──
+  const seatsUsed = usage?.seats_used ?? members.length;
+  const seatsLimit = usage?.seats_limit ?? 5;
+  const seatPct = seatsLimit > 0 ? Math.min((seatsUsed / seatsLimit) * 100, 100) : 0;
+  const seatBarColor = seatPct > 95 ? "#EF4444" : seatPct > 80 ? "#F59E0B" : "#0D9488";
+
+  // ── Format date ──
+  const fmtDate = (d: string | null | undefined) => {
+    if (!d) return "—";
+    try {
+      return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return "—";
+    }
+  };
+
+  // ── Tab definitions ──
+  const TABS: { key: SettingsTab; label: string }[] = [
+    { key: "team", label: "TEAM" },
+    { key: "billing", label: "BILLING" },
+    { key: "org", label: "ORG" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F0F4F8" }}>
+      {/* ── Navy Gradient Header ── */}
+      <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "32px 0 0" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3, color: "rgba(255,255,255,0.4)", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 4 }}>
+            ACCOUNT
+          </p>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: "#FFFFFF", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+            SETTINGS
+          </h1>
+        </div>
+
+        {/* ── Tab Bar ── */}
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px", marginTop: 20 }}>
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            {TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                style={{
+                  padding: "10px 24px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 2,
+                  color: activeTab === key ? "#14B8A6" : "rgba(255,255,255,0.38)",
+                  cursor: "pointer",
+                  transition: "all 0.12s",
+                  border: "none",
+                  borderBottom: `2px solid ${activeTab === key ? "#0D9488" : "transparent"}`,
+                  background: activeTab === key ? "rgba(13,148,136,0.08)" : "transparent",
+                  fontFamily: "'Oswald', sans-serif",
+                  textTransform: "uppercase",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tab Content ── */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px 48px" }}>
+
+        {/* ════════════ TEAM TAB ════════════ */}
+        {activeTab === "team" && (
+          <div>
+            {loading ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
+                <Loader2 size={24} style={{ color: "#0D9488", animation: "spin 1s linear infinite" }} />
+              </div>
+            ) : (
+              <>
+                {/* ── Team Members Table ── */}
+                <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+                  <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                    <Users size={18} style={{ color: "#0D9488" }} />
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                      Team Members
+                    </h2>
+                    <span style={{ fontSize: 11, color: "#8BA4BB", marginLeft: 4 }}>({members.length})</span>
+                  </div>
+
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: "#F8FAFC" }}>
+                          {["NAME", "EMAIL", "ROLE", "JOINED", "LAST ACTIVE", "ACTIONS"].map((h) => (
+                            <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", borderBottom: "1px solid #DDE6EF" }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {members.map((m) => {
+                          const initials = `${(m.first_name || "?")[0]}${(m.last_name || "?")[0]}`.toUpperCase();
+                          const roleBadge = ROLE_BADGE_COLORS[m.hockey_role] || ROLE_BADGE_COLORS.scout;
+                          const isCurrentUser = m.id === user?.id;
+                          return (
+                            <tr key={m.id} style={{ borderBottom: "1px solid #F0F4F8" }}>
+                              {/* NAME */}
+                              <td style={{ padding: "12px 16px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#0D9488", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#FFFFFF", fontFamily: "'Oswald', sans-serif", flexShrink: 0 }}>
+                                    {initials}
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: "#0F2942" }}>
+                                    {m.first_name || ""} {m.last_name || ""}
+                                    {isCurrentUser && <span style={{ fontSize: 10, color: "#8BA4BB", marginLeft: 6 }}>(you)</span>}
+                                  </span>
+                                </div>
+                              </td>
+                              {/* EMAIL */}
+                              <td style={{ padding: "12px 16px", color: "#5A7A95" }}>{m.email}</td>
+                              {/* ROLE */}
+                              <td style={{ padding: "12px 16px" }}>
+                                <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, letterSpacing: 1, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", background: roleBadge.bg, color: roleBadge.text }}>
+                                  {m.hockey_role || "scout"}
+                                </span>
+                              </td>
+                              {/* JOINED */}
+                              <td style={{ padding: "12px 16px", color: "#8BA4BB", fontSize: 12 }}>{fmtDate(m.created_at)}</td>
+                              {/* LAST ACTIVE */}
+                              <td style={{ padding: "12px 16px", color: "#8BA4BB", fontSize: 12 }}>{fmtDate(m.last_login)}</td>
+                              {/* ACTIONS */}
+                              <td style={{ padding: "12px 16px" }}>
+                                {!isCurrentUser && (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    {/* Change Role dropdown */}
+                                    <div style={{ position: "relative" }}>
+                                      <select
+                                        value={m.hockey_role}
+                                        onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                                        disabled={roleChanging === m.id}
+                                        style={{ padding: "4px 24px 4px 8px", fontSize: 11, borderRadius: 6, border: "1px solid #DDE6EF", background: "#FFFFFF", color: "#0F2942", cursor: "pointer", appearance: "none", WebkitAppearance: "none" }}
+                                      >
+                                        {HOCKEY_ROLES.map((r) => (
+                                          <option key={r.value} value={r.value}>{r.label}</option>
+                                        ))}
+                                      </select>
+                                      <ChevronDown size={10} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8BA4BB" }} />
+                                    </div>
+                                    {/* Deactivate */}
+                                    <button
+                                      onClick={() => handleDeactivate(m.id)}
+                                      style={{ padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 6, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.06)", color: "#EF4444", cursor: "pointer", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: 1 }}
+                                    >
+                                      Deactivate
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {members.length === 0 && (
+                          <tr>
+                            <td colSpan={6} style={{ padding: 32, textAlign: "center", color: "#8BA4BB" }}>
+                              No team members found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* ── Seat Usage Bar ── */}
+                <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", padding: 20, marginBottom: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>
+                      Seat Usage
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: seatBarColor }}>
+                      {seatsUsed} / {seatsLimit} seats used
+                    </span>
+                  </div>
+                  <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#DDE6EF" }}>
+                    <div style={{ width: `${seatPct}%`, height: 8, borderRadius: 4, background: seatBarColor, transition: "width 0.3s ease" }} />
+                  </div>
+                </div>
+
+                {/* ── Invite Team Member ── */}
+                <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+                  <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                    <UserPlus size={18} style={{ color: "#0D9488" }} />
+                    <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                      Invite Team Member
+                    </h2>
+                  </div>
+                  <div style={{ padding: 20 }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                      {/* Email */}
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                          Email Address
+                        </label>
+                        <div style={{ position: "relative" }}>
+                          <Mail size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#8BA4BB" }} />
+                          <input
+                            type="email"
+                            value={inviteEmail}
+                            onChange={(e) => setInviteEmail(e.target.value)}
+                            placeholder="colleague@team.com"
+                            style={{ width: "100%", padding: "10px 12px 10px 32px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", outline: "none" }}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleInvite(); }}
+                          />
+                        </div>
+                      </div>
+                      {/* Role */}
+                      <div style={{ minWidth: 160 }}>
+                        <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                          Hockey Role
+                        </label>
+                        <div style={{ position: "relative" }}>
+                          <select
+                            value={inviteRole}
+                            onChange={(e) => setInviteRole(e.target.value)}
+                            style={{ width: "100%", padding: "10px 28px 10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", cursor: "pointer", appearance: "none", WebkitAppearance: "none" }}
+                          >
+                            {HOCKEY_ROLES.map((r) => (
+                              <option key={r.value} value={r.value}>{r.label}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={12} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8BA4BB" }} />
+                        </div>
+                      </div>
+                      {/* Send button */}
+                      <button
+                        onClick={handleInvite}
+                        disabled={inviting || !inviteEmail.trim()}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", fontSize: 11, fontWeight: 700, letterSpacing: 2,
+                          borderRadius: 8, border: "none", background: "#0D9488", color: "#FFFFFF", cursor: inviting || !inviteEmail.trim() ? "not-allowed" : "pointer",
+                          opacity: inviting || !inviteEmail.trim() ? 0.5 : 1, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", transition: "opacity 0.15s",
+                        }}
+                      >
+                        {inviting ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <UserPlus size={13} />}
+                        Send Invite
+                      </button>
+                    </div>
+
+                    {/* Success / Error messages */}
+                    {inviteSuccess && (
+                      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 8, background: "rgba(13,148,136,0.06)", border: "1px solid rgba(13,148,136,0.2)" }}>
+                        <CheckCircle size={14} style={{ color: "#0D9488" }} />
+                        <span style={{ fontSize: 12, color: "#0D9488", fontWeight: 600 }}>{inviteSuccess}</span>
+                        <button onClick={() => setInviteSuccess("")} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", color: "#0D9488" }}><X size={12} /></button>
+                      </div>
+                    )}
+                    {inviteError && (
+                      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                        <AlertTriangle size={14} style={{ color: "#EF4444" }} />
+                        <span style={{ fontSize: 12, color: "#EF4444", fontWeight: 600 }}>{inviteError}</span>
+                        <button onClick={() => setInviteError("")} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", color: "#EF4444" }}><X size={12} /></button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Pending Invites ── */}
+                {invites.length > 0 && (
+                  <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden" }}>
+                    <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                      <Mail size={18} style={{ color: "#E67E22" }} />
+                      <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                        Pending Invites
+                      </h2>
+                      <span style={{ fontSize: 11, color: "#8BA4BB", marginLeft: 4 }}>({invites.length})</span>
+                    </div>
+
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: "#F8FAFC" }}>
+                          {["EMAIL", "ROLE", "SENT", "ACTIONS"].map((h) => (
+                            <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 9, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", borderBottom: "1px solid #DDE6EF" }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invites.map((inv) => {
+                          const roleBadge = ROLE_BADGE_COLORS[inv.hockey_role] || ROLE_BADGE_COLORS.scout;
+                          return (
+                            <tr key={inv.id} style={{ borderBottom: "1px solid #F0F4F8" }}>
+                              <td style={{ padding: "12px 16px", color: "#5A7A95" }}>{inv.email}</td>
+                              <td style={{ padding: "12px 16px" }}>
+                                <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, letterSpacing: 1, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", background: roleBadge.bg, color: roleBadge.text }}>
+                                  {inv.hockey_role}
+                                </span>
+                              </td>
+                              <td style={{ padding: "12px 16px", color: "#8BA4BB", fontSize: 12 }}>{fmtDate(inv.created_at)}</td>
+                              <td style={{ padding: "12px 16px" }}>
+                                <button
+                                  onClick={() => handleRevokeInvite(inv.id)}
+                                  style={{ padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 6, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.06)", color: "#EF4444", cursor: "pointer", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: 1 }}
+                                >
+                                  Revoke
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ════════════ BILLING TAB (Commit 2) ════════════ */}
+        {activeTab === "billing" && (
+          <div style={{ padding: 48, textAlign: "center", color: "#8BA4BB" }}>
+            <Shield size={32} style={{ color: "#DDE6EF", margin: "0 auto 12px" }} />
+            <p style={{ fontSize: 14, fontWeight: 600 }}>Billing settings coming soon</p>
+          </div>
+        )}
+
+        {/* ════════════ ORG TAB (Commit 2) ════════════ */}
+        {activeTab === "org" && (
+          <div style={{ padding: 48, textAlign: "center", color: "#8BA4BB" }}>
+            <Shield size={32} style={{ color: "#DDE6EF", margin: "0 auto 12px" }} />
+            <p style={{ fontSize: 14, fontWeight: 600 }}>Organization settings coming soon</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
