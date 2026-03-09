@@ -1351,7 +1351,11 @@ export default function PlayerDetailPage() {
           {/* ── Stat Bar ── */}
           <div style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,.06)", margin: "14px -24px 0" }}>
             {(() => {
-              const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              const currentSeason = stats.filter(s => s.stat_type === "season").sort((a, b) => {
+                const yearA = parseInt((a.season || "0").slice(0, 4), 10);
+                const yearB = parseInt((b.season || "0").slice(0, 4), 10);
+                return yearB - yearA;
+              })[0];
               if (!currentSeason) return null;
               // Compute PXI composite average from 6 dimension scores
               const pxiMetricsForBar = buildPxiMetrics(playerMetrics, pxrData);
@@ -1609,7 +1613,11 @@ export default function PlayerDetailPage() {
             {/* ── PXI Intelligence Card (Radar + Donut Grid) ── */}
             {intelligence && intelligence.version > 0 && (() => {
               const pxiMetrics = buildPxiMetrics(playerMetrics, pxrData);
-              const gpSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              const gpSeason = stats.filter(s => s.stat_type === "season").sort((a, b) => {
+                const yearA = parseInt((a.season || "0").slice(0, 4), 10);
+                const yearB = parseInt((b.season || "0").slice(0, 4), 10);
+                return yearB - yearA;
+              })[0];
               return (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                 {/* Teal left stripe */}
@@ -2768,7 +2776,11 @@ export default function PlayerDetailPage() {
                 <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Season Snapshot</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {(() => {
-                    const s = stats[0];
+                    const s = stats.filter(st => st.stat_type === "season").sort((a, b) => {
+                      const yearA = parseInt((a.season || "0").slice(0, 4), 10);
+                      const yearB = parseInt((b.season || "0").slice(0, 4), 10);
+                      return yearB - yearA;
+                    })[0] || stats[0];
                     const isGoalie = player?.position?.toUpperCase() === "G";
                     const isFamily = FAMILY_ROLES.has(userRole);
                     if (isGoalie) {
@@ -3587,7 +3599,11 @@ export default function PlayerDetailPage() {
 
             {/* Season Snapshot Card */}
             {(() => {
-              const currentSeason = stats.filter(s => s.stat_type === "season" || s.gp >= 5).sort((a, b) => b.gp - a.gp)[0];
+              const currentSeason = stats.filter(s => s.stat_type === "season").sort((a, b) => {
+                const yearA = parseInt((a.season || "0").slice(0, 4), 10);
+                const yearB = parseInt((b.season || "0").slice(0, 4), 10);
+                return yearB - yearA;
+              })[0];
               if (!currentSeason) return null;
               return (
                 <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
