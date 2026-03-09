@@ -11,7 +11,14 @@ import {
   X,
   CheckCircle,
   AlertTriangle,
+  CreditCard,
+  Building2,
+  Upload,
+  ExternalLink,
+  Save,
+  Info,
 } from "lucide-react";
+import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api, { extractApiError } from "@/lib/api";
 import { getUser } from "@/lib/auth";
@@ -74,6 +81,33 @@ const ROLE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
   parent: { bg: "rgba(236,72,153,0.12)", text: "#EC4899" },
 };
 
+const LEAGUE_OPTIONS: { code: string; label: string; full: string }[] = [
+  // Professional
+  { code: "ahl", label: "AHL", full: "American Hockey League" },
+  { code: "echl", label: "ECHL", full: "ECHL" },
+  { code: "sphl", label: "SPHL", full: "Southern Professional Hockey League" },
+  { code: "pwhl", label: "PWHL", full: "Professional Women's Hockey League" },
+  // Major Junior (CHL)
+  { code: "ohl", label: "OHL", full: "Ontario Hockey League" },
+  { code: "whl", label: "WHL", full: "Western Hockey League" },
+  { code: "lhjmq", label: "QMJHL", full: "Quebec Major Junior Hockey League" },
+  // Junior A
+  { code: "bchl", label: "BCHL", full: "British Columbia Hockey League" },
+  { code: "ajhl", label: "AJHL", full: "Alberta Junior Hockey League" },
+  { code: "sjhl", label: "SJHL", full: "Saskatchewan Junior Hockey League" },
+  { code: "mjhl", label: "MJHL", full: "Manitoba Junior Hockey League" },
+  { code: "ushl", label: "USHL", full: "United States Hockey League" },
+  { code: "ojhl", label: "OJHL", full: "Ontario Junior Hockey League" },
+  { code: "cchl", label: "CCHL", full: "Central Canada Hockey League" },
+  { code: "nojhl", label: "NOJHL", full: "Northern Ontario Junior Hockey League" },
+  { code: "mhl", label: "MHL", full: "Maritime Hockey League" },
+  { code: "gojhl", label: "GOJHL", full: "Greater Ontario Junior Hockey League" },
+  // Junior B
+  { code: "kijhl", label: "KIJHL", full: "Kootenay International Junior Hockey League" },
+  { code: "pjhl", label: "PJHL", full: "Provincial Junior Hockey League" },
+  { code: "vijhl", label: "VIJHL", full: "Vancouver Island Junior Hockey League" },
+];
+
 // ── Main Component ───────────────────────────────────────────────
 export default function SettingsPage() {
   return (
@@ -99,6 +133,14 @@ function SettingsContent() {
   const [inviteError, setInviteError] = useState("");
   const [roleChanging, setRoleChanging] = useState<string | null>(null);
 
+  // ── Org tab state ──
+  const [orgName, setOrgName] = useState("");
+  const [orgLeague, setOrgLeague] = useState("");
+  const [orgTeam, setOrgTeam] = useState("");
+  const [orgSaving, setOrgSaving] = useState(false);
+  const [orgSuccess, setOrgSuccess] = useState("");
+  const [orgError, setOrgError] = useState("");
+
   // ── Load data ──
   const loadTeamData = useCallback(async () => {
     setLoading(true);
@@ -117,6 +159,18 @@ function SettingsContent() {
       } catch {
         // Endpoint may not exist yet — silently skip
         setInvites([]);
+      }
+
+      // Try to load org settings
+      try {
+        const orgRes = await api.get("/admin/org");
+        if (orgRes.data) {
+          setOrgName(orgRes.data.name || orgRes.data.org_name || "");
+          setOrgLeague(orgRes.data.default_league || orgRes.data.league || "");
+          setOrgTeam(orgRes.data.default_team || orgRes.data.team || "");
+        }
+      } catch {
+        // Endpoint may not exist yet — silently skip
       }
     } catch {
       // Handled per-section
@@ -179,6 +233,21 @@ function SettingsContent() {
       loadTeamData();
     } catch {
       // silently fail
+    }
+  };
+
+  // ── Org save handler ──
+  const handleOrgSave = async () => {
+    setOrgSaving(true);
+    setOrgError("");
+    setOrgSuccess("");
+    try {
+      await api.put("/admin/org", { name: orgName, default_league: orgLeague, default_team: orgTeam });
+      setOrgSuccess("Organization settings saved");
+    } catch (err) {
+      setOrgError(extractApiError(err, "Failed to save organization settings"));
+    } finally {
+      setOrgSaving(false);
     }
   };
 
@@ -500,19 +569,277 @@ function SettingsContent() {
           </div>
         )}
 
-        {/* ════════════ BILLING TAB (Commit 2) ════════════ */}
+        {/* ════════════ BILLING TAB ════════════ */}
         {activeTab === "billing" && (
-          <div style={{ padding: 48, textAlign: "center", color: "#8BA4BB" }}>
-            <Shield size={32} style={{ color: "#DDE6EF", margin: "0 auto 12px" }} />
-            <p style={{ fontSize: 14, fontWeight: 600 }}>Billing settings coming soon</p>
+          <div>
+            {/* ── Current Plan Card ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <CreditCard size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Current Plan
+                </h2>
+              </div>
+              <div style={{ padding: 24 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontSize: 32, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: 1 }}>
+                    {usage?.tier || user?.subscription_tier || "Rookie"}
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 600, color: "#0D9488" }}>
+                    {(() => {
+                      const tier = (usage?.tier || user?.subscription_tier || "rookie").toLowerCase();
+                      if (tier === "rookie") return "Free";
+                      if (tier === "novice") return "$25/mo";
+                      if (tier === "pro") return "$49.99/mo";
+                      if (tier === "team") return "$299.99/mo";
+                      if (tier === "aaa_org") return "$499/mo";
+                      return "";
+                    })()}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13, color: "#5A7A95" }}>
+                  <span><strong style={{ color: "#0F2942" }}>{usage?.seats_limit ?? "—"}</strong> seats included</span>
+                  <span><strong style={{ color: "#0F2942" }}>{usage?.reports_limit === -1 ? "Unlimited" : (usage?.reports_limit ?? "—")}</strong> reports/month</span>
+                  <span>Next billing: <strong style={{ color: "#0F2942" }}>—</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Usage Meters ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF" }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Current Month Usage
+                </h2>
+              </div>
+              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Reports meter */}
+                {(() => {
+                  const used = usage?.reports_used ?? 0;
+                  const limit = usage?.reports_limit ?? 0;
+                  const isUnlimited = limit === -1;
+                  const pct = isUnlimited ? 15 : (limit > 0 ? Math.min((used / limit) * 100, 100) : 0);
+                  return (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>Reports</span>
+                        <span style={{ fontSize: 12, color: "#5A7A95" }}>{used} of {isUnlimited ? "Unlimited" : limit} used</span>
+                      </div>
+                      <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#DDE6EF" }}>
+                        <div style={{ width: `${pct}%`, height: 8, borderRadius: 4, background: "#0D9488", transition: "width 0.3s ease" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Bench Talk meter */}
+                {(() => {
+                  const used = usage?.bench_talks_used ?? 0;
+                  const limit = usage?.bench_talks_limit ?? 0;
+                  const isUnlimited = limit === -1;
+                  const pct = isUnlimited ? 15 : (limit > 0 ? Math.min((used / limit) * 100, 100) : 0);
+                  return (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>PXI / Bench Talk</span>
+                        <span style={{ fontSize: 12, color: "#5A7A95" }}>{used} of {isUnlimited ? "Unlimited" : limit} used</span>
+                      </div>
+                      <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#DDE6EF" }}>
+                        <div style={{ width: `${pct}%`, height: 8, borderRadius: 4, background: "#0D9488", transition: "width 0.3s ease" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Seats meter */}
+                {(() => {
+                  const used = usage?.seats_used ?? members.length;
+                  const limit = usage?.seats_limit ?? 5;
+                  const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+                  const barColor = pct > 95 ? "#EF4444" : pct > 80 ? "#F59E0B" : "#0D9488";
+                  return (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>Seats</span>
+                        <span style={{ fontSize: 12, color: "#5A7A95" }}>{used} of {limit} used</span>
+                      </div>
+                      <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#DDE6EF" }}>
+                        <div style={{ width: `${pct}%`, height: 8, borderRadius: 4, background: barColor, transition: "width 0.3s ease" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* ── Action Buttons ── */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {/* Manage Billing — disabled placeholder */}
+              <div style={{ position: "relative" }}>
+                <button
+                  disabled
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                    borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#8BA4BB", cursor: "not-allowed",
+                    fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                  }}
+                  title="Coming soon — Stripe billing portal will be available here"
+                >
+                  <CreditCard size={14} />
+                  Manage Billing
+                  <Info size={12} style={{ marginLeft: 4, opacity: 0.5 }} />
+                </button>
+              </div>
+              {/* Upgrade Plan */}
+              <Link
+                href="/pricing"
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                  borderRadius: 8, border: "none", background: "#0D9488", color: "#FFFFFF", textDecoration: "none",
+                  fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                }}
+              >
+                <ExternalLink size={14} />
+                Upgrade Plan
+              </Link>
+            </div>
           </div>
         )}
 
-        {/* ════════════ ORG TAB (Commit 2) ════════════ */}
+        {/* ════════════ ORG TAB ════════════ */}
         {activeTab === "org" && (
-          <div style={{ padding: 48, textAlign: "center", color: "#8BA4BB" }}>
-            <Shield size={32} style={{ color: "#DDE6EF", margin: "0 auto 12px" }} />
-            <p style={{ fontSize: 14, fontWeight: 600 }}>Organization settings coming soon</p>
+          <div>
+            {/* ── Org Settings Card ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <Building2 size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Organization Settings
+                </h2>
+              </div>
+              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Org Name */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Organization Name
+                  </label>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <input
+                      type="text"
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      placeholder="e.g. Chatham Maroons"
+                      style={{ flex: 1, maxWidth: 400, padding: "10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", outline: "none" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Default League */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Default League
+                  </label>
+                  <div style={{ position: "relative", maxWidth: 400 }}>
+                    <select
+                      value={orgLeague}
+                      onChange={(e) => setOrgLeague(e.target.value)}
+                      style={{ width: "100%", padding: "10px 28px 10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", cursor: "pointer", appearance: "none", WebkitAppearance: "none" }}
+                    >
+                      <option value="">Select a league...</option>
+                      <optgroup label="Professional">
+                        {LEAGUE_OPTIONS.filter((_, i) => i < 4).map((opt) => (
+                          <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Major Junior (CHL)">
+                        {LEAGUE_OPTIONS.filter((_, i) => i >= 4 && i < 7).map((opt) => (
+                          <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Junior A">
+                        {LEAGUE_OPTIONS.filter((_, i) => i >= 7 && i < 17).map((opt) => (
+                          <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Junior B">
+                        {LEAGUE_OPTIONS.filter((_, i) => i >= 17).map((opt) => (
+                          <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    <ChevronDown size={12} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8BA4BB" }} />
+                  </div>
+                </div>
+
+                {/* Default Team */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Default Team
+                  </label>
+                  <input
+                    type="text"
+                    value={orgTeam}
+                    onChange={(e) => setOrgTeam(e.target.value)}
+                    placeholder="e.g. Chatham Maroons"
+                    style={{ maxWidth: 400, width: "100%", padding: "10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", outline: "none" }}
+                  />
+                </div>
+
+                {/* Logo Upload — disabled placeholder */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Organization Logo
+                  </label>
+                  <button
+                    disabled
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                      borderRadius: 8, border: "1.5px dashed #DDE6EF", background: "#F8FAFC", color: "#8BA4BB", cursor: "not-allowed",
+                      fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                    }}
+                    title="Coming soon — R2 storage not yet built"
+                  >
+                    <Upload size={14} />
+                    Upload Logo
+                    <Info size={12} style={{ marginLeft: 4, opacity: 0.5 }} />
+                  </button>
+                  <p style={{ fontSize: 10, color: "#8BA4BB", marginTop: 6, fontStyle: "italic" }}>
+                    Logo upload coming soon — R2 storage not yet built
+                  </p>
+                </div>
+
+                {/* Save button */}
+                <div style={{ paddingTop: 8, borderTop: "1px solid #DDE6EF" }}>
+                  <button
+                    onClick={handleOrgSave}
+                    disabled={orgSaving}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                      borderRadius: 8, border: "none", background: "#0D9488", color: "#FFFFFF", cursor: orgSaving ? "not-allowed" : "pointer",
+                      opacity: orgSaving ? 0.5 : 1, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", transition: "opacity 0.15s",
+                    }}
+                  >
+                    {orgSaving ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={14} />}
+                    Save Settings
+                  </button>
+
+                  {orgSuccess && (
+                    <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 8, background: "rgba(13,148,136,0.06)", border: "1px solid rgba(13,148,136,0.2)" }}>
+                      <CheckCircle size={14} style={{ color: "#0D9488" }} />
+                      <span style={{ fontSize: 12, color: "#0D9488", fontWeight: 600 }}>{orgSuccess}</span>
+                      <button onClick={() => setOrgSuccess("")} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", color: "#0D9488" }}><X size={12} /></button>
+                    </div>
+                  )}
+                  {orgError && (
+                    <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                      <AlertTriangle size={14} style={{ color: "#EF4444" }} />
+                      <span style={{ fontSize: 12, color: "#EF4444", fontWeight: 600 }}>{orgError}</span>
+                      <button onClick={() => setOrgError("")} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", color: "#EF4444" }}><X size={12} /></button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
