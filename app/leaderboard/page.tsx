@@ -98,7 +98,6 @@ interface LeaderboardPlayer {
   gp?: number | null;
   toi_minutes?: number | null;
   score_type?: string | null;
-  pxi_intelligence?: number | null;
 }
 
 interface FilterOptions {
@@ -379,7 +378,6 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PPG" : "PXR Score"}</th>
-                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>}
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title={ppgFallbackMode ? undefined : "League Percentile — ranks this player among all same-position players in their league this season"}>{ppgFallbackMode ? "PXR Status" : "League %"}</th>
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>}
@@ -390,7 +388,7 @@ export default function LeaderboardPage() {
                       <tbody>
                         {byLeaguePlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={ppgFallbackMode ? 5 : 10} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={ppgFallbackMode ? 5 : 9} className="px-4 py-12 text-center text-muted text-sm">
                               No players found for this league and position.
                             </td>
                           </tr>
@@ -432,7 +430,6 @@ export default function LeaderboardPage() {
                                       <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                                   <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                                   <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                   <td className={`px-3 py-2.5 text-xs font-medium ${p.age_modifier != null && p.age_modifier > 0 ? "text-green-600" : p.age_modifier != null && p.age_modifier < 0 ? "text-orange" : "text-muted/40"}`}>
@@ -478,7 +475,6 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="League Percentile — ranks this player among all same-position players in their league this season">League %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
@@ -487,7 +483,7 @@ export default function LeaderboardPage() {
                       <tbody>
                         {byCohortPlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={8} className="px-4 py-12 text-center text-muted text-sm">
                               No players found for this birth year.
                             </td>
                           </tr>
@@ -530,7 +526,6 @@ export default function LeaderboardPage() {
                                     <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                   )}
                                 </td>
-                                <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                                 <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
@@ -565,7 +560,6 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Birth Year</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="League Percentile — ranks this player among all same-position players in their league this season">League %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Gap</th>
@@ -575,7 +569,7 @@ export default function LeaderboardPage() {
                       <tbody>
                         {undervaluedPlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={11} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={10} className="px-4 py-12 text-center text-muted text-sm">
                               No undervalued players found with current data.
                             </td>
                           </tr>
@@ -608,7 +602,6 @@ export default function LeaderboardPage() {
                                   <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">+{Math.round(p.gap)}</td>
@@ -643,7 +636,6 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60" title="AI-generated score from PXI assessment. Requires a generated report.">PXI</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Advantage</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
@@ -652,7 +644,7 @@ export default function LeaderboardPage() {
                       <tbody>
                         {topMoversPlayers.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="px-4 py-12 text-center text-muted text-sm">
+                            <td colSpan={8} className="px-4 py-12 text-center text-muted text-sm">
                               No players with positive age advantage found.
                             </td>
                           </tr>
@@ -684,7 +676,6 @@ export default function LeaderboardPage() {
                                   <span className="ml-1 text-[9px] text-gray-400 font-oswald">{p.gp}GP</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-sm font-bold font-oswald" style={{ color: "#14B8A8" }}>{p.pxi_intelligence != null ? p.pxi_intelligence.toFixed(1) : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-semibold text-green-600">
                                 +{p.age_modifier?.toFixed(1)}
