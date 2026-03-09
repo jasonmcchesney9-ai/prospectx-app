@@ -3721,41 +3721,41 @@ export default function PlayerDetailPage() {
               </div>
             </div>
 
+            {/* Training Volume Widget — shown on Dev Plan tab */}
+            {activeTab === "player" && drillLogData && drillLogData.summary.total_season > 0 && (
+              <section className="print:hidden" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px" }}>
+                <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-3 bg-teal/5 rounded-lg">
+                    <p className="text-lg font-bold text-navy">{drillLogData.summary.this_week}</p>
+                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Week</p>
+                  </div>
+                  <div className="text-center p-3 bg-teal/5 rounded-lg">
+                    <p className="text-lg font-bold text-navy">{drillLogData.summary.this_month}</p>
+                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Month</p>
+                  </div>
+                  <div className="text-center p-3 bg-teal/5 rounded-lg">
+                    <p className="text-lg font-bold text-navy">{drillLogData.summary.total_season}</p>
+                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Season Total</p>
+                  </div>
+                </div>
+                {drillLogData.logs.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Recent Drills</p>
+                    {drillLogData.logs.slice(0, 5).map((log) => (
+                      <div key={log.id} className="flex items-center justify-between text-xs py-1">
+                        <span className="text-navy truncate">{log.drill_name}</span>
+                        <span className="text-muted shrink-0 ml-2">{new Date(log.logged_at).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
           </div>
 
         </div>
-
-        {/* Training Volume Widget — shown on Dev Plan tab */}
-        {activeTab === "player" && drillLogData && drillLogData.summary.total_season > 0 && (
-          <section className="print:hidden" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px" }}>
-            <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 bg-teal/5 rounded-lg">
-                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_week}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Week</p>
-              </div>
-              <div className="text-center p-3 bg-teal/5 rounded-lg">
-                <p className="text-lg font-bold text-navy">{drillLogData.summary.this_month}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Month</p>
-              </div>
-              <div className="text-center p-3 bg-teal/5 rounded-lg">
-                <p className="text-lg font-bold text-navy">{drillLogData.summary.total_season}</p>
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Season Total</p>
-              </div>
-            </div>
-            {drillLogData.logs.length > 0 && (
-              <div className="mt-3 space-y-1">
-                <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Recent Drills</p>
-                {drillLogData.logs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="flex items-center justify-between text-xs py-1">
-                    <span className="text-navy truncate">{log.drill_name}</span>
-                    <span className="text-muted shrink-0 ml-2">{new Date(log.logged_at).toLocaleDateString()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
 
         {/* Print Footer */}
         <div className="print-footer mt-8 pt-4 border-t border-navy/10 justify-center items-center gap-2 text-xs text-muted">
