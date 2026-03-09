@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, TrendingUp } from "lucide-react";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -214,12 +214,13 @@ export default function SeasonProjectionPage() {
 
           {/* Empty state */}
           {!loading && !error && sortedResults.length === 0 && (
-            <div style={{ textAlign: "center", padding: "60px 0", color: "#6B7280" }}>
-              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 14, fontWeight: 600, letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 8 }}>
-                No projection data available
+            <div style={{ textAlign: "center", padding: "60px 0", color: "#5A7A95" }}>
+              <TrendingUp size={48} style={{ color: "#0F2942", opacity: 0.25, margin: "0 auto 16px" }} />
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "#0F2942", marginBottom: 8 }}>
+                Projections Updating
               </div>
-              <div style={{ fontSize: 13, fontFamily: "'Source Serif 4', serif" }}>
-                Run a Monte Carlo simulation for {leagueInfo.label} from the admin panel first.
+              <div style={{ fontSize: 13, fontFamily: "'Source Serif 4', serif", maxWidth: 420, margin: "0 auto", lineHeight: 1.6 }}>
+                Season projection data for this league is being calculated. Results will be available after the next scheduled update, or contact your administrator to run a manual simulation.
               </div>
             </div>
           )}
