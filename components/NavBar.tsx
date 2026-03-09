@@ -359,8 +359,12 @@ export default function NavBar() {
             {/* Org Hub dropdown (PRO only) */}
             {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
 
-            {/* League Hub — direct link (all roles except PLAYER) */}
-            {roleGroup !== "PLAYER" && (roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "League Hub")) && (
+            {/* League Hub dropdown (all roles except PLAYER and FAMILY) */}
+            {roleGroup !== "PLAYER" && roleGroup !== "FAMILY" && (roleGroup === "PRO" || navConfig.directLinks.some(l => l.label === "League Hub")) && (
+              <LeagueHubDropdown pathname={pathname} />
+            )}
+            {/* League Hub — direct link for FAMILY (no Season Projection) */}
+            {roleGroup === "FAMILY" && (
               <NavLink href="/leagues" label="League Hub" icon={Trophy} pathname={pathname} />
             )}
 
@@ -665,7 +669,7 @@ export default function NavBar() {
             </div>
           )}
 
-          {/* League Hub — direct link (not for PLAYER) */}
+          {/* League Hub + Season Projection (not for PLAYER) */}
           {roleGroup !== "PLAYER" && (
           <div className="border-t border-white/10 mt-1 pt-1">
             <Link
@@ -678,6 +682,18 @@ export default function NavBar() {
               <Trophy size={16} />
               League Hub
             </Link>
+            {roleGroup !== "FAMILY" && (
+              <Link
+                href="/season-projection"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                  pathname.startsWith("/season-projection") ? "text-teal" : "text-white/70"
+                }`}
+              >
+                <TrendingUp size={16} />
+                Season Projection
+              </Link>
+            )}
           </div>
           )}
 
@@ -1131,6 +1147,69 @@ function CoachHubDropdown({ pathname }: { pathname: string }) {
       {open && (
         <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
           {COACH_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const LEAGUE_HUB_ITEMS: { href: string; label: string; icon: React.ElementType }[] = [
+  { href: "/leagues", label: "League Hub", icon: Trophy },
+  { href: "/season-projection", label: "Season Projection", icon: TrendingUp },
+];
+
+function LeagueHubDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = LEAGUE_HUB_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "hover:bg-white/5 hover:text-white"
+        }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
+      >
+        <Trophy size={16} />
+        League Hub
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {LEAGUE_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
