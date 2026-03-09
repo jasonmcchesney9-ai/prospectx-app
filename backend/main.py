@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 import uuid
+import random
 import statistics
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -4848,7 +4849,39 @@ def init_db():
         conn.rollback()
         logger.warning("ht_team_stats table DDL skipped (already exists or PG error): %s", e)
 
-    logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats)")
+    # ── monte_carlo_results ──
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS monte_carlo_results (
+                id TEXT PRIMARY KEY,
+                league TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                team_name TEXT NOT NULL,
+                team_id INTEGER,
+                current_points INTEGER DEFAULT 0,
+                current_gp INTEGER DEFAULT 0,
+                projected_points_p50 REAL DEFAULT 0,
+                projected_points_p10 REAL DEFAULT 0,
+                projected_points_p90 REAL DEFAULT 0,
+                playoff_pct REAL DEFAULT 0,
+                avg_final_rank REAL DEFAULT 0,
+                best_rank INTEGER DEFAULT 0,
+                worst_rank INTEGER DEFAULT 0,
+                simulations INTEGER DEFAULT 10000,
+                confidence TEXT DEFAULT 'medium',
+                remaining_games INTEGER DEFAULT 0,
+                total_games INTEGER DEFAULT 0,
+                calculated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mc_results_league ON monte_carlo_results(league)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_mc_results_league_team ON monte_carlo_results(league, season_id, team_id)")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.warning("monte_carlo_results table DDL skipped (already exists or PG error): %s", e)
+
+    logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats, monte_carlo_results)")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -10672,17 +10705,230 @@ def sync_hockeytech_data_cron():
                 logger.error("[HT SYNC CRON] %s failed: %s", code, e)
                 continue
 
+        # ── Run Monte Carlo projections for each synced league ──
+        mc_leagues = 0
+        for code in synced_leagues:
+            try:
+                sid_row = conn.execute(
+                    "SELECT DISTINCT season_id FROM ht_team_stats WHERE league = ? LIMIT 1",
+                    (code,),
+                ).fetchone()
+                if sid_row:
+                    calculate_monte_carlo(conn, code, sid_row["season_id"], simulations=10000)
+                    mc_leagues += 1
+            except Exception as mc_err:
+                logger.warning("[HT SYNC CRON] Monte Carlo failed for %s: %s", code, mc_err)
+
         conn.close()
-        return {"leagues": synced_leagues, "total_games": total_games, "total_teams": total_teams}
+        return {"leagues": synced_leagues, "total_games": total_games, "total_teams": total_teams, "mc_leagues": mc_leagues}
 
     try:
         result = asyncio.run(_run_sync())
         duration = _time.time() - start
-        logger.info("[HT SYNC CRON] Complete: %d leagues, %d games, %d teams in %.2fs",
-                    len(result["leagues"]), result["total_games"], result["total_teams"], duration)
+        logger.info("[HT SYNC CRON] Complete: %d leagues, %d games, %d teams, %d MC projections in %.2fs",
+                    len(result["leagues"]), result["total_games"], result["total_teams"], result.get("mc_leagues", 0), duration)
     except Exception as e:
         duration = _time.time() - start
         logger.error("[HT SYNC CRON] Failed after %.2fs: %s", duration, e)
+
+
+def calculate_monte_carlo(conn, league: str, season_id: str, simulations: int = 10000) -> list:
+    """Monte Carlo season projection engine.
+
+    Uses points_pct from ht_team_stats as win probability model.
+    Simulates remaining games from game_schedule, tallies final standings,
+    and records playoff qualification across all simulations.
+    """
+    import time as _mc_time
+    start = _mc_time.time()
+    logger.info("[MONTE CARLO] Starting %d simulations for %s (season %s)", simulations, league, season_id)
+
+    # ── Load current team standings ──
+    team_rows = conn.execute(
+        """SELECT team_name, team_id, gp, wins, losses, otl, points, points_pct
+           FROM ht_team_stats
+           WHERE league = ?
+           ORDER BY points DESC""",
+        (league,),
+    ).fetchall()
+
+    if not team_rows:
+        logger.warning("[MONTE CARLO] No team stats found for %s — aborting", league)
+        return []
+
+    # Build team lookup: team_name → {stats}
+    teams = {}
+    for t in team_rows:
+        name = t["team_name"]
+        teams[name] = {
+            "team_id": t["team_id"],
+            "gp": t["gp"] or 0,
+            "wins": t["wins"] or 0,
+            "losses": t["losses"] or 0,
+            "otl": t["otl"] or 0,
+            "current_points": t["points"] or 0,
+            "points_pct": t["points_pct"] or 0.0,
+        }
+
+    # ── Load remaining games ──
+    remaining_games = conn.execute(
+        """SELECT home_team, away_team
+           FROM game_schedule
+           WHERE league = ? AND status NOT IN ('Final', 'Final OT', 'Final SO')
+           ORDER BY game_date""",
+        (league,),
+    ).fetchall()
+
+    remaining_count = len(remaining_games)
+    total_schedule = conn.execute(
+        "SELECT COUNT(*) FROM game_schedule WHERE league = ?", (league,),
+    ).fetchone()[0]
+
+    logger.info("[MONTE CARLO] %s: %d teams, %d remaining games (of %d total)",
+                league, len(teams), remaining_count, total_schedule)
+
+    # ── Determine playoff cutoff ──
+    # Standard: top 8 qualify. Adjust for smaller leagues.
+    num_teams = len(teams)
+    playoff_spots = min(8, max(4, num_teams // 2))
+
+    # ── Run simulations ──
+    # Track per-team: list of final points, list of final rank, playoff count
+    sim_points = {name: [] for name in teams}
+    sim_ranks = {name: [] for name in teams}
+    playoff_counts = {name: 0 for name in teams}
+
+    for _ in range(simulations):
+        # Start with current points
+        trial_points = {name: t["current_points"] for name, t in teams.items()}
+
+        # Simulate each remaining game
+        for game in remaining_games:
+            home = game["home_team"]
+            away = game["away_team"]
+
+            # Get points_pct for each team (default 0.5 if unknown)
+            home_pct = teams.get(home, {}).get("points_pct", 0.5)
+            away_pct = teams.get(away, {}).get("points_pct", 0.5)
+
+            # Normalize to head-to-head probability
+            total_pct = home_pct + away_pct
+            if total_pct == 0:
+                home_win_prob = 0.5
+            else:
+                home_win_prob = home_pct / total_pct
+
+            # Add small home-ice advantage (3%)
+            home_win_prob = min(0.95, home_win_prob + 0.03)
+
+            # Determine outcome: regulation win, OT win, OT loss
+            roll = random.random()
+            ot_probability = 0.23  # ~23% of NHL/OHL games go to OT
+
+            if roll < home_win_prob * (1 - ot_probability):
+                # Home regulation win: home +2, away +0
+                if home in trial_points:
+                    trial_points[home] += 2
+            elif roll < home_win_prob:
+                # Home OT win: home +2, away +1
+                if home in trial_points:
+                    trial_points[home] += 2
+                if away in trial_points:
+                    trial_points[away] += 1
+            elif roll < home_win_prob + (1 - home_win_prob) * (1 - ot_probability):
+                # Away regulation win: away +2, home +0
+                if away in trial_points:
+                    trial_points[away] += 2
+            else:
+                # Away OT win: away +2, home +1
+                if away in trial_points:
+                    trial_points[away] += 2
+                if home in trial_points:
+                    trial_points[home] += 1
+
+        # Rank teams by points (desc), then wins (desc) as tiebreak
+        ranked = sorted(trial_points.items(), key=lambda x: (x[1], teams.get(x[0], {}).get("wins", 0)), reverse=True)
+
+        for rank_idx, (name, pts) in enumerate(ranked):
+            sim_points[name].append(pts)
+            sim_ranks[name].append(rank_idx + 1)
+            if rank_idx < playoff_spots:
+                playoff_counts[name] += 1
+
+    # ── Calculate result statistics per team ──
+    now = datetime.utcnow().isoformat()
+    results = []
+
+    # Determine confidence level based on remaining games
+    avg_gp = sum(t["gp"] for t in teams.values()) / max(1, len(teams))
+    if remaining_count == 0:
+        confidence = "final"
+    elif avg_gp >= 20 and remaining_count < total_schedule * 0.3:
+        confidence = "high"
+    elif avg_gp >= 10:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    # Clear old results for this league
+    conn.execute("DELETE FROM monte_carlo_results WHERE league = ?", (league,))
+
+    for name, t_data in teams.items():
+        pts_list = sim_points[name]
+        rank_list = sim_ranks[name]
+
+        pts_sorted = sorted(pts_list)
+        p10 = pts_sorted[int(simulations * 0.10)]
+        p50 = pts_sorted[int(simulations * 0.50)]
+        p90 = pts_sorted[int(simulations * 0.90)]
+
+        playoff_pct = round((playoff_counts[name] / simulations) * 100, 1)
+        avg_rank = round(sum(rank_list) / len(rank_list), 1)
+        best_rank = min(rank_list)
+        worst_rank = max(rank_list)
+
+        row_id = gen_id()
+        conn.execute(
+            """INSERT INTO monte_carlo_results
+               (id, league, season_id, team_name, team_id,
+                current_points, current_gp, projected_points_p50,
+                projected_points_p10, projected_points_p90,
+                playoff_pct, avg_final_rank, best_rank, worst_rank,
+                simulations, confidence, remaining_games, total_games, calculated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row_id, league, season_id, name, t_data["team_id"],
+                t_data["current_points"], t_data["gp"], p50,
+                p10, p90, playoff_pct, avg_rank, best_rank, worst_rank,
+                simulations, confidence, remaining_count, total_schedule, now,
+            ),
+        )
+
+        results.append({
+            "team_name": name,
+            "team_id": t_data["team_id"],
+            "current_points": t_data["current_points"],
+            "current_gp": t_data["gp"],
+            "projected_points_p50": p50,
+            "projected_points_p10": p10,
+            "projected_points_p90": p90,
+            "playoff_pct": playoff_pct,
+            "avg_final_rank": avg_rank,
+            "best_rank": best_rank,
+            "worst_rank": worst_rank,
+            "confidence": confidence,
+            "remaining_games": remaining_count,
+        })
+
+    conn.commit()
+
+    duration = _mc_time.time() - start
+    logger.info("[MONTE CARLO] %s complete: %d teams, %d simulations in %.2fs (confidence=%s)",
+                league, len(results), simulations, duration, confidence)
+
+    # Sort by playoff_pct descending
+    results.sort(key=lambda x: x["playoff_pct"], reverse=True)
+    return results
 
 
 # ── APScheduler: Nightly PXR recalculation (2:00 AM UTC) + hourly report cleanup ────
@@ -30044,6 +30290,81 @@ async def league_hub_team_stats(league: str, token_data: dict = Depends(verify_t
     except Exception as e:
         logger.warning("[League Hub] live team-stats fallback failed for %s: %s", league, e)
     return []
+
+
+@app.post("/admin/monte-carlo/run/{league}")
+async def admin_monte_carlo_run(league: str, token_data: dict = Depends(verify_token)):
+    """Trigger Monte Carlo season projection for a league. Admin endpoint."""
+    conn = get_db()
+    try:
+        # Get current season_id from ht_team_stats
+        row = conn.execute(
+            "SELECT DISTINCT season_id FROM ht_team_stats WHERE league = ? LIMIT 1",
+            (league,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"No team stats found for league '{league}'. Run HT sync first.")
+        season_id = row["season_id"]
+
+        results = calculate_monte_carlo(conn, league, season_id, simulations=10000)
+        return {
+            "league": league,
+            "season_id": season_id,
+            "teams": len(results),
+            "simulations": 10000,
+            "results": results,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/league-hub/{league}/monte-carlo")
+async def league_hub_monte_carlo(league: str, token_data: dict = Depends(verify_token)):
+    """Return stored Monte Carlo projection results for a league."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT team_name, team_id, current_points, current_gp,
+                      projected_points_p50, projected_points_p10, projected_points_p90,
+                      playoff_pct, avg_final_rank, best_rank, worst_rank,
+                      simulations, confidence, remaining_games, total_games, calculated_at
+               FROM monte_carlo_results
+               WHERE league = ?
+               ORDER BY playoff_pct DESC""",
+            (league,),
+        ).fetchall()
+
+        if not rows:
+            return {"league": league, "results": [], "calculated_at": None}
+
+        results = []
+        for r in rows:
+            results.append({
+                "team_name": r["team_name"],
+                "team_id": r["team_id"],
+                "current_points": r["current_points"],
+                "current_gp": r["current_gp"],
+                "projected_points_p50": r["projected_points_p50"],
+                "projected_points_p10": r["projected_points_p10"],
+                "projected_points_p90": r["projected_points_p90"],
+                "playoff_pct": r["playoff_pct"],
+                "avg_final_rank": r["avg_final_rank"],
+                "best_rank": r["best_rank"],
+                "worst_rank": r["worst_rank"],
+                "simulations": r["simulations"],
+                "confidence": r["confidence"],
+                "remaining_games": r["remaining_games"],
+                "total_games": r["total_games"],
+                "calculated_at": r["calculated_at"],
+            })
+
+        return {
+            "league": league,
+            "results": results,
+            "calculated_at": rows[0]["calculated_at"] if rows else None,
+        }
+    finally:
+        conn.close()
 
 
 @app.get("/admin/pxr/leaderboard")
