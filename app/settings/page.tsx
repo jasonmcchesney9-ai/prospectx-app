@@ -17,6 +17,12 @@ import {
   ExternalLink,
   Save,
   Info,
+  User,
+  Lock,
+  Bell,
+  Eye,
+  EyeOff,
+  Calendar,
 } from "lucide-react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -57,7 +63,7 @@ interface UsageData {
 }
 
 // ── Constants ────────────────────────────────────────────────────
-type SettingsTab = "team" | "billing" | "org";
+type SettingsTab = "account" | "team" | "billing" | "org";
 
 const HOCKEY_ROLES = [
   { value: "scout", label: "Scout" },
@@ -121,7 +127,7 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const user = getUser();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("team");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("account");
 
   // ── Team tab state ──
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -134,6 +140,21 @@ function SettingsContent() {
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [roleChanging, setRoleChanging] = useState<string | null>(null);
+
+  // ── Account tab state ──
+  const [displayName, setDisplayName] = useState(`${user?.first_name || ""} ${user?.last_name || ""}`.trim());
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [prefLeague, setPrefLeague] = useState(user?.preferred_league || "");
+  const [emailDigest, setEmailDigest] = useState<"daily" | "weekly" | "off">("weekly");
+  const [pxrAlerts, setPxrAlerts] = useState(true);
+  const [teamOutcomeUpdates, setTeamOutcomeUpdates] = useState(true);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
 
   // ── Org tab state ──
   const [orgName, setOrgName] = useState("");
@@ -184,6 +205,20 @@ function SettingsContent() {
   useEffect(() => {
     loadTeamData();
   }, [loadTeamData]);
+
+  // ── Load notification prefs from localStorage ──
+  useEffect(() => {
+    try {
+      const savedDigest = localStorage.getItem("pxEmailDigest");
+      if (savedDigest === "daily" || savedDigest === "weekly" || savedDigest === "off") setEmailDigest(savedDigest);
+      const savedPxr = localStorage.getItem("pxPxrAlerts");
+      if (savedPxr !== null) setPxrAlerts(savedPxr === "true");
+      const savedTeam = localStorage.getItem("pxTeamOutcomeUpdates");
+      if (savedTeam !== null) setTeamOutcomeUpdates(savedTeam === "true");
+      const savedLeague = localStorage.getItem("pxPrefLeague");
+      if (savedLeague) setPrefLeague(savedLeague);
+    } catch { /* noop */ }
+  }, []);
 
   // ── Invite handler ──
   const handleInvite = async () => {
@@ -271,6 +306,7 @@ function SettingsContent() {
 
   // ── Tab definitions ──
   const TABS: { key: SettingsTab; label: string }[] = [
+    { key: "account", label: "ACCOUNT" },
     { key: "team", label: "TEAM" },
     { key: "billing", label: "BILLING" },
     { key: "org", label: "ORG" },
@@ -320,6 +356,391 @@ function SettingsContent() {
 
       {/* ── Tab Content ── */}
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px 48px" }}>
+
+        {/* ════════════ ACCOUNT TAB ════════════ */}
+        {activeTab === "account" && (
+          <div>
+            {/* ── Profile Section ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <User size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Profile
+                </h2>
+              </div>
+              <div style={{ padding: 24 }}>
+                <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  {/* Avatar — initials circle */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, minWidth: 80 }}>
+                    <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#0D9488", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, color: "#FFFFFF", fontFamily: "'Oswald', sans-serif" }}>
+                      {`${(user?.first_name || "?")[0]}${(user?.last_name || "?")[0]}`.toUpperCase()}
+                    </div>
+                    <button
+                      disabled
+                      title="Coming soon — photo upload not yet available"
+                      style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#8BA4BB", cursor: "not-allowed", border: "none", background: "none", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase" }}
+                    >
+                      Upload Photo
+                    </button>
+                  </div>
+
+                  {/* Profile fields */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16, minWidth: 260 }}>
+                    {/* Display Name */}
+                    <div>
+                      <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                        Display Name
+                      </label>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <input
+                          type="text"
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          placeholder="Your name"
+                          style={{ flex: 1, maxWidth: 320, padding: "10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", outline: "none" }}
+                        />
+                        <button
+                          disabled
+                          title="Coming soon — PUT /users/me endpoint not yet available"
+                          style={{
+                            display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                            borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#8BA4BB", cursor: "not-allowed",
+                            fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                          }}
+                        >
+                          {profileSaving ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={13} />}
+                          Save
+                          <Info size={11} style={{ marginLeft: 2, opacity: 0.5 }} />
+                        </button>
+                      </div>
+                      {profileSuccess && (
+                        <div style={{ marginTop: 8, fontSize: 12, color: "#0D9488", fontWeight: 600 }}>{profileSuccess}</div>
+                      )}
+                      {profileError && (
+                        <div style={{ marginTop: 8, fontSize: 12, color: "#EF4444", fontWeight: 600 }}>{profileError}</div>
+                      )}
+                    </div>
+
+                    {/* Email (read-only) */}
+                    <div>
+                      <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                        Email
+                      </label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input
+                          type="email"
+                          value={user?.email || ""}
+                          readOnly
+                          style={{ flex: 1, maxWidth: 320, padding: "10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F0F4F8", color: "#5A7A95", outline: "none", cursor: "default" }}
+                        />
+                        <span title="Contact support to change your email" style={{ cursor: "help" }}>
+                          <Info size={14} style={{ color: "#8BA4BB" }} />
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Role Badge */}
+                    <div>
+                      <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                        Hockey Role
+                      </label>
+                      <span style={{
+                        display: "inline-block", padding: "5px 16px", borderRadius: 20, fontSize: 12, fontWeight: 700, letterSpacing: 1.5,
+                        fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                        background: (ROLE_BADGE_COLORS[user?.hockey_role || "scout"] || ROLE_BADGE_COLORS.scout).bg,
+                        color: (ROLE_BADGE_COLORS[user?.hockey_role || "scout"] || ROLE_BADGE_COLORS.scout).text,
+                      }}>
+                        {user?.hockey_role || "Scout"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Preferences Section ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <Bell size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Preferences
+                </h2>
+              </div>
+              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Preferred League */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Preferred League
+                  </label>
+                  <div style={{ position: "relative", maxWidth: 400 }}>
+                    <select
+                      value={prefLeague}
+                      onChange={(e) => {
+                        setPrefLeague(e.target.value);
+                        try { localStorage.setItem("pxPrefLeague", e.target.value); } catch { /* noop */ }
+                      }}
+                      style={{ width: "100%", padding: "10px 28px 10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#0F2942", cursor: "pointer", appearance: "none", WebkitAppearance: "none" }}
+                    >
+                      <option value="">Select a league...</option>
+                      {LEAGUE_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>{opt.label} — {opt.full}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={12} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8BA4BB" }} />
+                  </div>
+                </div>
+
+                {/* Notification Preferences */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 10 }}>
+                    Notifications
+                  </label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* Email Digest */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 420 }}>
+                      <span style={{ fontSize: 13, color: "#0F2942", fontFamily: "'Source Serif 4', serif" }}>Email Digest</span>
+                      <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+                        {(["daily", "weekly", "off"] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            onClick={() => {
+                              setEmailDigest(opt);
+                              try { localStorage.setItem("pxEmailDigest", opt); } catch { /* noop */ }
+                            }}
+                            style={{
+                              padding: "6px 14px", fontSize: 11, fontWeight: 700, letterSpacing: 1, border: "none",
+                              background: emailDigest === opt ? "#0D9488" : "#F8FAFC",
+                              color: emailDigest === opt ? "#FFFFFF" : "#5A7A95",
+                              cursor: "pointer", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                            }}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* PXR Report Alerts */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 420 }}>
+                      <span style={{ fontSize: 13, color: "#0F2942", fontFamily: "'Source Serif 4', serif" }}>New PXR Report Alerts</span>
+                      <button
+                        onClick={() => {
+                          const next = !pxrAlerts;
+                          setPxrAlerts(next);
+                          try { localStorage.setItem("pxPxrAlerts", String(next)); } catch { /* noop */ }
+                        }}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s",
+                          background: pxrAlerts ? "#0D9488" : "#DDE6EF",
+                        }}
+                      >
+                        <div style={{
+                          width: 18, height: 18, borderRadius: "50%", background: "#FFFFFF", position: "absolute", top: 3, transition: "left 0.2s",
+                          left: pxrAlerts ? 23 : 3, boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* Team Outcome Updates */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 420 }}>
+                      <span style={{ fontSize: 13, color: "#0F2942", fontFamily: "'Source Serif 4', serif" }}>Team Outcome Updates</span>
+                      <button
+                        onClick={() => {
+                          const next = !teamOutcomeUpdates;
+                          setTeamOutcomeUpdates(next);
+                          try { localStorage.setItem("pxTeamOutcomeUpdates", String(next)); } catch { /* noop */ }
+                        }}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s",
+                          background: teamOutcomeUpdates ? "#0D9488" : "#DDE6EF",
+                        }}
+                      >
+                        <div style={{
+                          width: 18, height: 18, borderRadius: "50%", background: "#FFFFFF", position: "absolute", top: 3, transition: "left 0.2s",
+                          left: teamOutcomeUpdates ? 23 : 3, boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                        }} />
+                      </button>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 10, color: "#8BA4BB", marginTop: 10, fontStyle: "italic" }}>
+                    Notification preferences are saved locally. Backend integration coming soon.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Usage Section ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <Calendar size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  My Activity This Month
+                </h2>
+              </div>
+              <div style={{ padding: 24 }}>
+                <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 20 }}>
+                  {/* Reports Used */}
+                  {(() => {
+                    const used = usage?.reports_used ?? user?.monthly_reports_used ?? 0;
+                    const limit = usage?.reports_limit ?? -1;
+                    const isUnlimited = limit === -1;
+                    const pct = isUnlimited ? Math.min(used * 2, 100) : (limit > 0 ? Math.min((used / limit) * 100, 100) : 0);
+                    return (
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>Reports</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#0D9488", fontFamily: "'Oswald', sans-serif" }}>
+                            {used} / {isUnlimited ? "∞" : limit}
+                          </span>
+                        </div>
+                        <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#DDE6EF" }}>
+                          <div style={{ width: `${pct}%`, height: 8, borderRadius: 4, background: "#0D9488", transition: "width 0.3s ease" }} />
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Bench Talks Used */}
+                  {(() => {
+                    const used = usage?.bench_talks_used ?? user?.monthly_bench_talks_used ?? 0;
+                    const limit = usage?.bench_talks_limit ?? -1;
+                    const isUnlimited = limit === -1;
+                    const pct = isUnlimited ? Math.min(used, 100) : (limit > 0 ? Math.min((used / limit) * 100, 100) : 0);
+                    return (
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>Bench Talks</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#0D9488", fontFamily: "'Oswald', sans-serif" }}>
+                            {used} / {isUnlimited ? "∞" : limit}
+                          </span>
+                        </div>
+                        <div style={{ width: "100%", height: 8, borderRadius: 4, background: "#DDE6EF" }}>
+                          <div style={{ width: `${pct}%`, height: 8, borderRadius: 4, background: "#0D9488", transition: "width 0.3s ease" }} />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Member since / Last login */}
+                <div style={{ display: "flex", gap: 32, flexWrap: "wrap", paddingTop: 16, borderTop: "1px solid #DDE6EF" }}>
+                  <div>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase" }}>Member Since</span>
+                    <div style={{ fontSize: 13, color: "#0F2942", fontFamily: "'Source Serif 4', serif", marginTop: 4 }}>
+                      {(() => {
+                        const member = members.find(m => m.id === user?.id);
+                        return member ? fmtDate(member.created_at) : "—";
+                      })()}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase" }}>Last Login</span>
+                    <div style={{ fontSize: 13, color: "#0F2942", fontFamily: "'Source Serif 4', serif", marginTop: 4 }}>
+                      {(() => {
+                        const member = members.find(m => m.id === user?.id);
+                        return member?.last_login ? fmtDate(member.last_login) : "—";
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Password Section ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <Lock size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Change Password
+                </h2>
+              </div>
+              <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, maxWidth: 400 }}>
+                {/* Current Password */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Current Password
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showCurrentPw ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="••••••••"
+                      disabled
+                      style={{ width: "100%", padding: "10px 36px 10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F0F4F8", color: "#8BA4BB", outline: "none", cursor: "not-allowed" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPw(!showCurrentPw)}
+                      style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "#8BA4BB", padding: 0 }}
+                    >
+                      {showCurrentPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* New Password */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    New Password
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={showNewPw ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      disabled
+                      style={{ width: "100%", padding: "10px 36px 10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F0F4F8", color: "#8BA4BB", outline: "none", cursor: "not-allowed" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPw(!showNewPw)}
+                      style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "#8BA4BB", padding: 0 }}
+                    >
+                      {showNewPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label style={{ display: "block", fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "#8BA4BB", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", marginBottom: 6 }}>
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    disabled
+                    style={{ width: "100%", padding: "10px 12px", fontSize: 13, borderRadius: 8, border: "1px solid #DDE6EF", background: "#F0F4F8", color: "#8BA4BB", outline: "none", cursor: "not-allowed" }}
+                  />
+                </div>
+
+                {/* Save button — disabled */}
+                <div style={{ paddingTop: 8, borderTop: "1px solid #DDE6EF" }}>
+                  <button
+                    disabled
+                    title="Coming soon — POST /auth/change-password endpoint not yet available"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                      borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#8BA4BB", cursor: "not-allowed",
+                      fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                    }}
+                  >
+                    <Lock size={14} />
+                    Change Password
+                    <Info size={12} style={{ marginLeft: 4, opacity: 0.5 }} />
+                  </button>
+                  <p style={{ fontSize: 10, color: "#8BA4BB", marginTop: 8, fontStyle: "italic" }}>
+                    Password change coming soon — endpoint not yet built
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ════════════ TEAM TAB ════════════ */}
         {activeTab === "team" && (
