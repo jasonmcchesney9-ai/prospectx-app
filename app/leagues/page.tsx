@@ -36,7 +36,7 @@ import type {
   HTGame,
 } from "@/types/api";
 
-type Tab = "standings" | "player-stats" | "schedule" | "teams";
+type Tab = "standings" | "scores" | "schedule" | "player-stats" | "team-stats" | "teams";
 
 const LEAGUE_OPTIONS: { code: string; label: string; full: string; logo?: string }[] = [
   // Professional
@@ -165,12 +165,14 @@ export default function LeagueHubPage() {
   const isLimitedRole = currentUser?.hockey_role === "player" || currentUser?.hockey_role === "parent";
   const allTabs: { key: Tab; label: string; icon: typeof Trophy }[] = [
     { key: "standings", label: "Standings", icon: Trophy },
+    { key: "scores", label: "Scores", icon: BarChart3 },
+    { key: "schedule", label: "Schedule", icon: Calendar },
     { key: "player-stats", label: "Player Stats", icon: TrendingUp },
-    { key: "schedule", label: "Live Schedule", icon: Calendar },
-    { key: "teams", label: "Teams", icon: Shield },
+    { key: "team-stats", label: "Team Stats", icon: Shield },
+    { key: "teams", label: "Teams", icon: Users },
   ];
   const tabs = isLimitedRole
-    ? allTabs.filter((t) => t.key === "standings" || t.key === "schedule")
+    ? allTabs.filter((t) => t.key === "standings" || t.key === "scores" || t.key === "schedule")
     : allTabs;
 
   return (
@@ -252,18 +254,24 @@ export default function LeagueHubPage() {
         )}
 
         {/* Tab Bar */}
-        <div className="flex gap-1 border-b border-teal/20 mb-6 overflow-x-auto">
+        <div className="flex gap-1 mb-6 overflow-x-auto" style={{ background: "#FFFFFF", borderBottom: "1px solid #DDE6EF" }}>
           {tabs.map((t) => {
             const Icon = t.icon;
+            const isActive = tab === t.key;
             return (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
-                  tab === t.key
-                    ? "border-teal text-teal"
-                    : "border-transparent text-muted hover:text-navy"
-                }`}
+                className="flex items-center gap-2 px-4 py-2.5 whitespace-nowrap transition-colors"
+                style={{
+                  fontFamily: "'Oswald', sans-serif",
+                  fontWeight: isActive ? 600 : 400,
+                  fontSize: 14,
+                  color: isActive ? "#0F2942" : "#666666",
+                  borderBottom: isActive ? "3px solid #0D9488" : "3px solid transparent",
+                }}
+                onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = "#0F2942"; }}
+                onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = "#666666"; }}
               >
                 <Icon size={16} />
                 {t.label}
@@ -281,6 +289,24 @@ export default function LeagueHubPage() {
             <StandingsTab standings={standings} />
           )
         )}
+        {tab === "scores" && (
+          loadingGames ? (
+            <SectionLoader label="scores" />
+          ) : failedSections.has("games") ? (
+            <EmptyState text="Data temporarily unavailable" />
+          ) : (
+            <ScoresTab games={games} />
+          )
+        )}
+        {tab === "schedule" && (
+          loadingGames || loadingTeams ? (
+            <SectionLoader label="schedule" />
+          ) : failedSections.has("games") ? (
+            <EmptyState text="Data temporarily unavailable" />
+          ) : (
+            <ScheduleTab games={games} teams={teams} />
+          )
+        )}
         {tab === "player-stats" && (
           loadingLeaders ? (
             <SectionLoader label="player stats" />
@@ -296,13 +322,13 @@ export default function LeagueHubPage() {
             />
           )
         )}
-        {tab === "schedule" && (
-          loadingGames || loadingTeams ? (
-            <SectionLoader label="schedule" />
-          ) : failedSections.has("games") ? (
+        {tab === "team-stats" && (
+          loadingStandings ? (
+            <SectionLoader label="team stats" />
+          ) : failedSections.has("standings") ? (
             <EmptyState text="Data temporarily unavailable" />
           ) : (
-            <ScheduleTab games={games} teams={teams} />
+            <TeamStatsTab standings={standings} />
           )
         )}
         {tab === "teams" && (
@@ -326,24 +352,36 @@ function StandingsTab({ standings }: { standings: HTStandings[] }) {
     return <EmptyState text="No standings data available" />;
   }
 
+  const thStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    fontFamily: "'Oswald', sans-serif",
+    fontWeight: 600,
+    fontSize: 11,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+    color: "#FFFFFF",
+    background: "#0F2942",
+  };
+
   return (
-    <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+    <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #DDE6EF" }}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-navy/[0.03] border-b border-teal/20">
-              <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">#</th>
-              <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Team</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">GP</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">W</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">L</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">OTL</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs font-bold">PTS</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">GF</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">GA</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">DIFF</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">PP%</th>
-              <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">PK%</th>
+            <tr>
+              <th style={{ ...thStyle, textAlign: "left" }}>#</th>
+              <th style={{ ...thStyle, textAlign: "left" }}>Team</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>GP</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>W</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>L</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>OTL</th>
+              <th style={{ ...thStyle, textAlign: "center", fontWeight: 700 }}>PTS</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>GF</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>GA</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>DIFF</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>PP%</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>PK%</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>STREAK</th>
             </tr>
           </thead>
           <tbody>
@@ -352,31 +390,38 @@ function StandingsTab({ standings }: { standings: HTStandings[] }) {
               // Strip clinch markers like "x - " from name
               const cleanName = team.name.replace(/^[a-z]\s*-\s*/i, "");
               const clinch = team.name.match(/^([a-z])\s*-\s*/i)?.[1] || "";
+              const rowBg = i % 2 === 1 ? "#F5F5F5" : "#FFFFFF";
               return (
-                <tr key={team.team_id ?? i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
-                  <td className="px-3 py-2 text-muted text-xs">{i + 1}</td>
-                  <td className="px-3 py-2 font-medium text-navy whitespace-nowrap">
-                    {clinch && (
-                      <span className="text-xs text-teal font-bold mr-1" title={clinch === "x" ? "Clinched playoff spot" : clinch === "y" ? "Clinched division" : clinch === "z" ? "Clinched conference" : ""}>
-                        {clinch}
+                <tr key={team.team_id ?? i} style={{ background: rowBg, borderBottom: "1px solid #EEF2F6" }}>
+                  <td style={{ padding: "8px 12px", color: "#999", fontSize: 12 }}>{i + 1}</td>
+                  <td style={{ padding: "8px 12px", fontWeight: 500, color: "#0F2942", whiteSpace: "nowrap" }}>
+                    <div className="flex items-center gap-2">
+                      <TeamLogo name={cleanName} code={team.team_code} size={24} />
+                      <span>
+                        {clinch && (
+                          <span style={{ fontSize: 11, color: "#0D9488", fontWeight: 700, marginRight: 4 }} title={clinch === "x" ? "Clinched playoff spot" : clinch === "y" ? "Clinched division" : clinch === "z" ? "Clinched conference" : ""}>
+                            {clinch}
+                          </span>
+                        )}
+                        <Link href={`/teams/${encodeURIComponent(cleanName)}`} style={{ color: "#0F2942" }} className="hover:underline transition-colors">
+                          {cleanName}
+                        </Link>
                       </span>
-                    )}
-                    <Link href={`/teams/${encodeURIComponent(cleanName)}`} className="hover:text-teal transition-colors hover:underline">
-                      {cleanName}
-                    </Link>
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-center">{team.gp ?? "—"}</td>
-                  <td className="px-3 py-2 text-center font-medium text-green-700">{team.wins ?? "—"}</td>
-                  <td className="px-3 py-2 text-center font-medium text-red-600">{team.losses ?? "—"}</td>
-                  <td className="px-3 py-2 text-center">{team.otl ?? "—"}</td>
-                  <td className="px-3 py-2 text-center font-bold text-navy">{team.points ?? "—"}</td>
-                  <td className="px-3 py-2 text-center">{team.gf ?? "—"}</td>
-                  <td className="px-3 py-2 text-center">{team.ga ?? "—"}</td>
-                  <td className={`px-3 py-2 text-center font-medium ${diff > 0 ? "text-green-700" : diff < 0 ? "text-red-600" : "text-muted"}`}>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.gp ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: "#15803D" }}>{team.wins ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: "#DC2626" }}>{team.losses ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.otl ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#0F2942" }}>{team.points ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.gf ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.ga ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: diff > 0 ? "#15803D" : diff < 0 ? "#DC2626" : "#999" }}>
                     {diff > 0 ? `+${diff}` : diff}
                   </td>
-                  <td className="px-3 py-2 text-center text-xs">{team.pp_pct || "—"}</td>
-                  <td className="px-3 py-2 text-center text-xs">{team.pk_pct || "—"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{team.pp_pct || "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{team.pk_pct || "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12, fontWeight: 500 }}>{team.streak || "--"}</td>
                 </tr>
               );
             })}
@@ -590,125 +635,165 @@ function PlayerStatsTab({
         ) : filteredGoalies.length === 0 ? (
           <EmptyState text="No goalie stats available" />
         ) : (
-          <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+          <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #DDE6EF" }}>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-navy/[0.03] border-b border-teal/20">
-                    <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">#</th>
-                    <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Goalie</th>
-                    <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Team</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">GP</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">W</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">L</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">OTL</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs font-bold">GAA</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs font-bold">SV%</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">SO</th>
-                    <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">MIN</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredGoalies.map((g, i) => (
-                    <tr key={g.player_id ?? i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
-                      <td className="px-3 py-2 text-muted text-xs">{i + 1}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          {g.photo ? (
-                            <Image src={g.photo} alt={g.name} width={28} height={28} className="rounded-full object-cover" unoptimized />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-navy/10 flex items-center justify-center">
-                              <Users size={12} className="text-navy/40" />
-                            </div>
-                          )}
-                          <p className="font-medium text-navy text-sm">{g.name}</p>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-xs whitespace-nowrap">
-                        <Link href={`/teams/${encodeURIComponent(g.team_name)}`} className="hover:text-teal transition-colors">
-                          {g.team_code || g.team_name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-center">{g.gp ?? "—"}</td>
-                      <td className="px-3 py-2 text-center font-medium text-green-700">{g.wins ?? "—"}</td>
-                      <td className="px-3 py-2 text-center font-medium text-red-600">{g.losses ?? "—"}</td>
-                      <td className="px-3 py-2 text-center">{g.otl ?? "—"}</td>
-                      <td className="px-3 py-2 text-center font-bold text-navy">{g.gaa || "—"}</td>
-                      <td className="px-3 py-2 text-center font-bold text-teal">{g.save_pct || "—"}</td>
-                      <td className="px-3 py-2 text-center">{g.shutouts ?? "—"}</td>
-                      <td className="px-3 py-2 text-center text-xs">{g.minutes || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {(() => {
+                const gThStyle: React.CSSProperties = {
+                  padding: "10px 12px",
+                  fontFamily: "'Oswald', sans-serif",
+                  fontWeight: 600,
+                  fontSize: 11,
+                  textTransform: "uppercase" as const,
+                  letterSpacing: "0.05em",
+                  color: "#FFFFFF",
+                  background: "#0F2942",
+                };
+                return (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th style={{ ...gThStyle, textAlign: "left" }}>#</th>
+                        <th style={{ ...gThStyle, textAlign: "left" }}>Goalie</th>
+                        <th style={{ ...gThStyle, textAlign: "left" }}>Team</th>
+                        <th style={{ ...gThStyle, textAlign: "center" }}>GP</th>
+                        <th style={{ ...gThStyle, textAlign: "center" }}>W</th>
+                        <th style={{ ...gThStyle, textAlign: "center" }}>L</th>
+                        <th style={{ ...gThStyle, textAlign: "center" }}>OTL</th>
+                        <th style={{ ...gThStyle, textAlign: "center", fontWeight: 700 }}>GAA</th>
+                        <th style={{ ...gThStyle, textAlign: "center", fontWeight: 700 }}>SV%</th>
+                        <th style={{ ...gThStyle, textAlign: "center" }}>SO</th>
+                        <th style={{ ...gThStyle, textAlign: "center" }}>MIN</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredGoalies.map((g, i) => {
+                        const rowBg = i % 2 === 1 ? "#F5F5F5" : "#FFFFFF";
+                        return (
+                          <tr key={g.player_id ?? i} style={{ background: rowBg, borderBottom: "1px solid #EEF2F6" }}>
+                            <td style={{ padding: "8px 12px", color: "#999", fontSize: 12 }}>{i + 1}</td>
+                            <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                              <div className="flex items-center gap-2">
+                                {g.photo ? (
+                                  <Image src={g.photo} alt={g.name} width={28} height={28} className="rounded-full object-cover" unoptimized />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "rgba(15,41,66,0.1)" }}>
+                                    <Users size={12} style={{ color: "rgba(15,41,66,0.4)" }} />
+                                  </div>
+                                )}
+                                <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0F2942" }}>{g.name}</p>
+                              </div>
+                            </td>
+                            <td style={{ padding: "8px 12px", fontSize: 12, whiteSpace: "nowrap" }}>
+                              <Link href={`/teams/${encodeURIComponent(g.team_name)}`} className="hover:underline transition-colors" style={{ color: "#0F2942" }}>
+                                {g.team_code || g.team_name}
+                              </Link>
+                            </td>
+                            <td style={{ padding: "8px 12px", textAlign: "center" }}>{g.gp ?? "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: "#15803D" }}>{g.wins ?? "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: "#DC2626" }}>{g.losses ?? "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center" }}>{g.otl ?? "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#0F2942" }}>{g.gaa || "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#0D9488" }}>{g.save_pct || "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center" }}>{g.shutouts ?? "--"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{g.minutes || "--"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           </div>
         )
       ) : (
-        <div className="bg-white rounded-xl border border-teal/20 overflow-hidden">
+        <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #DDE6EF" }}>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-navy/[0.03] border-b border-teal/20">
-                  <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">#</th>
-                  <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Player</th>
-                  <th className="px-3 py-2.5 text-left font-oswald uppercase tracking-wider text-muted text-xs">Team</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">Pos</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">GP</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">G</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">A</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs font-bold">P</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">P/GP</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">+/-</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">PIM</th>
-                  <th className="px-3 py-2.5 text-center font-oswald uppercase tracking-wider text-muted text-xs">PP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSkaters.map((p, i) => {
-                  const ppgRate = (p.gp ?? 0) > 0 ? ((p.points ?? 0) / (p.gp ?? 1)).toFixed(2) : "0.00";
-                  return (
-                    <tr key={p.player_id ?? i} className="border-b border-teal/10 hover:bg-navy/[0.02]">
-                      <td className="px-3 py-2 text-muted text-xs">{i + 1}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          {p.photo ? (
-                            <Image src={p.photo} alt={p.name} width={28} height={28} className="rounded-full object-cover" unoptimized />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-navy/10 flex items-center justify-center">
-                              <Users size={12} className="text-navy/40" />
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-medium text-navy text-sm">{p.name}</p>
-                            {p.rookie && <span className="text-[10px] text-orange font-semibold">R</span>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-xs whitespace-nowrap">
-                        <Link href={`/teams/${encodeURIComponent(p.team_name)}`} className="flex items-center gap-1.5 hover:text-teal transition-colors">
-                          {p.logo && (
-                            <Image src={p.logo} alt={p.team_code} width={18} height={18} className="object-contain" unoptimized />
-                          )}
-                          {p.team_code || p.team_name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 text-center text-xs">{p.position}</td>
-                      <td className="px-3 py-2 text-center">{p.gp ?? "—"}</td>
-                      <td className="px-3 py-2 text-center font-medium">{p.goals ?? "—"}</td>
-                      <td className="px-3 py-2 text-center">{p.assists ?? "—"}</td>
-                      <td className="px-3 py-2 text-center font-bold text-navy">{p.points ?? "—"}</td>
-                      <td className="px-3 py-2 text-center text-teal font-semibold text-xs">{ppgRate}</td>
-                      <td className={`px-3 py-2 text-center text-xs ${(p.plus_minus ?? 0) > 0 ? "text-green-700" : (p.plus_minus ?? 0) < 0 ? "text-red-600" : ""}`}>
-                        {p.plus_minus != null ? (p.plus_minus > 0 ? `+${p.plus_minus}` : p.plus_minus) : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-center text-xs">{p.pim ?? "—"}</td>
-                      <td className="px-3 py-2 text-center text-xs">{p.ppg ?? "—"}</td>
+            {(() => {
+              const psThStyle: React.CSSProperties = {
+                padding: "10px 12px",
+                fontFamily: "'Oswald', sans-serif",
+                fontWeight: 600,
+                fontSize: 11,
+                textTransform: "uppercase" as const,
+                letterSpacing: "0.05em",
+                color: "#FFFFFF",
+                background: "#0F2942",
+              };
+              return (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th style={{ ...psThStyle, textAlign: "left" }}>#</th>
+                      <th style={{ ...psThStyle, textAlign: "left" }}>Player</th>
+                      <th style={{ ...psThStyle, textAlign: "left" }}>Team</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>Pos</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>GP</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>G</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>A</th>
+                      <th style={{ ...psThStyle, textAlign: "center", fontWeight: 700 }}>P</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>P/GP</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>+/-</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>PIM</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>PPG</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>PPA</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>SHG</th>
+                      <th style={{ ...psThStyle, textAlign: "center" }}>Sh%</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {filteredSkaters.map((p, i) => {
+                      const ppgRate = (p.gp ?? 0) > 0 ? ((p.points ?? 0) / (p.gp ?? 1)).toFixed(2) : "0.00";
+                      const rowBg = i % 2 === 1 ? "#F5F5F5" : "#FFFFFF";
+                      return (
+                        <tr key={p.player_id ?? i} style={{ background: rowBg, borderBottom: "1px solid #EEF2F6" }}>
+                          <td style={{ padding: "8px 12px", color: "#999", fontSize: 12 }}>{i + 1}</td>
+                          <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                            <div className="flex items-center gap-2">
+                              {p.photo ? (
+                                <Image src={p.photo} alt={p.name} width={28} height={28} className="rounded-full object-cover" unoptimized />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "rgba(15,41,66,0.1)" }}>
+                                  <Users size={12} style={{ color: "rgba(15,41,66,0.4)" }} />
+                                </div>
+                              )}
+                              <div>
+                                <Link href={`/players/${p.player_id || ""}`} style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0F2942" }} className="hover:underline">
+                                  {p.name}
+                                </Link>
+                                {p.rookie && <span style={{ fontSize: 10, color: "#F36F21", fontWeight: 600, marginLeft: 4 }}>R</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: "8px 12px", fontSize: 12, whiteSpace: "nowrap" }}>
+                            <Link href={`/teams/${encodeURIComponent(p.team_name)}`} className="flex items-center gap-1.5 hover:underline transition-colors" style={{ color: "#0F2942" }}>
+                              {p.logo && (
+                                <Image src={p.logo} alt={p.team_code} width={18} height={18} className="object-contain" unoptimized />
+                              )}
+                              {p.team_code || p.team_name}
+                            </Link>
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{p.position}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center" }}>{p.gp ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500 }}>{p.goals ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center" }}>{p.assists ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#0D9488", fontFamily: "'Oswald', sans-serif" }}>{p.points ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", color: "#0D9488", fontWeight: 700, fontSize: 12, fontFamily: "'Oswald', sans-serif" }}>{ppgRate}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12, color: (p.plus_minus ?? 0) > 0 ? "#15803D" : (p.plus_minus ?? 0) < 0 ? "#DC2626" : undefined }}>
+                            {p.plus_minus != null ? (p.plus_minus > 0 ? `+${p.plus_minus}` : p.plus_minus) : "--"}
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{p.pim ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{p.ppg ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{p.ppa ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{p.shg ?? "--"}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{p.shooting_pct || "--"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1245,13 +1330,250 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
   );
 }
 
+// ── Scores Tab ──────────────────────────────────────────────────────
+
+function ScoresTab({ games }: { games: HTGame[] }) {
+  // Show recent results (final games) in card format
+  const finalGames = games.filter(
+    (g) => g.status === "Final" || g.status === "Final OT" || g.status === "Final SO"
+  ).sort((a, b) => (b.game_date || b.date).localeCompare(a.game_date || a.date));
+
+  const liveGames = games.filter((g) => {
+    const isFinal = g.status === "Final" || g.status === "Final OT" || g.status === "Final SO";
+    return !isFinal && g.status !== "" && g.period !== "";
+  });
+
+  if (!finalGames.length && !liveGames.length) {
+    return <EmptyState text="No recent scores available" />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Live Games */}
+      {liveGames.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#DC2626" }} />
+            <h3 style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: "#DC2626" }}>Live Now</h3>
+          </div>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+            {liveGames.map((g) => <ScoreCard key={g.game_id} game={g} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Results */}
+      {finalGames.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1 h-4 rounded-full" style={{ background: "#0F2942" }} />
+            <h3 style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: "#0F2942" }}>Recent Results</h3>
+          </div>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+            {finalGames.slice(0, 20).map((g) => <ScoreCard key={g.game_id} game={g} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScoreCard({ game: g }: { game: HTGame }) {
+  const isFinal = g.status === "Final" || g.status === "Final OT" || g.status === "Final SO";
+  const isLive = !isFinal && g.status !== "" && g.period !== "";
+  const homeScore = parseInt(String(g.home_score)) || 0;
+  const awayScore = parseInt(String(g.away_score)) || 0;
+  const homeWon = homeScore > awayScore;
+  const awayWon = awayScore > homeScore;
+
+  // Result badge text
+  let badgeText = "FINAL";
+  let badgeBg = "#0F2942";
+  if (g.status === "Final OT") { badgeText = "OT"; badgeBg = "#0F2942"; }
+  else if (g.status === "Final SO") { badgeText = "SO"; badgeBg = "#0F2942"; }
+  else if (isLive) { badgeText = `${g.period} ${g.game_clock}`; badgeBg = "#DC2626"; }
+
+  return (
+    <div className="bg-white rounded-xl overflow-hidden" style={{ border: isLive ? "1px solid #DC2626" : "1px solid #DDE6EF" }}>
+      {/* Navy band at top */}
+      <div className="flex items-center justify-between px-4 py-2" style={{ background: "#0F2942" }}>
+        <div className="flex items-center gap-2">
+          <TeamLogo name={g.away_team || g.away_code} code={g.away_code} size={24} />
+          <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#FFFFFF" }}>{g.away_team || g.away_code}</span>
+        </div>
+        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", color: "#FFFFFF", background: badgeBg, padding: "2px 8px", borderRadius: 9999 }}>{badgeText}</span>
+        <div className="flex items-center gap-2">
+          <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#FFFFFF" }}>{g.home_team || g.home_code}</span>
+          <TeamLogo name={g.home_team || g.home_code} code={g.home_code} size={24} />
+        </div>
+      </div>
+      {/* Score area */}
+      <div className="flex items-center justify-center px-4 py-3 gap-6">
+        <span style={{
+          fontFamily: "'Oswald', sans-serif",
+          fontWeight: 700,
+          fontSize: 28,
+          color: awayWon ? "#0D9488" : "#999999",
+        }}>{g.away_score}</span>
+        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 400, fontSize: 14, color: "#999999" }}>-</span>
+        <span style={{
+          fontFamily: "'Oswald', sans-serif",
+          fontWeight: 700,
+          fontSize: 28,
+          color: homeWon ? "#0D9488" : "#999999",
+        }}>{g.home_score}</span>
+      </div>
+      {/* Date + venue */}
+      <div className="px-4 pb-3 text-center">
+        <p style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#999999" }}>
+          {g.game_date || g.date}{g.venue ? ` - ${g.venue}` : ""}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Team Stats Tab ──────────────────────────────────────────────────
+
+type TeamStatSort = "points" | "gp" | "gf" | "ga" | "diff" | "gfgp" | "gagp" | "pp_pct" | "pk_pct";
+
+function TeamStatsTab({ standings }: { standings: HTStandings[] }) {
+  const [sortBy, setSortBy] = useState<TeamStatSort>("points");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  if (!standings.length) {
+    return <EmptyState text="No team stats data available" />;
+  }
+
+  const handleSort = (col: TeamStatSort) => {
+    if (sortBy === col) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortBy(col);
+      setSortDir("desc");
+    }
+  };
+
+  const sorted = [...standings].sort((a, b) => {
+    let aVal = 0, bVal = 0;
+    const aGp = a.gp ?? 1;
+    const bGp = b.gp ?? 1;
+    switch (sortBy) {
+      case "points": aVal = a.points ?? 0; bVal = b.points ?? 0; break;
+      case "gp": aVal = a.gp ?? 0; bVal = b.gp ?? 0; break;
+      case "gf": aVal = a.gf ?? 0; bVal = b.gf ?? 0; break;
+      case "ga": aVal = a.ga ?? 0; bVal = b.ga ?? 0; break;
+      case "diff": aVal = (a.gf ?? 0) - (a.ga ?? 0); bVal = (b.gf ?? 0) - (b.ga ?? 0); break;
+      case "gfgp": aVal = aGp > 0 ? (a.gf ?? 0) / aGp : 0; bVal = bGp > 0 ? (b.gf ?? 0) / bGp : 0; break;
+      case "gagp": aVal = aGp > 0 ? (a.ga ?? 0) / aGp : 0; bVal = bGp > 0 ? (b.ga ?? 0) / bGp : 0; break;
+      case "pp_pct": aVal = parseFloat(a.pp_pct) || 0; bVal = parseFloat(b.pp_pct) || 0; break;
+      case "pk_pct": aVal = parseFloat(a.pk_pct) || 0; bVal = parseFloat(b.pk_pct) || 0; break;
+    }
+    return sortDir === "desc" ? bVal - aVal : aVal - bVal;
+  });
+
+  const tsThStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    fontFamily: "'Oswald', sans-serif",
+    fontWeight: 600,
+    fontSize: 11,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+    color: "#FFFFFF",
+    background: "#0F2942",
+    cursor: "pointer",
+    userSelect: "none" as const,
+  };
+
+  const sortArrow = (col: TeamStatSort) => sortBy === col ? (sortDir === "desc" ? " \u25BC" : " \u25B2") : "";
+
+  return (
+    <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #DDE6EF" }}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th style={{ ...tsThStyle, textAlign: "left", cursor: "default" }}>#</th>
+              <th style={{ ...tsThStyle, textAlign: "left", cursor: "default" }}>Team</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("gp")}>GP{sortArrow("gp")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("gf")}>GF{sortArrow("gf")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("ga")}>GA{sortArrow("ga")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("diff")}>DIFF{sortArrow("diff")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("gfgp")}>GF/GP{sortArrow("gfgp")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("gagp")}>GA/GP{sortArrow("gagp")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("pp_pct")}>PP%{sortArrow("pp_pct")}</th>
+              <th style={{ ...tsThStyle, textAlign: "center" }} onClick={() => handleSort("pk_pct")}>PK%{sortArrow("pk_pct")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((team, i) => {
+              const diff = (team.gf ?? 0) - (team.ga ?? 0);
+              const gp = team.gp ?? 0;
+              const gfgp = gp > 0 ? ((team.gf ?? 0) / gp).toFixed(2) : "--";
+              const gagp = gp > 0 ? ((team.ga ?? 0) / gp).toFixed(2) : "--";
+              const cleanName = team.name.replace(/^[a-z]\s*-\s*/i, "");
+              const rowBg = i % 2 === 1 ? "#F5F5F5" : "#FFFFFF";
+              return (
+                <tr key={team.team_id ?? i} style={{ background: rowBg, borderBottom: "1px solid #EEF2F6" }}>
+                  <td style={{ padding: "8px 12px", color: "#999", fontSize: 12 }}>{i + 1}</td>
+                  <td style={{ padding: "8px 12px", fontWeight: 500, color: "#0F2942", whiteSpace: "nowrap" }}>
+                    <div className="flex items-center gap-2">
+                      <TeamLogo name={cleanName} code={team.team_code} size={24} />
+                      <Link href={`/teams/${encodeURIComponent(cleanName)}`} style={{ color: "#0F2942" }} className="hover:underline transition-colors">
+                        {cleanName}
+                      </Link>
+                    </div>
+                  </td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.gp ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.gf ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>{team.ga ?? "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500, color: diff > 0 ? "#15803D" : diff < 0 ? "#DC2626" : "#999" }}>
+                    {diff > 0 ? `+${diff}` : diff}
+                  </td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500 }}>{gfgp}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 500 }}>{gagp}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{team.pp_pct || "--"}</td>
+                  <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{team.pk_pct || "--"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Team Logo Placeholder ───────────────────────────────────────────
+
+function TeamLogo({ name, code, size = 24, logo }: { name: string; code?: string; size?: number; logo?: string }) {
+  if (logo) {
+    return (
+      <div className="flex-shrink-0 rounded overflow-hidden" style={{ width: size, height: size, background: "linear-gradient(135deg, #162E4A 0%, #0F2942 100%)" }}>
+        <Image src={logo} alt={name} width={size} height={size} className="object-contain" style={{ padding: 2 }} unoptimized />
+      </div>
+    );
+  }
+  // Abbreviation fallback
+  const abbr = (code || name.split(" ").map(w => w[0]).join("")).toUpperCase().slice(0, 3);
+  return (
+    <div className="flex-shrink-0 rounded flex items-center justify-center" style={{
+      width: size,
+      height: size,
+      background: "linear-gradient(135deg, #162E4A 0%, #0F2942 100%)",
+    }}>
+      <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: size * 0.4, color: "#FFFFFF", lineHeight: 1 }}>{abbr}</span>
+    </div>
+  );
+}
+
 // ── Section Loader (skeleton per tab) ────────────────────────────────
 
 function SectionLoader({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-center py-20">
-      <Loader2 size={32} className="text-teal animate-spin" />
-      <span className="ml-3 text-muted">Loading {label}...</span>
+      <Loader2 size={32} style={{ color: "#0D9488" }} className="animate-spin" />
+      <span className="ml-3" style={{ color: "#999999" }}>Loading {label}...</span>
     </div>
   );
 }
@@ -1260,7 +1582,7 @@ function SectionLoader({ label }: { label: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="text-center py-16 text-muted">
+    <div className="text-center py-16" style={{ color: "#999999" }}>
       <Star size={32} className="mx-auto mb-3 opacity-30" />
       <p className="text-sm">{text}</p>
     </div>
