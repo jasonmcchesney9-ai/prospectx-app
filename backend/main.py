@@ -9727,6 +9727,36 @@ LEAGUE_STRENGTH = {
     "NA3HL": 0.88,
 }
 
+# ── League Playoff Configuration ─────────────────────────────────────────────
+LEAGUE_PLAYOFF_CONFIG = {
+    # CHL Major Junior
+    "ohl":    {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    "whl":    {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    "lhjmq":  {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    # Junior A — conference-based
+    "gojhl":  {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    "ojhl":   {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    "bchl":   {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    "kijhl":  {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    "ushl":   {"playoff_teams": 16, "format": "top_n_conference", "conferences": 2, "spots_per_conf": 8},
+    # Junior A — single table
+    "ajhl":   {"playoff_teams": 8,  "format": "top_n_league"},
+    "cchl":   {"playoff_teams": 8,  "format": "top_n_league"},
+    "sjhl":   {"playoff_teams": 8,  "format": "top_n_league"},
+    "mjhl":   {"playoff_teams": 8,  "format": "top_n_league"},
+    "nojhl":  {"playoff_teams": 8,  "format": "top_n_league"},
+    "mhl":    {"playoff_teams": 8,  "format": "top_n_league"},
+    "sphl":   {"playoff_teams": 8,  "format": "top_n_league"},
+    # Junior B
+    "pjhl":   {"playoff_teams": 16, "format": "top_n_league"},
+    "vijhl":  {"playoff_teams": 8,  "format": "full_league"},
+    # Pro
+    "ahl":    {"playoff_teams": 16, "format": "top_n_division", "divisions": 4, "spots_per_div": 4},
+    "echl":   {"playoff_teams": 20, "format": "top_n_division", "divisions": 4, "spots_per_div": 5},
+    # Women's
+    "pwhl":   {"playoff_teams": 6,  "format": "full_league"},
+}
+
 
 def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
     """
@@ -10788,9 +10818,11 @@ def calculate_monte_carlo(conn, league: str, season_id: str, simulations: int = 
                 league, len(teams), remaining_count, total_schedule)
 
     # ── Determine playoff cutoff ──
-    # Standard: top 8 qualify. Adjust for smaller leagues.
+    # League-aware playoff spots
     num_teams = len(teams)
-    playoff_spots = min(8, max(4, num_teams // 2))
+    league_config = LEAGUE_PLAYOFF_CONFIG.get(league.lower(), {})
+    playoff_teams = league_config.get("playoff_teams", min(8, max(4, num_teams // 2)))
+    playoff_spots = min(playoff_teams, num_teams)  # cap at actual team count
 
     # ── Strength-of-schedule adjustment ──
     league_avg_pct = sum(t["points_pct"] for t in teams.values()) / len(teams)
@@ -10929,6 +10961,8 @@ def calculate_monte_carlo(conn, league: str, season_id: str, simulations: int = 
             "worst_rank": worst_rank,
             "confidence": confidence,
             "remaining_games": remaining_count,
+            "playoff_format": league_config.get("format", "top_n_league"),
+            "configured_playoff_spots": playoff_spots,
         })
 
     conn.commit()
