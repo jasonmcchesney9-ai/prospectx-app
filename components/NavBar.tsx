@@ -424,7 +424,7 @@ export default function NavBar() {
                     Upgrade
                   </Link>
                 )}
-                {user.role === "admin" && user.role !== "superadmin" && (
+                {user.role === "admin" && (
                   <Link
                     href="/admin"
                     className={`flex items-center gap-1 text-sm transition-colors ${
