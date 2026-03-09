@@ -23311,6 +23311,8 @@ async def summarize_series_context(series_id: str, current_game_number: int) -> 
 async def _generate_team_report(request, org_id: str, user_id: str, conn):
     """Generate a team-level report (team_identity, opponent_gameplan, etc.)."""
     team_name = request.team_name
+    if not team_name or not team_name.strip():
+        raise HTTPException(status_code=400, detail="team_name is required")
 
     # Get template
     template = conn.execute(
@@ -23341,6 +23343,8 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             (org_id, team_name),
         ).fetchall()
         roster = [_player_from_row(r) for r in roster_rows]
+        if not roster:
+            raise HTTPException(status_code=400, detail=f"No roster data available for team '{team_name}'")
 
         # Gather stats for each rostered player
         roster_with_stats = []

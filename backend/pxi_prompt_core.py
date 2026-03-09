@@ -2591,9 +2591,14 @@ Purpose: Foundational team document. Feeds into Opponent Game Plan
 and Playoff Series Prep. Generate this first, reference in game plans.
 
 REQUIRED HEADER:
-Level: [level] | Data Depth: [data_depth] | Perspective: [perspective]
-Team: [team_name] | Games Analyzed: [X] | Season Context: [context]
-Update Frequency: [After every X games / Monthly / As needed]
+Populate every field from the provided data. Do not use placeholder brackets.
+Level: State the league level (e.g. OHL, GOJHL, Junior A)
+Data Depth: State basic, intermediate, or advanced based on available metrics
+Perspective: State internal, external, or both as specified in the report request
+Team: Use the actual team name from the input data
+Games Analyzed: State the total GP from the roster data provided
+Season Context: Describe the current season stage (e.g. early season, mid-season, playoff push)
+Update Frequency: Recommend a cadence based on the team's schedule density
 
 SECTION SUMMARY RULE:
 Every section begins with 1-2 sentences synthesizing the key finding.
@@ -2641,16 +2646,17 @@ Goaltending, Overall Readiness
 End with 2-3 sentence playoff summary.
 
 SECTION 11 — PLAYER IDENTITY CARDS (internal only):
-For each player with GP > 5, generate a condensed card:
-Name (#XX) — Position
-GP/TOI: [X GP / XX.X min avg]
-Production: G/A/P ([X.XX P/gm]) | +/-
-Role: [Trust Anchor / Finisher / Possession Buffer / Energy]
-Identity: [One-sentence role summary]
-Strengths: [2-3 key strengths]
-Limitations: [1-2 key limitations]
-Trust Tier: [HIGH TRUST / TRUST / SHELTERED]
-Playoff Note: [Availability, role discipline, special considerations]
+For each player with GP > 5, generate a condensed card using real data from the roster.
+Use this exact format, filling in actual values from the provided stats:
+Name (jersey number if available) — Position
+GP/TOI: State actual GP and average TOI from the roster data
+Production: State actual G/A/P with per-game rate and +/-
+Role: Assign one of Trust Anchor, Finisher, Possession Buffer, or Energy
+Identity: Write one sentence summarizing this player's role on the team
+Strengths: List 2-3 key strengths based on stats and deployment
+Limitations: List 1-2 key limitations observed from the data
+Trust Tier: Assign HIGH TRUST, TRUST, or SHELTERED based on usage patterns
+Playoff Note: Note availability, role discipline, or special considerations
 
 SECTION 14 — IDENTITY TRACKING METRICS:
 Include trend indicators: ↑ improving / → stable / ↓ declining
@@ -2681,14 +2687,14 @@ INTERNAL: Connect identity to system. Every tactical choice traces to identity.
     How much switching vs staying home
   ST: PP design built around actual weapons, PK patterns built around stabilizers
 EXTERNAL: 5-10 precise exploit levers.
-  Format: [Trigger] -> [Action] -> [Expected result]
+  Format each lever as: Trigger → Action → Expected result
   Each must be specific enough to write on a bench card.
   Example: 'When their D1 carries wide → force inside with F1 → they default
   to rim which our strong-side D wins 70% of retrievals.'
 
 SECTION 17 — COACHING LAWS (internal only — OMIT for external perspective):
 3-6 non-negotiable archetype-based deployment rules.
-Format: '[Archetype] players are never/always [specific deployment rule].'
+Format: State the archetype, then the deployment rule. Example structure: 'Finisher-type players are never deployed on...'
 These survive when the game plan breaks down. They appear on every Bench Card.
 Examples:
   'Finisher-type players are never deployed on heavy DZ-start matchup lines.'
