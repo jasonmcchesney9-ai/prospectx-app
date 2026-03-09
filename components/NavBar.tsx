@@ -397,9 +397,9 @@ export default function NavBar() {
                     <Settings size={16} />
                   </Link>
                 )}
-                <span className="text-sm text-white/60">
+                <Link href="/settings" className="text-sm text-white/60 hover:text-white/80 transition-colors">
                   {user.first_name} {user.last_name}
-                </span>
+                </Link>
                 {/* Role Group Badge */}
                 <span
                   className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase font-oswald tracking-wider ${ROLE_GROUP_COLORS[roleGroup]}`}
@@ -424,7 +424,7 @@ export default function NavBar() {
                     Upgrade
                   </Link>
                 )}
-                {(user.role === "admin" || user.role === "superadmin") && (
+                {user.role === "admin" && user.role !== "superadmin" && (
                   <Link
                     href="/admin"
                     className={`flex items-center gap-1 text-sm transition-colors ${

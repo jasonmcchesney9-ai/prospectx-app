@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import NavBar from "@/components/NavBar";
 import api, { extractApiError } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 
@@ -112,6 +113,7 @@ const LEAGUE_OPTIONS: { code: string; label: string; full: string }[] = [
 export default function SettingsPage() {
   return (
     <ProtectedRoute>
+      <NavBar />
       <SettingsContent />
     </ProtectedRoute>
   );
