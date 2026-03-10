@@ -38,3 +38,5 @@ resend==2.5.1
 mux-python==5.1.2
 # Payments
 stripe==11.4.1
+# S3-compatible object storage (Cloudflare R2)
+boto3==1.35.99

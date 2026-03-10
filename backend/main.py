@@ -39,6 +39,8 @@ import csv
 import io
 import xml.etree.ElementTree as ET
 
+import boto3
+import botocore.exceptions
 import glob
 import httpx
 import jwt
@@ -690,20 +692,37 @@ os.makedirs(_IMAGES_DIR, exist_ok=True)
 # Serve uploaded player images as static files
 app.mount("/uploads", StaticFiles(directory=_IMAGES_DIR), name="uploads")
 
-# ── Cached HockeyTech assets (logos, headshots) ──────────────────────
-_ASSETS_DIR = os.path.join(_DATA_DIR, "assets")
-os.makedirs(_ASSETS_DIR, exist_ok=True)
-STATIC_ASSETS_URL = "/static/assets"
-app.mount("/static/assets", StaticFiles(directory=_ASSETS_DIR), name="static_assets")
+# ── Cached HockeyTech assets (logos, headshots) — Cloudflare R2 ──────
+_R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")
+_R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "")
+_R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "")
+_R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "")
+_R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL", "")  # e.g. https://assets.prospectxintelligence.com
+STATIC_ASSETS_URL = _R2_PUBLIC_URL.rstrip("/") if _R2_PUBLIC_URL else "/static/assets"
+
+_r2_client = None
+if _R2_ACCOUNT_ID and _R2_ACCESS_KEY_ID and _R2_SECRET_ACCESS_KEY:
+    _r2_client = boto3.client(
+        "s3",
+        endpoint_url=f"https://{_R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+        aws_access_key_id=_R2_ACCESS_KEY_ID,
+        aws_secret_access_key=_R2_SECRET_ACCESS_KEY,
+        region_name="auto",
+    )
+else:
+    logger.warning("R2 credentials not configured — asset caching will be disabled")
 
 
 async def cache_remote_asset(url: str, prefix: str = "asset") -> str | None:
-    """Download a remote asset URL and save to local static dir.
+    """Download a remote asset and upload to Cloudflare R2.
 
-    Returns the local /static/assets/... URL, or None on failure.
-    Uses URL hash as filename to avoid duplicates and re-downloading.
+    Returns the public R2 URL, or None on failure.
+    Uses URL hash as object key to avoid duplicates and re-uploading.
     """
     if not url or not url.startswith("http"):
+        return None
+    if not _r2_client:
+        logger.warning("R2 client not configured — cannot cache %s", url)
         return None
     try:
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
@@ -711,12 +730,16 @@ async def cache_remote_asset(url: str, prefix: str = "asset") -> str | None:
         if ext not in ("png", "jpg", "jpeg", "gif", "webp", "svg"):
             ext = "png"
         filename = f"{prefix}_{url_hash}.{ext}"
-        filepath = Path(_ASSETS_DIR) / filename
-        local_url = f"{STATIC_ASSETS_URL}/{filename}"
-        # Skip if already cached
-        if filepath.exists():
-            return local_url
-        # Download
+        object_key = f"assets/{filename}"
+        public_url = f"{STATIC_ASSETS_URL}/{filename}"
+        # Skip if already in R2
+        try:
+            _r2_client.head_object(Bucket=_R2_BUCKET_NAME, Key=object_key)
+            return public_url
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] != "404":
+                raise
+        # Download from source
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as dl_client:
             resp = await dl_client.get(url, headers={
                 "User-Agent": "ProspectX/1.0",
@@ -728,9 +751,18 @@ async def cache_remote_asset(url: str, prefix: str = "asset") -> str | None:
             content = resp.content
             if len(content) < 100:  # skip empty/error responses
                 return None
-        filepath.write_bytes(content)
-        logger.debug("Cached asset: %s → %s", url, local_url)
-        return local_url
+        # Upload to R2
+        content_type = f"image/{ext}" if ext != "svg" else "image/svg+xml"
+        if ext == "jpg":
+            content_type = "image/jpeg"
+        _r2_client.put_object(
+            Bucket=_R2_BUCKET_NAME,
+            Key=object_key,
+            Body=content,
+            ContentType=content_type,
+        )
+        logger.debug("Cached asset to R2: %s → %s", url, public_url)
+        return public_url
     except Exception as e:
         logger.warning("Asset cache error for %s: %s", url, e)
         return None
