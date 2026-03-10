@@ -316,6 +316,25 @@ interface DevPlanV2 {
   updated_at: string;
 }
 
+interface DevPlanEvidenceClip {
+  id: string;
+  clip_id: string | null;
+  session_id: string | null;
+  tag_type: string;
+  tag_label: string;
+  timestamp_in: number | null;
+  timestamp_out: number | null;
+  clip_title: string | null;
+  session_name: string | null;
+  added_at: string;
+}
+
+interface DevPlanEvidenceGroup {
+  tag_type: string;
+  tag_label: string;
+  clips: DevPlanEvidenceClip[];
+}
+
 const COACH_ROLES = new Set(["coach", "gm", "admin", "scout"]);
 const FAMILY_ROLES = new Set(["parent", "player"]);
 
@@ -451,6 +470,9 @@ export default function PlayerDetailPage() {
   const [visibilityFlags, setVisibilityFlags] = useState<Record<string, boolean>>({});
   const [editingV2Section, setEditingV2Section] = useState<number | null>(null);
   const [editV2Content, setEditV2Content] = useState("");
+
+  // Film Evidence (dev plan bridge)
+  const [filmEvidence, setFilmEvidence] = useState<DevPlanEvidenceGroup[]>([]);
 
   // Training Volume (drill logs)
   const [drillLogData, setDrillLogData] = useState<PlayerDrillLogsResponse | null>(null);
@@ -938,6 +960,12 @@ export default function PlayerDetailPage() {
             if (plansRes.data.length > 0) setDevPlan(plansRes.data[0]);
           } catch { /* Non-critical */ }
         }
+
+        // Load film evidence for dev plan bridge
+        try {
+          const evRes = await api.get<{ grouped: DevPlanEvidenceGroup[] }>(`/players/${playerId}/dev-plan-evidence`);
+          setFilmEvidence(evRes.data.grouped || []);
+        } catch { /* Non-critical — evidence may not exist yet */ }
 
         // Load drill logs for Training Volume widget
         try {
@@ -3123,6 +3151,49 @@ export default function PlayerDetailPage() {
                       </div>
                     );
                   })}
+
+                  {/* Film Evidence (coach/gm/admin/scout only) */}
+                  {COACH_ROLES.has(userRole) && (
+                    <div style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #00B5B8" }}>
+                      <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "10px 16px", display: "flex", alignItems: "center" }}>
+                        <div className="flex items-center gap-2">
+                          <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>Film Evidence</h4>
+                        </div>
+                      </div>
+                      <div style={{ padding: "12px 16px" }}>
+                        {filmEvidence.length === 0 ? (
+                          <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic" }}>No film clips linked yet</p>
+                        ) : (
+                          filmEvidence.map((group) => (
+                            <div key={group.tag_type} style={{ marginBottom: 16 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#00B5B8", marginBottom: 8 }}>
+                                {group.tag_type} — {group.clips.length} clip{group.clips.length !== 1 ? "s" : ""}
+                              </div>
+                              {group.clips.map((clip) => (
+                                <a
+                                  key={clip.id}
+                                  href={clip.session_id ? `/film/sessions/${clip.session_id}` : "#"}
+                                  style={{ display: "block", border: "1px solid #E5E7EB", borderRadius: 8, padding: 12, marginBottom: 8, textDecoration: "none", color: "inherit" }}
+                                >
+                                  <div style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>{clip.clip_title || "Untitled clip"}</div>
+                                  {clip.session_name && (
+                                    <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{clip.session_name}</div>
+                                  )}
+                                  {clip.timestamp_in != null && clip.timestamp_out != null && (
+                                    <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                                      {Math.floor(clip.timestamp_in / 60)}:{String(Math.floor(clip.timestamp_in % 60)).padStart(2, "0")}
+                                      {" – "}
+                                      {Math.floor(clip.timestamp_out / 60)}:{String(Math.floor(clip.timestamp_out % 60)).padStart(2, "0")}
+                                    </div>
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Section 8: Staff Notes (coach/admin only) */}
                   {COACH_ROLES.has(userRole) && (
