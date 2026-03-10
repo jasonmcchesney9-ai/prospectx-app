@@ -143,6 +143,46 @@ function getEventCategory(eventType: string): EventCategory {
   return "other";
 }
 
+// ── Code Window Pro Editor button definitions ──────────────
+interface CodeButtonDef {
+  type: string;
+  label: string;
+  tooltip: string;
+  category: "offensive" | "defensive" | "special_teams" | "other";
+}
+
+const CODE_BUTTONS: CodeButtonDef[] = [
+  { type: "goal", label: "Goal", tooltip: "Tag a goal scored", category: "offensive" },
+  { type: "shot", label: "Shot", tooltip: "Tag a shot on net", category: "offensive" },
+  { type: "chance", label: "Chance", tooltip: "Tag a scoring chance", category: "offensive" },
+  { type: "entry", label: "Entry", tooltip: "Tag a zone entry", category: "offensive" },
+  { type: "cycle", label: "Cycle", tooltip: "Tag an offensive cycle", category: "offensive" },
+  { type: "zone_time", label: "Zone Time", tooltip: "Tag offensive zone time", category: "offensive" },
+  { type: "screen", label: "Screen", tooltip: "Tag a net-front screen", category: "offensive" },
+  { type: "net_battle", label: "Net Battle", tooltip: "Tag a net-front battle", category: "offensive" },
+  { type: "hit", label: "Hit", tooltip: "Tag a body check", category: "defensive" },
+  { type: "block", label: "Block", tooltip: "Tag a shot block", category: "defensive" },
+  { type: "turnover", label: "Turnover", tooltip: "Tag a puck turnover", category: "defensive" },
+  { type: "exit", label: "Exit", tooltip: "Tag a defensive zone exit", category: "defensive" },
+  { type: "breakout", label: "Breakout", tooltip: "Tag a breakout play", category: "defensive" },
+  { type: "dz_coverage", label: "DZ Cover", tooltip: "Tag DZ coverage", category: "defensive" },
+  { type: "coverage_miss", label: "Cov. Miss", tooltip: "Tag a coverage breakdown", category: "defensive" },
+  { type: "stick_detail", label: "Stick", tooltip: "Tag a stick check", category: "defensive" },
+  { type: "faceoff", label: "Faceoff", tooltip: "Tag a faceoff", category: "special_teams" },
+  { type: "pp_rep", label: "PP Rep", tooltip: "Tag a power play rep", category: "special_teams" },
+  { type: "pk_rep", label: "PK Rep", tooltip: "Tag a penalty kill rep", category: "special_teams" },
+  { type: "icing", label: "Icing", tooltip: "Tag an icing call", category: "special_teams" },
+  { type: "penalty", label: "Penalty", tooltip: "Tag a penalty", category: "special_teams" },
+  { type: "custom", label: "Custom", tooltip: "Tag a custom event", category: "other" },
+];
+
+const CODE_CAT_COLOR: Record<string, string> = {
+  offensive: "#00B5B8",
+  defensive: "#E67E22",
+  special_teams: "#6366F1",
+  other: "#6B7280",
+};
+
 const SESSION_TYPE_LABELS: Record<string, string> = {
   general: "General",
   game_review: "Game Review",
@@ -330,6 +370,14 @@ export default function FilmSessionViewerPage() {
   const [addingVideo, setAddingVideo] = useState(false);
   const addVideoFileRef = useRef<HTMLInputElement>(null);
 
+  // Code Window Pro Editor state
+  const [codeCat, setCodeCat] = useState<"all" | "offensive" | "defensive" | "special_teams">("all");
+  const [codeTagging, setCodeTagging] = useState<string | null>(null);
+  const [codePulse, setCodePulse] = useState<string | null>(null);
+  const [codeLastTag, setCodeLastTag] = useState<{ name: string; time: string } | null>(null);
+  const [codeShowCustom, setCodeShowCustom] = useState(false);
+  const [codeCustomLabel, setCodeCustomLabel] = useState("");
+
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
@@ -358,6 +406,52 @@ export default function FilmSessionViewerPage() {
       switchUpload(idx);
     }
   }, [uploads, activeUploadIdx, switchUpload]);
+
+  // Code Window: tag event handler (inline, fires same API as EventTagger)
+  const codeTagEvent = useCallback(async (eventType: string, label?: string) => {
+    if (eventType === "custom" && !label) { setCodeShowCustom(true); return; }
+    if (!upload?.id) return;
+    setCodeTagging(eventType);
+    try {
+      const time = Math.floor(currentTimeRef.current);
+      await api.post("/film/events", {
+        upload_id: upload.id,
+        session_id: sessionId,
+        event_type: eventType,
+        event_label: label || null,
+        time_seconds: time,
+      });
+      const displayLabel = label || eventType.replace(/_/g, " ");
+      const m = Math.floor(time / 60);
+      const s = Math.floor(time % 60);
+      setCodeLastTag({ name: displayLabel, time: `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}` });
+      setCodePulse(eventType);
+      setTimeout(() => setCodePulse(null), 600);
+      loadSessionEvents();
+    } catch {
+      toast.error("Failed to tag event");
+    } finally {
+      setCodeTagging(null);
+    }
+  }, [upload?.id, sessionId, loadSessionEvents]);
+
+  // Code Window: keyboard shortcuts 1-9 for active category
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= 9) {
+        const visibleBtns = codeCat === "all" ? CODE_BUTTONS : CODE_BUTTONS.filter((b) => b.category === codeCat);
+        if (num <= visibleBtns.length) {
+          e.preventDefault();
+          codeTagEvent(visibleBtns[num - 1].type);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [codeCat, codeTagEvent]);
 
   // TODO: totalDuration should come from upload.duration when available; using 3600s fallback
   const totalDuration = 3600;
@@ -1182,25 +1276,57 @@ export default function FilmSessionViewerPage() {
                 REVIEW
               </span>
             </div>
-            {/* EventTagger — props unchanged */}
+            {/* ── Pro Editor: category tabs + 2-column button grid ── */}
+            <style>{`@keyframes codePulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+            {/* Category filter tabs */}
+            <div style={{ display: "flex", gap: 2, padding: "4px 6px", background: "#0A1628", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 }}>
+              {(["all", "offensive", "defensive", "special_teams"] as const).map((cat) => {
+                const label = cat === "all" ? "ALL" : cat === "offensive" ? "OFF" : cat === "defensive" ? "DEF" : "ST";
+                const active = codeCat === cat;
+                return (
+                  <button key={cat} onClick={() => setCodeCat(cat)} style={{ flex: 1, padding: "3px 0", borderRadius: 3, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: active ? "#FFFFFF" : "rgba(255,255,255,0.4)", background: active ? "#00B5B8" : "transparent", border: "none", cursor: "pointer", transition: "all 0.15s" }}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* 2-column button grid */}
             <div style={{ flex: 1, overflow: "auto", padding: 6 }}>
-              {upload?.playback_id && (
-                <EventTagger
-                  sessionId={sessionId}
-                  uploadId={upload.id}
-                  getCurrentTime={getCurrentTime}
-                  cinemaMode={cinemaMode}
-                />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                {(codeCat === "all" ? CODE_BUTTONS : CODE_BUTTONS.filter((b) => b.category === codeCat)).map((btn, idx) => {
+                  const catColor = CODE_CAT_COLOR[btn.category];
+                  const isPulse = codePulse === btn.type;
+                  const isTagging = codeTagging === btn.type;
+                  const evCount = sessionEvents.filter((ev) => ev.event_type === btn.type).length;
+                  return (
+                    <button key={btn.type} onClick={() => codeTagEvent(btn.type)} disabled={isTagging} title={btn.tooltip} style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 4px", borderRadius: 5, fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: isPulse ? "#FFFFFF" : "rgba(255,255,255,0.8)", background: isPulse ? catColor : "rgba(255,255,255,0.04)", border: `1px solid ${isPulse ? catColor : "rgba(255,255,255,0.1)"}`, borderLeft: `3px solid ${catColor}`, cursor: isTagging ? "not-allowed" : "pointer", opacity: isTagging ? 0.5 : 1, animation: isPulse ? "codePulse 1s infinite" : "none", transition: "all 0.15s" }}>
+                      {isTagging ? <Loader2 size={10} className="animate-spin" /> : btn.label}
+                      {evCount > 0 && (
+                        <span style={{ fontSize: 8, fontFamily: "'JetBrains Mono', monospace", background: `${catColor}33`, borderRadius: 8, padding: "0 4px", color: catColor }}>{evCount}</span>
+                      )}
+                      {idx < 9 && (
+                        <span style={{ position: "absolute", top: 1, right: 2, fontSize: 7, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.3)" }}>{idx + 1}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Custom event inline input */}
+              {codeShowCustom && (
+                <div style={{ display: "flex", gap: 3, marginTop: 6 }}>
+                  <input type="text" value={codeCustomLabel} onChange={(e) => setCodeCustomLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && codeCustomLabel.trim()) { codeTagEvent("custom", codeCustomLabel.trim()); setCodeCustomLabel(""); setCodeShowCustom(false); } if (e.key === "Escape") { setCodeShowCustom(false); setCodeCustomLabel(""); } }} placeholder="Event name..." autoFocus style={{ flex: 1, padding: "4px 6px", borderRadius: 4, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: "#FFFFFF", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", outline: "none" }} />
+                  <button onClick={() => { if (codeCustomLabel.trim()) { codeTagEvent("custom", codeCustomLabel.trim()); setCodeCustomLabel(""); setCodeShowCustom(false); } }} style={{ padding: "3px 8px", borderRadius: 4, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "#FFFFFF", background: "#6B7280", border: "none", cursor: "pointer" }}>Tag</button>
+                  <button onClick={() => { setCodeShowCustom(false); setCodeCustomLabel(""); }} style={{ padding: "3px 6px", borderRadius: 4, fontSize: 9, color: "rgba(255,255,255,0.4)", background: "transparent", border: "none", cursor: "pointer" }}>✕</button>
+                </div>
               )}
             </div>
             {/* Code Window footer — recording state + keyboard hints */}
             <div style={{ padding: "6px 8px", borderTop: "1px solid rgba(255,255,255,0.07)", background: "#0A1929", flexShrink: 0 }}>
-              {/* TODO: Replace static "Recording: none" with active tag name when recording state is added */}
               <p style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", margin: "0 0 3px 0" }}>
-                Recording: <span style={{ color: "rgba(255,255,255,0.28)" }}>none</span>
+                {codeLastTag ? (<>Last: <span style={{ color: "#00B5B8" }}>{codeLastTag.name}</span> @ {codeLastTag.time}</>) : (<>Recording: <span style={{ color: "rgba(255,255,255,0.28)" }}>none</span></>)}
               </p>
               <p style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.28)", whiteSpace: "nowrap", margin: 0 }}>
-                1–9: Tag · Space: Play · N/P: Clips
+                Space: Play · Tag: 1-9 · N/P: Clips
               </p>
             </div>
           </div>
