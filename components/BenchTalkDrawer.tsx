@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   MessageSquare,
@@ -172,6 +173,14 @@ const STATUS_CONFIG = {
 function formatInline(text: string): string {
   return text
     .replace(
+      /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-teal underline hover:text-teal/80">$1</a>'
+    )
+    .replace(
+      /\[([^\]]+)\]\((\/[^)]+)\)/g,
+      '<a href="$2" class="text-teal underline hover:text-teal/80">$1</a>'
+    )
+    .replace(
       /\*\*(.+?)\*\*/g,
       '<strong class="font-semibold text-navy">$1</strong>'
     )
@@ -288,10 +297,22 @@ function FlagCorrectionInline({ playerId, playerName }: { playerId: string; play
 }
 
 function BenchTalkMessageContent({ content }: { content: string }) {
+  const router = useRouter();
   const lines = content.split("\n");
 
+  const handleLinkClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest("a");
+    if (!anchor) return;
+    const href = anchor.getAttribute("href");
+    if (href && href.startsWith("/")) {
+      e.preventDefault();
+      router.push(href);
+    }
+  }, [router]);
+
   return (
-    <div className="space-y-1 text-sm leading-relaxed">
+    <div className="space-y-1 text-sm leading-relaxed" onClick={handleLinkClick}>
       {lines.map((line, i) => {
         if (!line.trim()) return <div key={i} className="h-2" />;
 
