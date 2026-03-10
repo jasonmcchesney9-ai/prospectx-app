@@ -93,8 +93,8 @@ type NavItem = { href: string; label: string; icon: React.ElementType; badge?: n
 // Player Hub — player browsing and management
 const PLAYER_HUB_ITEMS: NavItem[] = [
   { href: "/players", label: "All Players", icon: Users },
-  { href: "/players/cards", label: "Player Cards", icon: Eye },
   { href: "/players/manage", label: "Manage Players", icon: Settings },
+  // V2 Restore: Player Cards (/players/cards)
   // V2 Restore: PXR Leaderboard (/leaderboard) — moved to Scouting Hub
   // V2 Restore: Draft Board (PXR) (/draft-board) — moved to Scouting Hub
   // V2 Restore: Scouting List (/scouting) — moved to Scouting Hub
@@ -592,7 +592,7 @@ export default function NavBar() {
           {navConfig.showPlayerHub && (
             <div className="border-t border-white/10 mt-1 pt-1">
               <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
-                {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Player Hub"}
+                {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Players"}
               </p>
               {(roleGroup === "FAMILY"
                 ? [{ href: "/my-player", label: "My Player", icon: Heart }]
@@ -1189,7 +1189,7 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
         style={isActive ? undefined : { color: "#C8D8E8" }}
       >
         <Users size={16} />
-        {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Player Hub"}
+        {roleGroup === "FAMILY" || roleGroup === "PLAYER" ? "My Player" : "Players"}
         <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
