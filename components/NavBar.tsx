@@ -141,6 +141,7 @@ const COACH_HUB_ITEMS: NavItem[] = [
 const GAME_HUB_ITEMS: NavItem[] = [
   { href: "/chalk-talk/sessions", label: "Game Plans", icon: Swords },
   { href: "/series", label: "Series Planning", icon: Trophy },
+  { href: "/game-hub", label: "Game Sheets", icon: ClipboardCheck },
   { href: "/teams", label: "Teams", icon: Building2 },
   { href: "/team-systems", label: "Team Systems", icon: Shield },
 ];
