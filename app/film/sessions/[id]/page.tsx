@@ -2055,7 +2055,7 @@ export default function FilmSessionViewerPage() {
                   const s = Math.floor(secs % 60);
                   const label = totalDuration > 0 ? `${m}:${s.toString().padStart(2, "0")}` : (i === 0 ? "0:00" : "—:—");
                   return (
-                    <span key={i} style={{ position: "absolute", left: `calc(62px + ${(i / 10) * (100 - 0)}% * (1 - 62 / 100 / 1))`, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)", transform: "translateX(-50%)", whiteSpace: "nowrap", top: 0 }}>
+                    <span key={i} style={{ position: "absolute", left: `calc(50px + ${(i / 10) * (100 - 0)}% * (1 - 50 / 100 / 1))`, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.3)", transform: "translateX(-50%)", whiteSpace: "nowrap", top: 0 }}>
                       {label}
                     </span>
                   );
@@ -2068,22 +2068,22 @@ export default function FilmSessionViewerPage() {
                   ? sessionEvents
                   : sessionEvents.filter((ev) => getEventCategory(ev.event_type) === eventFilter);
                 const tracks: { key: string; label: string; match: (t: string) => boolean; color: string }[] = [
-                  { key: "goals", label: "GOALS", match: (t) => t.toLowerCase().includes("goal"), color: "#0D9488" },
-                  { key: "shots", label: "SHOTS", match: (t) => t.toLowerCase().includes("shot"), color: "#14B8A8" },
-                  { key: "faceoffs", label: "FACEOFFS", match: (t) => t.toLowerCase().includes("faceoff"), color: "#F59E0B" },
+                  { key: "goals", label: "GOALS", match: (t) => t.toLowerCase().includes("goal"), color: "#00B5B8" },
+                  { key: "shots", label: "SHOTS", match: (t) => t.toLowerCase().includes("shot"), color: "#6366F1" },
+                  { key: "faceoffs", label: "FACEOFFS", match: (t) => t.toLowerCase().includes("faceoff"), color: "#E67E22" },
                 ];
                 return (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {tracks.map((track) => {
                       const trackEvents = filteredEvents.filter((ev) => track.match(ev.event_type));
                       return (
-                        <div key={track.key} style={{ height: 14, position: "relative", background: "rgba(255,255,255,0.02)", borderRadius: 3 }}>
-                          {/* Track label */}
-                          <div style={{ position: "absolute", left: 0, top: 0, width: 60, height: "100%", background: "rgba(6,14,26,0.8)", borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", paddingLeft: 6, zIndex: 1, borderRadius: "3px 0 0 3px" }}>
-                            <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>{track.label}</span>
+                        <div key={track.key} style={{ height: 24, position: "relative", background: "rgba(255,255,255,0.02)", borderRadius: 3 }}>
+                          {/* Track label — 48px, right-aligned */}
+                          <div style={{ position: "absolute", left: 0, top: 0, width: 48, height: "100%", background: "rgba(6,14,26,0.8)", borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6, zIndex: 1, borderRadius: "3px 0 0 3px" }}>
+                            <span style={{ fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#6B7280" }}>{track.label}</span>
                           </div>
                           {/* Events area */}
-                          <div style={{ position: "absolute", left: 62, right: 0, top: 0, bottom: 0 }}>
+                          <div style={{ position: "absolute", left: 50, right: 0, top: 0, bottom: 0 }}>
                             {trackEvents.map((ev) => {
                               const pct = totalDuration > 0 ? (ev.time_seconds / totalDuration) * 100 : 0;
                               return (
@@ -2091,7 +2091,7 @@ export default function FilmSessionViewerPage() {
                                   key={ev.id}
                                   onClick={() => setStartTime(ev.time_seconds)}
                                   title={`${ev.event_type.replace(/_/g, " ")} at ${formatTimestamp(ev.time_seconds)}`}
-                                  style={{ position: "absolute", left: `${pct}%`, width: "max(0.8%, 4px)", top: 1, bottom: 1, borderRadius: 2, background: track.color, opacity: 0.85, cursor: "pointer", border: "none", padding: 0, transition: "opacity 0.15s" }}
+                                  style={{ position: "absolute", left: `${pct}%`, width: "max(8px, 0.8%)", top: 2, bottom: 2, borderRadius: 2, background: track.color, opacity: 0.85, cursor: "pointer", border: "none", padding: 0, transition: "opacity 0.15s" }}
                                   onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
                                   onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.85"; }}
                                 />
@@ -2106,15 +2106,15 @@ export default function FilmSessionViewerPage() {
               })()}
 
               {/* Playhead — vertical teal line tracking current playback position */}
-              <div style={{ position: "absolute", top: 0, bottom: 0, left: `calc(62px + ${playheadPct}% * (1 - 62 / 100 / 1))`, width: 1, background: "#14B8A8", zIndex: 20, pointerEvents: "none", transition: "left 0.25s linear" }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: `calc(50px + ${playheadPct}% * (1 - 50 / 100 / 1))`, width: 2, background: "#00B5B8", zIndex: 20, pointerEvents: "none", transition: "left 0.25s linear" }}>
                 {/* Triangle cap */}
-                <div style={{ position: "absolute", top: 0, left: -3, width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid #14B8A8" }} />
+                <div style={{ position: "absolute", top: 0, left: -3, width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid #00B5B8" }} />
               </div>
 
               {/* Empty state */}
               {sessionEvents.length === 0 && (
-                <p style={{ fontSize: 10, textAlign: "center", padding: "6px 0", color: "rgba(255,255,255,0.25)", position: "absolute", left: 62, right: 0, top: "50%", transform: "translateY(-50%)", margin: 0 }}>
-                  No events yet — tag events from the Code Window.
+                <p style={{ fontSize: 10, textAlign: "center", padding: "6px 0", color: "rgba(255,255,255,0.25)", position: "absolute", left: 50, right: 0, top: "50%", transform: "translateY(-50%)", margin: 0 }}>
+                  Tag clips to populate the timeline
                 </p>
               )}
             </div>
