@@ -1433,13 +1433,13 @@ function ScoutingListSection({ scoutingList, loading }: { scoutingList: Scouting
   return (
     <DashboardCard
       icon={<Target size={15} className="text-orange" />}
-      title="Scouting List"
-      viewAllHref="/scouting"
+      title="Watchlist"
+      viewAllHref="/watchlist"
       loading={loading}
       empty={scoutingList.length === 0}
       emptyIcon={<Target size={24} className="text-muted/30" />}
-      emptyText="No players on scouting list"
-      emptyLink="/scouting"
+      emptyText="No players on watchlist"
+      emptyLink="/watchlist"
       emptyLinkText="Add a player"
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>

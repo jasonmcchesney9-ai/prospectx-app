@@ -165,12 +165,12 @@ function OverflowMenu({ player, onScout }: { player: PlayerCardData; onScout: ()
             <Search size={12} style={{ color: "#0D9488" }} /> Scout in Bench Talk
           </button>
           <Link
-            href="/scouting"
+            href="/watchlist"
             onClick={(e) => { e.stopPropagation(); setOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", fontSize: 12, color: "#0F2942", textDecoration: "none" }}
             className="hover:bg-[#F0F4F8] transition-colors"
           >
-            <ListPlus size={12} style={{ color: "#94A3B8" }} /> Add to Scouting List
+            <ListPlus size={12} style={{ color: "#94A3B8" }} /> Add to Watchlist
           </Link>
           <Link
             href={`/players/${player.id}`}

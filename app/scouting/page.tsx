@@ -73,7 +73,7 @@ export default function ScoutingListPage() {
         orgId: u?.org_id || "",
         orgName: "ProspectX",
       },
-      page: { id: "SCOUTING_LIST", route: "/scouting" },
+      page: { id: "SCOUTING_LIST", route: "/watchlist" },
     });
     return () => { setActivePxiContext(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,7 +170,7 @@ function ScoutingList() {
         <div>
           <h1 className="text-2xl font-bold text-navy flex items-center gap-2">
             <Target size={24} className="text-teal" />
-            Scouting List
+            Watchlist
           </h1>
           <p className="text-muted text-sm mt-1">
             Your personal watchlist. Track prospects across any league, add priority ratings, and build your pipeline.
@@ -580,7 +580,7 @@ function AddPlayerModal({
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-oswald font-bold text-navy uppercase tracking-wider flex items-center gap-2">
             <User size={18} className="text-teal" />
-            Add Player to Scouting List
+            Add Player to Watchlist
           </h2>
           <button
             onClick={onClose}

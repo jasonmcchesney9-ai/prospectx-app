@@ -113,7 +113,7 @@ const SCOUTING_HUB_ITEMS: NavItem[] = [
   { href: "/draft-board", label: "Draft Board", icon: BarChart3 },
   { href: "/watchlist", label: "Watchlist", icon: Eye },
   { href: "/top-prospects", label: "Top Prospects", icon: Star },
-  { href: "/scouting", label: "Scouting List", icon: Target },
+  { href: "/watchlist", label: "Watchlist", icon: Target },
   { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
 ];
 

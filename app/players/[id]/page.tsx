@@ -1466,11 +1466,11 @@ export default function PlayerDetailPage() {
                         <Search size={12} className="text-teal" /> Scout in Bench Talk
                       </button>
                       <Link
-                        href="/scouting"
+                        href="/watchlist"
                         onClick={() => setOverflowOpen(false)}
                         className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
                       >
-                        <ListPlus size={12} className="text-muted" /> Add to Scouting List
+                        <ListPlus size={12} className="text-muted" /> Add to Watchlist
                       </Link>
                       <Link
                         href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
@@ -3663,7 +3663,7 @@ export default function PlayerDetailPage() {
                   <Link href={`/reports/generate?player=${playerId}&type=pro_skater`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
                     <Sparkles size={12} /> Generate PXI Report
                   </Link>
-                  <Link href="/scouting" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                  <Link href="/watchlist" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
                     <ListPlus size={12} /> Add to Tracking
                   </Link>
                   <Link href={`/players/${playerId}/card`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>

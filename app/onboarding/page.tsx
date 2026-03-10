@@ -26,7 +26,7 @@ const ALL_WIDGETS: { id: string; label: string; staffOnly?: boolean }[] = [
   { id: "recent_reports", label: "Recent Reports" },
   { id: "active_series", label: "Active Series", staffOnly: true },
   { id: "chalk_talk", label: "Chalk Talk", staffOnly: true },
-  { id: "scouting_list", label: "Scouting List", staffOnly: true },
+  { id: "scouting_list", label: "Watchlist", staffOnly: true },
   { id: "top_prospects", label: "Top Prospects", staffOnly: true },
   { id: "scoring_leaders", label: "Scoring Leaders" },
   { id: "wall_board", label: "Wall Board", staffOnly: true },
