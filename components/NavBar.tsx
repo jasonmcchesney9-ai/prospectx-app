@@ -113,6 +113,7 @@ const COACH_HUB_ITEMS: NavItem[] = [
   { href: "/rink-builder", label: "Rink Builder", icon: PenTool },
   { href: "/coach-documents", label: "Coach Documents", icon: FileText },
   { href: "/glossary", label: "Glossary", icon: GraduationCap },
+  { href: "/org-hub/development", label: "Development Dashboard", icon: TrendingUp },
 ];
 
 // Game Hub — game day operations
@@ -126,11 +127,10 @@ const GAME_HUB_ITEMS: NavItem[] = [
 // Org Hub — org management + imports (PRO only)
 const ORG_HUB_ITEMS: NavItem[] = [
   { href: "/org-hub", label: "Org Hub", icon: Building2 },
-  { href: "/org-hub/roster-board", label: "Roster Board", icon: Users },
+  // V2 Restore: Roster Board (/org-hub/roster-board) — redundant with Team → Lines in V1
   { href: "/org-hub/trade-board", label: "Trade Board", icon: ArrowLeftRight },
   { href: "/org-hub/draft-board", label: "Draft Board", icon: Trophy },
   { href: "/org-hub/playbook", label: "System Playbook", icon: BookOpen },
-  { href: "/org-hub/development", label: "Development Dashboard", icon: TrendingUp },
   { href: "/org-hub/scouting", label: "Scouting Pipeline", icon: Eye },
   { href: "/billing", label: "Billing & Admin", icon: CreditCard },
   { href: "/instat", label: "Import Stats (XLSX)", icon: BarChart3 },
