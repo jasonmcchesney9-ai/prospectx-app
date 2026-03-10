@@ -1080,22 +1080,27 @@ export default function PlayerDetailPage() {
     return () => { setActivePxiContext(null); };
   }, [player, playerId, currentUser, intelligence, pxrData, setActivePxiContext]);
 
-  // Auto-trigger: deep-link from dashboard with ?tab=devplan&generate=1
+  // Deep-link: set tab from URL param on mount only
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
     const tabParam = sp.get("tab");
-    const autoGen = sp.get("generate") || sp.get("autoGenerate");
     if (tabParam === "devplan" || tabParam === "player") {
       setActiveTab("player");
     }
+  }, []);
+
+  // Auto-generate: trigger dev plan generation from ?generate=1 deep-link
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const autoGen = sp.get("generate") || sp.get("autoGenerate");
     if ((autoGen === "1" || autoGen === "true") && !loading && !devPlanV2 && planStatus === "empty") {
       setActiveTab("player");
       handleGenerateV2();
       router.replace(`/players/${playerId}?tab=devplan`, { scroll: false });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]);
+  }, [loading, devPlanV2, planStatus]);
 
   // Close overflow menu on outside click
   useEffect(() => {
