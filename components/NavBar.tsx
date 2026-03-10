@@ -45,6 +45,8 @@ import {
   Zap,
   CreditCard,
   Heart,
+  FolderOpen,
+  Radio,
 } from "lucide-react";
 import { getUser, logout } from "@/lib/auth";
 import api from "@/lib/api";
@@ -88,21 +90,41 @@ function getRoleGroup(hockeyRole?: string): RoleGroup {
 type NavItem = { href: string; label: string; icon: React.ElementType; badge?: number };
 
 // ── Hub Dropdown Items ──────────────────────────────────────
-// Player Hub — consolidated player, scouting, and reports items
+// Player Hub — player browsing and management
 const PLAYER_HUB_ITEMS: NavItem[] = [
   { href: "/players", label: "All Players", icon: Users },
-  { href: "/leaderboard", label: "PXR Leaderboard", icon: Trophy },
-  { href: "/draft-board", label: "Draft Board (PXR)", icon: BarChart3 },
-  { href: "/scouting", label: "Scouting List", icon: Target },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/reports/library", label: "Report Library", icon: FileText },
-  { href: "/reports/generate", label: "Generate Report", icon: FileText },
-  { href: "/reports/custom", label: "Custom Report", icon: PenTool },
-  { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
-  { href: "/watchlist", label: "Watchlist", icon: Eye },
-  { href: "/top-prospects", label: "Top Prospects", icon: Star },
   { href: "/players/cards", label: "Player Cards", icon: Eye },
   { href: "/players/manage", label: "Manage Players", icon: Settings },
+  // V2 Restore: PXR Leaderboard (/leaderboard) — moved to Scouting Hub
+  // V2 Restore: Draft Board (PXR) (/draft-board) — moved to Scouting Hub
+  // V2 Restore: Scouting List (/scouting) — moved to Scouting Hub
+  // V2 Restore: Reports (/reports) — moved to Report Hub
+  // V2 Restore: Report Library (/reports/library) — moved to Report Hub
+  // V2 Restore: Generate Report (/reports/generate) — moved to Report Hub
+  // V2 Restore: Custom Report (/reports/custom) — moved to Report Hub
+  // V2 Restore: Scout Notes (/scout-notes) — moved to Scouting Hub
+  // V2 Restore: Watchlist (/watchlist) — moved to Scouting Hub
+  // V2 Restore: Top Prospects (/top-prospects) — moved to Scouting Hub
+];
+
+// Scouting Hub — scouting pipeline and evaluation tools (PRO only)
+const SCOUTING_HUB_ITEMS: NavItem[] = [
+  { href: "/leaderboard", label: "PXR Leaderboard", icon: Trophy },
+  { href: "/draft-board", label: "Draft Board", icon: BarChart3 },
+  { href: "/watchlist", label: "Watchlist", icon: Eye },
+  { href: "/top-prospects", label: "Top Prospects", icon: Star },
+  { href: "/scouting", label: "Scouting List", icon: Target },
+  { href: "/scout-notes", label: "Scout Notes", icon: ClipboardCheck },
+];
+
+// Report Hub — report generation and access (all roles, items filtered by role)
+type ReportNavItem = NavItem & { roles: string[] };
+const REPORT_HUB_ITEMS: ReportNavItem[] = [
+  { href: "/reports/generate", label: "Generate Report", icon: FileText, roles: ["SCOUT", "COACH", "GM", "ANALYST", "AGENT"] },
+  { href: "/reports/library", label: "Report Library", icon: BookOpen, roles: ["SCOUT", "COACH", "GM", "ANALYST"] },
+  { href: "/reports/custom", label: "Custom Report", icon: PenTool, roles: ["PRO_PLUS"] },
+  { href: "/reports", label: "My Reports", icon: FolderOpen, roles: ["PLAYER", "PARENT", "AGENT"] },
+  { href: "/reports/broadcast", label: "Broadcast Reports", icon: Radio, roles: ["MEDIA"] },
 ];
 
 // Coach Hub — coaching tools
@@ -144,12 +166,12 @@ const ORG_HUB_ITEMS: NavItem[] = [
 // Returns direct-link items + visibility flags for hub dropdowns
 function getNavItems(group: RoleGroup): {
   directLinks: NavItem[];
-  showPlayerHub: boolean; showCoachHub: boolean;
-  showGameHub: boolean; showOrgHub: boolean;
+  showPlayerHub: boolean; showScoutingHub: boolean; showCoachHub: boolean;
+  showGameHub: boolean; showReportHub: boolean; showOrgHub: boolean;
 } {
   const base = {
-    showPlayerHub: false, showCoachHub: false,
-    showGameHub: false, showOrgHub: false,
+    showPlayerHub: false, showScoutingHub: false, showCoachHub: false,
+    showGameHub: false, showReportHub: false, showOrgHub: false,
   };
   switch (group) {
     case "PRO":
@@ -158,8 +180,8 @@ function getNavItems(group: RoleGroup): {
         directLinks: [
           { href: "/", label: "Dashboard", icon: LayoutDashboard },
         ],
-        showPlayerHub: true, showCoachHub: true,
-        showGameHub: true, showOrgHub: true,
+        showPlayerHub: true, showScoutingHub: true, showCoachHub: true,
+        showGameHub: true, showReportHub: true, showOrgHub: true,
       };
     case "MEDIA":
       return {
@@ -170,7 +192,7 @@ function getNavItems(group: RoleGroup): {
           { href: "/film", label: "Film Hub", icon: Video },
           { href: "/schedule", label: "Schedule", icon: Calendar },
         ],
-        showPlayerHub: true,
+        showPlayerHub: true, showReportHub: true,
       };
     case "PLAYER":
       return {
@@ -182,7 +204,7 @@ function getNavItems(group: RoleGroup): {
           { href: "/schedule", label: "Schedule", icon: Calendar },
           { href: "/messages", label: "Messages", icon: MessageSquare },
         ],
-        showPlayerHub: true,
+        showPlayerHub: true, showReportHub: true,
       };
     case "FAMILY":
       return {
@@ -194,7 +216,7 @@ function getNavItems(group: RoleGroup): {
           { href: "/schedule", label: "Schedule", icon: Calendar },
           { href: "/messages", label: "Messages", icon: MessageSquare },
         ],
-        showPlayerHub: true,
+        showPlayerHub: true, showReportHub: true,
       };
     case "AGENT":
       return {
@@ -205,7 +227,7 @@ function getNavItems(group: RoleGroup): {
           { href: "/schedule", label: "Schedule", icon: Calendar },
           { href: "/messages", label: "Messages", icon: MessageSquare },
         ],
-        showPlayerHub: true,
+        showPlayerHub: true, showScoutingHub: true, showReportHub: true,
       };
   }
 }
@@ -345,6 +367,9 @@ export default function NavBar() {
             {/* Player Hub dropdown */}
             {navConfig.showPlayerHub && <PlayerHubDropdown pathname={pathname} roleGroup={roleGroup} />}
 
+            {/* Scouting Hub dropdown (PRO + AGENT) */}
+            {navConfig.showScoutingHub && <ScoutingHubDropdown pathname={pathname} />}
+
             {/* Coach Hub dropdown (PRO only) */}
             {navConfig.showCoachHub && <CoachHubDropdown pathname={pathname} />}
 
@@ -355,6 +380,9 @@ export default function NavBar() {
             {(roleGroup === "PRO" || roleGroup === "PLAYER" || roleGroup === "FAMILY" || roleGroup === "MEDIA") && (
               <NavLink href="/film" label="Film Hub" icon={Video} pathname={pathname} />
             )}
+
+            {/* Report Hub dropdown (all roles, items filtered by role) */}
+            {navConfig.showReportHub && <ReportHubDropdown pathname={pathname} roleGroup={roleGroup} hockeyRole={effectiveHockeyRole} />}
 
             {/* Org Hub dropdown (PRO only) */}
             {navConfig.showOrgHub && <OrgHubDropdown pathname={pathname} />}
@@ -570,10 +598,35 @@ export default function NavBar() {
               {(roleGroup === "FAMILY"
                 ? [{ href: "/my-player", label: "My Player", icon: Heart }]
                 : roleGroup === "PLAYER" ? [{ href: "/my-player", label: "My Profile", icon: Users }, { href: "/my-player/stats", label: "My Stats", icon: BarChart3 }, { href: "/my-player/reports", label: "My Reports", icon: FileText }, { href: "/my-player/dev-plan", label: "My Dev Plan", icon: TrendingUp }]
-                : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports", "/draft-board", "/leaderboard"].includes(i.href))
-                : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
+                : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players"].includes(i.href))
+                : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players"].includes(i.href))
                 : PLAYER_HUB_ITEMS
               ).map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Scouting Hub section (PRO + AGENT) */}
+          {navConfig.showScoutingHub && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Scouting Hub
+              </p>
+              {SCOUTING_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
                 const active = pathname.startsWith(href);
                 return (
                   <Link
@@ -655,6 +708,31 @@ export default function NavBar() {
                 <Video size={16} />
                 Film Hub
               </Link>
+            </div>
+          )}
+
+          {/* Report Hub section (all roles, items filtered) */}
+          {navConfig.showReportHub && (
+            <div className="border-t border-white/10 mt-1 pt-1">
+              <p className="px-3 py-2 text-xs font-oswald uppercase tracking-wider text-white/30">
+                Report Hub
+              </p>
+              {getFilteredReportItems(roleGroup, effectiveHockeyRole).map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 px-3 py-3 text-sm font-medium ${
+                      active ? "text-teal" : "text-white/70"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
           )}
 
@@ -1083,8 +1161,8 @@ function PlayerHubDropdown({ pathname, roleGroup }: { pathname: string; roleGrou
   // Filter items by role
   const items = roleGroup === "PRO" ? PLAYER_HUB_ITEMS
     : roleGroup === "PLAYER" ? [{ href: "/my-player", label: "My Profile", icon: Users }, { href: "/my-player/stats", label: "My Stats", icon: BarChart3 }, { href: "/my-player/reports", label: "My Reports", icon: FileText }, { href: "/my-player/dev-plan", label: "My Dev Plan", icon: TrendingUp }]
-    : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/reports", "/draft-board", "/leaderboard"].includes(i.href))
-    : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players", "/leaderboard"].includes(i.href))
+    : roleGroup === "AGENT" ? PLAYER_HUB_ITEMS.filter(i => ["/players"].includes(i.href))
+    : roleGroup === "MEDIA" ? PLAYER_HUB_ITEMS.filter(i => ["/players"].includes(i.href))
     : roleGroup === "FAMILY" ? [{ href: "/my-player", label: "My Player", icon: Heart }]
     : PLAYER_HUB_ITEMS;
 
@@ -1357,6 +1435,145 @@ function OrgHubDropdown({ pathname }: { pathname: string }) {
         <div className="absolute left-0 mt-1 w-64 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50 max-h-[70vh] overflow-y-auto">
           {ORG_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href) || pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Report Hub role filter helper ──────────────────────────────
+function getFilteredReportItems(roleGroup: RoleGroup, hockeyRole?: string): NavItem[] {
+  return REPORT_HUB_ITEMS.filter((item) => {
+    const roles = item.roles;
+    // PRO_PLUS = all PRO sub-roles
+    if (roles.includes("PRO_PLUS") && roleGroup === "PRO") return true;
+    // MEDIA
+    if (roles.includes("MEDIA") && roleGroup === "MEDIA") return true;
+    // PLAYER
+    if (roles.includes("PLAYER") && roleGroup === "PLAYER") return true;
+    // PARENT (FAMILY role group)
+    if (roles.includes("PARENT") && roleGroup === "FAMILY") return true;
+    // AGENT
+    if (roles.includes("AGENT") && roleGroup === "AGENT") return true;
+    // Specific hockey_role match (SCOUT, COACH, GM, ANALYST)
+    if (hockeyRole && roles.includes(hockeyRole.toUpperCase())) return true;
+    // Admin sees all PRO items
+    if (hockeyRole === "admin" && (roles.includes("SCOUT") || roles.includes("COACH") || roles.includes("GM") || roles.includes("ANALYST") || roles.includes("PRO_PLUS"))) return true;
+    return false;
+  });
+}
+
+function ScoutingHubDropdown({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isActive = SCOUTING_HUB_ITEMS.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "hover:bg-white/5 hover:text-white"
+        }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
+      >
+        <Target size={16} />
+        Scouting Hub
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {SCOUTING_HUB_ITEMS.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-white/10 text-teal"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportHubDropdown({ pathname, roleGroup, hockeyRole }: { pathname: string; roleGroup: RoleGroup; hockeyRole?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const items = getFilteredReportItems(roleGroup, hockeyRole);
+  const isActive = items.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
+          isActive
+            ? "bg-white/10 text-teal"
+            : "hover:bg-white/5 hover:text-white"
+        }`}
+        style={isActive ? undefined : { color: "#C8D8E8" }}
+      >
+        <FileText size={16} />
+        Report Hub
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 mt-1 w-56 bg-navy-light border border-white/10 rounded-lg shadow-xl overflow-hidden z-50">
+          {items.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
             return (
               <Link
                 key={href}
