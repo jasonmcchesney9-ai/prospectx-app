@@ -9,6 +9,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
+import ConfidenceBadge from "@/components/ConfidenceBadge";
 
 // ── PXR Tier Definitions (from PXR Engine Spec v1.0, Section 6) ──
 const PXR_TIERS = [
@@ -46,29 +47,6 @@ function TierBadge({ score, scoreType }: { score: number | null; scoreType?: str
       style={{ backgroundColor: tier.color }}
     >
       {tier.id}
-    </span>
-  );
-}
-
-function ConfidenceBadge({ tier, gp }: { tier?: string | null; gp?: number | null }) {
-  if (!tier) return null;
-  if (tier === "high") {
-    return (
-      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-green-100 text-green-700">
-        High
-      </span>
-    );
-  }
-  if (tier === "moderate") {
-    return (
-      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
-        Moderate
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-oswald font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
-      Small Sample{gp != null && gp < 15 ? ` (${gp} GP)` : ""}
     </span>
   );
 }

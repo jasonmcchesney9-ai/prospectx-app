@@ -76,6 +76,7 @@ import GameLogTable from "@/components/GameLogTable";
 import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import TrendlineChart from "@/components/TrendlineChart";
+import ConfidenceBadge from "@/components/ConfidenceBadge";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse, PlayerTransfer, PlayerAchievement, TeamSplit } from "@/types/api";
 import CareerHistoryAccordion from "@/components/player/CareerHistoryAccordion";
 import AchievementsAccordion from "@/components/player/AchievementsAccordion";
@@ -1781,6 +1782,7 @@ export default function PlayerDetailPage() {
                               Age {pxrData.age_modifier > 0 ? "+" : ""}{pxrData.age_modifier.toFixed(1)}
                             </span>
                           )}
+                          <ConfidenceBadge tier={pxrData.confidence_tier} gp={pxrData.gp} />
                         </div>
                       </>
                     )}
