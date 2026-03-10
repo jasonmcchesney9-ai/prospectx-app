@@ -35,6 +35,7 @@ _this_dir = os.path.dirname(os.path.abspath(__file__))
 if _this_dir not in sys.path:
     sys.path.insert(0, _this_dir)
 
+import base64
 import csv
 import io
 import xml.etree.ElementTree as ET
@@ -3942,6 +3943,27 @@ def init_db():
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_player_events_raw ON player_events(raw_event_id, source) WHERE raw_event_id IS NOT NULL")
 
     conn.commit()
+
+    # ── Table: game_sheet_imports (Vision-parsed game sheets) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_sheet_imports (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            uploaded_by TEXT,
+            filename TEXT,
+            home_team TEXT,
+            away_team TEXT,
+            game_date TEXT,
+            season TEXT,
+            raw_extracted TEXT,
+            parse_status TEXT DEFAULT 'pending',
+            events_inserted INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (uploaded_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_game_sheet_imports_org ON game_sheet_imports(org_id)")
 
     # ── Table: agent_clients ──
     conn.execute("""
@@ -27970,6 +27992,213 @@ async def instat_import_xml(
             "unresolved_names": result["unresolved_names"],
         },
     }
+
+
+# ── Game Sheet Import (Claude Vision) ────────────────────────
+
+_GAMESHEET_VISION_PROMPT = """You are a hockey game sheet parser. Extract all structured data from this game sheet image. Return ONLY valid JSON with this exact structure:
+{
+  "home_team": "string",
+  "away_team": "string",
+  "game_date": "string",
+  "final_score": { "home": 0, "away": 0 },
+  "goals": [{ "period": 1, "time": "12:34", "team": "string", "scorer": "string", "assists": ["string"], "situation": "EV" }],
+  "penalties": [{ "period": 1, "time": "12:34", "team": "string", "player": "string", "infraction": "string", "minutes": 2 }],
+  "goalie_stats": [{ "team": "string", "player": "string", "shots_faced": 0, "goals_allowed": 0 }]
+}
+If a field is not visible or legible, use null."""
+
+
+@app.post("/game-sheets/import")
+async def import_game_sheet(
+    file: UploadFile = File(...),
+    season: str = Form("2025-26"),
+    token_data: dict = Depends(verify_token),
+):
+    """Import a game sheet via Claude Vision (PDF, JPG, PNG)."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can import game sheets")
+
+        fname = (file.filename or "").lower()
+        if not fname.endswith((".pdf", ".jpg", ".jpeg", ".png")):
+            raise HTTPException(status_code=400, detail="File must be PDF, JPG, or PNG")
+
+        content = await file.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File exceeds 10MB limit")
+
+        # Determine media type and content block type
+        if fname.endswith(".pdf"):
+            media_type = "application/pdf"
+            block_type = "document"
+        elif fname.endswith(".png"):
+            media_type = "image/png"
+            block_type = "image"
+        else:
+            media_type = "image/jpeg"
+            block_type = "image"
+
+        b64_data = base64.standard_b64encode(content).decode("utf-8")
+        import_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        ai_client = get_anthropic_client()
+        if not ai_client:
+            raise HTTPException(status_code=503, detail="AI service not configured")
+
+        try:
+            response = ai_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4000,
+                system=_GAMESHEET_VISION_PROMPT,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": block_type,
+                            "source": {"type": "base64", "media_type": media_type, "data": b64_data},
+                        },
+                        {"type": "text", "text": "Extract all data from this game sheet."},
+                    ],
+                }],
+            )
+
+            raw_text = response.content[0].text
+            # Strip markdown fences if present
+            cleaned = raw_text.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```$", "", cleaned)
+            parsed = json.loads(cleaned)
+
+            # Insert import record
+            conn.execute("""
+                INSERT INTO game_sheet_imports
+                    (id, org_id, uploaded_by, filename, home_team, away_team,
+                     game_date, season, raw_extracted, parse_status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'parsed', ?)
+            """, (import_id, org_id, user_id, file.filename,
+                  parsed.get("home_team"), parsed.get("away_team"),
+                  parsed.get("game_date"), season, raw_text, now))
+
+            events_inserted = 0
+
+            # Process goals
+            goals = parsed.get("goals") or []
+            situation_map = {"EV": "5v5", "PP": "pp", "SH": "pk", "EN": "en"}
+            for i, goal in enumerate(goals):
+                scorer = goal.get("scorer")
+                if not scorer:
+                    continue
+                team = goal.get("team", "")
+                player_id = _resolve_player_id(scorer, team, season, org_id, conn)
+                situation = situation_map.get(goal.get("situation", "EV"), "5v5")
+
+                conn.execute("""
+                    INSERT INTO player_events
+                        (id, player_id, game_id, org_id, season, period, game_time,
+                         event_type, situation, outcome, zone, x_coord, y_coord,
+                         xg_value, tags, source, raw_event_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), player_id, import_id, org_id, season,
+                      goal.get("period"), goal.get("time"), "shot", situation,
+                      "success", "oz", None, None, None,
+                      json.dumps(["goal"]), "gamesheet_vision",
+                      f"gs_{import_id}_{i}", now))
+                events_inserted += 1
+
+                # Assists
+                for j, assist_name in enumerate(goal.get("assists") or []):
+                    if not assist_name:
+                        continue
+                    assist_pid = _resolve_player_id(assist_name, team, season, org_id, conn)
+                    conn.execute("""
+                        INSERT INTO player_events
+                            (id, player_id, game_id, org_id, season, period, game_time,
+                             event_type, situation, outcome, zone, x_coord, y_coord,
+                             xg_value, tags, source, raw_event_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (str(uuid.uuid4()), assist_pid, import_id, org_id, season,
+                          goal.get("period"), goal.get("time"), "pass", situation,
+                          "success", "oz", None, None, None,
+                          json.dumps(["assist"]), "gamesheet_vision",
+                          f"gs_{import_id}_{i}_a{j}", now))
+                    events_inserted += 1
+
+            # Process penalties
+            penalties = parsed.get("penalties") or []
+            for i, pen in enumerate(penalties):
+                player = pen.get("player")
+                if not player:
+                    continue
+                team = pen.get("team", "")
+                player_id = _resolve_player_id(player, team, season, org_id, conn)
+                infraction = pen.get("infraction", "minor")
+
+                conn.execute("""
+                    INSERT INTO player_events
+                        (id, player_id, game_id, org_id, season, period, game_time,
+                         event_type, situation, outcome, zone, x_coord, y_coord,
+                         xg_value, tags, source, raw_event_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), player_id, import_id, org_id, season,
+                      pen.get("period"), pen.get("time"), "penalty", "5v5",
+                      "fail", None, None, None, None,
+                      json.dumps(["penalty", infraction or "minor"]),
+                      "gamesheet_vision", f"gs_{import_id}_p{i}", now))
+                events_inserted += 1
+
+            # Update events count
+            conn.execute("UPDATE game_sheet_imports SET events_inserted = ? WHERE id = ?",
+                         (events_inserted, import_id))
+            conn.commit()
+
+            return {
+                "import_id": import_id,
+                "home_team": parsed.get("home_team"),
+                "away_team": parsed.get("away_team"),
+                "game_date": parsed.get("game_date"),
+                "goals_count": len(goals),
+                "penalties_count": len(penalties),
+                "events_inserted": events_inserted,
+                "raw_extracted": raw_text,
+            }
+
+        except Exception as e:
+            # Vision or parse failed — record failure
+            conn.execute("""
+                INSERT INTO game_sheet_imports
+                    (id, org_id, uploaded_by, filename, season, raw_extracted, parse_status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'failed', ?)
+            """, (import_id, org_id, user_id, file.filename, season, str(e), now))
+            conn.commit()
+            raise HTTPException(status_code=500, detail=f"Game sheet parsing failed: {str(e)}")
+
+    finally:
+        conn.close()
+
+
+@app.get("/game-sheets/imports")
+async def list_game_sheet_imports(token_data: dict = Depends(verify_token)):
+    """List game sheet imports for the current org, most recent first."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT id, filename, home_team, away_team, game_date, season,
+                   parse_status, events_inserted, created_at
+            FROM game_sheet_imports
+            WHERE org_id = ?
+            ORDER BY created_at DESC
+        """, (org_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def _find_team_column(row: dict) -> str:
