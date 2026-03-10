@@ -349,8 +349,10 @@ export default function FilmSessionViewerPage() {
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
   const [eventFilter, setEventFilter] = useState<EventCategory>("all");
 
-  // Cinema mode
-  const [cinemaMode, setCinemaMode] = useState(false);
+  // Cinema mode — persisted to localStorage
+  const [cinemaMode, setCinemaMode] = useState(() => {
+    try { return localStorage.getItem("filmroom_cinema") === "1"; } catch { return false; }
+  });
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   // Reel builder modal + session reels
@@ -624,7 +626,7 @@ export default function FilmSessionViewerPage() {
   // Escape key exits Cinema Mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCinemaMode(false);
+      if (e.key === "Escape") { setCinemaMode(false); try { localStorage.setItem("filmroom_cinema", "0"); } catch { /* */ } }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -1037,7 +1039,7 @@ export default function FilmSessionViewerPage() {
               {generating ? "Generating..." : generatedReport ? "Regenerate" : "Analyze"}
             </button>
             <button
-              onClick={() => setCinemaMode(!cinemaMode)}
+              onClick={() => { const next = !cinemaMode; setCinemaMode(next); try { localStorage.setItem("filmroom_cinema", next ? "1" : "0"); } catch { /* */ } }}
               style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "transparent", color: cinemaMode ? "#14B8A8" : "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }}
               title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
             >
@@ -1271,6 +1273,9 @@ export default function FilmSessionViewerPage() {
                 <span style={{ fontSize: 10, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#14B8A8" }}>
                   CODE WINDOW
                 </span>
+                {codeTagging && (
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", animation: "codePulse 1s infinite" }} />
+                )}
               </div>
               <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#14B8A8", background: "rgba(13,148,136,0.15)", border: "1px solid rgba(13,148,136,0.25)", borderRadius: 999, padding: "2px 8px" }}>
                 REVIEW
@@ -1471,7 +1476,14 @@ export default function FilmSessionViewerPage() {
                 </>
               )}
               {/* Score badge — bottom-left of video area */}
-              {/* TODO: Render score badge when session has team names/scores (home_team, away_team, home_score, away_score, period). Currently session only has team_id/opponent_team_id with no names or scores. */}
+              {session?.match_title && !cinemaMode && (
+                <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 10, background: "rgba(10,22,40,0.85)", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "#FFFFFF", letterSpacing: "0.04em" }}>{session.match_title}</span>
+                  {session.match_date && (
+                    <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.4)" }}>{session.match_date}</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Transport bar — Mark In/Out + Frame step + Speed + Cinema */}
@@ -1589,14 +1601,14 @@ export default function FilmSessionViewerPage() {
                         key={rate}
                         onClick={() => handleSpeedChange(rate)}
                         style={{
-                          padding: "3px 7px",
-                          borderRadius: 4,
+                          padding: "4px 10px",
+                          borderRadius: 999,
                           fontSize: 9,
                           fontFamily: "'Oswald', sans-serif",
                           fontWeight: 600,
                           letterSpacing: "0.06em",
-                          color: playbackSpeed === rate ? "#FFFFFF" : "rgba(255,255,255,0.4)",
-                          background: playbackSpeed === rate ? "#0D9488" : "rgba(255,255,255,0.04)",
+                          color: playbackSpeed === rate ? "#FFFFFF" : "#6B7280",
+                          background: playbackSpeed === rate ? "#00B5B8" : "transparent",
                           border: "none",
                           cursor: "pointer",
                         }}
