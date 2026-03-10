@@ -45624,6 +45624,31 @@ async def create_film_clip(request: Request, token_data: dict = Depends(verify_t
                 if pid:
                     asyncio.create_task(_generate_post_game_film_summary(str(pid), str(clip_session_id), org_id))
 
+        # ── Auto-wire dev plan evidence for coaching-relevant tags ──
+        _EVIDENCE_AUTO_TAGS = {"TURNOVER", "BREAKOUT", "DZ_COVERAGE", "COVERAGE_MISS", "ENTRY", "CYCLE"}
+        clip_tags = body.get("tags", [])
+        matching_tags = [t for t in clip_tags if t in _EVIDENCE_AUTO_TAGS]
+        if matching_tags and clip_player_ids:
+            sess_name = None
+            if clip_session_id:
+                sess_row = conn.execute(
+                    "SELECT name FROM video_sessions WHERE id = ?", (clip_session_id,)
+                ).fetchone()
+                if sess_row:
+                    sess_name = sess_row["name"]
+            for pid in clip_player_ids:
+                if not pid:
+                    continue
+                for tag in matching_tags:
+                    conn.execute("""
+                        INSERT INTO dev_plan_evidence
+                            (id, player_id, org_id, clip_id, session_id, tag_type, tag_label,
+                             timestamp_in, timestamp_out, clip_title, session_name, added_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (str(uuid.uuid4()), str(pid), org_id, clip_id, clip_session_id,
+                          tag, tag, start, end, title, sess_name, user_id))
+            conn.commit()
+
         return {"id": clip_id, "title": title, "start_time_seconds": start, "end_time_seconds": end, "created_at": now}
     finally:
         conn.close()
