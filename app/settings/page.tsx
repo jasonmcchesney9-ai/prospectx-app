@@ -23,6 +23,8 @@ import {
   Eye,
   EyeOff,
   Calendar,
+  FileText,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -60,6 +62,15 @@ interface UsageData {
   reports_limit: number;
   bench_talks_used: number;
   bench_talks_limit: number;
+}
+
+interface BillingData {
+  tier: string;
+  tier_name: string;
+  subscription_status: string;
+  has_stripe_customer: boolean;
+  next_billing_date: string | null;
+  subscription_started_at: string | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────
@@ -156,6 +167,10 @@ function SettingsContent() {
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
 
+  // ── Billing tab state ──
+  const [billing, setBilling] = useState<BillingData | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+
   // ── Org tab state ──
   const [orgName, setOrgName] = useState("");
   const [orgLeague, setOrgLeague] = useState("");
@@ -194,6 +209,14 @@ function SettingsContent() {
         }
       } catch {
         // Endpoint may not exist yet — silently skip
+      }
+
+      // Try to load billing status
+      try {
+        const billingRes = await api.get<BillingData>("/billing/status");
+        setBilling(billingRes.data);
+      } catch {
+        // Endpoint may not be available — silently skip
       }
     } catch {
       // Handled per-section
@@ -995,7 +1018,7 @@ function SettingsContent() {
         {/* ════════════ BILLING TAB ════════════ */}
         {activeTab === "billing" && (
           <div>
-            {/* ── Current Plan Card ── */}
+            {/* ── Section 1: Current Plan ── */}
             <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
               <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
                 <CreditCard size={18} style={{ color: "#0D9488" }} />
@@ -1004,7 +1027,7 @@ function SettingsContent() {
                 </h2>
               </div>
               <div style={{ padding: 24 }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 32, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: 1 }}>
                     {usage?.tier || user?.subscription_tier || "Rookie"}
                   </span>
@@ -1019,12 +1042,155 @@ function SettingsContent() {
                       return "";
                     })()}
                   </span>
+                  {/* Status Badge */}
+                  {(() => {
+                    const status = billing?.subscription_status || "inactive";
+                    const badgeMap: Record<string, { bg: string; text: string; label: string }> = {
+                      active: { bg: "rgba(13,148,136,0.12)", text: "#0D9488", label: "Active" },
+                      trialing: { bg: "rgba(59,130,246,0.12)", text: "#3B82F6", label: "Trialing" },
+                      past_due: { bg: "rgba(239,68,68,0.12)", text: "#EF4444", label: "Past Due" },
+                      canceled: { bg: "rgba(107,114,128,0.12)", text: "#6B7280", label: "Cancelled" },
+                      inactive: { bg: "rgba(107,114,128,0.12)", text: "#6B7280", label: "Inactive" },
+                    };
+                    const badge = badgeMap[status] || badgeMap.inactive;
+                    return (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 12px", borderRadius: 20,
+                        fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase",
+                        fontFamily: "'Oswald', sans-serif", background: badge.bg, color: badge.text,
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: badge.text }} />
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
                 </div>
-                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13, color: "#5A7A95" }}>
+                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13, color: "#5A7A95", marginBottom: 20 }}>
                   <span><strong style={{ color: "#0F2942" }}>{usage?.seats_limit ?? "—"}</strong> seats included</span>
                   <span><strong style={{ color: "#0F2942" }}>{usage?.reports_limit === -1 ? "Unlimited" : (usage?.reports_limit ?? "—")}</strong> reports/month</span>
-                  <span>Next billing: <strong style={{ color: "#0F2942" }}>—</strong></span>
+                  <span>Next billing: <strong style={{ color: "#0F2942" }}>
+                    {billing?.next_billing_date
+                      ? new Date(billing.next_billing_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                      : "—"}
+                  </strong></span>
                 </div>
+                {/* Action Buttons */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    onClick={async () => {
+                      setBillingLoading(true);
+                      try {
+                        const res = await api.post<{ portal_url: string }>("/stripe/create-portal", {});
+                        if (res.data?.portal_url) {
+                          window.open(res.data.portal_url, "_blank", "noopener,noreferrer");
+                        }
+                      } catch {
+                        // No Stripe customer yet — open pricing instead
+                        window.open("/pricing", "_blank");
+                      } finally {
+                        setBillingLoading(false);
+                      }
+                    }}
+                    disabled={billingLoading}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                      borderRadius: 8, border: "1px solid #DDE6EF", background: "#FFFFFF", color: "#0F2942", cursor: billingLoading ? "wait" : "pointer",
+                      fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                    }}
+                  >
+                    {billingLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                    Manage Billing
+                    <ExternalLink size={12} style={{ opacity: 0.5 }} />
+                  </button>
+                  <Link
+                    href="/pricing"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                      borderRadius: 8, border: "none", background: "#0D9488", color: "#FFFFFF", textDecoration: "none",
+                      fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                    }}
+                  >
+                    <ExternalLink size={14} />
+                    Upgrade Plan
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Section 2: Payment Method ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <CreditCard size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Payment Method
+                </h2>
+              </div>
+              <div style={{ padding: 24 }}>
+                {billing?.has_stripe_customer ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 40, height: 28, borderRadius: 4, border: "1px solid #DDE6EF", display: "flex", alignItems: "center", justifyContent: "center", background: "#F8FAFC" }}>
+                        <CreditCard size={16} style={{ color: "#5A7A95" }} />
+                      </div>
+                      <span style={{ fontSize: 14, color: "#5A7A95" }}>
+                        Payment method on file — manage via Stripe portal
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setBillingLoading(true);
+                        try {
+                          const res = await api.post<{ portal_url: string }>("/stripe/create-portal", {});
+                          if (res.data?.portal_url) window.open(res.data.portal_url, "_blank", "noopener,noreferrer");
+                        } catch { /* silently skip */ } finally { setBillingLoading(false); }
+                      }}
+                      disabled={billingLoading}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, letterSpacing: 1,
+                        borderRadius: 6, border: "1px solid #DDE6EF", background: "#FFFFFF", color: "#0F2942", cursor: billingLoading ? "wait" : "pointer",
+                        fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                      }}
+                    >
+                      Update
+                      <ExternalLink size={12} style={{ opacity: 0.5 }} />
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                    <span style={{ fontSize: 14, color: "#5A7A95" }}>No payment method on file</span>
+                    <Link
+                      href="/pricing"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, letterSpacing: 1,
+                        borderRadius: 6, border: "none", background: "#0D9488", color: "#FFFFFF", textDecoration: "none",
+                        fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                      }}
+                    >
+                      Add Payment Method
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Section 3: Invoice History ── */}
+            <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #DDE6EF", overflow: "hidden", marginBottom: 20 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #DDE6EF", display: "flex", alignItems: "center", gap: 8 }}>
+                <FileText size={18} style={{ color: "#0D9488" }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "#0F2942", fontFamily: "'Oswald', sans-serif", letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>
+                  Invoice History
+                </h2>
+              </div>
+              <div style={{ padding: 24 }}>
+                {/* Invoice endpoint does not exist yet — empty state placeholder */}
+                <div style={{ textAlign: "center", padding: "24px 0" }}>
+                  <FileText size={32} style={{ color: "#DDE6EF", marginBottom: 8 }} />
+                  <p style={{ fontSize: 14, color: "#5A7A95", margin: "0 0 4px 0" }}>No invoices yet</p>
+                  <p style={{ fontSize: 12, color: "#8BA4BB", margin: 0 }}>
+                    Invoices will appear here once your first billing cycle completes
+                  </p>
+                </div>
+                {/* TODO: Backend /invoices endpoint needed — queue for next session */}
               </div>
             </div>
 
@@ -1093,38 +1259,6 @@ function SettingsContent() {
                   );
                 })()}
               </div>
-            </div>
-
-            {/* ── Action Buttons ── */}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {/* Manage Billing — disabled placeholder */}
-              <div style={{ position: "relative" }}>
-                <button
-                  disabled
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
-                    borderRadius: 8, border: "1px solid #DDE6EF", background: "#F8FAFC", color: "#8BA4BB", cursor: "not-allowed",
-                    fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
-                  }}
-                  title="Coming soon — Stripe billing portal will be available here"
-                >
-                  <CreditCard size={14} />
-                  Manage Billing
-                  <Info size={12} style={{ marginLeft: 4, opacity: 0.5 }} />
-                </button>
-              </div>
-              {/* Upgrade Plan */}
-              <Link
-                href="/pricing"
-                style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
-                  borderRadius: 8, border: "none", background: "#0D9488", color: "#FFFFFF", textDecoration: "none",
-                  fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
-                }}
-              >
-                <ExternalLink size={14} />
-                Upgrade Plan
-              </Link>
             </div>
           </div>
         )}
