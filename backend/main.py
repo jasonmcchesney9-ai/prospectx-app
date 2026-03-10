@@ -3877,6 +3877,33 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_objectives_plan ON development_plan_objectives(plan_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_objectives_player ON development_plan_objectives(player_id)")
 
+    # ── Dev Plan Evidence (film clip → dev plan bridge) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dev_plan_evidence (
+            id TEXT PRIMARY KEY,
+            player_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            clip_id TEXT,
+            session_id TEXT,
+            tag_type TEXT,
+            tag_label TEXT,
+            timestamp_in REAL,
+            timestamp_out REAL,
+            clip_title TEXT,
+            session_name TEXT,
+            added_by TEXT,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players(id),
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (clip_id) REFERENCES video_clips(id),
+            FOREIGN KEY (session_id) REFERENCES video_sessions(id),
+            FOREIGN KEY (added_by) REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_evidence_player ON dev_plan_evidence(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_evidence_org ON dev_plan_evidence(org_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_evidence_clip ON dev_plan_evidence(clip_id)")
+
     # ── Player Events (XML/InStat event-level data) ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS player_events (
@@ -31309,6 +31336,17 @@ class DevPlanSaveRequest(BaseModel):
     summary: str | None = None
 
 
+class DevPlanEvidenceCreate(BaseModel):
+    clip_id: str | None = None
+    session_id: str | None = None
+    tag_type: str | None = None
+    tag_label: str | None = None
+    timestamp_in: float | None = None
+    timestamp_out: float | None = None
+    clip_title: str | None = None
+    session_name: str | None = None
+
+
 class ParentLinkRequest(BaseModel):
     parent_email: str
 
@@ -32114,6 +32152,71 @@ async def get_devplan_version(player_id: str, version: int, token_data: dict = D
         if not row:
             raise HTTPException(status_code=404, detail="Development plan version not found")
         return _devplan_row_to_dict(row)
+    finally:
+        conn.close()
+
+
+# ── Dev Plan Evidence endpoints ──────────────────────────────
+
+@app.get("/players/{player_id}/dev-plan-evidence")
+async def get_dev_plan_evidence(player_id: str, token_data: dict = Depends(verify_token)):
+    """Get film evidence items for a player, grouped by tag_type."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can view film evidence")
+
+        rows = conn.execute("""
+            SELECT * FROM dev_plan_evidence
+            WHERE player_id = ? AND org_id = ?
+            ORDER BY tag_type, added_at DESC
+        """, (player_id, org_id)).fetchall()
+
+        evidence = [dict(r) for r in rows]
+
+        grouped = {}
+        for item in evidence:
+            tt = item.get("tag_type") or "UNCATEGORIZED"
+            if tt not in grouped:
+                grouped[tt] = {"tag_type": tt, "tag_label": item.get("tag_label", tt), "clips": []}
+            grouped[tt]["clips"].append(item)
+
+        return {
+            "evidence": evidence,
+            "grouped": list(grouped.values()),
+            "total": len(evidence),
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/players/{player_id}/dev-plan-evidence")
+async def create_dev_plan_evidence(player_id: str, body: DevPlanEvidenceCreate, token_data: dict = Depends(verify_token)):
+    """Create a film evidence link for a player. Coach/GM/Admin only."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        hockey_role = _get_hockey_role(conn, user_id)
+        if hockey_role not in ("coach", "gm", "admin") and token_data.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Only coaches and admins can add film evidence")
+
+        evidence_id = str(uuid.uuid4())
+        conn.execute("""
+            INSERT INTO dev_plan_evidence
+                (id, player_id, org_id, clip_id, session_id, tag_type, tag_label,
+                 timestamp_in, timestamp_out, clip_title, session_name, added_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (evidence_id, player_id, org_id, body.clip_id, body.session_id,
+              body.tag_type, body.tag_label, body.timestamp_in, body.timestamp_out,
+              body.clip_title, body.session_name, user_id))
+        conn.commit()
+
+        row = conn.execute("SELECT * FROM dev_plan_evidence WHERE id = ?", (evidence_id,)).fetchone()
+        return dict(row)
     finally:
         conn.close()
 
