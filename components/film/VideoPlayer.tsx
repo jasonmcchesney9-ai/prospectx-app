@@ -87,7 +87,7 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
     }
 
     return (
-      <div className="w-full overflow-hidden bg-black" style={{ borderRadius: 12 }}>
+      <div className="w-full bg-black" style={{ borderRadius: 12, overflow: "clip" }}>
         <MuxPlayer
           ref={playerRef}
           playbackId={playbackId}
