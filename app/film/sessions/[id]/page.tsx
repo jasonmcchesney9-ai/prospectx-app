@@ -798,34 +798,6 @@ export default function FilmSessionViewerPage() {
     executeEventImport(file, hasExisting);
   }, [session, executeEventImport]);
 
-  if (loading) {
-    return (
-      <ProtectedRoute>
-        <NavBar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-teal" />
-            <span className="ml-2 text-sm text-muted">Loading session...</span>
-          </div>
-        </main>
-      </ProtectedRoute>
-    );
-  }
-
-  if (error || !session) {
-    return (
-      <ProtectedRoute>
-        <NavBar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center py-24 text-red-500 text-sm">
-            <AlertCircle size={16} className="mr-2" />
-            {error || "Session not found"}
-          </div>
-        </main>
-      </ProtectedRoute>
-    );
-  }
-
   // ── Add Video to Session handler ──
   const handleAddVideo = useCallback(async () => {
     if (addVideoPeriod === null || !addVideoFile) return;
@@ -862,6 +834,34 @@ export default function FilmSessionViewerPage() {
       setAddingVideo(false);
     }
   }, [addVideoPeriod, addVideoFile, sessionId, session?.title]);
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <NavBar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center py-24">
+            <Loader2 size={28} className="animate-spin text-teal" />
+            <span className="ml-2 text-sm text-muted">Loading session...</span>
+          </div>
+        </main>
+      </ProtectedRoute>
+    );
+  }
+
+  if (error || !session) {
+    return (
+      <ProtectedRoute>
+        <NavBar />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center py-24 text-red-500 text-sm">
+            <AlertCircle size={16} className="mr-2" />
+            {error || "Session not found"}
+          </div>
+        </main>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>

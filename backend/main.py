@@ -44987,6 +44987,7 @@ async def get_film_session(session_id: str, token_data: dict = Depends(verify_to
                         clip["upload_playback_id"] = first_upload.get("mux_playback_id")
                         clip["upload_period_number"] = first_upload.get("period_number")
             d["clips"] = clip_list
+        d["title"] = d.get("name", "")
         return d
     finally:
         conn.close()
