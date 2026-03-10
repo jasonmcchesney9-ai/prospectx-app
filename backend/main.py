@@ -10758,10 +10758,169 @@ def sync_hockeytech_data_cron():
                     )
                     total_teams += 1
 
+                # ── Sync player_stats (skaters + goalies) ──
+                total_skaters = 0
+                total_goalies = 0
+                try:
+                    # Derive season name
+                    ht_seasons = await client.get_seasons()
+                    cron_season_name = ""
+                    for s in ht_seasons:
+                        if s.get("id") == season_id:
+                            cron_season_name = _normalize_season(s.get("name", str(season_id)))
+                            break
+                    if not cron_season_name:
+                        cron_season_name = str(season_id)
+
+                    ht_display = _HT_LEAGUES.get(code, {}).get("name", code.upper())
+                    cron_league_name = _normalize_league_safe(ht_display, "full")
+
+                    # Build HT-linked player lookup (all orgs)
+                    ht_players = {}
+                    ht_rows = conn.execute(
+                        "SELECT id, hockeytech_id FROM players WHERE hockeytech_id IS NOT NULL"
+                    ).fetchall()
+                    for r in ht_rows:
+                        ht_players[r["hockeytech_id"]] = r["id"]
+
+                    # Skater stats (league-wide)
+                    cron_skater_stats = await client.get_skater_stats(season_id, limit=500)
+                    for hs in cron_skater_stats:
+                        ht_id = hs.get("player_id")
+                        if not ht_id or ht_id not in ht_players:
+                            continue
+                        player_id = ht_players[ht_id]
+                        gp = hs.get("gp", 0) or 0
+                        g = hs.get("goals", 0) or 0
+                        a = hs.get("assists", 0) or 0
+                        p = hs.get("points", 0) or 0
+                        plus_minus = hs.get("plus_minus", 0) or 0
+                        pim = hs.get("pim", 0) or 0
+                        shots = hs.get("shots", 0) or 0
+                        shooting_pct_str = hs.get("shooting_pct", "0")
+                        try:
+                            shooting_pct = float(str(shooting_pct_str).replace("%", "")) if shooting_pct_str else 0.0
+                        except (ValueError, TypeError):
+                            shooting_pct = 0.0
+                        ht_team_name = hs.get("team_name", "") or ""
+
+                        # Upsert team_season row
+                        existing_team = conn.execute(
+                            "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND team_name = ? AND stat_row_type = 'team_season'",
+                            (player_id, cron_season_name, ht_team_name)
+                        ).fetchone()
+                        if existing_team:
+                            conn.execute("""
+                                UPDATE player_stats SET gp = ?, g = ?, a = ?, p = ?, plus_minus = ?, pim = ?,
+                                    shots = ?, shooting_pct = ?, data_source = 'hockeytech'
+                                WHERE id = ?
+                            """, (gp, g, a, p, plus_minus, pim, shots, shooting_pct, existing_team["id"]))
+                        else:
+                            conn.execute("""
+                                INSERT INTO player_stats (id, player_id, season, stat_type, team_name, league,
+                                    gp, g, a, p, plus_minus, pim, shots, shooting_pct, data_source, stat_row_type)
+                                VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'hockeytech', 'team_season')
+                            """, (gen_id(), player_id, cron_season_name, ht_team_name, cron_league_name,
+                                  gp, g, a, p, plus_minus, pim, shots, shooting_pct))
+
+                        # Recompute season_total
+                        all_splits = conn.execute("""
+                            SELECT gp, g, a, p, plus_minus, pim, shots
+                            FROM player_stats
+                            WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
+                        """, (player_id, cron_season_name)).fetchall()
+                        tot_gp = sum(r["gp"] or 0 for r in all_splits)
+                        tot_g = sum(r["g"] or 0 for r in all_splits)
+                        tot_a = sum(r["a"] or 0 for r in all_splits)
+                        tot_p = sum(r["p"] or 0 for r in all_splits)
+                        tot_pm = sum(r["plus_minus"] or 0 for r in all_splits)
+                        tot_pim = sum(r["pim"] or 0 for r in all_splits)
+                        tot_shots = sum(r["shots"] or 0 for r in all_splits)
+                        tot_spct = round((tot_g / tot_shots * 100) if tot_shots > 0 else 0.0, 1)
+
+                        existing_total = conn.execute(
+                            "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND stat_row_type = 'season_total'",
+                            (player_id, cron_season_name)
+                        ).fetchone()
+                        if existing_total:
+                            conn.execute("""
+                                UPDATE player_stats SET gp = ?, g = ?, a = ?, p = ?, plus_minus = ?, pim = ?,
+                                    shots = ?, shooting_pct = ?, data_source = 'hockeytech', stat_type = 'season'
+                                WHERE id = ?
+                            """, (tot_gp, tot_g, tot_a, tot_p, tot_pm, tot_pim, tot_shots, tot_spct, existing_total["id"]))
+                        else:
+                            legacy_row = conn.execute(
+                                "SELECT id FROM player_stats WHERE player_id = ? AND season = ? AND stat_type = 'season' AND data_source = 'hockeytech' AND (stat_row_type IS NULL OR stat_row_type = 'season_total')",
+                                (player_id, cron_season_name)
+                            ).fetchone()
+                            if legacy_row:
+                                conn.execute("""
+                                    UPDATE player_stats SET gp = ?, g = ?, a = ?, p = ?, plus_minus = ?, pim = ?,
+                                        shots = ?, shooting_pct = ?, stat_row_type = 'season_total'
+                                    WHERE id = ?
+                                """, (tot_gp, tot_g, tot_a, tot_p, tot_pm, tot_pim, tot_shots, tot_spct, legacy_row["id"]))
+                            else:
+                                conn.execute("""
+                                    INSERT INTO player_stats (id, player_id, season, stat_type,
+                                        gp, g, a, p, plus_minus, pim, shots, shooting_pct, data_source, stat_row_type)
+                                    VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, ?, ?, 'hockeytech', 'season_total')
+                                """, (gen_id(), player_id, cron_season_name, tot_gp, tot_g, tot_a, tot_p, tot_pm, tot_pim, tot_shots, tot_spct))
+
+                        total_skaters += 1
+
+                    # Goalie stats (league-wide)
+                    cron_goalie_stats = await client.get_goalie_stats(season_id, limit=100)
+                    for gs in cron_goalie_stats:
+                        ht_id = gs.get("player_id")
+                        if not ht_id or ht_id not in ht_players:
+                            continue
+                        player_id = ht_players[ht_id]
+                        g_gp = gs.get("gp", 0) or 0
+                        gaa_str = gs.get("gaa", "0")
+                        sv_pct_str = gs.get("save_pct", "0")
+                        g_sa = gs.get("shots_against", 0) or 0
+                        g_sv = gs.get("saves", 0) or 0
+                        try:
+                            g_gaa = float(str(gaa_str)) if gaa_str else 0.0
+                        except (ValueError, TypeError):
+                            g_gaa = 0.0
+                        try:
+                            g_sv_pct = float(str(sv_pct_str)) if sv_pct_str else 0.0
+                        except (ValueError, TypeError):
+                            g_sv_pct = 0.0
+
+                        existing_gs = conn.execute(
+                            "SELECT id FROM goalie_stats WHERE player_id = ? AND season = ? AND data_source = 'hockeytech'",
+                            (player_id, cron_season_name)
+                        ).fetchone()
+                        if existing_gs:
+                            conn.execute("""
+                                UPDATE goalie_stats SET gp = ?, ga = ?, sa = ?, sv = ?, sv_pct = ?, gaa = ?,
+                                    data_source = 'hockeytech'
+                                WHERE id = ?
+                            """, (g_gp, g_gp * g_gaa if g_gaa else 0, g_sa, g_sv, str(g_sv_pct), g_gaa, existing_gs["id"]))
+                        else:
+                            # Get org_id from the player record for the INSERT
+                            p_row = conn.execute("SELECT org_id FROM players WHERE id = ?", (player_id,)).fetchone()
+                            p_org = p_row["org_id"] if p_row else ""
+                            conn.execute("""
+                                INSERT INTO goalie_stats (id, player_id, org_id, season, stat_type, gp,
+                                    ga, sa, sv, sv_pct, gaa, data_source)
+                                VALUES (?, ?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, 'hockeytech')
+                            """, (gen_id(), player_id, p_org, cron_season_name, g_gp,
+                                  g_gp * g_gaa if g_gaa else 0, g_sa, g_sv, str(g_sv_pct), g_gaa))
+
+                        total_goalies += 1
+
+                    logger.info("[HT SYNC CRON] %s player_stats sync complete: %d skaters, %d goalies",
+                                code, total_skaters, total_goalies)
+                except Exception as ps_err:
+                    logger.error("[HT SYNC CRON] %s player_stats sync failed: %s", code, ps_err)
+
                 conn.commit()
                 synced_leagues.append(code)
-                logger.info("[HT SYNC CRON] %s: %d games, %d teams synced",
-                            code, len(games), len(team_stats))
+                logger.info("[HT SYNC CRON] %s: %d games, %d teams, %d skaters, %d goalies synced",
+                            code, len(games), len(team_stats), total_skaters, total_goalies)
 
             except Exception as e:
                 logger.error("[HT SYNC CRON] %s failed: %s", code, e)
