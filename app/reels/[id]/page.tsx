@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Film, Loader2, ArrowLeft, Copy, Download, Play, RotateCcw } from "lucide-react";
+import { Film, Loader2, ArrowLeft, Copy, Download, Play, RotateCcw, Share2, RefreshCw, Link2 } from "lucide-react";
 import MuxPlayer from "@mux/mux-player-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -108,6 +108,9 @@ export default function ReelViewerPage() {
   const [reelDate, setReelDate] = useState("");
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [reelComplete, setReelComplete] = useState(false);
+  const [shareEnabled, setShareEnabled] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [showSharePanel, setShowSharePanel] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const muxPlayerRef = useRef<any>(null);
@@ -125,6 +128,12 @@ export default function ReelViewerPage() {
 
         setReelTitle(reel.title);
         setReelDate(reel.created_at);
+
+        // Share state from backend
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const reelAny = reel as any;
+        if (reelAny.share_token) setShareToken(reelAny.share_token);
+        if (reelAny.share_enabled) setShareEnabled(!!reelAny.share_enabled);
 
         if (reel.player_first_name || reel.player_last_name) {
           setPlayerName(`${reel.player_first_name || ""} ${reel.player_last_name || ""}`.trim());
@@ -269,12 +278,46 @@ export default function ReelViewerPage() {
   }, []);
 
   const handleCopyLink = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href).then(() => {
-      toast.success("Reel link copied", { duration: 3000 });
+    if (!shareEnabled || !shareToken) {
+      toast.error("Enable sharing first to get a share link");
+      return;
+    }
+    const shareUrl = `https://www.prospectxintelligence.com/reel/${shareToken}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast.success("Share link copied", { duration: 3000 });
     }).catch(() => {
       toast.error("Failed to copy link");
     });
-  }, []);
+  }, [shareEnabled, shareToken]);
+
+  const handleToggleShare = useCallback(async () => {
+    try {
+      const { data } = await api.patch(`/highlight-reels/${reelId}/share`, {
+        share_enabled: !shareEnabled,
+      });
+      setShareEnabled(data.share_enabled);
+      setShareToken(data.share_token);
+      toast.success(data.share_enabled ? "Sharing enabled" : "Sharing disabled", { duration: 3000 });
+    } catch {
+      toast.error("Failed to update sharing");
+    }
+  }, [reelId, shareEnabled]);
+
+  const handleRegenerateToken = useCallback(async () => {
+    try {
+      const { data } = await api.patch(`/highlight-reels/${reelId}/share`, {
+        share_enabled: true,
+        regenerate_token: true,
+      });
+      setShareEnabled(data.share_enabled);
+      setShareToken(data.share_token);
+      toast.success("New share link generated", { duration: 3000 });
+    } catch {
+      toast.error("Failed to regenerate link");
+    }
+  }, [reelId]);
+
+  const shareUrl = shareToken ? `https://www.prospectxintelligence.com/reel/${shareToken}` : null;
 
   const currentClip = clips[currentClipIndex] || null;
   const currentPlaybackId = currentClip?.mux_playback_id || "";
@@ -340,6 +383,29 @@ export default function ReelViewerPage() {
                 Back to Film Hub
               </Link>
               <button
+                onClick={() => setShowSharePanel(!showSharePanel)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontFamily: "'Oswald', sans-serif",
+                  fontWeight: 700,
+                  fontSize: 10,
+                  color: shareEnabled ? "#14B8A8" : "rgba(255,255,255,0.6)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: shareEnabled ? "1px solid rgba(13,148,136,0.3)" : "1px solid rgba(255,255,255,0.12)",
+                  background: showSharePanel ? "rgba(13,148,136,0.1)" : "transparent",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <Share2 size={12} />
+                Share
+              </button>
+              <button
                 onClick={handleCopyLink}
                 style={{
                   display: "flex",
@@ -388,6 +454,112 @@ export default function ReelViewerPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Share Panel (collapsible) ── */}
+        {showSharePanel && (
+          <div style={{ background: "#0A2540", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "14px 24px" }}>
+            <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              {/* Toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Public Link
+                </span>
+                <button
+                  onClick={handleToggleShare}
+                  style={{
+                    position: "relative",
+                    width: 36,
+                    height: 20,
+                    borderRadius: 10,
+                    border: "none",
+                    background: shareEnabled ? "#0D9488" : "rgba(255,255,255,0.15)",
+                    cursor: "pointer",
+                    transition: "background 0.2s ease",
+                    padding: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: shareEnabled ? 18 : 2,
+                      width: 16,
+                      height: 16,
+                      borderRadius: "50%",
+                      background: "#FFFFFF",
+                      transition: "left 0.2s ease",
+                    }}
+                  />
+                </button>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, color: shareEnabled ? "#14B8A8" : "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {shareEnabled ? "On" : "Off"}
+                </span>
+              </div>
+              {/* Share URL display */}
+              {shareEnabled && shareUrl && (
+                <>
+                  <div style={{ flex: 1, minWidth: 200, display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: "6px 10px" }}>
+                    <Link2 size={12} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+                    <span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11, color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {shareUrl}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCopyLink}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontFamily: "'Oswald', sans-serif",
+                      fontWeight: 700,
+                      fontSize: 10,
+                      color: "#14B8A8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      padding: "6px 10px",
+                      borderRadius: 5,
+                      border: "1px solid rgba(13,148,136,0.3)",
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Copy size={11} />
+                    Copy
+                  </button>
+                  <button
+                    onClick={handleRegenerateToken}
+                    title="Generate a new share link (old link will stop working)"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontFamily: "'Oswald', sans-serif",
+                      fontWeight: 700,
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.5)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      padding: "6px 10px",
+                      borderRadius: 5,
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <RefreshCw size={11} />
+                    Regenerate
+                  </button>
+                </>
+              )}
+              {/* Hint when off */}
+              {!shareEnabled && (
+                <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: 12, color: "rgba(255,255,255,0.35)", fontStyle: "italic" }}>
+                  Enable to create a public link anyone can view without signing in
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Main Content ── */}
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "16px 24px" }}>

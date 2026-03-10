@@ -59,7 +59,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const TYPE_COLORS: Record<string, { bg: string; color: string; border?: string }> = {
   game_highlights:   { bg: "#0D9488",          color: "#0F172A" },
-  player_highlights: { bg: "#F97316",          color: "#0F172A" },
+  player_highlights: { bg: "#E67E22",          color: "#0F172A" },
   teaching_reel:     { bg: "#0F2942",          color: "#FFFFFF", border: "1px solid #14B8A8" },
   custom:            { bg: "#475569",          color: "#FFFFFF" },
 };
