@@ -1046,10 +1046,10 @@ function SettingsContent() {
                   {(() => {
                     const status = billing?.subscription_status || "inactive";
                     const badgeMap: Record<string, { bg: string; text: string; label: string }> = {
-                      active: { bg: "rgba(13,148,136,0.12)", text: "#0D9488", label: "Active" },
-                      trialing: { bg: "rgba(59,130,246,0.12)", text: "#3B82F6", label: "Trialing" },
-                      past_due: { bg: "rgba(239,68,68,0.12)", text: "#EF4444", label: "Past Due" },
-                      canceled: { bg: "rgba(107,114,128,0.12)", text: "#6B7280", label: "Cancelled" },
+                      active: { bg: "rgba(34,197,94,0.12)", text: "#16A34A", label: "Active" },
+                      trialing: { bg: "rgba(13,148,136,0.12)", text: "#0D9488", label: "Trialing" },
+                      past_due: { bg: "rgba(245,158,11,0.12)", text: "#D97706", label: "Past Due" },
+                      canceled: { bg: "rgba(239,68,68,0.12)", text: "#EF4444", label: "Cancelled" },
                       inactive: { bg: "rgba(107,114,128,0.12)", text: "#6B7280", label: "Inactive" },
                     };
                     const badge = badgeMap[status] || badgeMap.inactive;
@@ -1075,33 +1075,34 @@ function SettingsContent() {
                   </strong></span>
                 </div>
                 {/* Action Buttons */}
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                  <button
-                    onClick={async () => {
-                      setBillingLoading(true);
-                      try {
-                        const res = await api.post<{ portal_url: string }>("/stripe/create-portal", {});
-                        if (res.data?.portal_url) {
-                          window.open(res.data.portal_url, "_blank", "noopener,noreferrer");
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  {billing?.has_stripe_customer ? (
+                    <button
+                      onClick={async () => {
+                        setBillingLoading(true);
+                        try {
+                          const res = await api.post<{ portal_url: string }>("/stripe/create-portal", {});
+                          if (res.data?.portal_url) {
+                            window.open(res.data.portal_url, "_blank", "noopener,noreferrer");
+                          }
+                        } catch { /* silently skip */ } finally {
+                          setBillingLoading(false);
                         }
-                      } catch {
-                        // No Stripe customer yet — open pricing instead
-                        window.open("/pricing", "_blank");
-                      } finally {
-                        setBillingLoading(false);
-                      }
-                    }}
-                    disabled={billingLoading}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
-                      borderRadius: 8, border: "1px solid #DDE6EF", background: "#FFFFFF", color: "#0F2942", cursor: billingLoading ? "wait" : "pointer",
-                      fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
-                    }}
-                  >
-                    {billingLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                    Manage Billing
-                    <ExternalLink size={12} style={{ opacity: 0.5 }} />
-                  </button>
+                      }}
+                      disabled={billingLoading}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", fontSize: 12, fontWeight: 700, letterSpacing: 2,
+                        borderRadius: 8, border: "1px solid #DDE6EF", background: "#FFFFFF", color: "#0F2942", cursor: billingLoading ? "wait" : "pointer",
+                        fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                      }}
+                    >
+                      {billingLoading ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                      Manage Billing
+                      <ExternalLink size={12} style={{ opacity: 0.5 }} />
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 13, color: "#8BA4BB", fontStyle: "italic" }}>No billing account yet</span>
+                  )}
                   <Link
                     href="/pricing"
                     style={{
@@ -1126,16 +1127,14 @@ function SettingsContent() {
                 </h2>
               </div>
               <div style={{ padding: 24 }}>
-                {billing?.has_stripe_customer ? (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 40, height: 28, borderRadius: 4, border: "1px solid #DDE6EF", display: "flex", alignItems: "center", justifyContent: "center", background: "#F8FAFC" }}>
-                        <CreditCard size={16} style={{ color: "#5A7A95" }} />
-                      </div>
-                      <span style={{ fontSize: 14, color: "#5A7A95" }}>
-                        Payment method on file — manage via Stripe portal
-                      </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 40, height: 28, borderRadius: 4, border: "1px solid #DDE6EF", display: "flex", alignItems: "center", justifyContent: "center", background: "#F8FAFC" }}>
+                      <CreditCard size={16} style={{ color: "#5A7A95" }} />
                     </div>
+                    <span style={{ fontSize: 14, color: "#5A7A95" }}>Payment method managed via Stripe</span>
+                  </div>
+                  {billing?.has_stripe_customer && (
                     <button
                       onClick={async () => {
                         setBillingLoading(true);
@@ -1151,25 +1150,12 @@ function SettingsContent() {
                         fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
                       }}
                     >
-                      Update
+                      Manage in Billing Portal
                       <ExternalLink size={12} style={{ opacity: 0.5 }} />
                     </button>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                    <span style={{ fontSize: 14, color: "#5A7A95" }}>No payment method on file</span>
-                    <Link
-                      href="/pricing"
-                      style={{
-                        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, letterSpacing: 1,
-                        borderRadius: 6, border: "none", background: "#0D9488", color: "#FFFFFF", textDecoration: "none",
-                        fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
-                      }}
-                    >
-                      Add Payment Method
-                    </Link>
-                  </div>
-                )}
+                  )}
+                </div>
+                {/* TODO: Card brand + last 4 display — needs backend endpoint, flagged for next session */}
               </div>
             </div>
 
@@ -1182,13 +1168,31 @@ function SettingsContent() {
                 </h2>
               </div>
               <div style={{ padding: 24 }}>
-                {/* Invoice endpoint does not exist yet — empty state placeholder */}
-                <div style={{ textAlign: "center", padding: "24px 0" }}>
-                  <FileText size={32} style={{ color: "#DDE6EF", marginBottom: 8 }} />
-                  <p style={{ fontSize: 14, color: "#5A7A95", margin: "0 0 4px 0" }}>No invoices yet</p>
-                  <p style={{ fontSize: 12, color: "#8BA4BB", margin: 0 }}>
-                    Invoices will appear here once your first billing cycle completes
-                  </p>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <FileText size={18} style={{ color: "#5A7A95" }} />
+                    <span style={{ fontSize: 14, color: "#5A7A95" }}>Invoices are available in the Stripe billing portal</span>
+                  </div>
+                  {billing?.has_stripe_customer && (
+                    <button
+                      onClick={async () => {
+                        setBillingLoading(true);
+                        try {
+                          const res = await api.post<{ portal_url: string }>("/stripe/create-portal", {});
+                          if (res.data?.portal_url) window.open(res.data.portal_url, "_blank", "noopener,noreferrer");
+                        } catch { /* silently skip */ } finally { setBillingLoading(false); }
+                      }}
+                      disabled={billingLoading}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, letterSpacing: 1,
+                        borderRadius: 6, border: "1px solid #DDE6EF", background: "#FFFFFF", color: "#0F2942", cursor: billingLoading ? "wait" : "pointer",
+                        fontFamily: "'Oswald', sans-serif", textTransform: "uppercase",
+                      }}
+                    >
+                      View Invoices
+                      <ExternalLink size={12} style={{ opacity: 0.5 }} />
+                    </button>
+                  )}
                 </div>
                 {/* TODO: Backend /invoices endpoint needed — queue for next session */}
               </div>
