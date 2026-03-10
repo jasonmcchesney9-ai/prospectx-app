@@ -399,7 +399,7 @@ function StandingsTab({ standings }: { standings: HTStandings[] }) {
               <th style={{ ...thStyle, textAlign: "center" }}>DIFF</th>
               <th style={{ ...thStyle, textAlign: "center" }}>PP%</th>
               <th style={{ ...thStyle, textAlign: "center" }}>PK%</th>
-              <th style={{ ...thStyle, textAlign: "center" }}>STREAK</th>
+              <th style={{ ...thStyle, textAlign: "center" }}>L10</th>
             </tr>
           </thead>
           <tbody>
