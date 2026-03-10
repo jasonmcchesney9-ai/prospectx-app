@@ -326,6 +326,7 @@ interface DevPlanEvidenceClip {
   timestamp_out: number | null;
   clip_title: string | null;
   session_name: string | null;
+  coaching_note: string | null;
   added_at: string;
 }
 
@@ -3184,6 +3185,11 @@ export default function PlayerDetailPage() {
                                       {Math.floor(clip.timestamp_in / 60)}:{String(Math.floor(clip.timestamp_in % 60)).padStart(2, "0")}
                                       {" – "}
                                       {Math.floor(clip.timestamp_out / 60)}:{String(Math.floor(clip.timestamp_out % 60)).padStart(2, "0")}
+                                    </div>
+                                  )}
+                                  {clip.coaching_note && (
+                                    <div style={{ borderLeft: "3px solid #00B5B8", paddingLeft: 10, fontSize: 13, color: "#374151", marginTop: 6 }}>
+                                      {clip.coaching_note}
                                     </div>
                                   )}
                                 </a>

@@ -3904,6 +3904,13 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_evidence_org ON dev_plan_evidence(org_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_evidence_clip ON dev_plan_evidence(clip_id)")
 
+    # ── Migration: coaching_note on dev_plan_evidence ──
+    dpe_cols = _get_table_columns(conn, "dev_plan_evidence")
+    if "coaching_note" not in dpe_cols:
+        conn.execute("ALTER TABLE dev_plan_evidence ADD COLUMN coaching_note TEXT")
+        conn.commit()
+        logger.info("Migration: added coaching_note column to dev_plan_evidence")
+
     # ── Player Events (XML/InStat event-level data) ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS player_events (
@@ -4300,6 +4307,7 @@ def init_db():
         ("section_key", "TEXT"),
         ("sort_order", "INTEGER DEFAULT 0"),
         ("visibility", "TEXT DEFAULT 'private'"),
+        ("coaching_note", "TEXT"),
     ]:
         if col_name not in vc_cols:
             conn.execute(f"ALTER TABLE video_clips ADD COLUMN {col_name} {col_def}")
@@ -45604,14 +45612,15 @@ async def create_film_clip(request: Request, token_data: dict = Depends(verify_t
             INSERT INTO video_clips
                 (id, org_id, upload_id, session_id, title, description,
                  start_time_seconds, end_time_seconds, clip_type, player_ids, tags,
-                 created_by, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 coaching_note, created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             clip_id, org_id, body.get("upload_id"), body.get("session_id"),
             title, body.get("description"), start, end,
             body.get("clip_type", "manual"),
             json.dumps(body.get("player_ids", [])),
             json.dumps(body.get("tags", [])),
+            body.get("coaching_note"),
             user_id, now, now,
         ))
         conn.commit()
@@ -45643,10 +45652,10 @@ async def create_film_clip(request: Request, token_data: dict = Depends(verify_t
                     conn.execute("""
                         INSERT INTO dev_plan_evidence
                             (id, player_id, org_id, clip_id, session_id, tag_type, tag_label,
-                             timestamp_in, timestamp_out, clip_title, session_name, added_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             timestamp_in, timestamp_out, clip_title, session_name, coaching_note, added_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (str(uuid.uuid4()), str(pid), org_id, clip_id, clip_session_id,
-                          tag, tag, start, end, title, sess_name, user_id))
+                          tag, tag, start, end, title, sess_name, body.get("coaching_note"), user_id))
             conn.commit()
 
         return {"id": clip_id, "title": title, "start_time_seconds": start, "end_time_seconds": end, "created_at": now}
@@ -45819,7 +45828,7 @@ async def update_film_clip(clip_id: str, request: Request, token_data: dict = De
         row = conn.execute("SELECT id FROM video_clips WHERE id = ? AND org_id = ?", (clip_id, org_id)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Clip not found")
-        allowed = {"title", "description", "start_time_seconds", "end_time_seconds", "clip_type", "player_ids", "tags"}
+        allowed = {"title", "description", "start_time_seconds", "end_time_seconds", "clip_type", "player_ids", "tags", "coaching_note"}
         updates = []
         params: list = []
         for key in allowed:

@@ -294,6 +294,7 @@ export default function FilmSessionViewerPage() {
   const [clipStart, setClipStart] = useState<number | null>(null);
   const [clipEnd, setClipEnd] = useState<number | null>(null);
   const [clipTitle, setClipTitle] = useState("");
+  const [clipCoachingNote, setClipCoachingNote] = useState("");
   const [savingClip, setSavingClip] = useState(false);
   const [clipRefreshKey, setClipRefreshKey] = useState(0);
 
@@ -742,18 +743,20 @@ export default function FilmSessionViewerPage() {
         start_time_seconds: clipStart,
         end_time_seconds: clipEnd,
         clip_type: "manual",
+        coaching_note: clipCoachingNote.trim() || null,
       });
       toast.success("Clip saved");
       setClipStart(null);
       setClipEnd(null);
       setClipTitle("");
+      setClipCoachingNote("");
       setClipRefreshKey((k) => k + 1);
     } catch {
       toast.error("Failed to save clip");
     } finally {
       setSavingClip(false);
     }
-  }, [clipStart, clipEnd, clipTitle, sessionId, upload]);
+  }, [clipStart, clipEnd, clipTitle, clipCoachingNote, sessionId, upload]);
 
   const executeEventImport = useCallback(async (file: File, replace: boolean) => {
     setImportingEvents(true);
@@ -1389,6 +1392,19 @@ export default function FilmSessionViewerPage() {
                     placeholder="Clip title..."
                     style={{ flex: 1, minWidth: 80, padding: "4px 8px", borderRadius: 5, fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#FFFFFF", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", outline: "none" }}
                   />
+
+                  {/* Coaching Note */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 80 }}>
+                    <label style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>Coaching Note</label>
+                    <textarea
+                      value={clipCoachingNote}
+                      onChange={(e) => setClipCoachingNote(e.target.value.slice(0, 500))}
+                      placeholder="Add a coaching note for this player..."
+                      maxLength={500}
+                      rows={2}
+                      style={{ width: "100%", padding: "4px 8px", borderRadius: 5, fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "#FFFFFF", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", resize: "none" }}
+                    />
+                  </div>
 
                   {/* Save Clip */}
                   <button
