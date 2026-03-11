@@ -19292,6 +19292,56 @@ async def update_scout_assignment(assignment_id: str, request: Request, token_da
         vals.append(org_id)
         conn.execute(f"UPDATE scout_assignments SET {', '.join(sets)} WHERE id = ? AND org_id = ?", vals)
         conn.commit()
+
+        # ── Send assignment notification email (non-fatal) ──
+        if "scout_user_id" in body and body["scout_user_id"]:
+            try:
+                scout_row = conn.execute(
+                    "SELECT first_name, last_name, email FROM users WHERE id = ?",
+                    (body["scout_user_id"],)
+                ).fetchone()
+                if scout_row and scout_row["email"]:
+                    # Gather assignment details for email
+                    updated_row = conn.execute("SELECT * FROM scout_assignments WHERE id = ?", (assignment_id,)).fetchone()
+                    team_name = updated_row["team_to_scout"] or "TBD"
+                    priority_val = updated_row["priority"] or "normal"
+                    notes_val = updated_row["notes"] or ""
+                    scout_first = scout_row["first_name"] or "Scout"
+
+                    body_lines = [
+                        f"Hi {scout_first},",
+                        "",
+                        "You've been assigned a new scouting task on the ProspectX Scouting Pipeline.",
+                        "",
+                        f"Team to Scout: {team_name}",
+                        f"Priority: {priority_val.capitalize()}",
+                    ]
+                    if notes_val:
+                        body_lines.append(f"Notes: {notes_val}")
+                    body_lines += [
+                        "",
+                        "View the Scouting Pipeline: https://prospectxintelligence.com/org-hub/scouting",
+                        "",
+                        "— ProspectX Intelligence",
+                    ]
+                    email_body = "\n".join(body_lines)
+
+                    if RESEND_API_KEY:
+                        import resend
+                        resend.api_key = RESEND_API_KEY
+                        params: resend.Emails.SendParams = {
+                            "from": "ProspectX <noreply@prospectx.com>",
+                            "to": [scout_row["email"]],
+                            "subject": f"New scouting assignment — {team_name}",
+                            "text": email_body,
+                        }
+                        resend.Emails.send(params)
+                        logger.info("Assignment email sent to %s for assignment %s", scout_row["email"], assignment_id)
+                    else:
+                        logger.info("RESEND_API_KEY not set — skipping assignment email to %s", scout_row["email"])
+            except Exception as e:
+                logger.warning("Failed to send assignment email for %s: %s", assignment_id, e)
+
         row = conn.execute("SELECT * FROM scout_assignments WHERE id = ?", (assignment_id,)).fetchone()
         d = dict(row)
         d["report_submitted"] = bool(d["report_submitted"])
