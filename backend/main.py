@@ -4638,6 +4638,52 @@ def init_db():
             )
         """)
 
+    # ── Table: player_outcomes (league transition logging) ──
+    if USE_PG:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS player_outcomes (
+                id SERIAL PRIMARY KEY,
+                player_id TEXT NOT NULL REFERENCES players(id),
+                from_league TEXT NOT NULL,
+                to_league TEXT NOT NULL,
+                from_team TEXT,
+                to_team TEXT,
+                transition_season TEXT NOT NULL,
+                detected_at TIMESTAMPTZ DEFAULT NOW(),
+                first_season_gp INTEGER,
+                first_season_goals INTEGER,
+                first_season_assists INTEGER,
+                first_season_points INTEGER,
+                first_season_ppg REAL,
+                outcome_verified INTEGER DEFAULT 0,
+                notes TEXT,
+                UNIQUE (player_id, transition_season, from_league)
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS player_outcomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                player_id TEXT NOT NULL REFERENCES players(id),
+                from_league TEXT NOT NULL,
+                to_league TEXT NOT NULL,
+                from_team TEXT,
+                to_team TEXT,
+                transition_season TEXT NOT NULL,
+                detected_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                first_season_gp INTEGER,
+                first_season_goals INTEGER,
+                first_season_assists INTEGER,
+                first_season_points INTEGER,
+                first_season_ppg REAL,
+                outcome_verified INTEGER DEFAULT 0,
+                notes TEXT,
+                UNIQUE (player_id, transition_season, from_league)
+            )
+        """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_outcomes_player ON player_outcomes(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_player_outcomes_leagues ON player_outcomes(from_league, to_league)")
+
     # ── Migration: add source_filename to instat stat tables ──
     ips_cols = _get_table_columns(conn, "instat_player_stats")
     if "source_filename" not in ips_cols:
@@ -36077,6 +36123,22 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                               team_name, league_name, _now_dt.strftime('%Y-%m-%d'), _cur_season))
                         logger.info(f"Transfer detected: {first} {last} from {old_team} to {team_name}")
 
+                # ── League transition logging (player_outcomes) ──
+                if old_league_val and league_name and old_league_val != league_name:
+                    try:
+                        _lo_now = datetime.now(timezone.utc)
+                        _lo_sy = _lo_now.year if _lo_now.month >= 9 else _lo_now.year - 1
+                        _lo_season = f"{_lo_sy}-{(_lo_sy + 1) % 100:02d}"
+                        conn.execute("""
+                            INSERT INTO player_outcomes
+                            (player_id, from_league, to_league, from_team, to_team, transition_season)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT DO NOTHING
+                        """, (existing[0], old_league_val, league_name, old_team, team_name, _lo_season))
+                        logger.info("League transition logged: %s %s from %s to %s", first, last, old_league_val, league_name)
+                    except Exception as _lo_err:
+                        logger.warning("Failed to log league transition for %s %s: %s", first, last, _lo_err)
+
                 # PXR 3B: Check manual_override — skip bio updates if set
                 mo_row = conn.execute("SELECT manual_override FROM players WHERE id = ?", (existing[0],)).fetchone()
                 if mo_row and mo_row["manual_override"]:
@@ -36146,6 +36208,22 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                         """, (gen_id(), matched_id, org_id, fm_old_team, fm_old_league,
                               team_name, league_name, _now_dt2.strftime('%Y-%m-%d'), _cur_season2))
                         logger.info(f"Transfer detected (fuzzy): {first} {last} from {fm_old_team} to {team_name}")
+
+                # ── League transition logging (player_outcomes) — fuzzy match ──
+                if fm_old_league and league_name and fm_old_league != league_name:
+                    try:
+                        _lo_now2 = datetime.now(timezone.utc)
+                        _lo_sy2 = _lo_now2.year if _lo_now2.month >= 9 else _lo_now2.year - 1
+                        _lo_season2 = f"{_lo_sy2}-{(_lo_sy2 + 1) % 100:02d}"
+                        conn.execute("""
+                            INSERT INTO player_outcomes
+                            (player_id, from_league, to_league, from_team, to_team, transition_season)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT DO NOTHING
+                        """, (matched_id, fm_old_league, league_name, fm_old_team, team_name, _lo_season2))
+                        logger.info("League transition logged (fuzzy): %s %s from %s to %s", first, last, fm_old_league, league_name)
+                    except Exception as _lo_err2:
+                        logger.warning("Failed to log league transition (fuzzy) for %s %s: %s", first, last, _lo_err2)
 
                 # PXR 3B: Check manual_override — skip bio updates if set
                 mo_row = conn.execute("SELECT manual_override FROM players WHERE id = ?", (matched_id,)).fetchone()
