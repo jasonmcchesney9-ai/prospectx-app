@@ -188,8 +188,8 @@ export default function LeagueHubPage() {
       .finally(() => setLoadingTeams(false));
 
     // Fetch 7: Monte Carlo projections (stored data)
-    api.get<MonteCarloResult[]>(`/league-hub/${league}/monte-carlo`)
-      .then((res) => setProjections(res.data))
+    api.get<{ results: MonteCarloResult[] }>(`/league-hub/${league}/monte-carlo`)
+      .then((res) => setProjections(res.data.results || []))
       .catch(() => { setProjections([]); })
       .finally(() => setLoadingProjections(false));
   };
