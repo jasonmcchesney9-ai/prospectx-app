@@ -31650,6 +31650,7 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
     updated_teams = 0
     updated_cache_players = 0
     updated_cache_teams = 0
+    migrated_logos = 0
     errors = []
     try:
         # Backfill player headshots
@@ -31719,6 +31720,41 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
                     updated_cache_teams += 1
             except Exception as e:
                 errors.append(f"cache_team {ct['id']}: {e}")
+        # Migrate local /uploads/ team logos to R2
+        if _r2_client:
+            local_logo_teams = conn.execute("""
+                SELECT id, logo_url FROM teams
+                WHERE logo_url IS NOT NULL
+                AND logo_url LIKE '/uploads/%'
+                LIMIT 500
+            """).fetchall()
+            for lt in local_logo_teams:
+                try:
+                    # /uploads/ maps to _IMAGES_DIR
+                    filename = lt["logo_url"].replace("/uploads/", "", 1)
+                    local_path = os.path.join(_IMAGES_DIR, filename)
+                    if not os.path.exists(local_path):
+                        errors.append(f"logo_migrate_{lt['id']}: file not found {local_path}")
+                        continue
+                    with open(local_path, "rb") as f:
+                        file_bytes = f.read()
+                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+                    object_key = f"assets/team_{lt['id']}.{ext}"
+                    content_type = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+                    _r2_client.put_object(
+                        Bucket=_R2_BUCKET_NAME,
+                        Key=object_key,
+                        Body=file_bytes,
+                        ContentType=content_type,
+                    )
+                    r2_url = f"{STATIC_ASSETS_URL}/team_{lt['id']}.{ext}"
+                    conn.execute(
+                        "UPDATE teams SET logo_url = ? WHERE id = ?",
+                        (r2_url, lt["id"]),
+                    )
+                    migrated_logos += 1
+                except Exception as e:
+                    errors.append(f"logo_migrate_{lt['id']}: {e}")
         conn.commit()
         return {
             "status": "ok",
@@ -31726,6 +31762,7 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
             "updated_teams": updated_teams,
             "updated_cache_players": updated_cache_players,
             "updated_cache_teams": updated_cache_teams,
+            "migrated_logos": migrated_logos,
             "errors": len(errors),
         }
     finally:
