@@ -338,22 +338,20 @@ export default function NavBar() {
                 </span>
                 <span className="hidden lg:inline text-white/30 mx-1">|</span>
                 {/* Small co-branded ProspectX wordmark */}
-                <span className="hidden lg:flex flex-col leading-none" style={{ gap: 1 }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
-                  </span>
-                  <span style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
-                </span>
+                <svg viewBox="0 0 148 36" xmlns="http://www.w3.org/2000/svg" className="hidden lg:block" style={{ height: 24, width: "auto" }}>
+                  <text y="21" fontFamily="'Oswald', sans-serif" fontWeight="700" fontSize="21">
+                    <tspan fill="#0D9488">PROSPECT</tspan><tspan fill="#E67E22">X</tspan>
+                  </text>
+                  <text y="33" fontFamily="'Oswald', sans-serif" fontWeight="600" fontSize="8" fill="rgba(255,255,255,0.7)" letterSpacing="0.18em">INTELLIGENCE</text>
+                </svg>
               </>
             ) : (
-              <span className="flex flex-col leading-none" style={{ gap: 1 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 0 }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: "#14B8A6", letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>PROSPECT</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: "#EA580C", marginLeft: 2, fontFamily: "'DM Sans', sans-serif" }}>X</span>
-                </span>
-                <span style={{ fontSize: 9.5, fontWeight: 600, color: "rgba(255,255,255,0.28)", letterSpacing: "0.12em", fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase" as const, marginTop: -1 }}>INTELLIGENCE</span>
-              </span>
+              <svg viewBox="0 0 148 36" xmlns="http://www.w3.org/2000/svg" style={{ height: 32, width: "auto" }}>
+                <text y="21" fontFamily="'Oswald', sans-serif" fontWeight="700" fontSize="21">
+                  <tspan fill="#0D9488">PROSPECT</tspan><tspan fill="#E67E22">X</tspan>
+                </text>
+                <text y="33" fontFamily="'Oswald', sans-serif" fontWeight="600" fontSize="8" fill="rgba(255,255,255,0.7)" letterSpacing="0.18em">INTELLIGENCE</text>
+              </svg>
             )}
           </Link>
 
