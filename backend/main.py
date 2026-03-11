@@ -4972,6 +4972,22 @@ def init_db():
 
     logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats, monte_carlo_results)")
 
+    # ── Film Room: clip_annotations table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS clip_annotations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clip_id TEXT NOT NULL REFERENCES video_clips(id) ON DELETE CASCADE,
+            session_id TEXT NOT NULL,
+            created_by_user_id TEXT NOT NULL,
+            timestamp_seconds REAL NOT NULL,
+            r2_key TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_clip_annotations_clip ON clip_annotations(clip_id)")
+    conn.commit()
+    logger.info("clip_annotations table ready")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -46126,6 +46142,90 @@ async def get_film_clip(clip_id: str, token_data: dict = Depends(verify_token)):
         if isinstance(d, dict):
             d["events"] = [dict(e) if hasattr(e, "keys") else e for e in events]
         return d
+    finally:
+        conn.close()
+
+
+@app.post("/film/clips/{clip_id}/annotation", status_code=201)
+async def create_clip_annotation(clip_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Save a telestration annotation image to R2 and link it to a clip."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    body = await request.json()
+    timestamp_seconds = body.get("timestamp_seconds")
+    image_data_url = body.get("image_data_url", "")
+    if timestamp_seconds is None:
+        raise HTTPException(status_code=400, detail="timestamp_seconds is required")
+    if not image_data_url:
+        raise HTTPException(status_code=400, detail="image_data_url is required")
+    conn = get_db()
+    try:
+        clip = conn.execute(
+            "SELECT id, session_id FROM video_clips WHERE id = ? AND org_id = ?",
+            (clip_id, org_id),
+        ).fetchone()
+        if not clip:
+            raise HTTPException(status_code=404, detail="Clip not found")
+        session_id = clip["session_id"] if hasattr(clip, "keys") else clip[1]
+        # Strip data URL prefix and decode base64
+        b64_data = image_data_url
+        if "," in b64_data:
+            b64_data = b64_data.split(",", 1)[1]
+        import base64 as _b64
+        try:
+            image_bytes = _b64.b64decode(b64_data)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 image data")
+        # Upload to R2
+        r2_key = f"annotations/{session_id}/{clip_id}_{int(timestamp_seconds)}.png"
+        if not _r2_client:
+            raise HTTPException(status_code=503, detail="R2 storage not configured")
+        _r2_client.put_object(
+            Bucket=_R2_BUCKET_NAME,
+            Key=r2_key,
+            Body=image_bytes,
+            ContentType="image/png",
+        )
+        r2_url = f"{STATIC_ASSETS_URL}/{r2_key}"
+        # Insert into DB
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = conn.execute("""
+            INSERT INTO clip_annotations
+                (clip_id, session_id, created_by_user_id, timestamp_seconds, r2_key, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (clip_id, session_id, user_id, timestamp_seconds, r2_key, now))
+        conn.commit()
+        annotation_id = cursor.lastrowid
+        return {"id": annotation_id, "r2_url": r2_url, "timestamp_seconds": timestamp_seconds}
+    finally:
+        conn.close()
+
+
+@app.get("/film/clips/{clip_id}/annotations")
+async def list_clip_annotations(clip_id: str, token_data: dict = Depends(verify_token)):
+    """List all annotations for a clip."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        clip = conn.execute(
+            "SELECT id FROM video_clips WHERE id = ? AND org_id = ?",
+            (clip_id, org_id),
+        ).fetchone()
+        if not clip:
+            raise HTTPException(status_code=404, detail="Clip not found")
+        rows = conn.execute("""
+            SELECT id, timestamp_seconds, r2_key, created_by_user_id AS created_by, created_at
+            FROM clip_annotations
+            WHERE clip_id = ?
+            ORDER BY timestamp_seconds
+        """, (clip_id,)).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else r
+            if isinstance(d, dict):
+                d["r2_url"] = f"{STATIC_ASSETS_URL}/{d['r2_key']}"
+            results.append(d)
+        return results
     finally:
         conn.close()
 

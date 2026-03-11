@@ -344,6 +344,9 @@ export default function FilmSessionViewerPage() {
   const [clipCoachingNote, setClipCoachingNote] = useState("");
   const [savingClip, setSavingClip] = useState(false);
   const [clipRefreshKey, setClipRefreshKey] = useState(0);
+  const [activeClipId, setActiveClipId] = useState<string | null>(null);
+  const [clipAnnotations, setClipAnnotations] = useState<{ id: number; timestamp_seconds: number; r2_url: string; created_by: string; created_at: string }[]>([]);
+  const [annotationPreview, setAnnotationPreview] = useState<string | null>(null);
 
   // Event data import
   const [importingEvents, setImportingEvents] = useState(false);
@@ -864,7 +867,7 @@ export default function FilmSessionViewerPage() {
     }
     setSavingClip(true);
     try {
-      await api.post("/film/clips", {
+      const clipRes = await api.post("/film/clips", {
         title: clipTitle.trim() || `Clip ${formatTimestamp(clipStart)}–${formatTimestamp(clipEnd)}`,
         session_id: sessionId,
         upload_id: upload?.id || null,
@@ -873,6 +876,7 @@ export default function FilmSessionViewerPage() {
         clip_type: "manual",
         coaching_note: clipCoachingNote.trim() || null,
       });
+      if (clipRes.data?.id) setActiveClipId(clipRes.data.id);
       toast.success("Clip saved");
       setClipStart(null);
       setClipEnd(null);
@@ -885,6 +889,41 @@ export default function FilmSessionViewerPage() {
       setSavingClip(false);
     }
   }, [clipStart, clipEnd, clipTitle, clipCoachingNote, sessionId, upload]);
+
+  const fetchClipAnnotations = useCallback(async (clipId: string) => {
+    try {
+      const res = await api.get(`/film/clips/${clipId}/annotations`);
+      setClipAnnotations(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      /* non-critical */
+    }
+  }, []);
+
+  const handleAnnotationSave = useCallback(async (dataUrl: string) => {
+    if (!activeClipId) {
+      toast.error("Save a clip first before annotating");
+      return;
+    }
+    try {
+      await api.post(`/film/clips/${activeClipId}/annotation`, {
+        timestamp_seconds: currentTimeRef.current,
+        image_data_url: dataUrl,
+      });
+      toast.success("Annotation saved to clip");
+      fetchClipAnnotations(activeClipId);
+    } catch {
+      toast.error("Failed to save annotation");
+    }
+  }, [activeClipId, fetchClipAnnotations]);
+
+  // Fetch annotations when active clip changes
+  useEffect(() => {
+    if (activeClipId) {
+      fetchClipAnnotations(activeClipId);
+    } else {
+      setClipAnnotations([]);
+    }
+  }, [activeClipId, fetchClipAnnotations]);
 
   const executeEventImport = useCallback(async (file: File, replace: boolean) => {
     setImportingEvents(true);
@@ -1539,9 +1578,7 @@ export default function FilmSessionViewerPage() {
                 lineWidth={drawLineWidth}
                 opacity={0.9}
                 fadeAfterMs={drawFade ? 4000 : 0}
-                onAnnotationSave={(dataUrl) => {
-                  console.log("Annotation saved:", dataUrl.length, "chars");
-                }}
+                onAnnotationSave={handleAnnotationSave}
                 style={{
                   position: "absolute",
                   top: 0, left: 0,
@@ -1642,7 +1679,7 @@ export default function FilmSessionViewerPage() {
                       <button
                         onClick={() => {
                           const dataUrl = telestrationRef.current?.getDataUrl();
-                          if (dataUrl) console.log("Annotation saved:", dataUrl.length, "chars");
+                          if (dataUrl) handleAnnotationSave(dataUrl);
                         }}
                         style={{
                           flex: 1, padding: "3px 7px", borderRadius: 4, border: "none", cursor: "pointer",
@@ -1929,6 +1966,49 @@ export default function FilmSessionViewerPage() {
                 uploads={uploads}
                 onPeriodSwitch={handleClipPeriodSwitch}
               />
+
+              {/* Annotation Thumbnails — shown when active clip has annotations */}
+              {activeClipId && clipAnnotations.length > 0 && (
+                <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{ padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>ANNOTATIONS</span>
+                  </div>
+                  <div style={{ padding: "6px 8px", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {clipAnnotations.map((ann) => (
+                      <div
+                        key={ann.id}
+                        style={{ position: "relative", cursor: "pointer" }}
+                        onClick={() => setAnnotationPreview(ann.r2_url)}
+                        title={`${Math.floor(ann.timestamp_seconds / 60)}:${String(Math.floor(ann.timestamp_seconds % 60)).padStart(2, "0")}`}
+                      >
+                        <img
+                          src={ann.r2_url}
+                          alt={`Annotation at ${Math.floor(ann.timestamp_seconds / 60)}:${String(Math.floor(ann.timestamp_seconds % 60)).padStart(2, "0")}`}
+                          style={{ width: 80, height: 45, objectFit: "cover", borderRadius: 4, border: "1px solid rgba(255,255,255,0.1)" }}
+                        />
+                        <span style={{ position: "absolute", bottom: 2, right: 3, fontSize: 8, fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700, color: "white", background: "rgba(0,0,0,0.7)", borderRadius: 2, padding: "0 3px" }}>
+                          {Math.floor(ann.timestamp_seconds / 60)}:{String(Math.floor(ann.timestamp_seconds % 60)).padStart(2, "0")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Annotation full-size preview modal */}
+              {annotationPreview && (
+                <div
+                  onClick={() => setAnnotationPreview(null)}
+                  style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                >
+                  <img
+                    src={annotationPreview}
+                    alt="Annotation preview"
+                    style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 8, border: "2px solid rgba(255,255,255,0.15)" }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              )}
 
               {/* Reels Section */}
               {sessionReels.length > 0 && (
