@@ -12,10 +12,14 @@ import {
   ExternalLink,
   User,
   ChevronDown,
+  ArrowRight,
+  Loader2,
+  CheckCircle,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
+import toast from "react-hot-toast";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { formatLeague } from "@/lib/leagues";
@@ -100,6 +104,7 @@ function ScoutingList() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [pipelinePlayerIds, setPipelinePlayerIds] = useState<Set<string>>(new Set());
 
   // ── Fetch list ──────────────────────────────────────────────
 
@@ -125,6 +130,13 @@ function ScoutingList() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  // Load pipeline status on mount
+  useEffect(() => {
+    api.get("/scouting-list/pipeline-status")
+      .then((res) => setPipelinePlayerIds(new Set(res.data?.player_ids || [])))
+      .catch(() => { /* silent */ });
+  }, []);
 
   // ── Handlers ────────────────────────────────────────────────
 
@@ -152,6 +164,31 @@ function ScoutingList() {
   const handleAdded = () => {
     setShowAddModal(false);
     fetchList();
+  };
+
+  const handlePushToPipeline = async (itemId: string, playerId: string) => {
+    try {
+      const res = await api.post(`/scouting-list/${itemId}/push-to-pipeline`);
+      setPipelinePlayerIds((prev) => new Set([...prev, playerId]));
+      const summary = res.data?.pxi_summary;
+      toast.success(
+        (t) => (
+          <div>
+            <div style={{ fontWeight: 600 }}>Added to Scouting Pipeline</div>
+            {summary && <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>{summary}</div>}
+          </div>
+        ),
+        { duration: 4000 }
+      );
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        setPipelinePlayerIds((prev) => new Set([...prev, playerId]));
+        toast("Already in Pipeline", { duration: 3000, style: { background: "#FEF3C7", color: "#92400E" } });
+      } else {
+        toast.error("Failed — try again", { duration: 3000, style: { background: "#FEF2F2", color: "#E67E22" } });
+      }
+    }
   };
 
   // ── Filter tabs ─────────────────────────────────────────────
@@ -270,6 +307,8 @@ function ScoutingList() {
               item={item}
               onRemove={handleRemove}
               onUpdate={handleUpdate}
+              isPushed={pipelinePlayerIds.has(item.player_id)}
+              onPushToPipeline={handlePushToPipeline}
             />
           ))}
         </div>
@@ -294,14 +333,19 @@ function ScoutingCard({
   item,
   onRemove,
   onUpdate,
+  isPushed,
+  onPushToPipeline,
 }: {
   item: ScoutingListItem;
   onRemove: (id: string) => void;
   onUpdate: (id: string, payload: Partial<{ priority: Priority; scout_notes: string; target_reason: string }>) => void;
+  isPushed: boolean;
+  onPushToPipeline: (itemId: string, playerId: string) => Promise<void>;
 }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState(item.scout_notes || "");
   const [removing, setRemoving] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Sync local state if parent updates
@@ -470,6 +514,29 @@ function ScoutingCard({
 
             {/* Quick actions */}
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={async () => { setPushing(true); await onPushToPipeline(item.id, item.player_id); setPushing(false); }}
+                disabled={isPushed || pushing}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "4px 10px", fontSize: 11, fontWeight: 600,
+                  fontFamily: "'Oswald', sans-serif", textTransform: "uppercase" as const,
+                  letterSpacing: "0.05em", borderRadius: 6, border: "none", cursor: isPushed ? "default" : "pointer",
+                  background: isPushed ? "#E2E8F0" : "#0D9488",
+                  color: isPushed ? "#94A3B8" : "#FFFFFF",
+                  opacity: pushing ? 0.7 : 1,
+                  transition: "background 0.2s, opacity 0.2s",
+                }}
+              >
+                {pushing ? (
+                  <Loader2 size={11} className="animate-spin" />
+                ) : isPushed ? (
+                  <CheckCircle size={11} />
+                ) : (
+                  <ArrowRight size={11} />
+                )}
+                {pushing ? "Pushing..." : isPushed ? "In Pipeline ✓" : "Push to Pipeline"}
+              </button>
               <Link
                 href={`/players/${item.player_id}`}
                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-teal hover:text-teal/70 font-oswald uppercase tracking-wider transition-colors"

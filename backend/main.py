@@ -2975,6 +2975,24 @@ def init_db():
         )
     """)
 
+    # ── Scouting pipeline (player prospect tracking) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scouting_pipeline (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            player_id TEXT NOT NULL,
+            added_by TEXT NOT NULL,
+            notes TEXT,
+            priority TEXT DEFAULT 'medium',
+            status TEXT DEFAULT 'new',
+            sourced_via TEXT,
+            source_item_id TEXT,
+            pxi_summary TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # ── Player team history (transfer audit trail) ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS player_team_history (
@@ -3008,6 +3026,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_scouting_list_org ON scouting_list(org_id, user_id)",
         "CREATE INDEX IF NOT EXISTS idx_scouting_list_player ON scouting_list(player_id)",
         "CREATE INDEX IF NOT EXISTS idx_scouting_list_priority ON scouting_list(priority)",
+        "CREATE INDEX IF NOT EXISTS idx_scouting_pipeline_org ON scouting_pipeline(org_id)",
+        "CREATE INDEX IF NOT EXISTS idx_scouting_pipeline_player ON scouting_pipeline(org_id, player_id)",
     ]:
         conn.execute(idx_sql)
 
@@ -41092,6 +41112,106 @@ async def track_scouting_view(item_id: str, token_data: dict = Depends(verify_to
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Scouting list entry not found")
     return {"status": "viewed"}
+
+
+@app.post("/scouting-list/{item_id}/push-to-pipeline")
+async def push_to_pipeline(item_id: str, token_data: dict = Depends(verify_token)):
+    """Push a watchlist entry into the scouting pipeline with optional PXI summary."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        # Verify item belongs to this org/user
+        item = conn.execute(
+            "SELECT * FROM scouting_list WHERE id = ? AND org_id = ? AND user_id = ?",
+            (item_id, org_id, user_id)
+        ).fetchone()
+        if not item:
+            raise HTTPException(status_code=404, detail="Scouting list entry not found")
+
+        player_id = item["player_id"]
+
+        # Check if player already in pipeline for this org
+        existing = conn.execute(
+            "SELECT id FROM scouting_pipeline WHERE player_id = ? AND org_id = ?",
+            (player_id, org_id)
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player already in pipeline")
+
+        pipeline_id = gen_id()
+        notes = item["scout_notes"] or ""
+        priority = item["priority"] or "medium"
+
+        conn.execute("""
+            INSERT INTO scouting_pipeline (id, org_id, player_id, added_by, notes, priority, sourced_via, source_item_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'watchlist', ?)
+        """, (pipeline_id, org_id, player_id, user_id, notes, priority, item_id))
+        conn.commit()
+
+        # Attempt PXI summary generation (non-fatal)
+        pxi_summary = None
+        try:
+            client = get_anthropic_client()
+            if client:
+                # Gather player context
+                player = conn.execute(
+                    "SELECT first_name, last_name, position, current_team, current_league FROM players WHERE id = ?",
+                    (player_id,)
+                ).fetchone()
+                stats_row = conn.execute(
+                    "SELECT games_played, goals, assists, points FROM player_stats WHERE player_id = ? ORDER BY season DESC LIMIT 1",
+                    (player_id,)
+                ).fetchone()
+
+                player_name = f"{player['first_name']} {player['last_name']}" if player else "Unknown"
+                position = player["position"] if player else "Unknown"
+                team = player["current_team"] if player else "Unknown"
+                league = player["current_league"] if player else ""
+                stats_str = ""
+                if stats_row:
+                    stats_str = f" Stats: {stats_row['games_played']}GP, {stats_row['goals']}G, {stats_row['assists']}A, {stats_row['points']}PTS."
+
+                scout_note_ctx = f' Scout note: "{notes}"' if notes else ""
+
+                prompt = (
+                    f"Player: {player_name}, {position}, {team} ({league}).{stats_str}{scout_note_ctx}\n\n"
+                    "In 2-3 sentences, summarize this player as a pipeline candidate based on their stats and the scout's note. "
+                    "Be direct and scouting-focused."
+                )
+
+                msg = client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=200,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                if msg.content and len(msg.content) > 0:
+                    pxi_summary = msg.content[0].text
+                    conn.execute(
+                        "UPDATE scouting_pipeline SET pxi_summary = ? WHERE id = ?",
+                        (pxi_summary, pipeline_id)
+                    )
+                    conn.commit()
+        except Exception as e:
+            logger.warning("PXI summary failed for pipeline %s: %s", pipeline_id, e)
+
+        return {"success": True, "pipeline_entry_id": pipeline_id, "pxi_summary": pxi_summary}
+    finally:
+        conn.close()
+
+
+@app.get("/scouting-list/pipeline-status")
+async def scouting_list_pipeline_status(token_data: dict = Depends(verify_token)):
+    """Return player_ids that are already in the scouting pipeline for this org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT player_id FROM scouting_pipeline WHERE org_id = ?", (org_id,)
+        ).fetchall()
+        return {"player_ids": [r["player_id"] for r in rows]}
+    finally:
+        conn.close()
 
 
 # ============================================================
