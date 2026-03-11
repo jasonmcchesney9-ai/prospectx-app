@@ -148,7 +148,7 @@ export default function GameHubPage() {
             <div style={{ textAlign: "center", padding: "40px 20px" }}>
               <Loader2 size={28} style={{ color: "#00B5B8", margin: "0 auto 12px", animation: "spin 1s linear infinite" }} />
               <p style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>Analysing game sheet...</p>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>Claude Vision is extracting game data</p>
+              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>PXI is extracting game data</p>
             </div>
           )}
 

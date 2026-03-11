@@ -81,7 +81,7 @@ const FAQ_DATA: FAQCategory[] = [
       },
       {
         q: "Does PXI use my data to train AI models?",
-        a: "Never. Your scouting data, notes, and reports are org-isolated and never used to train AI models. PXI uses the Anthropic Claude API with strict data handling policies.",
+        a: "Never. Your scouting data, notes, and reports are org-isolated and never used to train AI models. PXI operates under strict data handling policies — your data is never shared or used for model training.",
       },
       {
         q: "What report types are available?",

@@ -425,7 +425,7 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal/10 border border-teal/20 mb-4">
               <Zap size={12} className="text-teal" />
               <span className="text-xs font-oswald uppercase tracking-widest text-teal">
-                Powered by Claude AI
+                Powered by PXI
               </span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-oswald font-bold text-white">
