@@ -16039,6 +16039,171 @@ async def get_player_event_aggregates(
         conn.close()
 
 
+# ── Shot Map endpoint ────────────────────────────────────────
+_SHOT_MAP_TYPE = {
+    "Shots": "shot",
+    "Shots on goal": "shot_on_goal",
+    "Goals": "goal",
+    "Missed shots": "missed_shot",
+    "Blocked shots": "blocked_shot",
+    "PP shots": "pp_shot",
+    "SH shots": "sh_shot",
+}
+
+@app.get("/players/{player_id}/shot-map")
+async def get_player_shot_map(
+    player_id: str,
+    season: str = Query("2025-26"),
+    game_id: Optional[str] = Query(None),
+    event_types: str = Query("all", description="Comma-separated filter or 'all'"),
+    team_context: str = Query("for", description="'for' = player shots, 'against' = shots against"),
+    token_data: dict = Depends(verify_token),
+):
+    """Return shot coordinates for a player, normalized for rink visualization."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Fetch player info
+        player = conn.execute(
+            "SELECT id, first_name, last_name, team FROM players WHERE id = ? AND org_id = ?",
+            (player_id, org_id),
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        player_name = f"{player['first_name']} {player['last_name']}".strip()
+        team = player["team"] or ""
+
+        # Build query — game_events has InStat data with pos_x/pos_y
+        sql = """
+            SELECT id, action, pos_x, pos_y, period, game_id, game_date,
+                   opponent_name, zone, team_name
+            FROM game_events
+            WHERE org_id = ? AND pos_x IS NOT NULL AND pos_y IS NOT NULL
+        """
+        params: list = [org_id]
+
+        if team_context == "against":
+            # Shots against: opponent's shot events where this player's team was the opponent
+            sql += " AND opponent_name = ? AND season = ?"
+            params.extend([team, season])
+        else:
+            # Shots for: this player's own events
+            sql += " AND player_id = ? AND season = ?"
+            params.extend([player_id, season])
+
+        if game_id:
+            sql += " AND game_id = ?"
+            params.append(game_id)
+
+        # Filter to shot-related actions only
+        shot_actions = list(_SHOT_MAP_TYPE.keys())
+        placeholders = ",".join(["?" for _ in shot_actions])
+        sql += f" AND action IN ({placeholders})"
+        params.extend(shot_actions)
+
+        sql += " ORDER BY game_date, period, start_s"
+        rows = conn.execute(sql, params).fetchall()
+
+        # Apply event_types filter if not 'all'
+        if event_types != "all":
+            allowed = {t.strip() for t in event_types.split(",")}
+            rows = [r for r in rows if _SHOT_MAP_TYPE.get(r["action"], "other") in allowed]
+
+        # Normalize coordinates and build response
+        RINK_LENGTH = 60.0
+        RINK_WIDTH = 26.0
+        events_out = []
+        game_ids_seen = set()
+        shots = goals = shots_on_goal = missed = blocked = 0
+        left_side = slot = high_danger = 0
+
+        for r in rows:
+            px = r["pos_x"]
+            py = r["pos_y"]
+            zone = r["zone"] or ""
+
+            # Normalize to percentage of rink dimensions
+            x_pct = (px / RINK_LENGTH) * 100.0
+            y_pct = (py / RINK_WIDTH) * 100.0
+
+            # Flip for away team: if zone is OZ but pos_x < 50 → coords face left
+            # (InStat home team attacks right = high pos_x)
+            if zone == "OZ" and px < 30:
+                x_pct = (1.0 - px / RINK_LENGTH) * 100.0
+                y_pct = (1.0 - py / RINK_WIDTH) * 100.0
+            elif zone == "DZ" and px > 30:
+                x_pct = (1.0 - px / RINK_LENGTH) * 100.0
+                y_pct = (1.0 - py / RINK_WIDTH) * 100.0
+
+            action = r["action"]
+            map_type = _SHOT_MAP_TYPE.get(action, "other")
+            is_goal = action == "Goals"
+
+            events_out.append({
+                "id": r["id"],
+                "action": action,
+                "map_type": map_type,
+                "pos_x": px,
+                "pos_y": py,
+                "x_pct": round(x_pct, 2),
+                "y_pct": round(y_pct, 2),
+                "period": r["period"],
+                "game_id": r["game_id"],
+                "game_date": r["game_date"],
+                "opponent": r["opponent_name"] or "",
+                "is_goal": is_goal,
+            })
+
+            game_ids_seen.add(r["game_id"])
+
+            # Summary counters
+            if map_type in ("shot", "shot_on_goal", "goal", "pp_shot", "sh_shot"):
+                shots += 1
+            if map_type in ("shot_on_goal", "goal"):
+                shots_on_goal += 1
+            if map_type == "goal":
+                goals += 1
+            if map_type == "missed_shot":
+                missed += 1
+            if map_type == "blocked_shot":
+                blocked += 1
+
+            # Zone classification
+            if y_pct < 50:
+                left_side += 1
+            if 75 <= x_pct <= 100 and 35 <= y_pct <= 65:
+                slot += 1
+            if x_pct > 85 and 40 <= y_pct <= 60:
+                high_danger += 1
+
+        total = len(events_out)
+        shooting_pct = round((goals / shots_on_goal * 100) if shots_on_goal > 0 else 0.0, 1)
+
+        return {
+            "player_id": player_id,
+            "player_name": player_name,
+            "team": team,
+            "season": season,
+            "total_events": total,
+            "games_included": len(game_ids_seen),
+            "rink_dimensions": {"length_m": RINK_LENGTH, "width_m": RINK_WIDTH},
+            "events": events_out,
+            "summary": {
+                "shots": shots,
+                "shots_on_goal": shots_on_goal,
+                "goals": goals,
+                "missed_shots": missed,
+                "blocked_shots": blocked,
+                "shooting_pct": shooting_pct,
+                "left_side_pct": round((left_side / total * 100) if total > 0 else 0.0, 1),
+                "slot_pct": round((slot / total * 100) if total > 0 else 0.0, 1),
+                "high_danger_pct": round((high_danger / total * 100) if total > 0 else 0.0, 1),
+            },
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/players/{player_id}/trendline")
 async def get_player_trendline(
     player_id: str,
