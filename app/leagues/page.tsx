@@ -181,8 +181,8 @@ export default function LeagueHubPage() {
       .catch(() => { setTeamStats([]); failed.add("team-stats"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingTeamStats(false));
 
-    // Fetch 6: Teams (still live HT)
-    api.get<HTTeam[]>(`/hockeytech/${league}/teams`)
+    // Fetch 6: Teams (stored data with live HT fallback)
+    api.get<HTTeam[]>(`/league-hub/${league}/teams-stored`)
       .then((res) => setTeams(res.data))
       .catch(() => { setTeams([]); failed.add("teams"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingTeams(false));
