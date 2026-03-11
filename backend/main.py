@@ -4478,6 +4478,21 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_type ON chalk_talk_sessions(session_type)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ct_sessions_chalk ON chalk_talk_sessions(chalk_talk_id)")
 
+    # ── Migration: series_plan_id + game_number on chalk_talk_sessions ──
+    cts_cols = _get_table_columns(conn, "chalk_talk_sessions")
+    for col_name, col_type in [
+        ("series_plan_id", "TEXT"),
+        ("game_number", "INTEGER"),
+    ]:
+        if col_name not in cts_cols:
+            try:
+                conn.execute(f"ALTER TABLE chalk_talk_sessions ADD COLUMN {col_name} {col_type}")
+                conn.commit()
+                logger.info("Migration: added %s to chalk_talk_sessions", col_name)
+            except Exception as e:
+                conn.rollback()
+                logger.warning("Migration skip %s on chalk_talk_sessions: %s", col_name, e)
+
     # ── Table: chalk_talk_session_clips (junction: chalk talk sessions ↔ film clips) ──
     c.execute("""
         CREATE TABLE IF NOT EXISTS chalk_talk_session_clips (
