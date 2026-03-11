@@ -5002,17 +5002,30 @@ def init_db():
     logger.info("clip_annotations table ready")
 
     # ── PXI Context table ──
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pxi_context (
-            id TEXT PRIMARY KEY,
-            player_id TEXT,
-            team_id TEXT,
-            game_id TEXT,
-            report_type TEXT,
-            context_data TEXT,
-            generated_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
+    if USE_PG:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pxi_context (
+                id TEXT PRIMARY KEY,
+                player_id TEXT,
+                team_id TEXT,
+                game_id TEXT,
+                report_type TEXT,
+                context_data TEXT,
+                generated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pxi_context (
+                id TEXT PRIMARY KEY,
+                player_id TEXT,
+                team_id TEXT,
+                game_id TEXT,
+                report_type TEXT,
+                context_data TEXT,
+                generated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxi_context_player_report ON pxi_context(player_id, report_type)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxi_context_game ON pxi_context(game_id)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pxi_context_unique ON pxi_context(player_id, game_id, report_type)")
@@ -27157,10 +27170,11 @@ def write_shot_context(parse_result: dict) -> int:
                 "opponent": shots[0].get("opponent_name", ""),
             })
 
-            conn.execute("""
+            _now_expr = "NOW()" if USE_PG else "datetime('now')"
+            conn.execute(f"""
                 INSERT OR REPLACE INTO pxi_context
                     (id, player_id, team_id, game_id, report_type, context_data, generated_at)
-                VALUES (?, ?, ?, ?, 'game_shot_zones', ?, datetime('now'))
+                VALUES (?, ?, ?, ?, 'game_shot_zones', ?, {_now_expr})
             """, (str(uuid.uuid4()), pid, shots[0].get("team_name", ""), game_id, context_data))
             written += 1
 
@@ -27244,10 +27258,11 @@ def aggregate_player_shot_context(player_id: str, team_id: str = "") -> dict | N
         context_data = json.dumps(profile)
 
         # Write aggregated season profile — game_id is NULL for season-level
-        conn.execute("""
+        _now_expr = "NOW()" if USE_PG else "datetime('now')"
+        conn.execute(f"""
             INSERT OR REPLACE INTO pxi_context
                 (id, player_id, team_id, game_id, report_type, context_data, generated_at)
-            VALUES (?, ?, ?, '__season__', 'season_shot_profile', ?, datetime('now'))
+            VALUES (?, ?, ?, '__season__', 'season_shot_profile', ?, {_now_expr})
         """, (str(uuid.uuid4()), player_id, team_id, context_data))
         conn.commit()
 
