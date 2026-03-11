@@ -5053,6 +5053,44 @@ def init_db():
         conn.rollback()
         logger.warning("league_player_stats_cache table DDL skipped: %s", e)
 
+    # ── league_teams_cache (League Hub teams list) ──
+    try:
+        if USE_PG:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS league_teams_cache (
+                    id SERIAL PRIMARY KEY,
+                    league TEXT NOT NULL,
+                    team_id INTEGER,
+                    team_name TEXT,
+                    city TEXT,
+                    nickname TEXT,
+                    abbreviation TEXT,
+                    division TEXT,
+                    logo_url TEXT,
+                    cached_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+        else:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS league_teams_cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league TEXT NOT NULL,
+                    team_id INTEGER,
+                    team_name TEXT,
+                    city TEXT,
+                    nickname TEXT,
+                    abbreviation TEXT,
+                    division TEXT,
+                    logo_url TEXT,
+                    cached_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_league_teams_cache_league ON league_teams_cache(league)")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.warning("league_teams_cache table DDL skipped: %s", e)
+
     # ── Film Room: clip_annotations table ──
     if USE_PG:
         conn.execute("""
@@ -11020,6 +11058,32 @@ def sync_hockeytech_data_cron():
                     logger.info("[HT SYNC CRON] %s: cached %d scoring leaders", code, total_cached_leaders)
                 except Exception as ldr_err:
                     logger.error("[HT SYNC CRON] %s leaders cache failed: %s", code, ldr_err)
+
+                # ── Sync league_teams_cache ──
+                total_cached_teams = 0
+                try:
+                    ht_teams = await client.get_teams(season_id)
+                    conn.execute(
+                        "DELETE FROM league_teams_cache WHERE league = ?",
+                        (code,),
+                    )
+                    for t in ht_teams:
+                        conn.execute(
+                            """INSERT INTO league_teams_cache
+                               (league, team_id, team_name, city, nickname,
+                                abbreviation, division, logo_url)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                code, t.get("id"), t.get("name", ""),
+                                t.get("city", ""), t.get("nickname", ""),
+                                t.get("code", ""), t.get("division", ""),
+                                t.get("logo", ""),
+                            ),
+                        )
+                        total_cached_teams += 1
+                    logger.info("[HT SYNC CRON] %s: cached %d teams", code, total_cached_teams)
+                except Exception as team_err:
+                    logger.error("[HT SYNC CRON] %s teams cache failed: %s", code, team_err)
 
                 # ── Sync player_stats (skaters + goalies) ──
                 total_skaters = 0
@@ -32121,6 +32185,47 @@ async def league_hub_player_stats_stored(league: str, limit: int = 100, token_da
                 return await client.get_top_scorers(season_id, limit=limit)
         except Exception as ht_err:
             logger.warning("[league-hub] %s player stats live fallback failed: %s", league, ht_err)
+
+        return []
+    finally:
+        conn.close()
+
+
+@app.get("/league-hub/{league}/teams-stored")
+async def league_hub_teams_stored(league: str, token_data: dict = Depends(verify_token)):
+    """Return cached teams for a league, with live HT fallback."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT team_id, team_name, city, nickname, abbreviation, division, logo_url
+               FROM league_teams_cache
+               WHERE league = ?
+               ORDER BY team_name""",
+            (league,),
+        ).fetchall()
+
+        if rows:
+            return [
+                {
+                    "id": r["team_id"],
+                    "name": r["team_name"],
+                    "code": r["abbreviation"],
+                    "city": r["city"],
+                    "nickname": r["nickname"],
+                    "division": r["division"],
+                    "logo": r["logo_url"],
+                }
+                for r in rows
+            ]
+
+        # Fallback to live HT if cache is empty
+        try:
+            client = HockeyTechClient(league)
+            season_id = await client.get_current_season_id()
+            if season_id:
+                return await client.get_teams(season_id)
+        except Exception as ht_err:
+            logger.warning("[league-hub] %s teams live fallback failed: %s", league, ht_err)
 
         return []
     finally:
