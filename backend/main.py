@@ -5002,6 +5002,7 @@ def init_db():
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxi_context_player_report ON pxi_context(player_id, report_type)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pxi_context_game ON pxi_context(game_id)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pxi_context_unique ON pxi_context(player_id, game_id, report_type)")
     conn.commit()
     logger.info("pxi_context table ready")
 
@@ -27046,6 +27047,105 @@ def get_last_import_timestamp(game_id: str, conn) -> Optional[datetime]:
     return row[0] if row and row[0] else None
 
 
+def write_shot_context(parse_result: dict) -> int:
+    """Compute per-player zone stats from parsed InStat XML events and write to pxi_context.
+
+    Opens its own DB connection — the caller's conn from _parse_instat_xml_events()
+    is already committed and closed.
+    Uses the same zone constants as GET /players/{player_id}/shot-map:
+        slot:        75 <= x_pct <= 100 and 35 <= y_pct <= 65
+        high_danger: x_pct > 85 and 40 <= y_pct <= 60
+    Returns number of pxi_context rows written.
+    """
+    events = parse_result.get("events", [])
+    game_meta = parse_result.get("game_meta", {})
+    if not events:
+        return 0
+
+    game_id = events[0].get("game_id")
+    if not game_id:
+        return 0
+
+    home_team = game_meta.get("home_team", "")
+    RINK_LENGTH = 60.0
+    RINK_WIDTH = 26.0
+    shot_actions = set(_SHOT_MAP_TYPE.keys())
+
+    # Group shot events by player_id
+    player_shots: dict[str, list] = {}
+    for ev in events:
+        pid = ev.get("player_id")
+        if not pid:
+            continue
+        if ev["action"] not in shot_actions:
+            continue
+        if ev.get("pos_x") is None or ev.get("pos_y") is None:
+            continue
+        player_shots.setdefault(pid, []).append(ev)
+
+    if not player_shots:
+        return 0
+
+    conn = get_db()
+    written = 0
+    try:
+        for pid, shots in player_shots.items():
+            total = len(shots)
+            goals = shots_on_goal = left_side = slot = high_danger = 0
+
+            for s in shots:
+                px = s["pos_x"]
+                py = s["pos_y"]
+                zone = s.get("zone") or ""
+
+                # Normalize — same flip logic as player shot-map endpoint
+                x_pct = (px / RINK_LENGTH) * 100.0
+                y_pct = (py / RINK_WIDTH) * 100.0
+                if zone == "OZ" and px < 30:
+                    x_pct = (1.0 - px / RINK_LENGTH) * 100.0
+                    y_pct = (1.0 - py / RINK_WIDTH) * 100.0
+                elif zone == "DZ" and px > 30:
+                    x_pct = (1.0 - px / RINK_LENGTH) * 100.0
+                    y_pct = (1.0 - py / RINK_WIDTH) * 100.0
+
+                map_type = _SHOT_MAP_TYPE.get(s["action"], "other")
+                if map_type == "goal":
+                    goals += 1
+                if map_type in ("shot_on_goal", "goal"):
+                    shots_on_goal += 1
+                if y_pct < 50:
+                    left_side += 1
+                if 75 <= x_pct <= 100 and 35 <= y_pct <= 65:
+                    slot += 1
+                if x_pct > 85 and 40 <= y_pct <= 60:
+                    high_danger += 1
+
+            context_data = json.dumps({
+                "total_shots": total,
+                "goals": goals,
+                "shots_on_goal": shots_on_goal,
+                "shooting_pct": round((goals / shots_on_goal * 100) if shots_on_goal > 0 else 0.0, 1),
+                "left_side_pct": round((left_side / total * 100) if total > 0 else 0.0, 1),
+                "slot_pct": round((slot / total * 100) if total > 0 else 0.0, 1),
+                "high_danger_pct": round((high_danger / total * 100) if total > 0 else 0.0, 1),
+                "game_date": game_meta.get("game_date"),
+                "opponent": shots[0].get("opponent_name", ""),
+            })
+
+            conn.execute("""
+                INSERT OR REPLACE INTO pxi_context
+                    (id, player_id, team_id, game_id, report_type, context_data, generated_at)
+                VALUES (?, ?, ?, ?, 'game_shot_zones', ?, datetime('now'))
+            """, (str(uuid.uuid4()), pid, shots[0].get("team_name", ""), game_id, context_data))
+            written += 1
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return written
+
+
 # ── InStat XML Tagging Helpers (game_events pipeline) ─────
 
 def _parse_instat_xml_filename(filename: str) -> dict:
@@ -28373,6 +28473,15 @@ async def instat_import_xml(
     game_meta = result["game_meta"]
     score_str = f"{game_meta['home_score']}-{game_meta['away_score']}" if game_meta["home_score"] is not None else "unknown"
 
+    # Write per-player zone stats to pxi_context (non-fatal on failure)
+    ctx_written = 0
+    try:
+        ctx_written = write_shot_context(result)
+        logger.info("pxi_context: wrote %d shot zone records for game %s",
+                     ctx_written, result["events"][0]["game_id"] if result["events"] else "unknown")
+    except Exception as e:
+        logger.warning("pxi_context write failed (non-fatal): %s", str(e))
+
     return {
         "status": "ok",
         "game": {
@@ -28386,6 +28495,7 @@ async def instat_import_xml(
             "players_resolved": result["players_resolved"],
             "players_unresolved": result["players_unresolved"],
             "unresolved_names": result["unresolved_names"],
+            "pxi_context_written": ctx_written,
         },
     }
 
