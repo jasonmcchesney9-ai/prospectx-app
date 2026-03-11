@@ -102,3 +102,11 @@ input:focus, select:focus, textarea:focus {
 /* Hide print-only elements on screen */
 .print-only { display: none; }
 .print-footer { display: none; }
+
+/* Override Mux shadow DOM overflow so player controls are visible */
+mux-player {
+  overflow: visible !important;
+}
+mux-player::part(media) {
+  overflow: visible !important;
+}
