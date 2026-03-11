@@ -1838,13 +1838,14 @@ export default function FilmSessionViewerPage() {
                     }}
                     style={{
                       display: "flex", alignItems: "center", gap: 4,
-                      padding: "3px 10px", borderRadius: 4,
-                      background: drawMode ? "#00B5B8" : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${drawMode ? "#00B5B8" : "rgba(255,255,255,0.12)"}`,
-                      color: drawMode ? "white" : "rgba(255,255,255,0.5)",
+                      padding: "10px 20px", borderRadius: 4,
+                      background: drawMode ? "#0B7C75" : "#0D9488",
+                      border: `1px solid ${drawMode ? "#0B7C75" : "#0D9488"}`,
+                      color: "#FFFFFF",
                       cursor: "pointer", fontSize: 10,
                       fontFamily: "'Oswald', sans-serif",
-                      fontWeight: 700, letterSpacing: "0.08em",
+                      fontWeight: 600, letterSpacing: "0.08em",
+                      textTransform: "uppercase" as const,
                     }}
                   >
                     <PenLine size={12} />
