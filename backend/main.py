@@ -25023,6 +25023,16 @@ When a player has transfers or team splits:
                     )
                 except Exception:
                     _shot_ctx = None
+            # Load series context for chalk_talk report types
+            if request.report_type.startswith("chalk_talk_") or request.report_type in ("pre_game_intel",):
+                try:
+                    _sess_id = input_data.get("session_id", "")
+                    if _sess_id:
+                        _series_ctx = load_series_context_for_prompt(_sess_id)
+                        if _series_ctx:
+                            _shot_ctx = f"{_shot_ctx}\n\n{_series_ctx}" if _shot_ctx else _series_ctx
+                except Exception:
+                    pass  # Non-fatal — never block report generation
             system_prompt = build_report_system_prompt(
                 mode=_resolved_mode,
                 base_prompt=system_prompt,
@@ -27359,6 +27369,114 @@ def load_shot_context_for_prompt(player_id: str = "", team_id: str = "") -> str 
             return "\n".join(lines)
     finally:
         conn.close()
+
+
+def load_series_context_for_prompt(session_id: str) -> str | None:
+    """Load series context for a chalk_talk_session that belongs to a series.
+
+    If the session has series_plan_id set, pulls prior game results, adjustment
+    triggers, and the most recent series state summary. Returns a formatted
+    context block for PXI prompt injection, or None if not a series session.
+    All reads are non-fatal — never blocks report generation.
+    """
+    try:
+        conn = get_db()
+        try:
+            # Check if session belongs to a series
+            sess = conn.execute(
+                "SELECT series_plan_id, game_number FROM chalk_talk_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if not sess:
+                return None
+            sp_id = sess["series_plan_id"] if hasattr(sess, "keys") else sess[0]
+            current_gn = sess["game_number"] if hasattr(sess, "keys") else sess[1]
+            if not sp_id or not current_gn:
+                return None
+
+            # Get series plan metadata
+            sp = conn.execute(
+                "SELECT series_name, team_name, opponent_team_name, adjustments FROM series_plans WHERE id = ?",
+                (sp_id,),
+            ).fetchone()
+            if not sp:
+                return None
+            sp_name = sp["series_name"] if hasattr(sp, "keys") else sp[0]
+            sp_team = sp["team_name"] if hasattr(sp, "keys") else sp[1]
+            sp_opp = sp["opponent_team_name"] if hasattr(sp, "keys") else sp[2]
+            sp_adj_raw = sp["adjustments"] if hasattr(sp, "keys") else sp[3]
+
+            # Get all prior game sessions (game_number < current)
+            prior = conn.execute(
+                "SELECT game_number, status, opponent_analysis, keys_to_game FROM chalk_talk_sessions "
+                "WHERE series_plan_id = ? AND game_number < ? ORDER BY game_number ASC",
+                (sp_id, current_gn),
+            ).fetchall()
+
+            # Determine series record from prior game_notes in series_plans
+            sp_full = conn.execute(
+                "SELECT game_notes, current_score FROM series_plans WHERE id = ?", (sp_id,),
+            ).fetchone()
+            current_score = (sp_full["current_score"] if hasattr(sp_full, "keys") else sp_full[1]) if sp_full else "0-0"
+            game_notes_raw = (sp_full["game_notes"] if hasattr(sp_full, "keys") else sp_full[0]) if sp_full else "[]"
+            try:
+                game_notes = json.loads(game_notes_raw) if isinstance(game_notes_raw, str) else game_notes_raw
+            except (json.JSONDecodeError, TypeError):
+                game_notes = []
+
+            # Build series phase
+            if current_gn <= 2:
+                phase = "Phase 1 (Games 1-2) — identity establishment"
+            elif current_gn <= 4:
+                phase = "Phase 2 (Games 3-4) — first adjustments, bench compression"
+            else:
+                phase = "Phase 3 (Games 5-7) — desperation / closeout"
+
+            # Build context lines
+            lines = [
+                f"SERIES CONTEXT — Game {current_gn} of {sp_name}",
+                f"Series record: {current_score}",
+                f"Phase: {phase}",
+            ]
+
+            # Per-game summaries from game_notes
+            for gn in game_notes:
+                if isinstance(gn, dict) and gn.get("game_number", 0) < current_gn:
+                    result_str = gn.get("result", "").upper()
+                    notes = gn.get("notes", "")
+                    lines.append(f"Game {gn['game_number']} ({result_str}): {notes[:200]}")
+
+            # Fired adjustment triggers
+            try:
+                adjustments = json.loads(sp_adj_raw) if isinstance(sp_adj_raw, str) and sp_adj_raw else []
+            except (json.JSONDecodeError, TypeError):
+                adjustments = []
+            fired = [a for a in adjustments if isinstance(a, dict) and a.get("used_in_game")]
+            if fired:
+                lines.append("\nAdjustment triggers fired:")
+                for a in fired:
+                    lines.append(f"  - IF {a.get('trigger', '?')} THEN {a.get('action', '?')} [FIRED G{a.get('used_in_game')}]")
+
+            # Most recent series state summary (if table exists)
+            try:
+                state = conn.execute(
+                    "SELECT summary_text, momentum_percent FROM series_state_summaries "
+                    "WHERE series_id = ? ORDER BY after_game DESC LIMIT 1",
+                    (sp_id,),
+                ).fetchone()
+                if state:
+                    s_text = state["summary_text"] if hasattr(state, "keys") else state[0]
+                    s_mom = state["momentum_percent"] if hasattr(state, "keys") else state[1]
+                    lines.append(f"\nSeries State (latest): Momentum {s_mom}%. {s_text[:300]}")
+            except Exception:
+                pass  # Table may not exist yet (C3)
+
+            return "\n".join(lines) if len(lines) > 3 else None
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("load_series_context_for_prompt failed (non-fatal): %s", exc)
+        return None
 
 
 # ── InStat XML Tagging Helpers (game_events pipeline) ─────
@@ -37444,6 +37562,16 @@ When a player has transfers or team splits:
                 )
             except Exception:
                 _bg_shot_ctx = None
+        # Load series context for chalk_talk report types
+        if report_type.startswith("chalk_talk_") or report_type in ("pre_game_intel",):
+            try:
+                _bg_sess_id = input_data.get("session_id", "") if isinstance(input_data, dict) else ""
+                if _bg_sess_id:
+                    _bg_series_ctx = load_series_context_for_prompt(_bg_sess_id)
+                    if _bg_series_ctx:
+                        _bg_shot_ctx = f"{_bg_shot_ctx}\n\n{_bg_series_ctx}" if _bg_shot_ctx else _bg_series_ctx
+            except Exception:
+                pass  # Non-fatal
         bg_system_prompt = build_report_system_prompt(
             mode=_bg_mode,
             base_prompt=_bg_base_prompt,
@@ -44655,6 +44783,16 @@ async def chalk_talk_pre_populate(request: Request, token_data: dict = Depends(v
             context_parts.append(f"\nOUR TEAM IDENTITY:\n{team_identity[:1500]}")
         if opp_scorers:
             context_parts.append(f"\nOPPONENT TOP SCORERS:\n" + "\n".join(opp_scorers))
+
+        # ── Series context carry-forward (if session belongs to a series) ──
+        _session_id = body.get("session_id")
+        if _session_id:
+            try:
+                _series_ctx = load_series_context_for_prompt(_session_id)
+                if _series_ctx:
+                    context_parts.append(f"\n{_series_ctx}")
+            except Exception:
+                pass  # Non-fatal
 
         context = "\n".join(context_parts)
     finally:
