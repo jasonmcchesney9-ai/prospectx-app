@@ -1464,6 +1464,8 @@ MODE_TEMPLATE_WIRING = {
     "parent_season_update":      {"primary": "parent",   "secondary": "coach"},
     "trade_impact_simulation":   {"primary": "gm",       "secondary": "analyst"},
     "draft_class_summary":       {"primary": "scout",    "secondary": "gm"},
+    # Player Outcomes Engine
+    "player_outcomes":           {"primary": "analyst",  "secondary": "scout"},
 }
 
 # ─────────────────────────────────────────────────────────
@@ -1757,6 +1759,11 @@ REQUIRED_SECTIONS_BY_TYPE = {
     "draft_class_summary": [
         "CLASS_OVERVIEW", "OUR_PHILOSOPHY", "TIER_BREAKDOWN",
         "BEST_FITS", "OVERDRAFT_RISKS", "POTENTIAL_STEALS", "RECOMMENDED_STRATEGY",
+    ],
+    # Player Outcomes Engine
+    "player_outcomes": [
+        "READINESS_VERDICT", "CURRENT_LEAGUE_CONTEXT", "NEXT_LEVEL_TRANSLATION",
+        "ADVANCEMENT_TRIGGERS", "TIMELINE", "RISK_FACTORS", "BOTTOM_LINE",
     ],
 }
 
@@ -4364,7 +4371,7 @@ Perspective: {resolved_perspective}
         "agent_pack", "player_guide_prep_college", "in_season_projections",
         "player_season_roadmap", "next_season_projection", "metrics_dashboard",
         "free_agent_market", "free_agent_target", "trade_target",
-        "bench_card", "game_decision",
+        "bench_card", "game_decision", "player_outcomes",
     }
     if report_type in _PLAYER_FACING_TYPES:
         parts.append(SCOUTING_LANGUAGE_RULES)
@@ -4510,6 +4517,9 @@ Perspective: {resolved_perspective}
         parts.append(TRADE_IMPACT_SIMULATION)
     elif report_type == "draft_class_summary":
         parts.append(DRAFT_CLASS_SUMMARY)
+    # Player Outcomes Engine
+    elif report_type == "player_outcomes":
+        parts.append(PLAYER_OUTCOMES_REPORT)
 
     # Inject extra context (e.g., shot zone intelligence from pxi_context)
     if extra_context:
@@ -7208,6 +7218,94 @@ return "Schedule your next game to unlock PXI intel."
 
 
 # ─────────────────────────────────────────────────────────
+# Player Outcomes Engine — readiness + advancement path
+# ─────────────────────────────────────────────────────────
+PLAYER_OUTCOMES_REPORT = '''
+PLAYER OUTCOMES REPORT
+======================
+Audience: GM, Head Coach, Director of Player Development
+Purpose: Assess readiness for next-level advancement and define the specific path forward.
+Tier: Pro+
+
+IMPORTANT — HONESTY RULES FOR THIS REPORT:
+- This report is PXI analysis, not a calibrated probability model.
+- Never state percentage likelihoods (e.g. "72% chance of making OHL").
+- Never invent outcome data or historical transition rates.
+- Use language like "projects as", "assessment suggests", "current trajectory indicates" — not "will" or "guaranteed".
+- If GP < 15: prepend every section with "SMALL SAMPLE WARNING: [X] GP. Treat conclusions as directional only."
+- Guardrail: Do not make speculative negative ceiling projections for players under 20 without sufficient data (20+ GP minimum).
+
+REQUIRED HEADER:
+Player: [name] | Position: [position] | Age: [age]
+Current League: [league] | Team: [team] | Season: [season]
+GP: [gp] | PXR Score: [pxr_score] | PXR Tier: [tier]
+Report Type: Player Outcomes | Generated: [date]
+
+SECTION 1 — READINESS VERDICT
+State exactly one of:
+READY — player has demonstrated the production, age profile, and PXR score to compete at the next level now.
+DEVELOPING — player is on track but needs one more development cycle. Specific gap identified.
+NOT YET — clear development gap. Player needs defined work before advancement is realistic.
+
+State verdict in bold on its own line. Follow with 2-3 sentences of honest reasoning tied directly to PXR pillars and current stats. Do not soften a NOT YET verdict.
+
+SECTION 2 — CURRENT LEAGUE CONTEXT
+Interpret what the player's production actually means at their current league level.
+- Where do they rank relative to peers at the same age and position?
+- Is their production driven by PP time, sheltered deployment, or genuine 5v5 impact?
+- Are they a top contributor at this level or middle of the pack?
+Use PXR pillar scores (P1 offense, P2 defense, P3 possession, P4 physical) to anchor the assessment.
+CONFIDENCE: HIGH/MED/LOW with brief reason.
+
+SECTION 3 — NEXT LEVEL TRANSLATION
+Name the specific next league this player should target.
+Apply league strength context honestly:
+- Junior B → Junior A: significant step up in pace and competition
+- Junior A → Major Junior (OHL/WHL/QMJHL): elite tier, most players do not make this jump
+- Major Junior → AHL/ECHL: professional transition
+- USHL/NAHL → NCAA: academic + hockey pathway
+
+State projected role at next level (top-6, bottom-6, top-4 D, etc.)
+State projected production band as a range, not a point estimate.
+Example: "Projects as a 0.4–0.6 PPG player in a bottom-6 role at the OJHL level."
+Never state a single number as a fact.
+CONFIDENCE: HIGH/MED/LOW.
+
+SECTION 4 — ADVANCEMENT TRIGGERS
+List exactly 3–5 specific, numeric thresholds the player must hit before advancement is realistic.
+Format each trigger as:
+TRIGGER: [metric name]
+Current: [value from provided stats]
+Target: [specific target value]
+Timeline: [this season / offseason / next season]
+Status: ON TRACK / NEEDS WORK / CRITICAL GAP
+
+Base triggers on actual stats provided. Do not invent metrics not present in the data.
+If a metric is unavailable, skip it and use one that is available.
+
+SECTION 5 — TIMELINE
+State one of three windows:
+THIS SEASON — advancement realistic within current season
+NEXT SEASON — one more full development year needed
+1-2 YEARS — longer development arc required
+
+Follow with 2-3 sentences explaining what needs to happen in that window. Be specific about what "ready" looks like.
+
+SECTION 6 — RISK FACTORS
+List 2-4 honest risk factors that could derail the projection.
+Each risk: name it, explain why it matters for this specific player.
+Do not list generic risks. Tie each one to something in the data.
+Rate each: HIGH / MEDIUM / LOW risk.
+
+SECTION 7 — BOTTOM LINE
+One paragraph, plain language, written for a GM or coach.
+Synthesize sections 1-6 into a single clear recommendation.
+End with one sentence: what should the organization do right now?
+No hedging. No filler. Decision-grade language.
+'''
+
+
+# ─────────────────────────────────────────────────────────
 # PROPRIETARY_GUARDRAIL — identity protection, every prompt
 # ─────────────────────────────────────────────────────────
 PROPRIETARY_GUARDRAIL = """
@@ -7284,7 +7382,7 @@ def build_system_prompt(
         "agent_pack", "player_guide_prep_college", "in_season_projections",
         "player_season_roadmap", "next_season_projection", "metrics_dashboard",
         "free_agent_market", "free_agent_target", "trade_target",
-        "bench_card", "game_decision",
+        "bench_card", "game_decision", "player_outcomes",
     }
     if report_type in _PLAYER_FACING_TYPES:
         parts.append(SCOUTING_LANGUAGE_RULES)
@@ -7436,5 +7534,8 @@ def build_system_prompt(
         parts.append(TRADE_IMPACT_SIMULATION)
     elif report_type == "draft_class_summary":
         parts.append(DRAFT_CLASS_SUMMARY)
+    # Player Outcomes Engine
+    elif report_type == "player_outcomes":
+        parts.append(PLAYER_OUTCOMES_REPORT)
 
     return "\n\n".join(parts)

@@ -5586,6 +5586,9 @@ def seed_new_templates():
         ("Practice Film Review", "film_practice_review",
          "Film", "Practice Review",
          "AI analysis of practice film session — drill execution, standouts, system concepts, next session focus."),
+        ("Player Outcomes Report", "player_outcomes",
+         "Player Analytics", "Projections & Development",
+         "Assess readiness for next-level advancement with readiness verdict, league context, next-level translation, advancement triggers, timeline, and risk factors."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -23245,14 +23248,16 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
     # ── Hard checks (will trigger repair) ──
     needs_repair = False
 
-    # Check 1: Must contain EXECUTIVE_SUMMARY header
-    has_exec = bool(re.search(r'^EXECUTIVE_SUMMARY\s*[:—\-]?\s*$', output_text, re.MULTILINE))
-    if not has_exec:
-        warnings.append("HARD: Missing EXECUTIVE_SUMMARY header")
-        needs_repair = True
+    # Check 1: Must contain EXECUTIVE_SUMMARY header (player_outcomes uses READINESS_VERDICT instead)
+    _skip_exec = report_type in ("player_outcomes",)
+    if not _skip_exec:
+        has_exec = bool(re.search(r'^EXECUTIVE_SUMMARY\s*[:—\-]?\s*$', output_text, re.MULTILINE))
+        if not has_exec:
+            warnings.append("HARD: Missing EXECUTIVE_SUMMARY header")
+            needs_repair = True
 
     # Check 2: Must contain BOTTOM_LINE header (except practice_plan, team_identity, opponent_gameplan)
-    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep", "full_team_coaching", "personnel_suggestion", "role_adjustment", "player_season_roadmap")
+    skip_bottom = report_type in ("practice_plan", "team_identity", "opponent_gameplan", "game_decision", "line_chemistry", "st_optimization", "elite_profile", "forward_operating_profile", "defense_operating_profile", "bench_card", "bias_controlled_eval", "agent_projection", "in_season_projections", "playoff_series_prep", "full_team_coaching", "personnel_suggestion", "role_adjustment", "player_season_roadmap", "player_outcomes")
     if not skip_bottom:
         has_bottom = bool(re.search(r'^BOTTOM_LINE\s*[:—\-]?\s*$', output_text, re.MULTILINE))
         if not has_bottom:
@@ -23311,7 +23316,7 @@ def _validate_and_repair_report(output_text: str, report_type: str, client, llm_
     has_grade = bool(re.search(r'Overall\s*Grade[:\s]*[A-D][+-]?', output_text, re.IGNORECASE))
     report_types_without_grade = ("practice_plan", "team_identity", "opponent_gameplan", "game_decision",
                                    "line_chemistry", "st_optimization", "playoff_series", "goalie_tandem",
-                                   "player_season_roadmap")
+                                   "player_season_roadmap", "player_outcomes")
     if not has_grade and report_type not in report_types_without_grade:
         warnings.append("SOFT: No Overall Grade found in report")
 
@@ -24784,6 +24789,23 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
     if not request.player_id and not request.team_name:
         raise HTTPException(status_code=400, detail="Either player_id or team_name is required")
 
+    # ── Pro+ tier gate for player_outcomes ──
+    _PRO_PLUS_TIERS = {"pro", "team", "aaa_org", "superadmin"}
+    if request.report_type == "player_outcomes":
+        _tier_conn = get_db()
+        try:
+            _tier_row = _tier_conn.execute("SELECT subscription_tier FROM users WHERE id = ?", (user_id,)).fetchone()
+            _user_tier = (_tier_row["subscription_tier"] or "rookie") if _tier_row else "rookie"
+            if _user_tier not in _PRO_PLUS_TIERS:
+                raise HTTPException(status_code=403, detail={
+                    "error": "pro_tier_required",
+                    "message": "Player Outcomes Report requires Pro tier or higher.",
+                    "current_tier": _user_tier,
+                    "upgrade_url": "/pricing",
+                })
+        finally:
+            _tier_conn.close()
+
     is_team_report = request.report_type in TEAM_REPORT_TYPES and request.team_name and not request.player_id
 
     # ── Stuck report cleanup guard (10-minute cutoff, org-scoped) ──
@@ -25172,6 +25194,31 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     input_data["pxr_context"] = pxr_context
             except Exception as e:
                 logger.warning("PXR context injection failed for report: %s", e)
+
+            # ── Player Outcomes: surface PXR pillars as top-level for prominent access ──
+            if request.report_type == "player_outcomes":
+                try:
+                    _pxr_row = conn.execute("""
+                        SELECT pxr_score, p1_offense, p2_defense, p3_possession, p4_physical,
+                               confidence_tier, league_percentile, cohort_percentile, gp
+                        FROM pxr_scores
+                        WHERE player_id = ? AND pxr_score IS NOT NULL
+                        ORDER BY season DESC LIMIT 1
+                    """, (request.player_id,)).fetchone()
+                    if _pxr_row:
+                        input_data["pxr_pillars"] = {
+                            "pxr_score": round(_pxr_row["pxr_score"], 1) if _pxr_row["pxr_score"] else None,
+                            "p1_offense": round(_pxr_row["p1_offense"], 1) if _pxr_row["p1_offense"] else None,
+                            "p2_defense": round(_pxr_row["p2_defense"], 1) if _pxr_row["p2_defense"] else None,
+                            "p3_possession": round(_pxr_row["p3_possession"], 1) if _pxr_row["p3_possession"] else None,
+                            "p4_physical": round(_pxr_row["p4_physical"], 1) if _pxr_row["p4_physical"] else None,
+                            "confidence_tier": _pxr_row["confidence_tier"],
+                            "league_percentile": round(_pxr_row["league_percentile"], 1) if _pxr_row["league_percentile"] else None,
+                            "cohort_percentile": round(_pxr_row["cohort_percentile"], 1) if _pxr_row["cohort_percentile"] else None,
+                            "gp": _pxr_row["gp"],
+                        }
+                except Exception as e:
+                    logger.warning("PXR pillar injection for outcomes report failed: %s", e)
 
             report_type_name = template["template_name"]
 
