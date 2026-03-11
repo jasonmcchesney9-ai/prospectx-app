@@ -77,12 +77,13 @@ import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import TrendlineChart from "@/components/TrendlineChart";
 import ConfidenceBadge from "@/components/ConfidenceBadge";
+import ShotMap from "@/components/ShotMap";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse, PlayerTransfer, PlayerAchievement, TeamSplit } from "@/types/api";
 import CareerHistoryAccordion from "@/components/player/CareerHistoryAccordion";
 import AchievementsAccordion from "@/components/player/AchievementsAccordion";
 import { NOTE_TYPE_LABELS, NOTE_TAG_OPTIONS, NOTE_TAG_LABELS, PROSPECT_GRADES, STAT_SIGNATURE_LABELS, METRIC_COLORS, METRIC_ICONS, COMMITMENT_STATUS_OPTIONS, COMMITMENT_STATUS_COLORS, CORRECTABLE_FIELDS, CORRECTABLE_FIELD_LABELS, PROSPECT_STATUS_LABELS } from "@/types/api";
 
-type Tab = "profile" | "stats" | "notes" | "reports" | "player" | "video";
+type Tab = "profile" | "stats" | "shot_map" | "notes" | "reports" | "player" | "video";
 type StatsSubView = "current" | "progression" | "gamelog";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -368,6 +369,11 @@ export default function PlayerDetailPage() {
   const [pxrData, setPxrData] = useState<{ pxr_score: number | null; p1_offense: number | null; p2_defense: number | null; p3_possession: number | null; p4_physical: number | null; league_percentile: number | null; cohort_percentile: number | null; age_modifier: number | null; toi_gate_met?: number; data_completeness: number | null; confidence_tier?: string | null; gp?: number | null; toi_minutes?: number | null; pxr_null_reason?: string | null } | null>(null);
   const [loadingProgression, setLoadingProgression] = useState(false);
   const [loadingGameLog, setLoadingGameLog] = useState(false);
+
+  // Shot Map
+  const [shotMapData, setShotMapData] = useState<{ events: { id: string; action: string; map_type: string; pos_x: number; pos_y: number; x_pct: number; y_pct: number; period: number; game_id: string; game_date: string; opponent: string; is_goal: boolean }[]; summary: { shots: number; shots_on_goal: number; goals: number; missed: number; blocked: number; shooting_pct: number; left_side_pct: number; slot_pct: number; high_danger_pct: number } } | null>(null);
+  const [shotMapLoading, setShotMapLoading] = useState(false);
+  const [shotMapFilter, setShotMapFilter] = useState<string>("all");
 
   // Player Intelligence
   const [intelligence, setIntelligence] = useState<PlayerIntelligence | null>(null);
@@ -1145,6 +1151,17 @@ export default function PlayerDetailPage() {
     }
   }, [activeTab, filmClips.length, filmClipsLoading, loadFilmClips, playerReels.length, reelsLoading, playerId]);
 
+  // Load shot map data when Shot Map tab is active
+  useEffect(() => {
+    if (activeTab === "shot_map" && !shotMapData && !shotMapLoading) {
+      setShotMapLoading(true);
+      api.get(`/players/${playerId}/shot-map`, { params: { season: "2025-26" } })
+        .then(({ data }) => setShotMapData(data))
+        .catch(() => { /* non-critical */ })
+        .finally(() => setShotMapLoading(false));
+    }
+  }, [activeTab, shotMapData, shotMapLoading, playerId]);
+
   // Handle game log pagination
   const handleGameLogPageChange = (newOffset: number) => {
     setGameLogOffset(newOffset);
@@ -1422,6 +1439,7 @@ export default function PlayerDetailPage() {
           {([
             { key: "profile" as Tab, label: "Overview", count: null },
             { key: "stats" as Tab, label: "Stats", count: stats.length },
+            { key: "shot_map" as Tab, label: "Shot Map", count: null },
             { key: "notes" as Tab, label: "Notes", count: notes.length },
             { key: "reports" as Tab, label: "Reports", count: reports.length },
             { key: "player" as Tab, label: "Dev Plan", count: devPlanV2History.length || devPlanVersions.length || null },
@@ -2417,6 +2435,95 @@ export default function PlayerDetailPage() {
                 ) : null}
               </>
             )}
+          </section>
+        )}
+
+        {/* Shot Map Tab — Left Column */}
+        {activeTab === "shot_map" && (
+          <section>
+            <p style={{ fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 400, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(90,114,145,0.7)", marginBottom: 8 }}>Shot location heat map from InStat event data.</p>
+
+            <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden" }}>
+              {/* Header row */}
+              <div style={{ padding: "12px 16px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'Oswald', sans-serif" }}>Shot Map</span>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", textTransform: "uppercase" }}>2025-26</span>
+              </div>
+
+              {/* Filter pills */}
+              <div style={{ padding: "10px 16px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[
+                  { key: "all", label: "All" },
+                  { key: "shot_on_goal", label: "Shots on Goal" },
+                  { key: "goal", label: "Goals" },
+                  { key: "missed_shot", label: "Missed" },
+                  { key: "blocked_shot", label: "Blocked" },
+                ].map((pill) => (
+                  <button
+                    key={pill.key}
+                    onClick={() => setShotMapFilter(pill.key)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 4,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: "'DM Mono', monospace",
+                      letterSpacing: ".04em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      border: "none",
+                      background: shotMapFilter === pill.key ? "#0D9488" : "rgba(255,255,255,0.06)",
+                      color: shotMapFilter === pill.key ? "white" : "rgba(255,255,255,0.4)",
+                      transition: "all .12s",
+                    }}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Shot Map Canvas */}
+              <div style={{ padding: "0 16px 16px" }}>
+                {shotMapLoading && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: 8 }}>
+                    <Loader2 size={16} style={{ color: "#14B8A8", animation: "spin 1s linear infinite" }} />
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'DM Mono', monospace" }}>Loading shot data…</span>
+                  </div>
+                )}
+                {!shotMapLoading && shotMapData && (
+                  <ShotMap
+                    events={shotMapFilter === "all" ? shotMapData.events : shotMapData.events.filter(ev => ev.map_type === shotMapFilter)}
+                    width={600}
+                    height={260}
+                    showLegend={true}
+                  />
+                )}
+                {!shotMapLoading && (!shotMapData || shotMapData.events.length === 0) && (
+                  <div style={{ textAlign: "center", padding: "40px 0" }}>
+                    <Target size={24} style={{ margin: "0 auto 8px", color: "rgba(255,255,255,0.15)" }} />
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontFamily: "'DM Sans', sans-serif" }}>No shot data available for this player.</p>
+                    <p style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", fontFamily: "'DM Mono', monospace", marginTop: 4 }}>Import InStat data to populate the shot map.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Summary stats row */}
+              {!shotMapLoading && shotMapData && shotMapData.summary && (
+                <div style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.15)" }}>
+                  {[
+                    { label: "Shots", value: shotMapData.summary.shots },
+                    { label: "On Goal", value: shotMapData.summary.shots_on_goal },
+                    { label: "Goals", value: shotMapData.summary.goals },
+                    { label: "SH%", value: shotMapData.summary.shooting_pct != null ? `${shotMapData.summary.shooting_pct.toFixed(1)}%` : "—" },
+                  ].map((stat) => (
+                    <div key={stat.label} style={{ flex: 1, textAlign: "center", padding: "10px 8px", borderRight: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: stat.label === "Goals" ? "#E67E22" : "white", lineHeight: 1 }}>{stat.value}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{stat.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         )}
 
