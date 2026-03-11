@@ -4973,17 +4973,30 @@ def init_db():
     logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats, monte_carlo_results)")
 
     # ── Film Room: clip_annotations table ──
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS clip_annotations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            clip_id TEXT NOT NULL REFERENCES video_clips(id) ON DELETE CASCADE,
-            session_id TEXT NOT NULL,
-            created_by_user_id TEXT NOT NULL,
-            timestamp_seconds REAL NOT NULL,
-            r2_key TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
+    if USE_PG:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS clip_annotations (
+                id SERIAL PRIMARY KEY,
+                clip_id TEXT NOT NULL REFERENCES video_clips(id) ON DELETE CASCADE,
+                session_id TEXT NOT NULL,
+                created_by_user_id TEXT NOT NULL,
+                timestamp_seconds REAL NOT NULL,
+                r2_key TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT NOW()
+            )
+        """)
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS clip_annotations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                clip_id TEXT NOT NULL REFERENCES video_clips(id) ON DELETE CASCADE,
+                session_id TEXT NOT NULL,
+                created_by_user_id TEXT NOT NULL,
+                timestamp_seconds REAL NOT NULL,
+                r2_key TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_clip_annotations_clip ON clip_annotations(clip_id)")
     conn.commit()
     logger.info("clip_annotations table ready")
