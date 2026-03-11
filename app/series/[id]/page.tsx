@@ -79,6 +79,13 @@ interface GameSession {
   created_at: string;
 }
 
+interface StateSummary {
+  id: string;
+  after_game: number;
+  summary_text: string;
+  created_at: string;
+}
+
 type TabKey = "overview" | "dossier" | "games" | "adjustments";
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
@@ -149,6 +156,8 @@ function SeriesDetail() {
   const [momentumLog, setMomentumLog] = useState<MomentumEntry[]>([]);
   const [gameSessions, setGameSessions] = useState<GameSession[]>([]);
   const [creatingSession, setCreatingSession] = useState<number | null>(null);
+  const [stateSummaries, setStateSummaries] = useState<StateSummary[]>([]);
+  const [generatingState, setGeneratingState] = useState<number | null>(null);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -210,6 +219,13 @@ function SeriesDetail() {
         } catch {
           // Non-fatal — game sessions may not exist yet
         }
+        // Fetch series state summaries
+        try {
+          const sumRes = await api.get<StateSummary[]>(`/series/${seriesId}/state-summaries`);
+          setStateSummaries(sumRes.data);
+        } catch {
+          // Non-fatal — table may not exist yet
+        }
       } catch {
         setError("Series not found");
       } finally {
@@ -258,6 +274,20 @@ function SeriesDetail() {
       toast.error("Failed to create game session");
     } finally {
       setCreatingSession(null);
+    }
+  };
+
+  const generateStateSummary = async (afterGame: number) => {
+    setGeneratingState(afterGame);
+    try {
+      await api.post(`/series/${seriesId}/state-summary`, { after_game: afterGame });
+      const { data } = await api.get<StateSummary[]>(`/series/${seriesId}/state-summaries`);
+      setStateSummaries(data);
+      toast.success(`Series state generated for Game ${afterGame}`);
+    } catch {
+      toast.error("Failed to generate series state");
+    } finally {
+      setGeneratingState(null);
     }
   };
 
@@ -782,6 +812,31 @@ function SeriesDetail() {
               ))}
             </div>
           </div>
+
+          {/* Series State Summaries */}
+          {stateSummaries.length > 0 && (
+            <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-4">
+                <Zap size={14} className="text-teal" />
+                Series State Summaries
+              </h3>
+              <div className="space-y-3">
+                {stateSummaries.map((ss) => (
+                  <div key={ss.id} className="border border-teal/20 rounded-lg p-3 bg-gray-50/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-oswald uppercase tracking-wider text-navy">
+                        After Game {ss.after_game}
+                      </span>
+                      <span className="text-[9px] text-muted">
+                        {new Date(ss.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-xs text-navy/80 whitespace-pre-wrap">{ss.summary_text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -939,6 +994,23 @@ function SeriesDetail() {
                                 <span>Even</span>
                                 <span>Us</span>
                               </div>
+                            </div>
+                          )}
+                          {/* Generate Series State */}
+                          <button
+                            onClick={() => generateStateSummary(gn.game_number)}
+                            disabled={generatingState === gn.game_number}
+                            className="no-print text-[10px] px-3 py-1.5 rounded font-medium"
+                            style={{ backgroundColor: "rgba(13,148,136,0.1)", color: "#0D9488" }}
+                          >
+                            {generatingState === gn.game_number ? "Generating State..." : "Generate Series State"}
+                          </button>
+                          {stateSummaries.find(s => s.after_game === gn.game_number) && (
+                            <div className="p-2 rounded border" style={{ backgroundColor: "rgba(13,148,136,0.05)", borderColor: "rgba(13,148,136,0.15)" }}>
+                              <p className="text-[10px] font-oswald uppercase tracking-wider mb-1" style={{ color: "#0D9488" }}>Series State Summary</p>
+                              <p className="text-xs text-navy/80 whitespace-pre-wrap">
+                                {stateSummaries.find(s => s.after_game === gn.game_number)?.summary_text}
+                              </p>
                             </div>
                           )}
                         </div>

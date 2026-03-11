@@ -5047,6 +5047,35 @@ def init_db():
     conn.commit()
     logger.info("pxi_context table ready")
 
+    # ── Series State Summaries table ──
+    if USE_PG:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS series_state_summaries (
+                id SERIAL PRIMARY KEY,
+                series_id TEXT NOT NULL,
+                after_game INTEGER NOT NULL,
+                momentum_percent INTEGER,
+                momentum_narrative TEXT,
+                summary_text TEXT NOT NULL,
+                generated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS series_state_summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                series_id TEXT NOT NULL,
+                after_game INTEGER NOT NULL,
+                momentum_percent INTEGER,
+                momentum_narrative TEXT,
+                summary_text TEXT NOT NULL,
+                generated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sss_series ON series_state_summaries(series_id)")
+    conn.commit()
+    logger.info("series_state_summaries table ready")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -40331,6 +40360,144 @@ async def get_series_game_sessions(series_id: str, token_data: dict = Depends(ve
         rows = conn.execute(
             "SELECT * FROM chalk_talk_sessions WHERE series_plan_id = ? AND org_id = ? ORDER BY game_number ASC",
             (series_id, org_id),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/series/{series_id}/state-summary")
+async def generate_series_state_summary(series_id: str, request: Request, token_data: dict = Depends(verify_token)):
+    """Generate a PXI-powered series state summary after a game result is entered."""
+    org_id = token_data["org_id"]
+    body = await request.json()
+    after_game = body.get("after_game")
+    if not after_game or not isinstance(after_game, int):
+        raise HTTPException(status_code=400, detail="after_game (int) is required")
+
+    conn = get_db()
+    try:
+        # Verify series exists and belongs to org
+        sp = conn.execute(
+            "SELECT * FROM series_plans WHERE id = ? AND org_id = ?", (series_id, org_id)
+        ).fetchone()
+        if not sp:
+            raise HTTPException(status_code=404, detail="Series plan not found")
+        sp_dict = dict(sp)
+
+        # Build context from completed games
+        game_notes_raw = sp_dict.get("game_notes", "[]")
+        try:
+            game_notes = json.loads(game_notes_raw) if isinstance(game_notes_raw, str) else game_notes_raw
+        except (json.JSONDecodeError, TypeError):
+            game_notes = []
+        completed_games = [g for g in game_notes if isinstance(g, dict) and g.get("game_number", 0) <= after_game]
+
+        adjustments_raw = sp_dict.get("adjustments", "[]")
+        try:
+            adjustments = json.loads(adjustments_raw) if isinstance(adjustments_raw, str) else adjustments_raw
+        except (json.JSONDecodeError, TypeError):
+            adjustments = []
+
+        # Build prompt context
+        game_lines = []
+        for g in completed_games:
+            game_lines.append(f"Game {g.get('game_number', '?')} ({g.get('result', '?').upper()}): {g.get('notes', '')[:200]}")
+
+        adj_lines = []
+        for a in adjustments:
+            if isinstance(a, dict):
+                fired = f" [FIRED G{a['used_in_game']}]" if a.get("used_in_game") else ""
+                adj_lines.append(f"IF {a.get('trigger', '?')} THEN {a.get('action', '?')}{fired}")
+
+        context = (
+            f"SERIES: {sp_dict.get('series_name', '')} — {sp_dict.get('team_name', '')} vs {sp_dict.get('opponent_team_name', '')}\n"
+            f"Format: {sp_dict.get('series_format', 'best_of_7')}\n"
+            f"Current score: {sp_dict.get('current_score', '0-0')}\n"
+            f"After Game {after_game}:\n"
+            + "\n".join(game_lines)
+            + ("\n\nAdjustment triggers:\n" + "\n".join(adj_lines) if adj_lines else "")
+        )
+    finally:
+        conn.close()
+
+    # Call Claude for series state summary
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {"summary_text": "API key not configured. Series state summary unavailable.", "momentum_percent": 50}
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        system_prompt = """You are PXI — the ProspectX Intelligence engine for hockey series analysis.
+Generate a series state summary after the specified game. Be concise and actionable.
+
+Return valid JSON with these exact keys:
+{
+  "momentum_percent": <integer 0-100, where 0=opponent fully controls, 50=even, 100=we fully control>,
+  "momentum_narrative": "1 sentence describing momentum state",
+  "summary_text": "3-5 sentences: what happened, what changed, what to watch for next game. Reference specific adjustments and player performances if data is available."
+}
+
+Return valid JSON only — no markdown, no code fences."""
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            system=system_prompt,
+            messages=[{"role": "user", "content": f"Generate series state summary:\n\n{context}"}],
+        )
+
+        raw_text = response.content[0].text.strip()
+        if raw_text.startswith("```"):
+            raw_text = re.sub(r"^```(?:json)?\s*\n?", "", raw_text)
+            raw_text = re.sub(r"\n?```\s*$", "", raw_text)
+
+        result = json.loads(raw_text)
+        momentum_pct = result.get("momentum_percent", 50)
+        momentum_narrative = result.get("momentum_narrative", "")
+        summary_text = result.get("summary_text", "")
+
+        # Store in DB
+        conn = get_db()
+        try:
+            conn.execute(
+                "INSERT INTO series_state_summaries (series_id, after_game, momentum_percent, momentum_narrative, summary_text) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (series_id, after_game, momentum_pct, momentum_narrative, summary_text),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        return {
+            "after_game": after_game,
+            "momentum_percent": momentum_pct,
+            "momentum_narrative": momentum_narrative,
+            "summary_text": summary_text,
+        }
+    except json.JSONDecodeError:
+        logger.error("Series state summary: JSON parse error from LLM")
+        return {"summary_text": "Failed to parse PXI response.", "momentum_percent": 50}
+    except Exception as exc:
+        logger.error("Series state summary generation failed: %s", exc)
+        return {"summary_text": f"Generation failed: {exc}", "momentum_percent": 50}
+
+
+@app.get("/series/{series_id}/state-summaries")
+async def list_series_state_summaries(series_id: str, token_data: dict = Depends(verify_token)):
+    """Return all state summaries for a series, ordered by after_game desc."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Verify series belongs to org
+        sp = conn.execute("SELECT id FROM series_plans WHERE id = ? AND org_id = ?", (series_id, org_id)).fetchone()
+        if not sp:
+            raise HTTPException(status_code=404, detail="Series plan not found")
+        rows = conn.execute(
+            "SELECT * FROM series_state_summaries WHERE series_id = ? ORDER BY after_game DESC",
+            (series_id,),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
