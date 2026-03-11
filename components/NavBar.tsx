@@ -97,7 +97,6 @@ const PLAYER_HUB_ITEMS: NavItem[] = [
   // V2 Restore: Player Cards (/players/cards)
   // V2 Restore: PXR Leaderboard (/leaderboard) — moved to Scouting Hub
   // V2 Restore: Draft Board (PXR) (/draft-board) — moved to Scouting Hub
-  // V2 Restore: Scouting List (/scouting) — moved to Scouting Hub
   // V2 Restore: Reports (/reports) — moved to Report Hub
   // V2 Restore: Report Library (/reports/library) — moved to Report Hub
   // V2 Restore: Generate Report (/reports/generate) — moved to Report Hub

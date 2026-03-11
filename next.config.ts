@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: "/scouting", destination: "/watchlist", permanent: false },
+      { source: "/scouting", destination: "/watchlist", permanent: true },
     ];
   },
   async headers() {
