@@ -71,6 +71,14 @@ interface Adjustment {
   used_in_game: string;
 }
 
+interface GameSession {
+  id: string;
+  game_number: number;
+  session_type: string;
+  status: string;
+  created_at: string;
+}
+
 type TabKey = "overview" | "dossier" | "games" | "adjustments";
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
@@ -139,6 +147,8 @@ function SeriesDetail() {
   const [matchupPlan, setMatchupPlan] = useState<MatchupPlan>(EMPTY_MATCHUP);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [momentumLog, setMomentumLog] = useState<MomentumEntry[]>([]);
+  const [gameSessions, setGameSessions] = useState<GameSession[]>([]);
+  const [creatingSession, setCreatingSession] = useState<number | null>(null);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -193,6 +203,13 @@ function SeriesDetail() {
         setMatchupPlan(parseJSON<MatchupPlan>(data.matchup_plan, EMPTY_MATCHUP));
         setAdjustments(parseJSON<Adjustment[]>(data.adjustments, []));
         setMomentumLog(parseJSON<MomentumEntry[]>(data.momentum_log, []));
+        // Fetch linked game sessions
+        try {
+          const sessRes = await api.get<GameSession[]>(`/series/${seriesId}/game-sessions`);
+          setGameSessions(sessRes.data);
+        } catch {
+          // Non-fatal — game sessions may not exist yet
+        }
       } catch {
         setError("Series not found");
       } finally {
@@ -222,6 +239,25 @@ function SeriesDetail() {
       router.push("/series");
     } catch {
       toast.error("Failed to delete series");
+    }
+  };
+
+  const createGameSession = async (gameNumber: number) => {
+    if (!series) return;
+    setCreatingSession(gameNumber);
+    try {
+      const { data } = await api.post("/chalk-talk-sessions", {
+        session_type: "pre_game",
+        team_id: series.team_name,
+        opponent_team_id: series.opponent_team_name,
+        series_plan_id: seriesId,
+        game_number: gameNumber,
+      });
+      router.push(`/chalk-talk/sessions/${data.id}`);
+    } catch {
+      toast.error("Failed to create game session");
+    } finally {
+      setCreatingSession(null);
     }
   };
 
@@ -824,6 +860,7 @@ function SeriesDetail() {
               <div className="space-y-2">
                 {gameNotes.map((gn, i) => {
                   const momentum = momentumLog.find((m) => m.game_number === gn.game_number);
+                  const linkedSession = gameSessions.find((s) => s.game_number === gn.game_number);
                   return (
                     <div key={i} className="border border-teal/20 rounded-lg overflow-hidden">
                       <button
@@ -854,11 +891,32 @@ function SeriesDetail() {
                             </div>
                           )}
                         </div>
-                        {expandedGame === i ? (
-                          <ChevronDown size={14} className="text-muted" />
-                        ) : (
-                          <ChevronRight size={14} className="text-muted" />
-                        )}
+                        <div className="flex items-center gap-2">
+                          {linkedSession ? (
+                            <Link
+                              href={`/chalk-talk/sessions/${linkedSession.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="no-print text-[10px] px-2 py-1 rounded font-medium"
+                              style={{ backgroundColor: "rgba(13,148,136,0.1)", color: "#0D9488" }}
+                            >
+                              Open War Room
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); createGameSession(gn.game_number); }}
+                              disabled={creatingSession === gn.game_number}
+                              className="no-print text-[10px] px-2 py-1 rounded font-medium"
+                              style={{ backgroundColor: "rgba(230,126,34,0.1)", color: "#E67E22" }}
+                            >
+                              {creatingSession === gn.game_number ? "Creating..." : "Create Game Plan"}
+                            </button>
+                          )}
+                          {expandedGame === i ? (
+                            <ChevronDown size={14} className="text-muted" />
+                          ) : (
+                            <ChevronRight size={14} className="text-muted" />
+                          )}
+                        </div>
                       </button>
                       {expandedGame === i && (
                         <div className="px-3 py-3 border-t border-teal/20 bg-gray-50 space-y-3">

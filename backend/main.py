@@ -40194,6 +40194,21 @@ async def delete_series_plan(series_id: str, token_data: dict = Depends(verify_t
     return {"status": "deleted", "series_id": series_id}
 
 
+@app.get("/series/{series_id}/game-sessions")
+async def get_series_game_sessions(series_id: str, token_data: dict = Depends(verify_token)):
+    """Return all chalk_talk_sessions linked to a series plan, ordered by game_number."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM chalk_talk_sessions WHERE series_plan_id = ? AND org_id = ? ORDER BY game_number ASC",
+            (series_id, org_id),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 # ============================================================
 # SCOUTING LIST
 # ============================================================
@@ -44767,8 +44782,9 @@ async def create_chalk_talk_session(request: Request, token_data: dict = Depends
                 (id, org_id, created_by, chalk_talk_id, session_type, team_id, opponent_team_id,
                  game_id, game_date, forecheck, breakout, defensive_system, opponent_analysis,
                  our_strategy, special_teams_plan, keys_to_game, pregame_speech,
-                 postgame_win_message, postgame_loss_message, visibility, status, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 postgame_win_message, postgame_loss_message, visibility, status, created_at, updated_at,
+                 series_plan_id, game_number)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             session_id, org_id, user_id, chalk_talk_id, session_type,
             team_id, body.get("opponent_team_id"), body.get("game_id"), body.get("game_date"),
@@ -44778,6 +44794,7 @@ async def create_chalk_talk_session(request: Request, token_data: dict = Depends
             body.get("postgame_win_message"), body.get("postgame_loss_message"),
             body.get("visibility", "staff_only"), body.get("status", "draft"),
             now, now,
+            body.get("series_plan_id"), body.get("game_number"),
         ))
         conn.commit()
 
@@ -44798,6 +44815,8 @@ async def create_chalk_talk_session(request: Request, token_data: dict = Depends
             "visibility": body.get("visibility", "staff_only"),
             "status": body.get("status", "draft"),
             "created_at": now, "updated_at": now,
+            "series_plan_id": body.get("series_plan_id"),
+            "game_number": body.get("game_number"),
         }
     finally:
         conn.close()
