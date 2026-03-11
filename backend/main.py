@@ -28,7 +28,7 @@ import random
 import statistics
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 # Ensure backend directory is on sys.path so sibling modules (rink_diagrams, hockeytech) are importable
 _this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -4987,6 +4987,23 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_clip_annotations_clip ON clip_annotations(clip_id)")
     conn.commit()
     logger.info("clip_annotations table ready")
+
+    # ── PXI Context table ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pxi_context (
+            id TEXT PRIMARY KEY,
+            player_id TEXT,
+            team_id TEXT,
+            game_id TEXT,
+            report_type TEXT,
+            context_data TEXT,
+            generated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxi_context_player_report ON pxi_context(player_id, report_type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxi_context_game ON pxi_context(game_id)")
+    conn.commit()
+    logger.info("pxi_context table ready")
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -11559,6 +11576,22 @@ class ReportStatusResponse(BaseModel):
     status: str
     error_message: Optional[str] = None
     generation_time_ms: Optional[int] = None
+
+
+class HockeyEvent(BaseModel):
+    """Canonical event contract for all hockey event data flowing through PXI."""
+    game_id: str
+    event_id: str
+    player_id: str
+    event_type: Literal["shot", "goal", "faceoff", "hit",
+                         "penalty", "blocked_shot", "missed_shot"]
+    x: Optional[float] = None   # 0-100 normalized
+    y: Optional[float] = None   # 0-100 normalized
+    period: int
+    team_id: Optional[str] = None
+    raw_x: Optional[float] = None  # original InStat value preserved
+    raw_y: Optional[float] = None
+
 
 # --- Stats ---
 class StatsResponse(BaseModel):
@@ -26829,6 +26862,16 @@ INSTAT_MANPOWER_MAP: dict[str, str] = {
     "3v3": "3v3", "3x3": "3v3",
     "en": "en", "empty_net": "en",
 }
+
+
+def get_last_import_timestamp(game_id: str, conn) -> Optional[datetime]:
+    """Returns timestamp of last pxi_context record for this game_id.
+    Used to skip re-importing unchanged games."""
+    row = conn.execute(
+        "SELECT MAX(generated_at) FROM pxi_context WHERE game_id = ?",
+        (game_id,),
+    ).fetchone()
+    return row[0] if row and row[0] else None
 
 
 # ── InStat XML Tagging Helpers (game_events pipeline) ─────
