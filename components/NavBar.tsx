@@ -274,7 +274,19 @@ export default function NavBar() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpGuideId, setHelpGuideId] = useState<string | undefined>();
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
+
+  // Listen for openHelp custom events dispatched from child pages
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const guideId = (e as CustomEvent).detail?.guideId;
+      if (guideId) setHelpGuideId(guideId);
+      setHelpOpen(true);
+    };
+    window.addEventListener("prospectx-open-help", handler);
+    return () => window.removeEventListener("prospectx-open-help", handler);
+  }, []);
 
   // Effective role: admin override takes priority, otherwise real role
   const effectiveHockeyRole = roleOverride || user?.hockey_role;
@@ -865,7 +877,7 @@ export default function NavBar() {
           </button>
         </div>
       )}
-      <HelpDrawer isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+      <HelpDrawer isOpen={helpOpen} onClose={() => { setHelpOpen(false); setHelpGuideId(undefined); }} initialGuideId={helpGuideId} />
     </nav>
   );
 }

@@ -548,6 +548,12 @@ export default function FilmRoomPage() {
               <div className="text-center py-12">
                 <Film size={36} className="mx-auto text-teal/30 mb-3" />
                 <p className="text-sm text-muted mb-3">No film sessions yet. Upload a video to get started.</p>
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent("prospectx-open-help", { detail: { guideId: "film_hub" } }))}
+                  style={{ color: "#0D9488", background: "none", border: "none", cursor: "pointer", fontSize: "13px", textDecoration: "underline", display: "block", margin: "0 auto 12px" }}
+                >
+                  How does this work?
+                </button>
                 <Link
                   href="/film/upload"
                   className="inline-flex items-center gap-1.5 bg-teal text-white px-4 py-2 rounded-lg font-oswald uppercase tracking-wider text-xs hover:bg-teal/90 transition-colors"

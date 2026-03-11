@@ -1138,6 +1138,14 @@ export default function PlayersPage() {
                     ? "No players found matching your filters."
                     : "No players in your system yet. Import your roster from a spreadsheet or sync directly from your league."}
                 </p>
+                {!search && !posFilter && !teamFilter && advancedFilterCount === 0 && (
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent("prospectx-open-help", { detail: { guideId: "players_all" } }))}
+                    style={{ color: "#0D9488", background: "none", border: "none", cursor: "pointer", fontSize: "13px", textDecoration: "underline", display: "block", margin: "8px auto" }}
+                  >
+                    How does this work?
+                  </button>
+                )}
                 <Link href={search || posFilter || teamFilter || advancedFilterCount > 0 ? "/players/new" : "/players/import"} className="text-teal hover:underline text-sm mt-2 inline-block">
                   {search || posFilter || teamFilter || advancedFilterCount > 0 ? "Add a player" : "Import your roster"}
                 </Link>

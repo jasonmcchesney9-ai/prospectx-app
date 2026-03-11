@@ -291,6 +291,12 @@ function ScoutingList() {
             Start tracking prospects by clicking &quot;Add Player&quot; above to search and add players to your list.
           </p>
           <button
+            onClick={() => window.dispatchEvent(new CustomEvent("prospectx-open-help", { detail: { guideId: "watchlist" } }))}
+            style={{ color: "#0D9488", background: "none", border: "none", cursor: "pointer", fontSize: "13px", textDecoration: "underline", display: "block", margin: "8px auto" }}
+          >
+            How does this work?
+          </button>
+          <button
             onClick={() => setShowAddModal(true)}
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
           >

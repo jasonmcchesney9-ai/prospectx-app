@@ -230,13 +230,21 @@ export default function ReportsPage() {
                     : "No reports match your filters."}
                 </p>
                 {reports.length === 0 && (
-                  <Link
-                    href="/reports/generate"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
-                  >
-                    <Zap size={14} />
-                    Generate Your First Report
-                  </Link>
+                  <>
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent("prospectx-open-help", { detail: { guideId: "reports" } }))}
+                      style={{ color: "#0D9488", background: "none", border: "none", cursor: "pointer", fontSize: "13px", textDecoration: "underline", display: "block", margin: "0 auto 12px" }}
+                    >
+                      How does this work?
+                    </button>
+                    <Link
+                      href="/reports/generate"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors"
+                    >
+                      <Zap size={14} />
+                      Generate Your First Report
+                    </Link>
+                  </>
                 )}
               </div>
             ) : (
