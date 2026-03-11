@@ -11033,6 +11033,12 @@ def sync_hockeytech_data_cron():
                         (code,),
                     )
                     for ldr in leaders:
+                        raw_photo = ldr.get("photo", "")
+                        cached_photo = await cache_remote_asset(raw_photo, prefix="player") if raw_photo else None
+                        photo = cached_photo or raw_photo
+                        raw_logo = ldr.get("logo", "")
+                        cached_logo = await cache_remote_asset(raw_logo, prefix="team") if raw_logo else None
+                        logo = cached_logo or raw_logo
                         conn.execute(
                             """INSERT INTO league_player_stats_cache
                                (league, season, player_id, player_name, team_name, team_code,
@@ -11051,7 +11057,7 @@ def sync_hockeytech_data_cron():
                                 ldr.get("shg", 0), ldr.get("shots", 0),
                                 ldr.get("shooting_pct", ""),
                                 1 if ldr.get("rookie") else 0,
-                                ldr.get("photo", ""), ldr.get("logo", ""),
+                                photo, logo,
                             ),
                         )
                         total_cached_leaders += 1
@@ -11068,6 +11074,9 @@ def sync_hockeytech_data_cron():
                         (code,),
                     )
                     for t in ht_teams:
+                        raw_logo = t.get("logo", "")
+                        cached_logo = await cache_remote_asset(raw_logo, prefix="team") if raw_logo else None
+                        logo_url = cached_logo or raw_logo
                         conn.execute(
                             """INSERT INTO league_teams_cache
                                (league, team_id, team_name, city, nickname,
@@ -11077,7 +11086,7 @@ def sync_hockeytech_data_cron():
                                 code, t.get("id"), t.get("name", ""),
                                 t.get("city", ""), t.get("nickname", ""),
                                 t.get("code", ""), t.get("division", ""),
-                                t.get("logo", ""),
+                                logo_url,
                             ),
                         )
                         total_cached_teams += 1
