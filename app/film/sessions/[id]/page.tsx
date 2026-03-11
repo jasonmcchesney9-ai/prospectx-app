@@ -2074,20 +2074,19 @@ export default function FilmSessionViewerPage() {
                 })}
               </div>
 
-              {/* Event tracks — GOALS, SHOTS, FACEOFFS */}
+              {/* Event tracks — GOALS, SHOTS, PENALTIES, TURNOVERS */}
               {(() => {
-                const filteredEvents = eventFilter === "all"
-                  ? sessionEvents
-                  : sessionEvents.filter((ev) => getEventCategory(ev.event_type) === eventFilter);
-                const tracks: { key: string; label: string; match: (t: string) => boolean; color: string }[] = [
-                  { key: "goals", label: "GOALS", match: (t) => t.toLowerCase().includes("goal"), color: "#00B5B8" },
-                  { key: "shots", label: "SHOTS", match: (t) => t.toLowerCase().includes("shot"), color: "#6366F1" },
-                  { key: "faceoffs", label: "FACEOFFS", match: (t) => t.toLowerCase().includes("faceoff"), color: "#E67E22" },
+                const tracks: { key: string; label: string; match: (t: string) => boolean; color: string; filterGroup: EventCategory }[] = [
+                  { key: "goals", label: "GOALS", match: (t) => t.toLowerCase().includes("goal"), color: "#0D9488", filterGroup: "offensive" },
+                  { key: "shots", label: "SHOTS", match: (t) => t.toLowerCase().includes("shot") || t.toLowerCase().includes("chance"), color: "#14B8A8", filterGroup: "offensive" },
+                  { key: "penalties", label: "PENALTIES", match: (t) => t.toLowerCase().includes("penalt"), color: "#E67E22", filterGroup: "special_teams" },
+                  { key: "turnovers", label: "TURNOVERS", match: (t) => t.toLowerCase().includes("turnover"), color: "#6366F1", filterGroup: "defensive" },
                 ];
+                const visibleTracks = eventFilter === "all" ? tracks : tracks.filter((t) => t.filterGroup === eventFilter);
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {tracks.map((track) => {
-                      const trackEvents = filteredEvents.filter((ev) => track.match(ev.event_type));
+                    {visibleTracks.map((track) => {
+                      const trackEvents = sessionEvents.filter((ev) => track.match(ev.event_type));
                       return (
                         <div key={track.key} style={{ height: 24, position: "relative", background: "rgba(255,255,255,0.02)", borderRadius: 3 }}>
                           {/* Track label — 48px, right-aligned */}
@@ -2117,10 +2116,10 @@ export default function FilmSessionViewerPage() {
                 );
               })()}
 
-              {/* Playhead — vertical teal line tracking current playback position */}
-              <div style={{ position: "absolute", top: 0, bottom: 0, left: `calc(50px + ${playheadPct}% * (1 - 50 / 100 / 1))`, width: 2, background: "#00B5B8", zIndex: 20, pointerEvents: "none", transition: "left 0.25s linear" }}>
+              {/* Playhead — vertical line tracking current playback position */}
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: `calc(50px + ${playheadPct}% * (1 - 50 / 100 / 1))`, width: 1, background: "rgba(255,255,255,0.6)", zIndex: 20, pointerEvents: "none", transition: "left 0.25s linear" }}>
                 {/* Triangle cap */}
-                <div style={{ position: "absolute", top: 0, left: -3, width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid #00B5B8" }} />
+                <div style={{ position: "absolute", top: 0, left: -3, width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: "5px solid rgba(255,255,255,0.6)" }} />
               </div>
 
               {/* Empty state */}
