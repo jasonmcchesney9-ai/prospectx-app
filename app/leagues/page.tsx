@@ -157,8 +157,8 @@ export default function LeagueHubPage() {
       .catch(() => { setStandings([]); failed.add("standings"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingStandings(false));
 
-    // Fetch 2: Player Stats (leaders — still live HT, no stored endpoint yet)
-    api.get<HTSkaterStats[]>(`/hockeytech/${league}/stats/leaders?limit=100`)
+    // Fetch 2: Player Stats (leaders — stored data with live HT fallback)
+    api.get<HTSkaterStats[]>(`/league-hub/${league}/player-stats-stored?limit=100`)
       .then((res) => setLeaders(res.data))
       .catch(() => { setLeaders([]); failed.add("leaders"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingLeaders(false));
