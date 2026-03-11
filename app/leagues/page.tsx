@@ -36,7 +36,7 @@ import type {
   HTGame,
 } from "@/types/api";
 
-type Tab = "standings" | "scores" | "schedule" | "player-stats" | "team-stats" | "teams";
+type Tab = "standings" | "scores" | "schedule" | "player-stats" | "team-stats" | "teams" | "projections";
 
 const LEAGUE_OPTIONS: { code: string; label: string; full: string; logo?: string }[] = [
   // Professional
@@ -64,6 +64,23 @@ const LEAGUE_OPTIONS: { code: string; label: string; full: string; logo?: string
   { code: "pjhl", label: "PJHL", full: "Provincial Junior Hockey League" },
   { code: "vijhl", label: "VIJHL", full: "Vancouver Island Junior Hockey League" },
 ];
+
+interface MonteCarloResult {
+  team_name: string;
+  team_id: number;
+  current_points: number;
+  projected_points_p50: number;
+  projected_points_p10: number;
+  projected_points_p90: number;
+  playoff_pct: number;
+  avg_final_rank: number;
+  best_rank: number;
+  worst_rank: number;
+  simulations: number;
+  confidence: string;
+  remaining_games: number;
+  calculated_at: string;
+}
 
 export default function LeagueHubPage() {
   const currentUser = getUser();
@@ -93,6 +110,7 @@ export default function LeagueHubPage() {
   const [loadingSchedule, setLoadingSchedule] = useState(true);
   const [loadingTeamStats, setLoadingTeamStats] = useState(true);
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const [loadingProjections, setLoadingProjections] = useState(true);
   const [failedSections, setFailedSections] = useState<Set<string>>(new Set());
 
   // Data
@@ -102,6 +120,9 @@ export default function LeagueHubPage() {
   const [schedule, setSchedule] = useState<HTGame[]>([]);
   const [teamStats, setTeamStats] = useState<HTStandings[]>([]);
   const [teams, setTeams] = useState<HTTeam[]>([]);
+
+  // Monte Carlo projections
+  const [projections, setProjections] = useState<MonteCarloResult[]>([]);
 
   // Goalies (lazy loaded on demand)
   const [goalieStats, setGoalieStats] = useState<HTGoalieStats[]>([]);
@@ -122,6 +143,7 @@ export default function LeagueHubPage() {
     setLoadingSchedule(true);
     setLoadingTeamStats(true);
     setLoadingTeams(true);
+    setLoadingProjections(true);
     setFailedSections(new Set());
     // Reset goalie cache on league change
     setGoaliesLoaded(false);
@@ -164,6 +186,12 @@ export default function LeagueHubPage() {
       .then((res) => setTeams(res.data))
       .catch(() => { setTeams([]); failed.add("teams"); setFailedSections(new Set(failed)); })
       .finally(() => setLoadingTeams(false));
+
+    // Fetch 7: Monte Carlo projections (stored data)
+    api.get<MonteCarloResult[]>(`/league-hub/${league}/monte-carlo`)
+      .then((res) => setProjections(res.data))
+      .catch(() => { setProjections([]); })
+      .finally(() => setLoadingProjections(false));
   };
 
   const loadGoalies = async () => {
@@ -188,6 +216,7 @@ export default function LeagueHubPage() {
     { key: "player-stats", label: "Player Stats", icon: TrendingUp },
     { key: "team-stats", label: "Team Stats", icon: Shield },
     { key: "teams", label: "Teams", icon: Users },
+    { key: "projections", label: "Playoff Odds", icon: Star },
   ];
   const tabs = isLimitedRole
     ? allTabs.filter((t) => t.key === "standings" || t.key === "scores" || t.key === "schedule")
@@ -356,6 +385,13 @@ export default function LeagueHubPage() {
             <EmptyState text="Data temporarily unavailable" />
           ) : (
             <TeamsTab teams={teams} league={league} />
+          )
+        )}
+        {tab === "projections" && (
+          loadingProjections ? (
+            <SectionLoader label="playoff projections" />
+          ) : (
+            <PlayoffOddsTab projections={projections} />
           )
         )}
       </main>
@@ -1557,6 +1593,106 @@ function TeamStatsTab({ standings }: { standings: HTStandings[] }) {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Playoff Odds Tab ────────────────────────────────────────────────
+
+function PlayoffOddsTab({ projections }: { projections: { team_name: string; team_id: number; current_points: number; projected_points_p50: number; projected_points_p10: number; projected_points_p90: number; playoff_pct: number; avg_final_rank: number; remaining_games: number; calculated_at: string }[] }) {
+  if (!projections.length) {
+    return (
+      <div className="text-center py-16">
+        <Star size={32} className="mx-auto mb-3" style={{ color: "#CCCCCC" }} />
+        <p style={{ fontSize: 14, color: "#999999" }}>Projections update nightly</p>
+        <p style={{ fontSize: 12, color: "#BBBBBB", marginTop: 4 }}>Monte Carlo playoff simulations run at 3:00 AM UTC</p>
+      </div>
+    );
+  }
+
+  const sorted = [...projections].sort((a, b) => b.playoff_pct - a.playoff_pct);
+
+  const poThStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    fontFamily: "'Oswald', sans-serif",
+    fontWeight: 600,
+    fontSize: 11,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+    color: "#FFFFFF",
+    background: "#0F2942",
+  };
+
+  const pctColor = (pct: number) => {
+    if (pct >= 80) return "#0D9488";
+    if (pct >= 40) return "#F59E0B";
+    return "#999999";
+  };
+
+  const latestCalc = sorted[0]?.calculated_at;
+  const calcDate = latestCalc ? new Date(latestCalc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+
+  return (
+    <div className="space-y-3">
+      {calcDate && (
+        <p style={{ fontSize: 11, color: "#999999", fontFamily: "ui-monospace, monospace" }}>
+          Last updated: {calcDate}
+        </p>
+      )}
+      <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #DDE6EF" }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th style={{ ...poThStyle, textAlign: "left" }}>Rank</th>
+                <th style={{ ...poThStyle, textAlign: "left" }}>Team</th>
+                <th style={{ ...poThStyle, textAlign: "center" }}>Current Pts</th>
+                <th style={{ ...poThStyle, textAlign: "center" }}>Proj Pts (P50)</th>
+                <th style={{ ...poThStyle, textAlign: "center" }}>Range (P10–P90)</th>
+                <th style={{ ...poThStyle, textAlign: "center" }}>Remaining</th>
+                <th style={{ ...poThStyle, textAlign: "center", minWidth: 160 }}>Playoff %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((team, i) => {
+                const rowBg = i % 2 === 1 ? "#F5F5F5" : "#FFFFFF";
+                const pct = Math.round(team.playoff_pct);
+                const color = pctColor(pct);
+                const cleanName = team.team_name.replace(/^[a-z]\s*-\s*/i, "");
+                return (
+                  <tr key={team.team_id ?? i} style={{ background: rowBg, borderBottom: "1px solid #EEF2F6" }}>
+                    <td style={{ padding: "8px 12px", color: "#999999", fontSize: 12 }}>{i + 1}</td>
+                    <td style={{ padding: "8px 12px", fontWeight: 500, color: "#0F2942", whiteSpace: "nowrap" }}>
+                      <div className="flex items-center gap-2">
+                        <TeamLogo name={cleanName} size={24} />
+                        <Link href={`/teams/${encodeURIComponent(cleanName)}`} style={{ color: "#0F2942" }} className="hover:underline transition-colors">
+                          {cleanName}
+                        </Link>
+                      </div>
+                    </td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 600, color: "#0F2942" }}>{team.current_points}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "#0D9488", fontFamily: "'Oswald', sans-serif" }}>{Math.round(team.projected_points_p50)}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12, color: "#666666" }}>
+                      {Math.round(team.projected_points_p10)}–{Math.round(team.projected_points_p90)} pts
+                    </td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12 }}>{team.remaining_games}</td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <div className="flex items-center gap-2">
+                        <div style={{ flex: 1, height: 8, borderRadius: 4, background: "#0F2942", overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: color, transition: "width 0.3s ease" }} />
+                        </div>
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 13, color, minWidth: 40, textAlign: "right" }}>
+                          {pct}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
