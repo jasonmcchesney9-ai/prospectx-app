@@ -409,6 +409,16 @@ export default function FilmSessionViewerPage() {
     }
   }, [uploads, activeUploadIdx, switchUpload]);
 
+  const loadSessionEvents = useCallback(async () => {
+    try {
+      const res = await api.get(`/film/events`, { params: { session_id: sessionId, limit: 500 } });
+      const events = Array.isArray(res.data) ? res.data : [];
+      setSessionEvents(events);
+    } catch {
+      // Silently fail on events load
+    }
+  }, [sessionId]);
+
   // Code Window: tag event handler (inline, fires same API as EventTagger)
   const codeTagEvent = useCallback(async (eventType: string, label?: string) => {
     if (eventType === "custom" && !label) { setCodeShowCustom(true); return; }
@@ -669,16 +679,6 @@ export default function FilmSessionViewerPage() {
       );
     } catch { /* */ }
   }, []);
-
-  const loadSessionEvents = useCallback(async () => {
-    try {
-      const res = await api.get(`/film/events`, { params: { session_id: sessionId, limit: 500 } });
-      const events = Array.isArray(res.data) ? res.data : [];
-      setSessionEvents(events);
-    } catch {
-      // Silently fail on events load
-    }
-  }, [sessionId]);
 
   const handleSubmitComment = useCallback(async () => {
     if (!commentText.trim()) return;
