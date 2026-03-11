@@ -31648,6 +31648,8 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
     conn = get_db()
     updated_players = 0
     updated_teams = 0
+    updated_cache_players = 0
+    updated_cache_teams = 0
     errors = []
     try:
         # Backfill player headshots
@@ -31683,11 +31685,47 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
                     updated_teams += 1
             except Exception as e:
                 errors.append(f"team {t['id']}: {e}")
+        # Backfill league_player_stats_cache
+        cache_players = conn.execute("""
+            SELECT id, photo FROM league_player_stats_cache
+            WHERE photo IS NOT NULL AND photo LIKE 'http%'
+            LIMIT 2000
+        """).fetchall()
+        for cp in cache_players:
+            try:
+                local_url = await cache_remote_asset(cp["photo"], prefix="player")
+                if local_url:
+                    conn.execute(
+                        "UPDATE league_player_stats_cache SET photo = ? WHERE id = ?",
+                        (local_url, cp["id"]),
+                    )
+                    updated_cache_players += 1
+            except Exception as e:
+                errors.append(f"cache_player {cp['id']}: {e}")
+        # Backfill league_teams_cache
+        cache_teams = conn.execute("""
+            SELECT id, logo_url FROM league_teams_cache
+            WHERE logo_url IS NOT NULL AND logo_url LIKE 'http%'
+            LIMIT 500
+        """).fetchall()
+        for ct in cache_teams:
+            try:
+                local_url = await cache_remote_asset(ct["logo_url"], prefix="team")
+                if local_url:
+                    conn.execute(
+                        "UPDATE league_teams_cache SET logo_url = ? WHERE id = ?",
+                        (local_url, ct["id"]),
+                    )
+                    updated_cache_teams += 1
+            except Exception as e:
+                errors.append(f"cache_team {ct['id']}: {e}")
         conn.commit()
         return {
             "status": "ok",
             "updated_players": updated_players,
             "updated_teams": updated_teams,
+            "updated_cache_players": updated_cache_players,
+            "updated_cache_teams": updated_cache_teams,
             "errors": len(errors),
         }
     finally:
