@@ -24971,6 +24971,17 @@ When a player has transfers or team splits:
                 template_slug=request.report_type,
             )
             tpl_prompt = template["prompt_text"] if template else None
+            # Load shot zone intelligence for team/opponent reports
+            _shot_ctx = None
+            if request.report_type in ("team_identity", "opponent_gameplan"):
+                try:
+                    _team_for_ctx = input_data.get("team", "") if request.report_type == "team_identity" else ""
+                    _shot_ctx = load_shot_context_for_prompt(
+                        player_id=request.player_id if request.player_id else "",
+                        team_id=_team_for_ctx,
+                    )
+                except Exception:
+                    _shot_ctx = None
             system_prompt = build_report_system_prompt(
                 mode=_resolved_mode,
                 base_prompt=system_prompt,
@@ -24981,6 +24992,7 @@ When a player has transfers or team splits:
                 data_depth=request.data_depth,
                 audience=request.audience,
                 perspective=request.perspective,
+                extra_context=_shot_ctx,
             )
 
             # ── Report-type-specific prompt enhancements ──
@@ -27227,6 +27239,81 @@ def aggregate_player_shot_context(player_id: str, team_id: str = "") -> dict | N
         conn.commit()
 
         return profile
+    finally:
+        conn.close()
+
+
+def load_shot_context_for_prompt(player_id: str = "", team_id: str = "") -> str | None:
+    """Load season_shot_profile from pxi_context and format as a prompt block.
+
+    Returns a formatted string ready for injection into build_report_system_prompt(),
+    or None if no shot context exists. Accepts either player_id or team_id.
+    Opens its own DB connection.
+    """
+    conn = get_db()
+    try:
+        rows = []
+        if player_id:
+            rows = conn.execute(
+                "SELECT context_data FROM pxi_context WHERE player_id = ? AND report_type = 'season_shot_profile'",
+                (player_id,),
+            ).fetchall()
+        elif team_id:
+            # For team-level reports, aggregate all players on the team
+            rows = conn.execute(
+                "SELECT context_data, player_id FROM pxi_context WHERE team_id = ? AND report_type = 'season_shot_profile'",
+                (team_id,),
+            ).fetchall()
+
+        if not rows:
+            return None
+
+        if player_id:
+            # Single player context
+            try:
+                d = json.loads(rows[0]["context_data"])
+            except (json.JSONDecodeError, TypeError):
+                return None
+
+            return (
+                "SHOT ZONE INTELLIGENCE (from InStat tagging data):\n"
+                f"Games with shot data: {d.get('games_included', 0)}\n"
+                f"Total shots: {d.get('total_shots', 0)} | Goals: {d.get('total_goals', 0)} | "
+                f"SOG: {d.get('total_shots_on_goal', 0)}\n"
+                f"Shooting %: {d.get('shooting_pct', 0)}%\n"
+                f"Slot shot %: {d.get('slot_pct', 0)}% | High-danger %: {d.get('high_danger_pct', 0)}%\n"
+                f"Left-side tendency: {d.get('left_side_pct', 0)}%\n"
+                f"Avg shots/game: {d.get('avg_shots_per_game', 0)}\n"
+                "Use this data to inform shooting tendencies, deployment zones, and system fit analysis."
+            )
+        else:
+            # Team-level: summarize all players
+            lines = ["TEAM SHOT ZONE INTELLIGENCE (from InStat tagging data):"]
+            team_shots = team_goals = team_slot = team_hd = 0
+            player_count = 0
+            for row in rows:
+                try:
+                    d = json.loads(row["context_data"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                ts = d.get("total_shots", 0)
+                if ts == 0:
+                    continue
+                team_shots += ts
+                team_goals += d.get("total_goals", 0)
+                team_slot += round(d.get("slot_pct", 0) * ts / 100.0)
+                team_hd += round(d.get("high_danger_pct", 0) * ts / 100.0)
+                player_count += 1
+
+            if team_shots == 0:
+                return None
+
+            lines.append(f"Players with shot data: {player_count}")
+            lines.append(f"Team total shots: {team_shots} | Goals: {team_goals}")
+            lines.append(f"Team slot shot %: {round(team_slot / team_shots * 100, 1)}%")
+            lines.append(f"Team high-danger %: {round(team_hd / team_shots * 100, 1)}%")
+            lines.append("Use this data to evaluate team shooting tendencies and opponent vulnerability zones.")
+            return "\n".join(lines)
     finally:
         conn.close()
 
@@ -37303,6 +37390,17 @@ When a player has transfers or team splits:
         # Resolve mode and build full system prompt with guardrails + action plans
         _bg_mode = resolve_mode(template_slug=report_type)
         bg_tpl_prompt = template["prompt_text"] if template else None
+        # Load shot zone intelligence for team/opponent reports
+        _bg_shot_ctx = None
+        if report_type in ("team_identity", "opponent_gameplan"):
+            try:
+                _bg_team_for_ctx = player.get("team", "") if report_type == "team_identity" else ""
+                _bg_shot_ctx = load_shot_context_for_prompt(
+                    player_id=player_id or "",
+                    team_id=_bg_team_for_ctx,
+                )
+            except Exception:
+                _bg_shot_ctx = None
         bg_system_prompt = build_report_system_prompt(
             mode=_bg_mode,
             base_prompt=_bg_base_prompt,
@@ -37313,6 +37411,7 @@ When a player has transfers or team splits:
             data_depth=data_depth,
             audience=audience,
             perspective=perspective,
+            extra_context=_bg_shot_ctx,
         )
 
         # ── Build input data ──

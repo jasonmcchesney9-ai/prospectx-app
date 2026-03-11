@@ -4318,6 +4318,7 @@ def build_report_system_prompt(
     data_depth: Optional[str] = None,
     audience: Optional[str] = None,
     perspective: Optional[str] = None,
+    extra_context: Optional[str] = None,
 ) -> str:
     """Assemble a report system prompt in the spec-required injection order.
 
@@ -4511,6 +4512,10 @@ Perspective: {resolved_perspective}
         parts.append(TRADE_IMPACT_SIMULATION)
     elif report_type == "draft_class_summary":
         parts.append(DRAFT_CLASS_SUMMARY)
+
+    # Inject extra context (e.g., shot zone intelligence from pxi_context)
+    if extra_context:
+        parts.append(extra_context)
 
     return "\n\n".join(parts)
 
