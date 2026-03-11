@@ -16253,6 +16253,153 @@ async def get_player_shot_map(
         conn.close()
 
 
+@app.get("/games/{game_id}/shot-map")
+async def get_game_shot_map(
+    game_id: str,
+    team_id: Optional[str] = Query(None, description="Filter to one team by name"),
+    token_data: dict = Depends(verify_token),
+):
+    """Return shot coordinates for a game, grouped by team.
+    Uses same data source (game_events) and normalization as player shot-map."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        shot_actions = list(_SHOT_MAP_TYPE.keys())
+        placeholders = ",".join(["?" for _ in shot_actions])
+        sql = f"""
+            SELECT id, action, pos_x, pos_y, period, game_id, game_date,
+                   opponent_name, zone, team_name, player_id
+            FROM game_events
+            WHERE org_id = ? AND game_id = ?
+              AND pos_x IS NOT NULL AND pos_y IS NOT NULL
+              AND action IN ({placeholders})
+            ORDER BY period, start_s
+        """
+        params: list = [org_id, game_id] + shot_actions
+        rows = conn.execute(sql, params).fetchall()
+
+        if not rows:
+            raise HTTPException(status_code=404, detail="No shot data found for this game")
+
+        # Filter by team name if requested
+        if team_id:
+            rows = [r for r in rows if r["team_name"] == team_id]
+            if not rows:
+                raise HTTPException(status_code=404, detail="No shot data for this team in this game")
+
+        # Same normalization constants as player shot-map
+        RINK_LENGTH = 60.0
+        RINK_WIDTH = 26.0
+
+        # Group events by team
+        teams_data: Dict[str, dict] = {}
+        player_name_cache: Dict[str, str] = {}
+
+        for r in rows:
+            team_name = r["team_name"] or "Unknown"
+            if team_name not in teams_data:
+                teams_data[team_name] = {
+                    "events": [],
+                    "shots": 0, "shots_on_goal": 0, "goals": 0,
+                    "missed": 0, "blocked": 0,
+                    "left_side": 0, "slot": 0, "high_danger": 0,
+                }
+
+            td = teams_data[team_name]
+            px = r["pos_x"]
+            py = r["pos_y"]
+            zone = r["zone"] or ""
+
+            # Same normalization + flip logic as player shot-map
+            x_pct = (px / RINK_LENGTH) * 100.0
+            y_pct = (py / RINK_WIDTH) * 100.0
+            if zone == "OZ" and px < 30:
+                x_pct = (1.0 - px / RINK_LENGTH) * 100.0
+                y_pct = (1.0 - py / RINK_WIDTH) * 100.0
+            elif zone == "DZ" and px > 30:
+                x_pct = (1.0 - px / RINK_LENGTH) * 100.0
+                y_pct = (1.0 - py / RINK_WIDTH) * 100.0
+
+            action = r["action"]
+            map_type = _SHOT_MAP_TYPE.get(action, "other")
+            is_goal = action == "Goals"
+
+            # Resolve player name (cached)
+            pid = r["player_id"] or ""
+            if pid and pid not in player_name_cache:
+                p_row = conn.execute(
+                    "SELECT first_name, last_name FROM players WHERE id = ?", (pid,),
+                ).fetchone()
+                player_name_cache[pid] = f"{p_row['first_name']} {p_row['last_name']}".strip() if p_row else ""
+
+            td["events"].append({
+                "id": r["id"],
+                "action": action,
+                "map_type": map_type,
+                "pos_x": px,
+                "pos_y": py,
+                "x_pct": round(x_pct, 2),
+                "y_pct": round(y_pct, 2),
+                "period": r["period"],
+                "game_id": r["game_id"],
+                "game_date": r["game_date"],
+                "opponent": r["opponent_name"] or "",
+                "is_goal": is_goal,
+                "player_id": pid,
+                "player_name": player_name_cache.get(pid, ""),
+            })
+
+            # Same zone counters as player shot-map
+            if map_type in ("shot", "shot_on_goal", "goal", "pp_shot", "sh_shot"):
+                td["shots"] += 1
+            if map_type in ("shot_on_goal", "goal"):
+                td["shots_on_goal"] += 1
+            if map_type == "goal":
+                td["goals"] += 1
+            if map_type == "missed_shot":
+                td["missed"] += 1
+            if map_type == "blocked_shot":
+                td["blocked"] += 1
+            if y_pct < 50:
+                td["left_side"] += 1
+            if 75 <= x_pct <= 100 and 35 <= y_pct <= 65:
+                td["slot"] += 1
+            if x_pct > 85 and 40 <= y_pct <= 60:
+                td["high_danger"] += 1
+
+        # Build per-team response
+        teams_out = []
+        for tn, td in teams_data.items():
+            total = len(td["events"])
+            shooting_pct = round((td["goals"] / td["shots_on_goal"] * 100) if td["shots_on_goal"] > 0 else 0.0, 1)
+            teams_out.append({
+                "team_name": tn,
+                "total_events": total,
+                "events": td["events"],
+                "summary": {
+                    "shots": td["shots"],
+                    "shots_on_goal": td["shots_on_goal"],
+                    "goals": td["goals"],
+                    "missed_shots": td["missed"],
+                    "blocked_shots": td["blocked"],
+                    "shooting_pct": shooting_pct,
+                    "left_side_pct": round((td["left_side"] / total * 100) if total > 0 else 0.0, 1),
+                    "slot_pct": round((td["slot"] / total * 100) if total > 0 else 0.0, 1),
+                    "high_danger_pct": round((td["high_danger"] / total * 100) if total > 0 else 0.0, 1),
+                },
+            })
+
+        game_date = rows[0]["game_date"] if rows else None
+
+        return {
+            "game_id": game_id,
+            "game_date": game_date,
+            "teams": teams_out,
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/players/{player_id}/trendline")
 async def get_player_trendline(
     player_id: str,
