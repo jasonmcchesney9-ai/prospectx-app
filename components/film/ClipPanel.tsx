@@ -43,6 +43,7 @@ interface ClipPanelProps {
   refreshKey?: number;
   uploads?: UploadInfo[];
   onPeriodSwitch?: (uploadId: string) => void;
+  onClipCountChange?: (count: number) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -95,6 +96,7 @@ export default function ClipPanel({
   refreshKey,
   uploads = [],
   onPeriodSwitch,
+  onClipCountChange,
 }: ClipPanelProps) {
   const [clips, setClips] = useState<Clip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,6 +182,11 @@ export default function ClipPanel({
   useEffect(() => {
     loadClips();
   }, [loadClips, refreshKey]);
+
+  // Notify parent of clip count changes for tab badge
+  useEffect(() => {
+    if (onClipCountChange) onClipCountChange(clips.length);
+  }, [clips.length, onClipCountChange]);
 
   const openCreator = useCallback(
     (clip?: Clip) => {

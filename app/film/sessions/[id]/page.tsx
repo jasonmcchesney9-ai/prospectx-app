@@ -405,6 +405,7 @@ export default function FilmSessionViewerPage() {
 
   // Right panel tab state
   const [rightTab, setRightTab] = useState<"clips" | "reels" | "pxi" | "info">("clips");
+  const [clipCount, setClipCount] = useState(0);
 
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
@@ -834,6 +835,7 @@ export default function FilmSessionViewerPage() {
               created_at: reportRes.data.created_at,
             });
             setReportExpanded(true);
+            setRightTab("pxi");
             try { localStorage.setItem(`film_analysis_expanded_${sessionId}`, "true"); } catch { /* */ }
             toast.success("Report generated!");
           } else {
@@ -1878,6 +1880,9 @@ export default function FilmSessionViewerPage() {
                   }}
                 >
                   {tab.toUpperCase()}
+                  {tab === "clips" && clipCount > 0 && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>({clipCount})</span>}
+                  {tab === "reels" && sessionReels.length > 0 && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>({sessionReels.length})</span>}
+                  {tab === "pxi" && generatedReport && <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#0D9488", marginLeft: 5, verticalAlign: "middle" }} />}
                 </button>
               ))}
             </div>
@@ -1997,6 +2002,7 @@ export default function FilmSessionViewerPage() {
                 refreshKey={clipRefreshKey}
                 uploads={uploads}
                 onPeriodSwitch={handleClipPeriodSwitch}
+                onClipCountChange={setClipCount}
               />
 
               {/* Annotation Thumbnails — shown when active clip has annotations */}
@@ -2542,7 +2548,7 @@ export default function FilmSessionViewerPage() {
           sessionId={sessionId}
           playerId={session?.player_id || null}
           onClose={() => setShowReelBuilder(false)}
-          onCreated={() => loadSessionReels()}
+          onCreated={() => { loadSessionReels(); setRightTab("reels"); }}
         />
       )}
     </ProtectedRoute>
