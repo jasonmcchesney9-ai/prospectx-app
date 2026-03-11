@@ -27146,6 +27146,91 @@ def write_shot_context(parse_result: dict) -> int:
     return written
 
 
+def aggregate_player_shot_context(player_id: str, team_id: str = "") -> dict | None:
+    """Aggregate all game_shot_zones records for a player into a season_shot_profile.
+
+    Reads per-game context from pxi_context (report_type='game_shot_zones'),
+    computes weighted averages across games, and writes a single
+    season_shot_profile record back to pxi_context.
+
+    Returns the aggregated context dict, or None if no game data exists.
+    Opens its own DB connection.
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT context_data, game_id FROM pxi_context WHERE player_id = ? AND report_type = 'game_shot_zones'",
+            (player_id,),
+        ).fetchall()
+
+        if not rows:
+            return None
+
+        # Accumulate across games
+        total_shots = 0
+        total_goals = 0
+        total_sog = 0
+        total_left = 0
+        total_slot = 0
+        total_hd = 0
+        games = []
+
+        for row in rows:
+            try:
+                d = json.loads(row["context_data"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            g_shots = d.get("total_shots", 0)
+            if g_shots == 0:
+                continue
+
+            total_shots += g_shots
+            total_goals += d.get("goals", 0)
+            total_sog += d.get("shots_on_goal", 0)
+            # Convert percentages back to counts for proper aggregation
+            total_left += round(d.get("left_side_pct", 0) * g_shots / 100.0)
+            total_slot += round(d.get("slot_pct", 0) * g_shots / 100.0)
+            total_hd += round(d.get("high_danger_pct", 0) * g_shots / 100.0)
+            games.append({
+                "game_id": row["game_id"],
+                "game_date": d.get("game_date"),
+                "opponent": d.get("opponent"),
+                "shots": g_shots,
+                "goals": d.get("goals", 0),
+            })
+
+        if total_shots == 0:
+            return None
+
+        profile = {
+            "games_included": len(games),
+            "total_shots": total_shots,
+            "total_goals": total_goals,
+            "total_shots_on_goal": total_sog,
+            "shooting_pct": round((total_goals / total_sog * 100) if total_sog > 0 else 0.0, 1),
+            "left_side_pct": round((total_left / total_shots * 100) if total_shots > 0 else 0.0, 1),
+            "slot_pct": round((total_slot / total_shots * 100) if total_shots > 0 else 0.0, 1),
+            "high_danger_pct": round((total_hd / total_shots * 100) if total_shots > 0 else 0.0, 1),
+            "avg_shots_per_game": round(total_shots / len(games), 1),
+            "games": games,
+        }
+
+        context_data = json.dumps(profile)
+
+        # Write aggregated season profile — game_id is NULL for season-level
+        conn.execute("""
+            INSERT OR REPLACE INTO pxi_context
+                (id, player_id, team_id, game_id, report_type, context_data, generated_at)
+            VALUES (?, ?, ?, '__season__', 'season_shot_profile', ?, datetime('now'))
+        """, (str(uuid.uuid4()), player_id, team_id, context_data))
+        conn.commit()
+
+        return profile
+    finally:
+        conn.close()
+
+
 # ── InStat XML Tagging Helpers (game_events pipeline) ─────
 
 def _parse_instat_xml_filename(filename: str) -> dict:
@@ -28481,6 +28566,17 @@ async def instat_import_xml(
                      ctx_written, result["events"][0]["game_id"] if result["events"] else "unknown")
     except Exception as e:
         logger.warning("pxi_context write failed (non-fatal): %s", str(e))
+
+    # Re-aggregate season shot profiles for all players in this game (non-fatal)
+    if ctx_written > 0:
+        try:
+            player_ids_in_game = {ev["player_id"] for ev in result["events"] if ev.get("player_id")}
+            for pid in player_ids_in_game:
+                team_for_pid = next((ev["team_name"] for ev in result["events"] if ev.get("player_id") == pid), "")
+                aggregate_player_shot_context(pid, team_for_pid)
+            logger.info("pxi_context: re-aggregated season profiles for %d players", len(player_ids_in_game))
+        except Exception as e:
+            logger.warning("pxi_context season aggregation failed (non-fatal): %s", str(e))
 
     return {
         "status": "ok",
