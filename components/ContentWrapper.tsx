@@ -67,6 +67,9 @@ export default function ContentWrapper({ children }: { children: React.ReactNode
         </div>
       )}
       {children}
+      <footer style={{ textAlign: "center", padding: "8px 0", color: "#94A3B8", fontSize: 11, fontFamily: "'Source Serif 4', serif" }}>
+        © 2026 ProspectX Intelligence. All rights reserved.
+      </footer>
     </div>
   );
 }

@@ -170,10 +170,15 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-# P0-2: Refuse to start in production with default JWT secret
-if ENVIRONMENT != "development" and JWT_SECRET == _DEFAULT_JWT_SECRET:
-    print("FATAL: JWT_SECRET is still the default value in '%s' environment. Set a strong JWT_SECRET env var." % ENVIRONMENT)
-    sys.exit(1)
+# P0-2: Refuse to start in production with weak JWT secret
+if ENVIRONMENT != "development":
+    if (JWT_SECRET == _DEFAULT_JWT_SECRET
+            or JWT_SECRET == "your-secret-key"
+            or len(JWT_SECRET) < 32):
+        raise RuntimeError(
+            "JWT_SECRET must be set to a strong random value in production "
+            "(>= 32 chars, not a default). Current environment: %s" % ENVIRONMENT
+        )
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 
@@ -686,6 +691,21 @@ async def per_user_rate_limit_middleware(request: Request, call_next):
     response.headers["X-RateLimit-Remaining"] = str(remaining)
     return response
 
+# ── Scraper Blocking Middleware ────────────────────
+_BLOCKED_AGENTS = [
+    "python-requests", "python-urllib", "scrapy", "curl", "wget",
+    "httpx", "go-http-client", "java/", "libwww-perl",
+]
+
+@app.middleware("http")
+async def block_scrapers(request: Request, call_next):
+    """Block known scraping user-agents. Exempt /health endpoint."""
+    if request.url.path != "/health":
+        ua = (request.headers.get("user-agent") or "").lower()
+        if any(b in ua for b in _BLOCKED_AGENTS):
+            return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+    return await call_next(request)
+
 # ── Images directory ──────────────────────────────
 _IMAGES_DIR = os.path.join(_DATA_DIR, "images")
 os.makedirs(_IMAGES_DIR, exist_ok=True)
@@ -781,6 +801,7 @@ if FRONTEND_URL and FRONTEND_URL not in _allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://prospectx-app-[a-z0-9]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -14593,7 +14614,9 @@ async def get_player_filter_options(token_data: dict = Depends(verify_token)):
 
 
 @app.get("/players", response_model=List[PlayerResponse])
+@limiter.limit("30/minute", key_func=get_remote_address)
 async def list_players(
+    request: Request,
     search: Optional[str] = None,
     position: Optional[str] = None,
     team: Optional[str] = None,
@@ -14792,7 +14815,9 @@ async def list_players(
 
 
 @app.get("/players/cards")
+@limiter.limit("30/minute", key_func=get_remote_address)
 async def list_player_cards(
+    request: Request,
     search: Optional[str] = None,
     position: Optional[str] = None,
     team: Optional[str] = None,
@@ -31892,7 +31917,8 @@ async def admin_ht_sync_full(token_data: dict = Depends(verify_token)):
 
 
 @app.get("/league-hub/{league}/standings-stored")
-async def league_hub_standings_stored(league: str, token_data: dict = Depends(verify_token)):
+@limiter.limit("20/minute", key_func=get_remote_address)
+async def league_hub_standings_stored(league: str, request: Request, token_data: dict = Depends(verify_token)):
     """Standings from ht_team_stats table, mapped to HTStandings shape.
 
     Falls back to live HockeyTech get_standings() if no stored data exists.
@@ -32219,7 +32245,8 @@ async def league_hub_monte_carlo(league: str, token_data: dict = Depends(verify_
 
 
 @app.get("/league-hub/{league}/player-stats-stored")
-async def league_hub_player_stats_stored(league: str, limit: int = 100, token_data: dict = Depends(verify_token)):
+@limiter.limit("20/minute", key_func=get_remote_address)
+async def league_hub_player_stats_stored(league: str, request: Request, limit: int = 100, token_data: dict = Depends(verify_token)):
     """Return cached player stats leaders for a league, with live HT fallback."""
     conn = get_db()
     try:
@@ -36893,7 +36920,7 @@ current standings, conference/division alignment, playoff formats and qualificat
 recent game results or schedules.
 Treat this external info as more current than any stale or missing league-structure data in PXI.
 Approved sources: official league websites (gojhl.ca, ontariohockeyleague.com, theahl.com,
-bchl.ca, cchl.ca, nahl.com, ushl.com, etc.), eliteprospects.com, hockeydb.com.
+bchl.ca, cchl.ca, nahl.com, ushl.com, etc.), hockeydb.com.
 
 3. CONFLICT RESOLUTION
 If PXI and an external site disagree:

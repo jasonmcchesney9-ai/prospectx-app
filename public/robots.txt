@@ -1,6 +1,10 @@
 User-agent: *
 Disallow: /api/
 Disallow: /admin/
+Disallow: /players/
+Disallow: /league-hub/
+Disallow: /reports/
 Allow: /
 Allow: /pricing
 Allow: /login
+Sitemap: https://prospectxintelligence.com/sitemap.xml

@@ -914,8 +914,6 @@ APPROVED_REFERENCE_URLS = [
     "hockeypei.com",
     "hockeynovascotia.ca",
     "hockeynl.ca",
-    # Secondary reference (restricted use — see guardrails)
-    "eliteprospects.com",
     "hockeydb.com",
     # Rankings and standings (restricted: standings, records, league strength only)
     "myhockeyrankings.com",
