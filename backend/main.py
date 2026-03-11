@@ -4987,6 +4987,72 @@ def init_db():
 
     logger.info("HockeyTech stored data tables ready (game_schedule, ht_team_stats, monte_carlo_results)")
 
+    # ── league_player_stats_cache (League Hub player stats leaders) ──
+    try:
+        if USE_PG:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS league_player_stats_cache (
+                    id SERIAL PRIMARY KEY,
+                    league TEXT NOT NULL,
+                    season TEXT NOT NULL,
+                    player_id TEXT,
+                    player_name TEXT,
+                    team_name TEXT,
+                    team_code TEXT,
+                    team_id INTEGER,
+                    position TEXT,
+                    gp INTEGER DEFAULT 0,
+                    g INTEGER DEFAULT 0,
+                    a INTEGER DEFAULT 0,
+                    pts INTEGER DEFAULT 0,
+                    pim INTEGER DEFAULT 0,
+                    plus_minus INTEGER DEFAULT 0,
+                    ppg INTEGER DEFAULT 0,
+                    ppa INTEGER DEFAULT 0,
+                    shg INTEGER DEFAULT 0,
+                    shots INTEGER DEFAULT 0,
+                    shooting_pct TEXT,
+                    rookie BOOLEAN DEFAULT FALSE,
+                    photo TEXT,
+                    logo TEXT,
+                    cached_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+        else:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS league_player_stats_cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    league TEXT NOT NULL,
+                    season TEXT NOT NULL,
+                    player_id TEXT,
+                    player_name TEXT,
+                    team_name TEXT,
+                    team_code TEXT,
+                    team_id INTEGER,
+                    position TEXT,
+                    gp INTEGER DEFAULT 0,
+                    g INTEGER DEFAULT 0,
+                    a INTEGER DEFAULT 0,
+                    pts INTEGER DEFAULT 0,
+                    pim INTEGER DEFAULT 0,
+                    plus_minus INTEGER DEFAULT 0,
+                    ppg INTEGER DEFAULT 0,
+                    ppa INTEGER DEFAULT 0,
+                    shg INTEGER DEFAULT 0,
+                    shots INTEGER DEFAULT 0,
+                    shooting_pct TEXT,
+                    rookie INTEGER DEFAULT 0,
+                    photo TEXT,
+                    logo TEXT,
+                    cached_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_league_player_stats_cache_league ON league_player_stats_cache(league, season)")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.warning("league_player_stats_cache table DDL skipped: %s", e)
+
     # ── Film Room: clip_annotations table ──
     if USE_PG:
         conn.execute("""
@@ -10918,6 +10984,42 @@ def sync_hockeytech_data_cron():
                         ),
                     )
                     total_teams += 1
+
+                # ── Sync league_player_stats_cache (leaders) ──
+                total_cached_leaders = 0
+                try:
+                    leaders = await client.get_top_scorers(season_id, limit=200)
+                    # Clear old cache for this league
+                    conn.execute(
+                        "DELETE FROM league_player_stats_cache WHERE league = ?",
+                        (code,),
+                    )
+                    for ldr in leaders:
+                        conn.execute(
+                            """INSERT INTO league_player_stats_cache
+                               (league, season, player_id, player_name, team_name, team_code,
+                                team_id, position, gp, g, a, pts, pim, plus_minus,
+                                ppg, ppa, shg, shots, shooting_pct, rookie, photo, logo)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                code, str(season_id),
+                                str(ldr.get("player_id", "")), ldr.get("name", ""),
+                                ldr.get("team_name", ""), ldr.get("team_code", ""),
+                                ldr.get("team_id"), ldr.get("position", ""),
+                                ldr.get("gp", 0), ldr.get("goals", 0),
+                                ldr.get("assists", 0), ldr.get("points", 0),
+                                ldr.get("pim", 0), ldr.get("plus_minus", 0),
+                                ldr.get("ppg", 0), ldr.get("ppa", 0),
+                                ldr.get("shg", 0), ldr.get("shots", 0),
+                                ldr.get("shooting_pct", ""),
+                                1 if ldr.get("rookie") else 0,
+                                ldr.get("photo", ""), ldr.get("logo", ""),
+                            ),
+                        )
+                        total_cached_leaders += 1
+                    logger.info("[HT SYNC CRON] %s: cached %d scoring leaders", code, total_cached_leaders)
+                except Exception as ldr_err:
+                    logger.error("[HT SYNC CRON] %s leaders cache failed: %s", code, ldr_err)
 
                 # ── Sync player_stats (skaters + goalies) ──
                 total_skaters = 0
@@ -31964,6 +32066,63 @@ async def league_hub_monte_carlo(league: str, token_data: dict = Depends(verify_
             "results": results,
             "calculated_at": rows[0]["calculated_at"] if rows else None,
         }
+    finally:
+        conn.close()
+
+
+@app.get("/league-hub/{league}/player-stats-stored")
+async def league_hub_player_stats_stored(league: str, limit: int = 100, token_data: dict = Depends(verify_token)):
+    """Return cached player stats leaders for a league, with live HT fallback."""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT player_id, player_name, team_name, team_code, team_id,
+                      position, gp, g, a, pts, pim, plus_minus,
+                      ppg, ppa, shg, shots, shooting_pct, rookie, photo, logo
+               FROM league_player_stats_cache
+               WHERE league = ?
+               ORDER BY pts DESC
+               LIMIT ?""",
+            (league, limit),
+        ).fetchall()
+
+        if rows:
+            return [
+                {
+                    "player_id": r["player_id"],
+                    "name": r["player_name"],
+                    "team_name": r["team_name"],
+                    "team_code": r["team_code"],
+                    "team_id": r["team_id"],
+                    "position": r["position"],
+                    "gp": r["gp"],
+                    "goals": r["g"],
+                    "assists": r["a"],
+                    "points": r["pts"],
+                    "pim": r["pim"],
+                    "plus_minus": r["plus_minus"],
+                    "ppg": r["ppg"],
+                    "ppa": r["ppa"],
+                    "shg": r["shg"],
+                    "shots": r["shots"],
+                    "shooting_pct": r["shooting_pct"],
+                    "rookie": bool(r["rookie"]),
+                    "photo": r["photo"],
+                    "logo": r["logo"],
+                }
+                for r in rows
+            ]
+
+        # Fallback to live HT if cache is empty
+        try:
+            client = HockeyTechClient(league)
+            season_id = await client.get_current_season_id()
+            if season_id:
+                return await client.get_top_scorers(season_id, limit=limit)
+        except Exception as ht_err:
+            logger.warning("[league-hub] %s player stats live fallback failed: %s", league, ht_err)
+
+        return []
     finally:
         conn.close()
 
