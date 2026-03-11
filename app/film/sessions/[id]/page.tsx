@@ -403,6 +403,9 @@ export default function FilmSessionViewerPage() {
   const [codeShowCustom, setCodeShowCustom] = useState(false);
   const [codeCustomLabel, setCodeCustomLabel] = useState("");
 
+  // Right panel tab state
+  const [rightTab, setRightTab] = useState<"clips" | "reels" | "pxi" | "info">("clips");
+
   // Video player ref for getting current time + playback control
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const currentTimeRef = useRef<number>(0);
@@ -1859,7 +1862,29 @@ export default function FilmSessionViewerPage() {
 
           {/* ── COL 3 — Clips Panel + Reels + Comments ─────────── */}
           <div style={{ gridColumn: 3, gridRow: 1, background: "#0A1929", borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden", transition: "opacity 0.3s ease", opacity: cinemaMode ? 0 : 1, pointerEvents: cinemaMode ? "none" : "auto" }}>
+            {/* ── Right Panel Tab Bar ── */}
+            <div style={{ width: "100%", background: "#0F2942", display: "flex", borderBottom: "1px solid #1E3A5F", flexShrink: 0 }}>
+              {(["clips", "reels", "pxi", "info"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setRightTab(tab)}
+                  style={{
+                    flex: 1, padding: "10px 0", textAlign: "center",
+                    fontFamily: "'Oswald', sans-serif", fontSize: 12, fontWeight: 600,
+                    letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer",
+                    background: "transparent", border: "none",
+                    borderBottom: rightTab === tab ? "2px solid #0D9488" : "2px solid transparent",
+                    color: rightTab === tab ? "#0D9488" : "#94A3B8",
+                  }}
+                >
+                  {tab.toUpperCase()}
+                </button>
+              ))}
+            </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+              {/* ── INFO TAB ── */}
+              {rightTab === "info" && (
+              <>
               {/* Session info — compact */}
               <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
@@ -1958,6 +1983,12 @@ export default function FilmSessionViewerPage() {
                   </div>
                 </div>
 
+              </>
+              )}
+
+              {/* ── CLIPS TAB ── */}
+              {rightTab === "clips" && (
+              <>
               {/* Clip Panel — props unchanged */}
               <ClipPanel
                 sessionId={sessionId}
@@ -2011,8 +2042,14 @@ export default function FilmSessionViewerPage() {
                 </div>
               )}
 
+              </>
+              )}
+
+              {/* ── REELS TAB ── */}
+              {rightTab === "reels" && (
+              <>
               {/* Reels Section */}
-              {sessionReels.length > 0 && (
+              {sessionReels.length > 0 ? (
                 <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                     <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#EA580C" }} />
@@ -2088,8 +2125,23 @@ export default function FilmSessionViewerPage() {
                     ))}
                   </div>
                 </div>
+              ) : (
+                <div style={{ background: "#0D2037", borderRadius: 6, padding: "16px 10px", textAlign: "center" }}>
+                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "0 0 8px" }}>No reels yet</p>
+                  <button
+                    onClick={() => setShowReelBuilder(true)}
+                    style={{ padding: "8px 16px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", background: "#0D9488", color: "#FFFFFF" }}
+                  >
+                    Build Reel
+                  </button>
+                </div>
+              )}
+              </>
               )}
 
+              {/* ── PXI TAB ── */}
+              {rightTab === "pxi" && (
+              <>
               {/* PXI Report Display — moved from Col 2 for accessibility */}
               {generating && (
                 <div style={{ background: "#0D2037", borderRadius: 6, padding: "12px 10px" }}>
@@ -2225,6 +2277,12 @@ export default function FilmSessionViewerPage() {
                 </div>
               )}
 
+              </>
+              )}
+
+              {/* ── INFO TAB (continued): Comments ── */}
+              {rightTab === "info" && (
+              <>
               {/* Comments */}
               <div style={{ background: "#0D2037", borderRadius: 6, overflow: "hidden" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
@@ -2301,6 +2359,8 @@ export default function FilmSessionViewerPage() {
                   )}
                 </div>
               </div>
+              </>
+              )}
             </div>
           </div>
 
