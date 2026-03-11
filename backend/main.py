@@ -16400,6 +16400,31 @@ async def get_game_shot_map(
         conn.close()
 
 
+@app.get("/games/with-events")
+async def list_games_with_events(
+    season: str = Query("2025-26"),
+    token_data: dict = Depends(verify_token),
+):
+    """List distinct games that have event data with coordinates (for shot map drill-down)."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT game_id, game_date,
+                   MIN(team_name) AS team_a, MAX(team_name) AS team_b,
+                   COUNT(*) AS total_events,
+                   SUM(CASE WHEN pos_x IS NOT NULL THEN 1 ELSE 0 END) AS events_with_coords
+            FROM game_events
+            WHERE org_id = ? AND season = ?
+            GROUP BY game_id
+            HAVING events_with_coords > 0
+            ORDER BY game_date DESC
+        """, (org_id, season)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 @app.get("/players/{player_id}/trendline")
 async def get_player_trendline(
     player_id: str,

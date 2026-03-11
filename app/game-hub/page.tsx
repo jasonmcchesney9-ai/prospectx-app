@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Loader2, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Loader2, Upload, CheckCircle2, AlertTriangle, X, Crosshair } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ShotMap from "@/components/ShotMap";
 import api from "@/lib/api";
 
 interface ImportRecord {
@@ -28,6 +29,53 @@ interface ImportResult {
   events_inserted: number;
 }
 
+interface EventGame {
+  game_id: string;
+  game_date: string | null;
+  team_a: string;
+  team_b: string;
+  total_events: number;
+  events_with_coords: number;
+}
+
+interface ShotEvent {
+  id: string;
+  action: string;
+  map_type: string;
+  pos_x: number;
+  pos_y: number;
+  x_pct: number;
+  y_pct: number;
+  period: number;
+  game_id: string;
+  game_date: string;
+  opponent: string;
+  is_goal: boolean;
+  player_id?: string;
+  player_name?: string;
+}
+
+interface TeamShotData {
+  team_name: string;
+  total_events: number;
+  events: ShotEvent[];
+  summary: {
+    shots: number;
+    shots_on_goal: number;
+    goals: number;
+    missed_shots: number;
+    blocked_shots: number;
+    shooting_pct: number;
+    slot_pct: number;
+  };
+}
+
+interface GameShotMapResponse {
+  game_id: string;
+  game_date: string | null;
+  teams: TeamShotData[];
+}
+
 export default function GameHubPage() {
   const [imports, setImports] = useState<ImportRecord[]>([]);
   const [loadingImports, setLoadingImports] = useState(true);
@@ -37,13 +85,41 @@ export default function GameHubPage() {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Event games with shot data
+  const [eventGames, setEventGames] = useState<EventGame[]>([]);
+  const [loadingEventGames, setLoadingEventGames] = useState(true);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [shotMapData, setShotMapData] = useState<GameShotMapResponse | null>(null);
+  const [shotMapLoading, setShotMapLoading] = useState(false);
+
   useEffect(() => {
     api
       .get<ImportRecord[]>("/game-sheets/imports")
       .then((r) => setImports(r.data))
       .catch(() => {})
       .finally(() => setLoadingImports(false));
+    api
+      .get<EventGame[]>("/games/with-events", { params: { season: "2025-26" } })
+      .then((r) => setEventGames(r.data))
+      .catch(() => {})
+      .finally(() => setLoadingEventGames(false));
   }, []);
+
+  const openShotMap = useCallback((gameId: string) => {
+    if (selectedGameId === gameId) {
+      setSelectedGameId(null);
+      setShotMapData(null);
+      return;
+    }
+    setSelectedGameId(gameId);
+    setShotMapLoading(true);
+    setShotMapData(null);
+    api
+      .get<GameShotMapResponse>(`/games/${gameId}/shot-map`)
+      .then((r) => setShotMapData(r.data))
+      .catch(() => setShotMapData(null))
+      .finally(() => setShotMapLoading(false));
+  }, [selectedGameId]);
 
   const handleUpload = async (file: File) => {
     const name = file.name.toLowerCase();
@@ -212,7 +288,7 @@ export default function GameHubPage() {
         </div>
 
         {/* Section 2 — Import History */}
-        <div style={{ background: "#FFFFFF", borderRadius: 14, border: "1px solid #E5E7EB", padding: 24 }}>
+        <div style={{ background: "#FFFFFF", borderRadius: 14, border: "1px solid #E5E7EB", padding: 24, marginBottom: 24 }}>
           <h2 style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>
             Import History
           </h2>
@@ -270,6 +346,138 @@ export default function GameHubPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+
+        {/* Section 3 — Games with Event Data (Shot Maps) */}
+        <div style={{ background: "#FFFFFF", borderRadius: 14, border: "1px solid #E5E7EB", padding: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <Crosshair size={14} style={{ color: "#0D9488" }} />
+            <h2 style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Games with Shot Data
+            </h2>
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Oswald', sans-serif", color: "#0D9488", background: "rgba(13,148,136,0.1)", padding: "2px 6px", borderRadius: 4, letterSpacing: "0.06em" }}>
+              InStat
+            </span>
+          </div>
+
+          {loadingEventGames ? (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <Loader2 size={18} style={{ color: "#9CA3AF", margin: "0 auto", animation: "spin 1s linear infinite" }} />
+            </div>
+          ) : eventGames.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic" }}>
+              No InStat event data imported yet. Import an InStat XML tagging file to see shot maps.
+            </p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #E5E7EB" }}>
+                    <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 700, color: "#6B7280", fontSize: 11, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>Date</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 700, color: "#6B7280", fontSize: 11, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>Teams</th>
+                    <th style={{ textAlign: "center", padding: "8px 12px", fontWeight: 700, color: "#6B7280", fontSize: 11, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>Events</th>
+                    <th style={{ textAlign: "center", padding: "8px 12px", fontWeight: 700, color: "#6B7280", fontSize: 11, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>With Coords</th>
+                    <th style={{ textAlign: "center", padding: "8px 12px", fontWeight: 700, color: "#6B7280", fontSize: 11, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>Shot Map</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {eventGames.map((g) => (
+                    <tr
+                      key={g.game_id}
+                      onClick={() => openShotMap(g.game_id)}
+                      style={{
+                        borderBottom: "1px solid #F3F4F6",
+                        cursor: "pointer",
+                        background: selectedGameId === g.game_id ? "rgba(13,148,136,0.04)" : "transparent",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={(e) => { if (selectedGameId !== g.game_id) (e.currentTarget as HTMLElement).style.background = "#FAFBFC"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = selectedGameId === g.game_id ? "rgba(13,148,136,0.04)" : "transparent"; }}
+                    >
+                      <td style={{ padding: "10px 12px", color: "#374151" }}>
+                        {g.game_date || "—"}
+                      </td>
+                      <td style={{ padding: "10px 12px", color: "#374151", fontWeight: 600 }}>
+                        {g.team_a} vs {g.team_b}
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center", color: "#374151" }}>
+                        {g.total_events}
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center", color: "#0D9488", fontWeight: 600 }}>
+                        {g.events_with_coords}
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", color: "#0D9488" }}>
+                          {selectedGameId === g.game_id ? "Close" : "View"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Shot Map Detail Panel */}
+          {selectedGameId && (
+            <div style={{ marginTop: 16, background: "#0F2942", borderRadius: 12, padding: 24, position: "relative" }}>
+              {/* Close button */}
+              <button
+                onClick={() => { setSelectedGameId(null); setShotMapData(null); }}
+                style={{ position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 6, padding: 4, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <X size={14} style={{ color: "rgba(255,255,255,0.6)" }} />
+              </button>
+
+              {shotMapLoading ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <Loader2 size={24} style={{ color: "#0D9488", margin: "0 auto", animation: "spin 1s linear infinite" }} />
+                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 8, fontFamily: "'Oswald', sans-serif", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Loading shot data...
+                  </p>
+                </div>
+              ) : !shotMapData || shotMapData.teams.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <Crosshair size={24} style={{ color: "rgba(255,255,255,0.2)", margin: "0 auto 8px" }} />
+                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
+                    No shot location data for this game
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Game date header */}
+                  {shotMapData.game_date && (
+                    <p style={{ fontSize: 10, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 16, textAlign: "center" }}>
+                      {shotMapData.game_date}
+                    </p>
+                  )}
+
+                  {/* Side-by-side shot maps */}
+                  <div style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "center" }}>
+                    {shotMapData.teams.map((team) => (
+                      <div key={team.team_name} style={{ flex: "1 1 340px", minWidth: 300, maxWidth: 500 }}>
+                        {/* Team label */}
+                        <div style={{ marginBottom: 8, textAlign: "center" }}>
+                          <p style={{ fontSize: 14, fontWeight: 600, fontFamily: "'Oswald', sans-serif", color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                            {team.team_name}
+                          </p>
+                          <p style={{ fontSize: 11, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.4)" }}>
+                            {team.total_events} events · {team.summary.goals} goals · {team.summary.shooting_pct}% shooting
+                          </p>
+                        </div>
+                        <ShotMap
+                          events={team.events}
+                          width={400}
+                          height={260}
+                          showLegend={true}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
