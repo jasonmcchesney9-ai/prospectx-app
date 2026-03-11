@@ -41214,6 +41214,46 @@ async def scouting_list_pipeline_status(token_data: dict = Depends(verify_token)
         conn.close()
 
 
+@app.get("/scouting-list/pipeline")
+async def list_scouting_pipeline(token_data: dict = Depends(verify_token)):
+    """Return all scouting pipeline entries with player info for the org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT sp.id, sp.player_id, sp.notes, sp.priority, sp.status,
+                   sp.pxi_summary, sp.created_at, sp.updated_at, sp.sourced_via,
+                   p.first_name, p.last_name, p.position, p.current_team AS team_name,
+                   u.first_name AS added_by_first, u.last_name AS added_by_last
+            FROM scouting_pipeline sp
+            LEFT JOIN players p ON p.id = sp.player_id
+            LEFT JOIN users u ON u.id = sp.added_by
+            WHERE sp.org_id = ?
+            ORDER BY sp.created_at DESC
+        """, (org_id,)).fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "id": r["id"],
+                "player_id": r["player_id"],
+                "first_name": r["first_name"] or "Unknown",
+                "last_name": r["last_name"] or "",
+                "position": r["position"] or "",
+                "team_name": r["team_name"] or "",
+                "priority": r["priority"] or "medium",
+                "status": r["status"] or "new",
+                "notes": r["notes"] or "",
+                "pxi_summary": r["pxi_summary"] or "",
+                "added_by": f"{r['added_by_first'] or ''} {r['added_by_last'] or ''}".strip() or "Unknown",
+                "sourced_via": r["sourced_via"] or "",
+                "created_at": r["created_at"] or "",
+                "updated_at": r["updated_at"] or "",
+            })
+        return result
+    finally:
+        conn.close()
+
+
 # ============================================================
 # MY DATA
 # ============================================================

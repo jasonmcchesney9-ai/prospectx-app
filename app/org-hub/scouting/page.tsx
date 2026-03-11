@@ -61,6 +61,22 @@ interface PipelineData {
   total_assignments: number;
 }
 
+interface PipelinePlayer {
+  id: string;
+  player_id: string;
+  first_name: string;
+  last_name: string;
+  position: string;
+  team_name: string;
+  priority: string;
+  status: string;
+  notes: string;
+  pxi_summary: string;
+  added_by: string;
+  sourced_via: string;
+  created_at: string;
+}
+
 interface OrgUser {
   id: string;
   first_name: string;
@@ -125,11 +141,27 @@ export default function ScoutingPipeline() {
   // Org scouts list
   const [orgScouts, setOrgScouts] = useState<OrgUser[]>([]);
 
+  // Pushed pipeline players (from Watchlist)
+  const [pipelinePlayers, setPipelinePlayers] = useState<PipelinePlayer[]>([]);
+  const [pipelineLoading, setPipelineLoading] = useState(true);
+
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
 
   const user = getUser();
   const { openBenchTalk } = useBenchTalk();
+
+  const fetchPipelinePlayers = useCallback(async () => {
+    setPipelineLoading(true);
+    try {
+      const res = await api.get("/scouting-list/pipeline");
+      setPipelinePlayers(res.data || []);
+    } catch {
+      // silent — assignments still load
+    } finally {
+      setPipelineLoading(false);
+    }
+  }, []);
 
   const fetchPipeline = useCallback(async () => {
     setLoading(true);
@@ -157,7 +189,8 @@ export default function ScoutingPipeline() {
   useEffect(() => {
     fetchPipeline();
     fetchScouts();
-  }, [fetchPipeline, fetchScouts]);
+    fetchPipelinePlayers();
+  }, [fetchPipeline, fetchScouts, fetchPipelinePlayers]);
 
   /* ── Team autocomplete ─────────────────────────────────── */
   const searchTeams = useCallback(async (q: string) => {
@@ -405,7 +438,84 @@ export default function ScoutingPipeline() {
 
                         {/* Cards */}
                         <div className="flex flex-col gap-2 flex-1">
-                          {items.length === 0 && (
+                          {/* Pipeline players (pushed from Watchlist) — first column only */}
+                          {col.key === "assigned" && !pipelineLoading && pipelinePlayers.length > 0 && (
+                            <>
+                              <div
+                                className="px-2.5 py-1.5 mb-1"
+                                style={{ borderRadius: 6, background: "rgba(13,148,136,0.08)" }}
+                              >
+                                <span className="font-bold uppercase" style={{ fontSize: 8, fontFamily: MONO, letterSpacing: 1.5, color: "#0D9488" }}>
+                                  Nominated from Watchlist ({pipelinePlayers.length})
+                                </span>
+                              </div>
+                              {pipelinePlayers.map((pp) => {
+                                const pcfg2 = PRIORITY_CFG[pp.priority] || PRIORITY_CFG.normal;
+                                return (
+                                  <div
+                                    key={`pp-${pp.id}`}
+                                    style={{ borderRadius: 10, border: "1.5px solid #DDE6EF", background: "#FFFFFF", overflow: "hidden", borderLeft: "3px solid #0D9488" }}
+                                  >
+                                    <div className="px-3 py-2.5">
+                                      <div className="flex items-start justify-between mb-1">
+                                        <Link
+                                          href={`/players/${pp.player_id}`}
+                                          className="font-bold text-xs hover:underline"
+                                          style={{ color: "#0F2942" }}
+                                        >
+                                          {pp.first_name} {pp.last_name}
+                                        </Link>
+                                        <span
+                                          className="shrink-0 px-1.5 py-0.5 rounded font-bold uppercase"
+                                          style={{ fontSize: 7, fontFamily: MONO, letterSpacing: 0.5, color: pcfg2.color, background: pcfg2.bg }}
+                                        >
+                                          {pcfg2.label}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        {pp.position && (
+                                          <span className="font-bold uppercase" style={{ fontSize: 8, fontFamily: MONO, letterSpacing: 0.5, color: "#5A7291" }}>
+                                            {pp.position}
+                                          </span>
+                                        )}
+                                        {pp.team_name && (
+                                          <span className="text-xs" style={{ color: "#8BA4BB" }}>{pp.team_name}</span>
+                                        )}
+                                      </div>
+                                      {pp.pxi_summary && (
+                                        <p
+                                          className="text-xs mb-1"
+                                          style={{ color: "#5A7291", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                                        >
+                                          {pp.pxi_summary}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center gap-1 mt-1.5">
+                                        <User size={10} style={{ color: "#8BA4BB" }} />
+                                        <span className="text-xs" style={{ color: "#8BA4BB" }}>{pp.added_by}</span>
+                                        {pp.sourced_via === "watchlist" && (
+                                          <span className="px-1.5 py-0.5 rounded font-bold uppercase" style={{ fontSize: 7, fontFamily: MONO, letterSpacing: 0.5, color: "#0D9488", background: "rgba(13,148,136,0.10)" }}>
+                                            Watchlist
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          )}
+                          {col.key === "assigned" && !pipelineLoading && pipelinePlayers.length === 0 && items.length === 0 && (
+                            <div className="py-4 text-center" style={{ borderRadius: 8, border: "1px dashed rgba(13,148,136,0.2)" }}>
+                              <span className="text-xs" style={{ color: "#8BA4BB" }}>Players pushed from Watchlist will appear here</span>
+                            </div>
+                          )}
+                          {col.key === "assigned" && pipelineLoading && (
+                            <div className="py-4 text-center">
+                              <Loader2 size={16} className="animate-spin mx-auto" style={{ color: "#0D9488" }} />
+                            </div>
+                          )}
+                          {items.length === 0 && (col.key !== "assigned" || pipelinePlayers.length === 0) && (
                             <div className="py-6 text-center" style={{ borderRadius: 8, border: "1px dashed #DDE6EF" }}>
                               <span className="text-xs" style={{ color: "#8BA4BB" }}>No assignments yet. Click &ldquo;New Assignment&rdquo; to assign a scout to a game.</span>
                             </div>
