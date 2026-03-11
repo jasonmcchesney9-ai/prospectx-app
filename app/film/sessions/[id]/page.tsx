@@ -32,6 +32,12 @@ import {
   Gauge,
   Film,
   Search,
+  PenLine,
+  Type,
+  Circle,
+  Minus,
+  ArrowUpRight,
+  Eraser,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -44,6 +50,7 @@ import { getUser } from "@/lib/auth";
 import toast from "react-hot-toast";
 import MicButton from "@/components/MicButton";
 import ListenButton from "@/components/ListenButton";
+import TelestrationCanvas, { TelestrationCanvasHandle } from "@/components/TelestrationCanvas";
 
 interface SessionData {
   id: string;
@@ -360,6 +367,14 @@ export default function FilmSessionViewerPage() {
   const [awayScore, setAwayScore] = useState<number>(0);
   const [currentPeriod, setCurrentPeriod] = useState("1st");
 
+  // Telestration draw mode
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawTool, setDrawTool] = useState<"arrow" | "circle" | "freehand" | "line" | "text" | "eraser">("freehand");
+  const [drawColor, setDrawColor] = useState("#00B5B8");
+  const [drawLineWidth, setDrawLineWidth] = useState(3);
+  const [drawFade, setDrawFade] = useState(false);
+  const telestrationRef = useRef<TelestrationCanvasHandle>(null);
+
   // Reel builder modal + session reels
   const [showReelBuilder, setShowReelBuilder] = useState(false);
   const [sessionReels, setSessionReels] = useState<{ id: string; title: string; status: string; clip_count: number; created_at: string; share_token?: string; share_enabled?: boolean }[]>([]);
@@ -638,14 +653,26 @@ export default function FilmSessionViewerPage() {
     } catch { /* localStorage unavailable */ }
   }, [sessionId]);
 
-  // Escape key exits Cinema Mode
+  // Escape key exits Cinema Mode + D toggles draw mode + tool shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (e.key === "Escape") { setCinemaMode(false); try { localStorage.setItem("pxi_cinema_mode", "0"); } catch { /* */ } }
+      if (e.key === "d" || e.key === "D") { setDrawMode(prev => !prev); }
+      if (drawMode) {
+        if (e.key === "a" || e.key === "A") setDrawTool("arrow");
+        if (e.key === "c" || e.key === "C") setDrawTool("circle");
+        if (e.key === "f" || e.key === "F") setDrawTool("freehand");
+        if (e.key === "l" || e.key === "L") setDrawTool("line");
+        if (e.key === "t" || e.key === "T") setDrawTool("text");
+        if (e.key === "e" || e.key === "E") setDrawTool("eraser");
+        if (e.key === "x" || e.key === "X") telestrationRef.current?.clear();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [drawMode]);
 
   const toggleReportExpanded = useCallback(() => {
     setReportExpanded((prev) => {
@@ -1503,6 +1530,132 @@ export default function FilmSessionViewerPage() {
                   <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{currentPeriod}</span>
                 </div>
               )}
+              {/* Telestration canvas overlay */}
+              <TelestrationCanvas
+                ref={telestrationRef}
+                active={drawMode}
+                tool={drawTool}
+                color={drawColor}
+                lineWidth={drawLineWidth}
+                opacity={0.9}
+                fadeAfterMs={drawFade ? 4000 : 0}
+                onAnnotationSave={(dataUrl) => {
+                  console.log("Annotation saved:", dataUrl.length, "chars");
+                }}
+                style={{
+                  position: "absolute",
+                  top: 0, left: 0,
+                  width: "100%", height: "100%",
+                  pointerEvents: drawMode ? "all" : "none",
+                  zIndex: 10,
+                }}
+              />
+              {/* Floating draw toolbar */}
+              {drawMode && (
+                <div style={{ position: "absolute", top: 12, right: 12, zIndex: 20, background: "rgba(7,14,26,0.92)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {/* Tool selector */}
+                  <div style={{ display: "flex", gap: 3 }}>
+                    {([
+                      { key: "arrow" as const, icon: <ArrowUpRight size={14} /> },
+                      { key: "circle" as const, icon: <Circle size={14} /> },
+                      { key: "freehand" as const, icon: <PenLine size={14} /> },
+                      { key: "line" as const, icon: <Minus size={14} /> },
+                      { key: "text" as const, icon: <Type size={14} /> },
+                      { key: "eraser" as const, icon: <Eraser size={14} /> },
+                    ]).map((t) => (
+                      <button
+                        key={t.key}
+                        onClick={() => setDrawTool(t.key)}
+                        style={{
+                          width: 28, height: 28,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          borderRadius: 4, border: "none", cursor: "pointer",
+                          background: drawTool === t.key ? "#00B5B8" : "rgba(255,255,255,0.06)",
+                          color: drawTool === t.key ? "white" : "rgba(255,255,255,0.4)",
+                        }}
+                        title={t.key}
+                      >
+                        {t.icon}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Color swatches */}
+                  <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                    {["#00B5B8", "#E67E22", "#FFFFFF", "#EF4444", "#F59E0B", "#6366F1"].map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setDrawColor(c)}
+                        style={{
+                          width: 18, height: 18,
+                          borderRadius: "50%", border: "none", cursor: "pointer",
+                          background: c,
+                          outline: drawColor === c ? "2px solid white" : "none",
+                          outlineOffset: drawColor === c ? 2 : 0,
+                        }}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+                  {/* Line width */}
+                  <div style={{ display: "flex", gap: 2 }}>
+                    {([
+                      { label: "THIN", w: 2 },
+                      { label: "MED", w: 4 },
+                      { label: "THICK", w: 7 },
+                    ]).map((lw) => (
+                      <button
+                        key={lw.label}
+                        onClick={() => setDrawLineWidth(lw.w)}
+                        style={{
+                          flex: 1, padding: "3px 6px", borderRadius: 4, border: "none", cursor: "pointer",
+                          fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.06em",
+                          color: drawLineWidth === lw.w ? "#FFFFFF" : "rgba(255,255,255,0.35)",
+                          background: drawLineWidth === lw.w ? "#0D9488" : "rgba(255,255,255,0.04)",
+                        }}
+                      >
+                        {lw.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Fade toggle + Clear + Save */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={drawFade}
+                        onChange={(e) => setDrawFade(e.target.checked)}
+                        style={{ accentColor: "#00B5B8" }}
+                      />
+                      <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', ui-monospace, monospace", color: "rgba(255,255,255,0.5)" }}>Auto-fade 4s</span>
+                    </label>
+                    <div style={{ display: "flex", gap: 3 }}>
+                      <button
+                        onClick={() => telestrationRef.current?.clear()}
+                        style={{
+                          flex: 1, padding: "3px 7px", borderRadius: 4, border: "none", cursor: "pointer",
+                          fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.06em",
+                          color: "rgba(255,255,255,0.5)", background: "rgba(255,255,255,0.06)",
+                        }}
+                      >
+                        CLEAR ✕
+                      </button>
+                      <button
+                        onClick={() => {
+                          const dataUrl = telestrationRef.current?.getDataUrl();
+                          if (dataUrl) console.log("Annotation saved:", dataUrl.length, "chars");
+                        }}
+                        style={{
+                          flex: 1, padding: "3px 7px", borderRadius: 4, border: "none", cursor: "pointer",
+                          fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, letterSpacing: "0.06em",
+                          color: "white", background: "#E67E22",
+                        }}
+                      >
+                        SAVE ↓
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Transport bar — Mark In/Out + Frame step + Speed + Cinema */}
@@ -1637,6 +1790,29 @@ export default function FilmSessionViewerPage() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Draw mode toggle */}
+                  <button
+                    onClick={() => {
+                      setDrawMode(prev => {
+                        if (!prev) videoPlayerRef.current?.pause();
+                        return !prev;
+                      });
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      padding: "3px 10px", borderRadius: 4,
+                      background: drawMode ? "#00B5B8" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${drawMode ? "#00B5B8" : "rgba(255,255,255,0.12)"}`,
+                      color: drawMode ? "white" : "rgba(255,255,255,0.5)",
+                      cursor: "pointer", fontSize: 10,
+                      fontFamily: "'Oswald', sans-serif",
+                      fontWeight: 700, letterSpacing: "0.08em",
+                    }}
+                  >
+                    <PenLine size={12} />
+                    DRAW
+                  </button>
                 </div>
               </div>
             )}
