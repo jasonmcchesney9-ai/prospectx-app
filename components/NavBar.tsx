@@ -54,6 +54,8 @@ import { useBenchTalk } from "./BenchTalkProvider";
 import PXIIcon from "./PXIIcon";
 import PlayerSearchDropdown from "./PlayerSearchDropdown";
 import { useUpload } from "@/contexts/UploadContext";
+import HelpDrawer from "./ui/HelpDrawer";
+import HelpButton from "./ui/HelpButton";
 
 // ── Role Group Mapping ─────────────────────────────────────────
 // Maps hockey_role to a nav group. Each group is an isolated environment.
@@ -271,6 +273,7 @@ export default function NavBar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
+  const [helpOpen, setHelpOpen] = useState(false);
   const { isOpen: benchTalkOpen, toggleBenchTalk, roleOverride, setRoleOverride } = useBenchTalk();
 
   // Effective role: admin override takes priority, otherwise real role
@@ -561,6 +564,7 @@ export default function NavBar() {
             <ClipboardCheck size={14} />
             + New Note
           </Link>
+          <HelpButton onClick={() => setHelpOpen(true)} />
         </div>
       </div>
 
@@ -861,6 +865,7 @@ export default function NavBar() {
           </button>
         </div>
       )}
+      <HelpDrawer isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
     </nav>
   );
 }
