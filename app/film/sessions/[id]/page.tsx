@@ -351,9 +351,14 @@ export default function FilmSessionViewerPage() {
 
   // Cinema mode — persisted to localStorage
   const [cinemaMode, setCinemaMode] = useState(() => {
-    try { return localStorage.getItem("filmroom_cinema") === "1"; } catch { return false; }
+    try { return localStorage.getItem("pxi_cinema_mode") === "1"; } catch { return false; }
   });
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+
+  // Score badge state
+  const [homeScore, setHomeScore] = useState<number>(0);
+  const [awayScore, setAwayScore] = useState<number>(0);
+  const [currentPeriod, setCurrentPeriod] = useState("1st");
 
   // Reel builder modal + session reels
   const [showReelBuilder, setShowReelBuilder] = useState(false);
@@ -636,7 +641,7 @@ export default function FilmSessionViewerPage() {
   // Escape key exits Cinema Mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setCinemaMode(false); try { localStorage.setItem("filmroom_cinema", "0"); } catch { /* */ } }
+      if (e.key === "Escape") { setCinemaMode(false); try { localStorage.setItem("pxi_cinema_mode", "0"); } catch { /* */ } }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -1039,7 +1044,7 @@ export default function FilmSessionViewerPage() {
               {generating ? "Generating..." : generatedReport ? "Regenerate" : "Analyze"}
             </button>
             <button
-              onClick={() => { const next = !cinemaMode; setCinemaMode(next); try { localStorage.setItem("filmroom_cinema", next ? "1" : "0"); } catch { /* */ } }}
+              onClick={() => { const next = !cinemaMode; setCinemaMode(next); try { localStorage.setItem("pxi_cinema_mode", next ? "1" : "0"); } catch { /* */ } }}
               style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "transparent", color: cinemaMode ? "#14B8A8" : "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }}
               title={cinemaMode ? "Exit Cinema Mode" : "Cinema Mode"}
             >
@@ -1464,24 +1469,38 @@ export default function FilmSessionViewerPage() {
                   {playbackSpeed}x
                 </span>
               )}
-              {/* Recording dot — top-right of video area */}
-              {/* TODO: Wire to EventTagger recording state when exposed via props/callback; currently always visible with blink */}
-              {upload?.playback_id && (
+              {/* Recording dot — top-right of video area, visible only when code tagging active */}
+              {codeTagging && (
                 <>
                   <style>{`@keyframes recDotBlink { 0%,100%{opacity:1} 50%{opacity:0.2} }`}</style>
                   <span
-                    className="absolute top-3 right-3 z-10"
-                    style={{ width: 8, height: 8, borderRadius: "50%", background: "#EF4444", display: "block", animation: "recDotBlink 1.2s infinite" }}
+                    style={{ position: "absolute", top: 10, right: 12, zIndex: 10, width: 8, height: 8, borderRadius: "50%", background: "#EF4444", display: "block", animation: "recDotBlink 1.2s infinite" }}
                   />
                 </>
               )}
               {/* Score badge — bottom-left of video area */}
-              {session?.match_title && !cinemaMode && (
-                <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 10, background: "rgba(10,22,40,0.85)", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "#FFFFFF", letterSpacing: "0.04em" }}>{session.match_title}</span>
-                  {session.match_date && (
-                    <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.4)" }}>{session.match_date}</span>
-                  )}
+              {!cinemaMode && (
+                <div style={{ position: "absolute", bottom: 12, left: 14, zIndex: 10, background: "rgba(6,14,26,0.85)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: "5px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <button
+                      onClick={() => setHomeScore((s) => s + 1)}
+                      onContextMenu={(e) => { e.preventDefault(); setHomeScore((s) => Math.max(0, s - 1)); }}
+                      style={{ fontSize: 18, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: "#FFFFFF", background: "none", border: "none", cursor: "pointer", padding: "0 4px", lineHeight: 1, minWidth: 20, textAlign: "center" }}
+                      title="Click +1 / Right-click -1"
+                    >
+                      {homeScore}
+                    </button>
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 700 }}>–</span>
+                    <button
+                      onClick={() => setAwayScore((s) => s + 1)}
+                      onContextMenu={(e) => { e.preventDefault(); setAwayScore((s) => Math.max(0, s - 1)); }}
+                      style={{ fontSize: 18, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: "#FFFFFF", background: "none", border: "none", cursor: "pointer", padding: "0 4px", lineHeight: 1, minWidth: 20, textAlign: "center" }}
+                      title="Click +1 / Right-click -1"
+                    >
+                      {awayScore}
+                    </button>
+                  </div>
+                  <span style={{ fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{currentPeriod}</span>
                 </div>
               )}
             </div>
@@ -1596,19 +1615,19 @@ export default function FilmSessionViewerPage() {
                   {/* Playback speed */}
                   <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                     <Gauge size={11} style={{ color: "rgba(255,255,255,0.3)" }} />
-                    {[0.25, 0.5, 1, 1.5, 2].map((rate) => (
+                    {[0.25, 0.5, 1, 2, 4].map((rate) => (
                       <button
                         key={rate}
                         onClick={() => handleSpeedChange(rate)}
                         style={{
-                          padding: "4px 10px",
-                          borderRadius: 999,
+                          padding: "3px 7px",
+                          borderRadius: 4,
                           fontSize: 9,
                           fontFamily: "'Oswald', sans-serif",
-                          fontWeight: 600,
+                          fontWeight: 700,
                           letterSpacing: "0.06em",
-                          color: playbackSpeed === rate ? "#FFFFFF" : "#6B7280",
-                          background: playbackSpeed === rate ? "#00B5B8" : "transparent",
+                          color: playbackSpeed === rate ? "#FFFFFF" : "rgba(255,255,255,0.35)",
+                          background: playbackSpeed === rate ? "#0D9488" : "rgba(255,255,255,0.04)",
                           border: "none",
                           cursor: "pointer",
                         }}
