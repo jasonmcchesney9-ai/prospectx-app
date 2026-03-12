@@ -3011,6 +3011,13 @@ def init_db():
 
     conn.commit()
 
+    # ── Migration: Add list_type column to scouting_list ──────
+    sl_cols = _get_table_columns(conn, "scouting_list")
+    if "list_type" not in sl_cols:
+        conn.execute("ALTER TABLE scouting_list ADD COLUMN list_type TEXT DEFAULT 'watchlist'")
+        conn.commit()
+        logger.info("Migration: added list_type column to scouting_list")
+
     # ── Migration: Add diagram_data column to drills ──────────
     drill_cols = _get_table_columns(conn, "drills")
     if "diagram_data" not in drill_cols:
@@ -41607,6 +41614,131 @@ async def list_scouting_pipeline(token_data: dict = Depends(verify_token)):
                 "updated_at": r["updated_at"] or "",
             })
         return result
+    finally:
+        conn.close()
+
+
+# ============================================================
+# TOP PROSPECTS (curated org-scoped list via scouting_list)
+# ============================================================
+
+TOP_PROSPECT_ROLES = {"scout", "gm", "coach", "admin"}
+
+
+@app.get("/watchlist/top-prospects")
+async def list_top_prospects(
+    limit: int = Query(default=100, ge=1, le=500),
+    token_data: dict = Depends(verify_token),
+):
+    """Return curated top-prospect list for the org, enriched with PXR + latest scout note."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT sl.id, sl.player_id, sl.user_id, sl.priority,
+                   sl.target_reason, sl.scout_notes AS list_note,
+                   sl.created_at, sl.updated_at,
+                   p.first_name, p.last_name, p.position, p.current_team,
+                   p.current_league, p.dob, p.image_url,
+                   pxr.pxr_score, pxr.confidence_tier, pxr.cohort_percentile,
+                   pxr.league_percentile,
+                   (SELECT sn.note_text FROM scout_notes sn
+                    WHERE sn.player_id = sl.player_id AND sn.org_id = ?
+                    ORDER BY sn.created_at DESC LIMIT 1) AS latest_note
+            FROM scouting_list sl
+            JOIN players p ON sl.player_id = p.id
+            LEFT JOIN pxr_scores pxr ON pxr.player_id = sl.player_id
+                AND pxr.season = (SELECT MAX(pxr2.season) FROM pxr_scores pxr2 WHERE pxr2.player_id = sl.player_id)
+            WHERE sl.org_id = ? AND sl.list_type = 'top_prospect'
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY pxr.pxr_score DESC NULLS LAST, p.last_name ASC
+            LIMIT ?
+        """, (org_id, org_id, limit)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/watchlist/top-prospects/add")
+async def add_top_prospect(
+    request: Request,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Add a player to the org's curated Top Prospects list."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    # Role gate
+    hockey_role = _get_effective_hockey_role(request, token_data)
+    if hockey_role not in TOP_PROSPECT_ROLES:
+        raise HTTPException(status_code=403, detail="Only Scout, GM, Coach, or Admin roles can manage top prospects.")
+
+    player_id = body.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    conn = get_db()
+    try:
+        # Verify player exists
+        player = conn.execute("SELECT id FROM players WHERE id = ? AND (is_deleted = 0 OR is_deleted IS NULL)", (player_id,)).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        # Check if already on top_prospects for this org
+        existing = conn.execute(
+            "SELECT id FROM scouting_list WHERE org_id = ? AND player_id = ? AND list_type = 'top_prospect'",
+            (org_id, player_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player already on Top Prospects list")
+
+        item_id = gen_id()
+        conn.execute("""
+            INSERT INTO scouting_list (id, org_id, user_id, player_id, priority,
+                target_reason, scout_notes, tags, is_active, list_order, list_type,
+                created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'medium', '', '', '[]', 1, 0, 'top_prospect',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (item_id, org_id, user_id, player_id))
+        conn.commit()
+
+        row = conn.execute("""
+            SELECT sl.id, sl.player_id, sl.user_id, sl.list_type, sl.created_at,
+                   p.first_name, p.last_name, p.position, p.current_team, p.current_league
+            FROM scouting_list sl
+            JOIN players p ON sl.player_id = p.id
+            WHERE sl.id = ?
+        """, (item_id,)).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@app.delete("/watchlist/top-prospects/{player_id}")
+async def remove_top_prospect(
+    player_id: str,
+    request: Request,
+    token_data: dict = Depends(verify_token),
+):
+    """Remove a player from the org's Top Prospects list (does not touch watchlist entries)."""
+    org_id = token_data["org_id"]
+
+    # Role gate
+    hockey_role = _get_effective_hockey_role(request, token_data)
+    if hockey_role not in TOP_PROSPECT_ROLES:
+        raise HTTPException(status_code=403, detail="Only Scout, GM, Coach, or Admin roles can manage top prospects.")
+
+    conn = get_db()
+    try:
+        result = conn.execute(
+            "DELETE FROM scouting_list WHERE org_id = ? AND player_id = ? AND list_type = 'top_prospect'",
+            (org_id, player_id),
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Player not on Top Prospects list")
+        return {"status": "removed", "player_id": player_id}
     finally:
         conn.close()
 
