@@ -11370,7 +11370,7 @@ def sync_hockeytech_data_cron():
                                 ldr.get("ppg", 0), ldr.get("ppa", 0),
                                 ldr.get("shg", 0), ldr.get("shots", 0),
                                 ldr.get("shooting_pct", ""),
-                                1 if ldr.get("rookie") else 0,
+                                bool(ldr.get("rookie")),
                                 photo, logo,
                             ),
                         )
@@ -32443,7 +32443,7 @@ async def admin_populate_league_cache(league: str, token_data: dict = Depends(ve
                         ldr.get("ppg", 0), ldr.get("ppa", 0),
                         ldr.get("shg", 0), ldr.get("shots", 0),
                         ldr.get("shooting_pct", ""),
-                        1 if ldr.get("rookie") else 0,
+                        bool(ldr.get("rookie")),
                         photo, logo,
                     ),
                 )
