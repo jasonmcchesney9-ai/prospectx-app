@@ -32,6 +32,7 @@ import {
   Unlink,
   Zap,
   Printer,
+  Dumbbell,
 } from "lucide-react";
 import BenchCardView from "@/components/BenchCardView";
 import NavBar from "@/components/NavBar";
@@ -129,6 +130,9 @@ function WarRoom() {
   const [selectedFilmSession, setSelectedFilmSession] = useState<string | null>(null);
   const [benchCardContent, setBenchCardContent] = useState<string | null>(null);
   const [benchCardLoading, setBenchCardLoading] = useState(false);
+  const [drillRecs, setDrillRecs] = useState<{ id: string; name: string; category: string; description: string; duration: number; intensity: string; tags: string; skill_focus?: string }[]>([]);
+  const [drillRecsLoading, setDrillRecsLoading] = useState(false);
+  const [selectedDrillIds, setSelectedDrillIds] = useState<string[]>([]);
 
   /* ── Derived ───────────────────────────────────────────── */
   const teamName = teams.find((t) => t.id === teamId)?.name || "";
@@ -244,6 +248,23 @@ function WarRoom() {
   }, [sessionId]);
 
   useEffect(() => { loadLinkedClips(); }, [loadLinkedClips]);
+
+  /* ── Fetch drill recommendations ────────────────────────── */
+  useEffect(() => {
+    if (!sessionId || loading) return;
+    let cancelled = false;
+    (async () => {
+      setDrillRecsLoading(true);
+      try {
+        const { data } = await api.get<{ drills: typeof drillRecs }>(`/chalk-talk/sessions/${sessionId}/drill-recommendations`);
+        if (!cancelled && data.drills && data.drills.length > 0) {
+          setDrillRecs(data.drills);
+        }
+      } catch { /* non-fatal */ }
+      finally { if (!cancelled) setDrillRecsLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, loading]);
 
   const handlePrintBenchCard = async () => {
     setBenchCardLoading(true);
@@ -873,6 +894,86 @@ function WarRoom() {
             )}
           </div>
         </div>
+
+        {/* ── Drill Recommendations ───────────────────────────── */}
+        {drillRecs.length > 0 && (
+          <div className="mt-4 rounded-xl overflow-hidden" style={{ border: "1.5px solid #DDE6EF", borderLeft: "3px solid #0D9488", background: "#FFFFFF" }}>
+            <div className="px-5 py-3 flex items-center justify-between" style={{ background: "#0F2942" }}>
+              <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 2, color: "#FFFFFF" }}>
+                <Dumbbell size={14} style={{ color: "#0D9488" }} />
+                Recommended Drills
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: "rgba(13,148,136,0.15)", color: "#0D9488" }}>
+                  {drillRecs.length}
+                </span>
+              </h3>
+              <span className="text-[10px] uppercase font-semibold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "rgba(255,255,255,0.4)" }}>
+                Matched from your drill library
+              </span>
+            </div>
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {drillRecs.map((drill) => {
+                const isSelected = selectedDrillIds.includes(drill.id);
+                let tagList: string[] = [];
+                try { tagList = typeof drill.tags === "string" ? JSON.parse(drill.tags) : (drill.tags || []); } catch { /* */ }
+                return (
+                  <div
+                    key={drill.id}
+                    className="rounded-lg p-4 transition-all"
+                    style={{
+                      border: isSelected ? "1.5px solid #0D9488" : "1.5px solid #E8EFF5",
+                      background: isSelected ? "rgba(13,148,136,0.04)" : "#FFFFFF",
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h4 className="text-sm font-bold" style={{ color: "#0F2942" }}>{drill.name}</h4>
+                      <span
+                        className="shrink-0 px-2 py-0.5 rounded text-[9px] font-bold uppercase"
+                        style={{
+                          fontFamily: "ui-monospace, monospace",
+                          letterSpacing: 0.5,
+                          background: drill.intensity === "high" ? "rgba(220,38,38,0.08)" : drill.intensity === "low" ? "rgba(13,148,136,0.08)" : "rgba(245,158,11,0.08)",
+                          color: drill.intensity === "high" ? "#DC2626" : drill.intensity === "low" ? "#0D9488" : "#F59E0B",
+                        }}
+                      >
+                        {drill.intensity}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed mb-3" style={{ color: "#5A7291" }}>
+                      {drill.description}
+                    </p>
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <span className="text-[10px] font-semibold" style={{ fontFamily: "ui-monospace, monospace", color: "#0D9488" }}>
+                        {drill.duration} min
+                      </span>
+                      {tagList.slice(0, 3).map((tag, ti) => (
+                        <span key={ti} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(15,41,66,0.06)", color: "#5A7291" }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedDrillIds((prev) =>
+                          prev.includes(drill.id) ? prev.filter((d) => d !== drill.id) : [...prev, drill.id]
+                        );
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                      style={{
+                        fontFamily: "ui-monospace, monospace",
+                        letterSpacing: 1,
+                        background: isSelected ? "#0D9488" : "rgba(13,148,136,0.08)",
+                        color: isSelected ? "#FFFFFF" : "#0D9488",
+                        border: isSelected ? "1.5px solid #0D9488" : "1.5px solid rgba(13,148,136,0.2)",
+                      }}
+                    >
+                      {isSelected ? "✓ Added" : "+ Add to Practice Plan"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Link Clip Modal — two-step: sessions → clips ──── */}
         {showClipModal && (

@@ -25018,6 +25018,106 @@ async def summarize_series_context(series_id: str, current_game_number: int) -> 
         return concatenated[:2000]
 
 
+# ── Drill Recommendation Helpers ──────────────────────────────────────────────
+
+_TACTICAL_KEYWORDS = [
+    "breakout", "forecheck", "cycle", "transition", "gap control",
+    "board play", "net front", "net-front", "one-timer", "one timer",
+    "slot coverage", "slot", "passing", "puck movement", "puck handling",
+    "skating", "edges", "crossovers", "pivots", "agility",
+    "shooting", "wrist shot", "snap shot", "slap shot", "backhand",
+    "defensive zone", "neutral zone", "offensive zone",
+    "power play", "penalty kill", "man advantage", "shorthanded",
+    "pp", "pk", "special teams",
+    "faceoff", "face-off", "faceoffs",
+    "dump and chase", "dump-and-chase", "chip and chase",
+    "regroup", "regrouping",
+    "support", "spacing", "lane", "layers",
+    "pressure", "pinch", "seal", "contain",
+    "backcheck", "back-check", "backchecking",
+    "body position", "stick position", "angling",
+    "zone entry", "zone exit", "carry", "controlled entry",
+    "battle", "compete", "puck protection", "protect the puck",
+    "1-on-1", "one on one", "2-on-1", "3-on-2",
+    "screen", "screening", "deflection", "tip", "redirect",
+    "goalie", "goaltender", "crease",
+    "gap", "stick check", "poke check",
+]
+
+
+def _extract_tactical_keywords(text: str) -> list[str]:
+    """Extract hockey tactical keywords found in text."""
+    if not text:
+        return []
+    lower = text.lower()
+    found = []
+    for kw in _TACTICAL_KEYWORDS:
+        if kw in lower:
+            found.append(kw)
+    return found
+
+
+def _get_drill_recommendations(keywords: list[str], org_id: str, conn, limit: int = 5) -> list[dict]:
+    """Match drills from the library by keyword/tag overlap. Prefers org-owned drills."""
+    if not keywords:
+        return []
+
+    # Build OR conditions for each keyword across searchable fields
+    conditions = []
+    params: list = []
+    for kw in keywords:
+        like_val = f"%{kw}%"
+        conditions.append(
+            "(LOWER(name) LIKE ? OR LOWER(COALESCE(description,'')) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ? "
+            "OR LOWER(COALESCE(category,'')) LIKE ? OR LOWER(COALESCE(skill_focus,'')) LIKE ?)"
+        )
+        params.extend([like_val] * 5)
+
+    where_clause = " OR ".join(conditions)
+
+    # Query: count keyword matches per drill, prefer org-owned
+    query = f"""
+        SELECT id, name, category, description, duration_minutes, intensity, tags, skill_focus, diagram_data,
+               CASE WHEN org_id = ? THEN 1 ELSE 0 END AS is_org_owned,
+               ({' + '.join([
+                   f"(CASE WHEN (LOWER(name) LIKE ? OR LOWER(COALESCE(description,'')) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ? OR LOWER(COALESCE(category,'')) LIKE ? OR LOWER(COALESCE(skill_focus,'')) LIKE ?) THEN 1 ELSE 0 END)"
+                   for _ in keywords
+               ])}) AS match_score
+        FROM drills
+        WHERE ({where_clause})
+        ORDER BY is_org_owned DESC, match_score DESC, name ASC
+        LIMIT ?
+    """
+    # params: org_id for CASE, then per-keyword params for match_score, then per-keyword params for WHERE, then limit
+    score_params: list = []
+    for kw in keywords:
+        like_val = f"%{kw}%"
+        score_params.extend([like_val] * 5)
+
+    all_params = [org_id] + score_params + params + [limit]
+
+    try:
+        rows = conn.execute(query, all_params).fetchall()
+    except Exception as e:
+        logger.warning("Drill recommendation query failed: %s", str(e))
+        return []
+
+    results = []
+    for row in rows:
+        desc = row["description"] if hasattr(row, "keys") else row[3]
+        results.append({
+            "id": row["id"] if hasattr(row, "keys") else row[0],
+            "name": row["name"] if hasattr(row, "keys") else row[1],
+            "category": row["category"] if hasattr(row, "keys") else row[2],
+            "description": (desc or "")[:200],
+            "duration": row["duration_minutes"] if hasattr(row, "keys") else row[4],
+            "intensity": row["intensity"] if hasattr(row, "keys") else row[5],
+            "tags": row["tags"] if hasattr(row, "keys") else row[6],
+            "skill_focus": row["skill_focus"] if hasattr(row, "keys") else row[7],
+        })
+    return results
+
+
 async def _generate_team_report(request, org_id: str, user_id: str, conn):
     """Generate a team-level report (team_identity, opponent_gameplan, etc.)."""
     team_name = request.team_name
@@ -25306,6 +25406,31 @@ This report was generated in demo mode. Add your API key to backend/.env and re-
 """
             logger.info("No Anthropic API key — generated mock team report for %s", team_name)
 
+        # ── Append drill recommendations for opponent_gameplan ──
+        _drill_rec_ids: list[str] = []
+        if request.report_type == "opponent_gameplan":
+            try:
+                _tac_keywords = _extract_tactical_keywords(output_text)
+                if _tac_keywords:
+                    _drill_recs = _get_drill_recommendations(_tac_keywords[:15], org_id, conn, limit=5)
+                    if _drill_recs:
+                        _drill_rec_ids = [d["id"] for d in _drill_recs]
+                        _drill_section = "\n\n=== RECOMMENDED PRACTICE DRILLS ===\nBased on the tactical priorities identified in this Game Plan:\n"
+                        for _di, _drill in enumerate(_drill_recs, 1):
+                            _drill_section += f"\n{_di}. {_drill['name']} — {_drill.get('duration', 10)} min, {_drill.get('intensity', 'medium')} intensity\n"
+                            _drill_section += f"   {_drill['description']}\n"
+                            _tags_str = _drill.get('tags', '[]')
+                            if _tags_str and _tags_str != '[]':
+                                try:
+                                    _tag_list = json.loads(_tags_str) if isinstance(_tags_str, str) else _tags_str
+                                    _drill_section += f"   Focus: {', '.join(_tag_list)}\n"
+                                except Exception:
+                                    _drill_section += f"   Focus: {_tags_str}\n"
+                        output_text += _drill_section
+                        logger.info("Appended %d drill recommendations to opponent_gameplan %s", len(_drill_recs), report_id)
+            except Exception as dre:
+                logger.warning("Drill recommendation append failed (non-fatal): %s", str(dre))
+
         generation_ms = int((time.perf_counter() - start_time) * 1000)
 
         # Score quality
@@ -25321,6 +25446,18 @@ This report was generated in demo mode. Add your API key to backend/.env and re-
         conn.commit()
 
         logger.info("Team report generated: %s (%s) in %d ms, quality=%.1f", title, request.report_type, generation_ms, quality["score"])
+
+        # Store drill recommendation IDs in input_data for later retrieval
+        if _drill_rec_ids:
+            try:
+                existing_input = conn.execute("SELECT input_data FROM reports WHERE id = ?", (report_id,)).fetchone()
+                _inp = json.loads(existing_input[0]) if existing_input and existing_input[0] else {}
+                _inp["drill_recommendation_ids"] = _drill_rec_ids
+                conn.execute("UPDATE reports SET input_data = ? WHERE id = ?", (json.dumps(_inp, default=str), report_id))
+                conn.commit()
+            except Exception as _dre2:
+                logger.warning("Failed to store drill rec IDs (non-fatal): %s", str(_dre2))
+
         # Track report usage
         _increment_usage(user_id, "report", report_id, org_id, conn)
 
@@ -25440,6 +25577,106 @@ async def extract_bench_card(
                         return {"found": True, "content": match.group(1).strip(), "source": "opponent_gameplan"}
 
         return {"found": False, "content": "", "source": ""}
+    finally:
+        conn.close()
+
+
+@app.get("/reports/{report_id}/drill-recommendations")
+async def get_report_drill_recommendations(report_id: str, token_data: dict = Depends(verify_token)):
+    """Return drill recommendations for a generated Game Plan report.
+
+    First checks stored drill IDs in input_data. If not found, re-runs matching
+    from the report output text.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT output_text, input_data, report_type FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        output_text = row["output_text"] if hasattr(row, "keys") else row[0]
+        input_data_str = row["input_data"] if hasattr(row, "keys") else row[1]
+
+        # Try stored drill IDs first
+        drill_ids: list[str] = []
+        if input_data_str:
+            try:
+                _inp = json.loads(input_data_str) if isinstance(input_data_str, str) else input_data_str
+                drill_ids = _inp.get("drill_recommendation_ids", [])
+            except Exception:
+                pass
+
+        if drill_ids:
+            placeholders = ",".join(["?" for _ in drill_ids])
+            drill_rows = conn.execute(
+                f"SELECT id, name, category, description, duration_minutes, intensity, tags, skill_focus, diagram_data FROM drills WHERE id IN ({placeholders})",
+                drill_ids,
+            ).fetchall()
+            drills = []
+            for dr in drill_rows:
+                drills.append({
+                    "id": dr["id"] if hasattr(dr, "keys") else dr[0],
+                    "name": dr["name"] if hasattr(dr, "keys") else dr[1],
+                    "category": dr["category"] if hasattr(dr, "keys") else dr[2],
+                    "description": (dr["description"] if hasattr(dr, "keys") else dr[3] or "")[:200],
+                    "duration": dr["duration_minutes"] if hasattr(dr, "keys") else dr[4],
+                    "intensity": dr["intensity"] if hasattr(dr, "keys") else dr[5],
+                    "tags": dr["tags"] if hasattr(dr, "keys") else dr[6],
+                    "skill_focus": dr["skill_focus"] if hasattr(dr, "keys") else dr[7],
+                    "has_diagram": bool(dr["diagram_data"] if hasattr(dr, "keys") else dr[8]),
+                })
+            return {"drills": drills, "source": "stored"}
+
+        # Fallback: re-run matching from report output
+        if output_text:
+            keywords = _extract_tactical_keywords(output_text)
+            if keywords:
+                recs = _get_drill_recommendations(keywords[:15], org_id, conn, limit=5)
+                return {"drills": recs, "source": "matched"}
+
+        return {"drills": [], "source": "none"}
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk/sessions/{session_id}/drill-recommendations")
+async def get_session_drill_recommendations(session_id: str, token_data: dict = Depends(verify_token)):
+    """Return drill recommendations based on a chalk talk session's tactical content.
+
+    Extracts keywords from opponent_analysis, our_strategy, keys_to_game, and system fields,
+    then matches against the drill library.
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        sess = conn.execute(
+            "SELECT opponent_analysis, our_strategy, keys_to_game, forecheck, breakout, defensive_system FROM chalk_talk_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not sess:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Combine all tactical text fields
+        text_parts = []
+        for field in ["opponent_analysis", "our_strategy", "keys_to_game", "forecheck", "breakout", "defensive_system"]:
+            val = sess[field] if hasattr(sess, "keys") else None
+            if val:
+                text_parts.append(str(val))
+
+        combined_text = " ".join(text_parts)
+        if not combined_text.strip():
+            return {"drills": [], "source": "no_content"}
+
+        keywords = _extract_tactical_keywords(combined_text)
+        if not keywords:
+            return {"drills": [], "source": "no_keywords"}
+
+        drills = _get_drill_recommendations(keywords[:15], org_id, conn, limit=5)
+        return {"drills": drills, "source": "session_matched"}
     finally:
         conn.close()
 
