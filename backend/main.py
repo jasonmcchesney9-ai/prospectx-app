@@ -4591,6 +4591,7 @@ def init_db():
         ("game_number", "INTEGER"),
         ("game_result", "TEXT"),
         ("game_score", "TEXT"),
+        ("opponent", "TEXT"),
     ]:
         if col_name not in cts_cols:
             try:
