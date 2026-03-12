@@ -20,6 +20,9 @@ import {
   Users,
   Zap,
   Download,
+  Sparkles,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -158,6 +161,8 @@ function SeriesDetail() {
   const [creatingSession, setCreatingSession] = useState<number | null>(null);
   const [stateSummaries, setStateSummaries] = useState<StateSummary[]>([]);
   const [generatingState, setGeneratingState] = useState<number | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+  const [analyseError, setAnalyseError] = useState("");
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -308,6 +313,35 @@ function SeriesDetail() {
 
   const handleStatusChange = (newStatus: string) => {
     saveField({ status: newStatus });
+  };
+
+  const handlePxiAnalyse = async () => {
+    if (!series || analysing) return;
+    setAnalysing(true);
+    setAnalyseError("");
+    try {
+      // 1. Generate playoff_series report
+      const genRes = await api.post<{ report_id: string; status: string; title?: string }>("/reports/generate", {
+        report_type: "playoff_series",
+        team_name: series.opponent_team_name,
+        series_id: seriesId,
+      });
+      const reportId = genRes.data.report_id;
+
+      // 2. Link report to this series
+      await api.post(`/chalk-talk/series/${seriesId}/link-report`, { report_id: reportId });
+
+      // 3. Switch to Dossier tab
+      setActiveTab("dossier");
+      toast.success("Series intelligence generated");
+    } catch (err: unknown) {
+      const msg = (err && typeof err === "object" && "response" in err)
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || "PXI analysis failed. Please try again.")
+        : "PXI analysis failed. Please try again.";
+      setAnalyseError(typeof msg === "string" ? msg : "PXI analysis failed. Please try again.");
+    } finally {
+      setAnalysing(false);
+    }
   };
 
   // ── Overview handlers ──────────────────────────────────────
@@ -479,6 +513,16 @@ function SeriesDetail() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={handlePxiAnalyse}
+            disabled={analysing}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90 no-print disabled:opacity-50"
+            style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: analysing ? "rgba(13,148,136,0.08)" : "rgba(13,148,136,0.1)", color: "#0D9488", border: "1.5px solid rgba(13,148,136,0.2)" }}
+            title="Generate PXI series intelligence report"
+          >
+            {analysing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {analysing ? "Analysing…" : "PXI Analyse Series"}
+          </button>
+          <button
             onClick={handleDownloadPDF}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal border border-teal/20 rounded-lg text-xs font-semibold hover:bg-teal/20 transition-colors no-print"
             title="Download as PDF"
@@ -547,6 +591,23 @@ function SeriesDetail() {
         <div className="flex items-center justify-center gap-2 text-xs text-teal mb-3">
           <div className="animate-spin rounded-full h-3 w-3 border border-teal border-t-transparent" />
           Saving...
+        </div>
+      )}
+
+      {/* ── PXI Analyse status banners ────────────────────── */}
+      {analysing && (
+        <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4 text-xs font-oswald uppercase tracking-wider" style={{ background: "rgba(13,148,136,0.06)", border: "1.5px solid rgba(13,148,136,0.2)", color: "#0D9488" }}>
+          <Loader2 size={14} className="animate-spin" />
+          Generating Series Intelligence…
+        </div>
+      )}
+      {analyseError && (
+        <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4 text-xs font-bold" style={{ background: "rgba(249,158,11,0.06)", border: "1.5px solid #F59E0B", color: "#F59E0B" }}>
+          <AlertCircle size={14} />
+          <span>{analyseError}</span>
+          <button onClick={() => setAnalyseError("")} className="ml-auto opacity-60 hover:opacity-100">
+            <X size={12} />
+          </button>
         </div>
       )}
 
