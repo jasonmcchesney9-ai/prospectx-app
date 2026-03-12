@@ -20029,7 +20029,9 @@ def _get_plan_with_drills(conn, plan_id: str, org_id: str) -> Optional[dict]:
                d.concept_id as drill_concept_id,
                d.age_levels as drill_age_levels, d.tags as drill_tags,
                d.equipment as drill_equipment,
-               d.diagram_url as drill_diagram_url
+               d.diagram_url as drill_diagram_url,
+               d.diagram_data as drill_diagram_data,
+               d.players_needed as drill_players_needed
         FROM practice_plan_drills ppd
         LEFT JOIN drills d ON ppd.drill_id = d.id
         WHERE ppd.practice_plan_id = ?
@@ -20040,6 +20042,15 @@ def _get_plan_with_drills(conn, plan_id: str, org_id: str) -> Optional[dict]:
         dd = dict(dr)
         dd["drill_age_levels"] = json.loads(dd.get("drill_age_levels") or "[]")
         dd["drill_tags"] = json.loads(dd.get("drill_tags") or "[]")
+        # Parse drill_diagram_data from JSON string
+        ddata = dd.get("drill_diagram_data")
+        if ddata and isinstance(ddata, str):
+            try:
+                dd["drill_diagram_data"] = json.loads(ddata)
+            except (json.JSONDecodeError, TypeError):
+                dd["drill_diagram_data"] = None
+        elif not ddata:
+            dd["drill_diagram_data"] = None
         plan["drills"].append(dd)
     return plan
 

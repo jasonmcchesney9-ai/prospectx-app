@@ -15,6 +15,10 @@ import {
   CheckCircle2,
   X,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -47,6 +51,10 @@ export default function PracticePlanDetailPage() {
   const [plan, setPlan] = useState<PracticePlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Drill expand/collapse state
+  const [expandedDrills, setExpandedDrills] = useState<Set<string>>(new Set());
+  const [allExpanded, setAllExpanded] = useState(false);
 
   // Completion modal state
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -148,6 +156,31 @@ export default function PracticePlanDetailPage() {
     setTimeout(() => {
       document.title = prevTitle;
     }, 1000);
+  };
+
+  const toggleDrill = (key: string) => {
+    setExpandedDrills((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAllDrills = () => {
+    if (allExpanded) {
+      setExpandedDrills(new Set());
+      setAllExpanded(false);
+    } else {
+      const allKeys = new Set<string>();
+      phases.forEach((phase, pi) => {
+        phase.drills?.forEach((_: unknown, di: number) => {
+          allKeys.add(`${pi}-${di}`);
+        });
+      });
+      setExpandedDrills(allKeys);
+      setAllExpanded(true);
+    }
   };
 
   const handleOpenCompleteModal = async () => {
@@ -340,6 +373,16 @@ export default function PracticePlanDetailPage() {
         {/* Phase Sections */}
         {phases.length > 0 ? (
           <div className="space-y-4">
+            {/* Expand All / Collapse All */}
+            <div className="flex justify-end print:hidden">
+              <button
+                onClick={toggleAllDrills}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider text-muted hover:text-navy transition-colors"
+              >
+                {allExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                {allExpanded ? "Collapse All Drills" : "Expand All Drills"}
+              </button>
+            </div>
             {phases.map((phase, phaseIdx) => {
               const ps = PHASE_STYLES[phase.phase] || PHASE_STYLES.skill_work;
               const time = runningTimes[phaseIdx];
@@ -374,13 +417,32 @@ export default function PracticePlanDetailPage() {
                         drill_ice_surface?: string;
                         drill_equipment?: string;
                         drill_diagram_url?: string | null;
+                        drill_diagram_data?: unknown;
+                        drill_players_needed?: number;
                       };
                       const ic = d.drill_intensity ? INTENSITY_COLORS[d.drill_intensity] : null;
+                      const drillKey = `${phaseIdx}-${drillIdx}`;
+                      const isExpanded = expandedDrills.has(drillKey);
+                      const hasDetails = !!(d.drill_setup || d.drill_description || d.drill_coaching_points || d.coaching_notes || d.drill_diagram_url || d.drill_ice_surface || d.drill_equipment || d.drill_players_needed);
 
                       return (
                         <div key={drillIdx} className="px-5 py-4">
-                          <div className="flex items-start justify-between mb-1">
+                          {/* Always-visible header — click to expand */}
+                          <div
+                            role="button"
+                            tabIndex={hasDetails ? 0 : undefined}
+                            onClick={() => hasDetails && toggleDrill(drillKey)}
+                            onKeyDown={(e) => { if (hasDetails && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleDrill(drillKey); } }}
+                            className={`flex items-start justify-between w-full text-left ${hasDetails ? "cursor-pointer" : "cursor-default"}`}
+                          >
                             <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {hasDetails ? (
+                                isExpanded
+                                  ? <ChevronDown size={14} className="text-teal shrink-0 mt-0.5 print:hidden" />
+                                  : <ChevronRight size={14} className="text-navy/30 shrink-0 mt-0.5 print:hidden" />
+                              ) : (
+                                <span className="w-3.5 shrink-0 print:hidden" />
+                              )}
                               <span className="text-xs font-oswald font-bold text-navy/30 w-5 shrink-0">
                                 {drillIdx + 1}
                               </span>
@@ -404,56 +466,62 @@ export default function PracticePlanDetailPage() {
                             </span>
                           </div>
 
-                          {/* Drill Diagram */}
-                          {d.drill_diagram_url && (
-                            <div className="ml-7 mt-2 mb-1">
-                              <img
-                                src={assetUrl(d.drill_diagram_url)}
-                                alt={`${d.drill_name} diagram`}
-                                className="max-w-[300px] max-h-36 object-contain rounded border border-teal/8 bg-white p-1"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                              />
-                            </div>
-                          )}
+                          {/* Collapsible drill details */}
+                          <div className={`drill-details ${isExpanded ? "" : "hidden print:block"}`}>
+                            {/* Drill Diagram */}
+                            {d.drill_diagram_url && (
+                              <div className="ml-9 mt-2 mb-1">
+                                <img
+                                  src={assetUrl(d.drill_diagram_url)}
+                                  alt={`${d.drill_name} diagram`}
+                                  className="max-w-[300px] max-h-36 object-contain rounded border border-teal/8 bg-white p-1"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                />
+                              </div>
+                            )}
 
-                          {/* Drill details */}
-                          {d.drill_setup && (
-                            <div className="ml-7 mt-2">
-                              <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Setup: </span>
-                              <span className="text-xs text-navy/60">{d.drill_setup}</span>
-                            </div>
-                          )}
+                            {/* Drill details */}
+                            {d.drill_setup && (
+                              <div className="ml-9 mt-2">
+                                <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">Setup: </span>
+                                <span className="text-xs text-navy/60">{d.drill_setup}</span>
+                              </div>
+                            )}
 
-                          {d.drill_description && (
-                            <p className="ml-7 mt-1 text-xs text-navy/70 leading-relaxed">{d.drill_description}</p>
-                          )}
+                            {d.drill_description && (
+                              <p className="ml-9 mt-1 text-xs text-navy/70 leading-relaxed">{d.drill_description}</p>
+                            )}
 
-                          {d.drill_coaching_points && (
-                            <div className="ml-7 mt-2">
-                              <span className="text-[10px] font-oswald uppercase tracking-wider text-teal">Coaching Points: </span>
-                              <span className="text-xs text-navy/60">{d.drill_coaching_points}</span>
-                            </div>
-                          )}
+                            {d.drill_coaching_points && (
+                              <div className="ml-9 mt-2">
+                                <span className="text-[10px] font-oswald uppercase tracking-wider text-teal">Coaching Points: </span>
+                                <span className="text-xs text-navy/60">{d.drill_coaching_points}</span>
+                              </div>
+                            )}
 
-                          {/* AI coaching notes for this specific drill in the plan */}
-                          {d.coaching_notes && (
-                            <div className="ml-7 mt-2 pl-3 border-l-2 border-orange/30">
-                              <span className="text-[10px] font-oswald uppercase tracking-wider text-orange">Plan Notes: </span>
-                              <span className="text-xs text-navy/60 italic">{d.coaching_notes}</span>
-                            </div>
-                          )}
+                            {/* AI coaching notes for this specific drill in the plan */}
+                            {d.coaching_notes && (
+                              <div className="ml-9 mt-2 pl-3 border-l-2 border-orange/30">
+                                <span className="text-[10px] font-oswald uppercase tracking-wider text-orange">Plan Notes: </span>
+                                <span className="text-xs text-navy/60 italic">{d.coaching_notes}</span>
+                              </div>
+                            )}
 
-                          {/* Extra metadata row */}
-                          {(d.drill_ice_surface || d.drill_equipment) && (
-                            <div className="ml-7 mt-2 flex items-center gap-3 text-[10px] text-muted/60">
-                              {d.drill_ice_surface && (
-                                <span>{ICE_SURFACES[d.drill_ice_surface] || d.drill_ice_surface}</span>
-                              )}
-                              {d.drill_equipment && d.drill_equipment !== "None" && (
-                                <span>Equipment: {d.drill_equipment}</span>
-                              )}
-                            </div>
-                          )}
+                            {/* Extra metadata row */}
+                            {(d.drill_ice_surface || d.drill_equipment || d.drill_players_needed) && (
+                              <div className="ml-9 mt-2 flex items-center gap-3 text-[10px] text-muted/60">
+                                {d.drill_ice_surface && (
+                                  <span>{ICE_SURFACES[d.drill_ice_surface] || d.drill_ice_surface}</span>
+                                )}
+                                {d.drill_equipment && d.drill_equipment !== "None" && (
+                                  <span>Equipment: {d.drill_equipment}</span>
+                                )}
+                                {d.drill_players_needed && d.drill_players_needed > 0 && (
+                                  <span>Players: {d.drill_players_needed}+</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

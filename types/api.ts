@@ -1962,6 +1962,8 @@ export interface PracticePlanDrill {
   drill_tags?: string[];
   drill_equipment?: string;
   drill_diagram_url?: string | null;
+  drill_diagram_data?: unknown;
+  drill_players_needed?: number;
 }
 
 export interface PracticePlan {
