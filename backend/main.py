@@ -4582,6 +4582,8 @@ def init_db():
     for col_name, col_type in [
         ("series_plan_id", "TEXT"),
         ("game_number", "INTEGER"),
+        ("game_result", "TEXT"),
+        ("game_score", "TEXT"),
     ]:
         if col_name not in cts_cols:
             try:
@@ -46956,13 +46958,88 @@ async def get_series_linked_games(series_id: str, token_data: dict = Depends(ver
     try:
         rows = conn.execute(
             """SELECT id, game_number, session_type, status, created_at, game_date,
-                      opponent_team_id, chalk_talk_id, team_id
+                      opponent_team_id, chalk_talk_id, team_id, game_result, game_score
                FROM chalk_talk_sessions
                WHERE series_plan_id = ? AND org_id = ?
                ORDER BY game_number ASC, created_at ASC""",
             (series_id, org_id),
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.patch("/chalk-talk/sessions/{session_id}/result")
+async def update_session_result(session_id: str, body: dict, token_data: dict = Depends(verify_token)):
+    """Update the game result and score for a chalk_talk_session."""
+    org_id = token_data["org_id"]
+    game_result = body.get("game_result")  # 'win', 'loss', 'otl', or None
+    game_score = body.get("game_score")    # e.g. "4-2", "3-1 OT"
+    if game_result and game_result not in ("win", "loss", "otl"):
+        raise HTTPException(status_code=400, detail="game_result must be 'win', 'loss', 'otl', or null")
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM chalk_talk_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Session not found")
+        conn.execute(
+            "UPDATE chalk_talk_sessions SET game_result = ?, game_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (game_result, game_score, session_id),
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT id, game_number, session_type, status, created_at, game_date, game_result, game_score FROM chalk_talk_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        return dict(updated)
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk/series/{series_id}/score")
+async def get_series_score(series_id: str, token_data: dict = Depends(verify_token)):
+    """Compute series score from chalk_talk_sessions with game results."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Get series plan for team names
+        sp = conn.execute(
+            "SELECT team_name, opponent_team_name FROM series_plans WHERE id = ? AND org_id = ?",
+            (series_id, org_id),
+        ).fetchone()
+        team_name = (sp["team_name"] if hasattr(sp, "keys") else sp[0]) if sp else "Your Team"
+        opponent_name = (sp["opponent_team_name"] if hasattr(sp, "keys") else sp[1]) if sp else "Opponent"
+
+        rows = conn.execute(
+            "SELECT game_result FROM chalk_talk_sessions WHERE series_plan_id = ? AND org_id = ? AND game_result IS NOT NULL",
+            (series_id, org_id),
+        ).fetchall()
+        wins = sum(1 for r in rows if (r["game_result"] if hasattr(r, "keys") else r[0]) == "win")
+        losses = sum(1 for r in rows if (r["game_result"] if hasattr(r, "keys") else r[0]) == "loss")
+        otl = sum(1 for r in rows if (r["game_result"] if hasattr(r, "keys") else r[0]) == "otl")
+        games_played = wins + losses + otl
+
+        if games_played == 0:
+            summary = "Series not started"
+        elif wins > losses:
+            summary = f"{team_name} leads {wins}-{losses}" + (f"-{otl}" if otl else "")
+        elif losses > wins:
+            summary = f"{opponent_name} leads {losses}-{wins}" + (f"-{otl}" if otl else "")
+        else:
+            summary = f"Series tied {wins}-{losses}" + (f"-{otl}" if otl else "")
+
+        return {
+            "your_wins": wins,
+            "opponent_wins": losses,
+            "otl": otl,
+            "games_played": games_played,
+            "summary": summary,
+            "team_name": team_name,
+            "opponent_name": opponent_name,
+        }
     finally:
         conn.close()
 

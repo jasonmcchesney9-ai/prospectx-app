@@ -114,6 +114,8 @@ interface GameSession {
   session_type: string;
   status: string;
   created_at: string;
+  game_result?: string | null;
+  game_score?: string | null;
 }
 
 interface StateSummary {
@@ -206,6 +208,7 @@ function SeriesDetail() {
   const [showTiModal, setShowTiModal] = useState(false);
   const [tiChecks, setTiChecks] = useState<{ team: boolean; opponent: boolean }>({ team: false, opponent: false });
   const [tiGenerating, setTiGenerating] = useState<string | null>(null);
+  const [seriesScore, setSeriesScore] = useState<{ your_wins: number; opponent_wins: number; otl: number; games_played: number; summary: string } | null>(null);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -303,7 +306,17 @@ function SeriesDetail() {
     return () => { cancelled = true; };
   }, [activeTab, seriesId, dossierFetchKey]);
 
-  // ── Fetch linked game plans when Games tab activates ──
+  // ── Fetch linked game plans + series score when Games tab activates ──
+  const fetchSeriesScore = useCallback(async () => {
+    if (!seriesId) return;
+    try {
+      const { data } = await api.get<{ your_wins: number; opponent_wins: number; otl: number; games_played: number; summary: string }>(`/chalk-talk/series/${seriesId}/score`);
+      setSeriesScore(data);
+    } catch {
+      /* non-fatal */
+    }
+  }, [seriesId]);
+
   useEffect(() => {
     if (activeTab !== "games" || !seriesId) return;
     let cancelled = false;
@@ -319,8 +332,9 @@ function SeriesDetail() {
       }
     }
     fetchLinkedGames();
+    fetchSeriesScore();
     return () => { cancelled = true; };
-  }, [activeTab, seriesId]);
+  }, [activeTab, seriesId, fetchSeriesScore]);
 
   // ── Save helper ────────────────────────────────────────────
   const saveField = useCallback(async (updates: Record<string, unknown>) => {
@@ -381,6 +395,16 @@ function SeriesDetail() {
       toast.error("Failed to create game plan");
     } finally {
       setAddingGamePlan(false);
+    }
+  };
+
+  const handleUpdateResult = async (sessionId: string, game_result: string | null, game_score: string | null) => {
+    try {
+      const { data } = await api.patch<GameSession>(`/chalk-talk/sessions/${sessionId}/result`, { game_result, game_score });
+      setLinkedGames(prev => prev.map(g => g.id === sessionId ? { ...g, game_result: data.game_result, game_score: data.game_score } : g));
+      fetchSeriesScore();
+    } catch {
+      toast.error("Failed to update game result");
     }
   };
 
@@ -1093,6 +1117,18 @@ function SeriesDetail() {
       {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Game Notes</h2>}
       {(activeTab === "games" || printMode) && (
         <div className="space-y-4">
+          {/* Series Score Header */}
+          {seriesScore && seriesScore.games_played > 0 && (
+            <div className="bg-white rounded-xl border p-4 text-center" style={{ borderColor: "rgba(13,148,136,0.2)" }}>
+              <p className="text-lg font-oswald font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                {seriesScore.summary}
+              </p>
+              <p className="text-xs mt-1" style={{ color: "rgba(15,41,66,0.5)" }}>
+                {seriesScore.games_played} game{seriesScore.games_played !== 1 ? "s" : ""} played
+              </p>
+            </div>
+          )}
+
           {/* Linked Game Plans (War Room Sessions) */}
           <div className="bg-white rounded-xl border p-5" style={{ borderColor: "rgba(13,148,136,0.2)" }}>
             <div className="flex items-center justify-between mb-4">
@@ -1127,42 +1163,91 @@ function SeriesDetail() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {linkedGames.map((g) => (
-                  <Link
+                  <div
                     key={g.id}
-                    href={`/chalk-talk/sessions/${g.id}`}
-                    className="flex items-center justify-between px-4 py-3 rounded-lg border transition-colors hover:shadow-sm"
-                    style={{ borderColor: "rgba(13,148,136,0.15)", backgroundColor: "rgba(13,148,136,0.03)" }}
+                    className="rounded-lg border overflow-hidden"
+                    style={{ borderColor: g.game_result === "win" ? "rgba(22,163,74,0.3)" : g.game_result === "loss" ? "rgba(220,38,38,0.3)" : g.game_result === "otl" ? "rgba(245,158,11,0.3)" : "rgba(13,148,136,0.15)" }}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-oswald font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>
-                        Game {g.game_number}
-                      </span>
-                      {series?.opponent_team_name && (
-                        <span className="text-xs" style={{ color: "rgba(15,41,66,0.6)" }}>
-                          vs {series.opponent_team_name}
+                    <Link
+                      href={`/chalk-talk/sessions/${g.id}`}
+                      className="flex items-center justify-between px-4 py-3 transition-colors hover:shadow-sm"
+                      style={{ backgroundColor: "rgba(13,148,136,0.03)" }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-oswald font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                          Game {g.game_number}
                         </span>
-                      )}
-                      {g.created_at && (
-                        <span className="text-[10px]" style={{ color: "rgba(15,41,66,0.35)" }}>
-                          — {new Date(g.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {series?.opponent_team_name && (
+                          <span className="text-xs" style={{ color: "rgba(15,41,66,0.6)" }}>
+                            vs {series.opponent_team_name}
+                          </span>
+                        )}
+                        {g.game_result && (
+                          <span
+                            className="text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider font-bold"
+                            style={{
+                              backgroundColor: g.game_result === "win" ? "rgba(22,163,74,0.1)" : g.game_result === "loss" ? "rgba(220,38,38,0.1)" : "rgba(245,158,11,0.1)",
+                              color: g.game_result === "win" ? "#16A34A" : g.game_result === "loss" ? "#DC2626" : "#F59E0B",
+                            }}
+                          >
+                            {g.game_result.toUpperCase()}{g.game_score ? ` ${g.game_score}` : ""}
+                          </span>
+                        )}
+                        {g.created_at && (
+                          <span className="text-[10px]" style={{ color: "rgba(15,41,66,0.35)" }}>
+                            — {new Date(g.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider"
+                          style={{
+                            backgroundColor: g.status === "completed" ? "rgba(34,197,94,0.1)" : g.status === "generated" ? "rgba(13,148,136,0.1)" : "rgba(15,41,66,0.06)",
+                            color: g.status === "completed" ? "#16a34a" : g.status === "generated" ? "#0D9488" : "rgba(15,41,66,0.5)",
+                          }}
+                        >
+                          {g.status || "Draft"}
                         </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider"
-                        style={{
-                          backgroundColor: g.status === "completed" ? "rgba(34,197,94,0.1)" : g.status === "generated" ? "rgba(13,148,136,0.1)" : "rgba(15,41,66,0.06)",
-                          color: g.status === "completed" ? "#16a34a" : g.status === "generated" ? "#0D9488" : "rgba(15,41,66,0.5)",
+                        <ChevronRight size={14} style={{ color: "rgba(15,41,66,0.3)" }} />
+                      </div>
+                    </Link>
+                    {/* Result selector row */}
+                    <div className="flex items-center gap-2 px-4 py-2 no-print" style={{ backgroundColor: "rgba(15,41,66,0.02)", borderTop: "1px solid rgba(15,41,66,0.06)" }}>
+                      <span className="text-[10px] font-oswald uppercase tracking-wider mr-1" style={{ color: "rgba(15,41,66,0.4)" }}>Result:</span>
+                      {(["win", "loss", "otl"] as const).map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => handleUpdateResult(g.id, g.game_result === r ? null : r, g.game_score || null)}
+                          className="text-[10px] px-2.5 py-1 rounded font-oswald uppercase tracking-wider font-bold transition-colors"
+                          style={{
+                            backgroundColor: g.game_result === r
+                              ? (r === "win" ? "#16A34A" : r === "loss" ? "#DC2626" : "#F59E0B")
+                              : "rgba(15,41,66,0.06)",
+                            color: g.game_result === r ? "#FFFFFF" : "rgba(15,41,66,0.5)",
+                          }}
+                        >
+                          {r.toUpperCase()}
+                        </button>
+                      ))}
+                      <input
+                        type="text"
+                        placeholder="4-2"
+                        value={g.game_score || ""}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setLinkedGames(prev => prev.map(gm => gm.id === g.id ? { ...gm, game_score: val } : gm));
                         }}
-                      >
-                        {g.status || "Draft"}
-                      </span>
-                      <ChevronRight size={14} style={{ color: "rgba(15,41,66,0.3)" }} />
+                        onBlur={(e) => handleUpdateResult(g.id, g.game_result || null, e.target.value || null)}
+                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        className="text-xs px-2 py-1 rounded border w-16 text-center"
+                        style={{ borderColor: "rgba(15,41,66,0.15)", color: "#0F2942" }}
+                      />
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}
