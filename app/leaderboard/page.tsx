@@ -10,6 +10,8 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import ConfidenceBadge from "@/components/ConfidenceBadge";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 // ── PXR Tier Definitions (from PXR Engine Spec v1.0, Section 6) ──
 const PXR_TIERS = [
@@ -32,13 +34,14 @@ function TierBadge({ score, scoreType }: { score: number | null; scoreType?: str
   if (!tier) return <span className="text-xs text-muted">—</span>;
   if (isEstimated) {
     return (
-      <span
-        className="inline-block px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider"
-        style={{ backgroundColor: "#F59E0B", color: "#422006" }}
-        title="Estimated PXR — calculated from game stats. Full PXR requires advanced microstat data."
-      >
-        PXR~
-      </span>
+      <Tooltip text={TOOLTIPS.leaderboard_est_badge} position="bottom">
+        <span
+          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-oswald font-bold uppercase tracking-wider cursor-help"
+          style={{ backgroundColor: "#F59E0B", color: "#422006" }}
+        >
+          PXR~
+        </span>
+      </Tooltip>
     );
   }
   return (
@@ -86,6 +89,13 @@ interface FilterOptions {
 }
 
 const TABS = ["By League", "By Cohort", "Undervalued", "Top Movers"] as const;
+
+const TAB_TOOLTIP_MAP: Record<string, string> = {
+  "By League": TOOLTIPS.leaderboard_by_league,
+  "By Cohort": TOOLTIPS.leaderboard_by_cohort,
+  "Undervalued": TOOLTIPS.leaderboard_undervalued,
+  "Top Movers": TOOLTIPS.leaderboard_rising,
+};
 type Tab = (typeof TABS)[number];
 
 export default function LeaderboardPage() {
@@ -292,17 +302,18 @@ export default function LeaderboardPage() {
         {/* Tabs */}
         <div className="flex gap-1 mb-6">
           {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
-                activeTab === tab
-                  ? "bg-navy text-white"
-                  : "bg-navy/5 text-navy hover:bg-navy/10"
-              }`}
-            >
-              {tab}
-            </button>
+            <Tooltip key={tab} text={TAB_TOOLTIP_MAP[tab] || ""} position="bottom">
+              <button
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2.5 rounded-lg text-sm font-oswald uppercase tracking-wider transition-colors ${
+                  activeTab === tab
+                    ? "bg-navy text-white"
+                    : "bg-navy/5 text-navy hover:bg-navy/10"
+                }`}
+              >
+                {tab}
+              </button>
+            </Tooltip>
           ))}
         </div>
 
@@ -356,8 +367,8 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PPG" : "PXR Score"}</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title={ppgFallbackMode ? undefined : "League Percentile — ranks this player among all same-position players in their league this season"}>{ppgFallbackMode ? "PXR Status" : "League %"}</th>
-                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>}
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PXR Status" : <Tooltip text={TOOLTIPS.league_pct} position="bottom"><span className="cursor-help">League %</span></Tooltip>}</th>
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>}
@@ -453,8 +464,8 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="League Percentile — ranks this player among all same-position players in their league this season">League %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.league_pct} position="bottom"><span className="cursor-help">League %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
                       </thead>
@@ -538,8 +549,8 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Birth Year</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="League Percentile — ranks this player among all same-position players in their league this season">League %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.league_pct} position="bottom"><span className="cursor-help">League %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Gap</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
@@ -614,7 +625,7 @@ export default function LeaderboardPage() {
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 cursor-help" title="Cohort Percentile — ranks this player among all same-position, same-birth-year players across all leagues">Cohort %</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Advantage</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
                         </tr>
