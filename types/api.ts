@@ -1936,6 +1936,8 @@ export interface Drill {
   concept_id: string | null;
   age_group: string | null;
   country_framework: string | null;
+  is_system_drill?: boolean;
+  diagram_data?: unknown;
   created_at: string;
 }
 

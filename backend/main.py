@@ -3082,6 +3082,17 @@ def init_db():
             conn.commit()
             logger.info("Migration: added %s column to drills", col_name)
 
+    # ── Migration: is_system_drill on drills ──
+    drill_cols = _get_table_columns(conn, "drills")  # refresh
+    if "is_system_drill" not in drill_cols:
+        conn.execute("ALTER TABLE drills ADD COLUMN is_system_drill INTEGER DEFAULT 0")
+        conn.commit()
+        # Back-fill: all seeded drills (org_id IS NULL) become system drills
+        conn.execute("UPDATE drills SET is_system_drill = 1 WHERE org_id IS NULL")
+        conn.commit()
+        logger.info("Migration: added is_system_drill column to drills, back-filled %s system drills",
+                     conn.execute("SELECT COUNT(*) FROM drills WHERE is_system_drill = 1").fetchone()[0])
+
     # ── Migration: PXI mode column on bench_talk_conversations ──
     bt_cols = _get_table_columns(conn, "bench_talk_conversations")
     if "mode" not in bt_cols:
@@ -19877,6 +19888,71 @@ async def delete_drill_diagram(
     return {"detail": "Custom diagram removed, SVG regenerated", "diagram_url": diagram_url}
 
 
+@app.post("/drills/{drill_id}/customize", status_code=201)
+async def customize_drill(
+    drill_id: str,
+    body: dict = Body(default={}),
+    token_data: dict = Depends(verify_token),
+):
+    """Create an org-owned copy of a drill for customization. Original is never modified."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM drills WHERE id = ? AND (org_id IS NULL OR org_id = ?)",
+        (drill_id, org_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Drill not found")
+    original = dict(row)
+    new_id = gen_id()
+    new_name = original["name"] + " (Custom)"
+    # Use supplied diagram_data or copy existing
+    diagram_data = body.get("diagram_data")
+    if diagram_data is None:
+        diagram_data_str = original.get("diagram_data")
+        if diagram_data_str and isinstance(diagram_data_str, str):
+            pass  # already JSON string
+        elif diagram_data_str:
+            diagram_data_str = json.dumps(diagram_data_str)
+        else:
+            diagram_data_str = None
+    else:
+        diagram_data_str = json.dumps(diagram_data)
+    conn.execute("""
+        INSERT INTO drills (id, org_id, name, category, description, coaching_points, setup,
+            duration_minutes, players_needed, ice_surface, equipment, age_levels, tags,
+            diagram_url, skill_focus, intensity, concept_id, diagram_data, age_group,
+            country_framework, is_system_drill, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+    """, (
+        new_id, org_id, new_name,
+        original.get("category", ""),
+        original.get("description", ""),
+        original.get("coaching_points"),
+        original.get("setup"),
+        original.get("duration_minutes", 10),
+        original.get("players_needed", 0),
+        original.get("ice_surface", "full"),
+        original.get("equipment"),
+        original.get("age_levels", "[]"),
+        original.get("tags", "[]"),
+        original.get("diagram_url"),
+        original.get("skill_focus"),
+        original.get("intensity", "medium"),
+        original.get("concept_id"),
+        diagram_data_str,
+        original.get("age_group"),
+        original.get("country_framework"),
+        user_id,
+    ))
+    conn.commit()
+    new_row = conn.execute("SELECT * FROM drills WHERE id = ?", (new_id,)).fetchone()
+    conn.close()
+    return _drill_row_to_dict(new_row)
+
+
 @app.put("/drills/{drill_id}/diagram/canvas")
 async def save_canvas_diagram(
     drill_id: str,
@@ -19887,12 +19963,18 @@ async def save_canvas_diagram(
     org_id = token_data["org_id"]
     conn = get_db()
     row = conn.execute(
-        "SELECT id FROM drills WHERE id = ? AND (org_id IS NULL OR org_id = ?)",
+        "SELECT id, org_id, is_system_drill FROM drills WHERE id = ? AND (org_id IS NULL OR org_id = ?)",
         (drill_id, org_id)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(status_code=404, detail="Drill not found")
+    if row["is_system_drill"]:
+        conn.close()
+        raise HTTPException(status_code=403, detail="System drills are read-only. Use POST /drills/{id}/customize to create an editable copy.")
+    if row["org_id"] is not None and row["org_id"] != org_id:
+        conn.close()
+        raise HTTPException(status_code=403, detail="You can only edit drills owned by your organization.")
 
     diagram_data = body.get("diagram_data")
     svg_string = body.get("svg_string", "")

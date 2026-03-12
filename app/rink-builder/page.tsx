@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle, Search, Trash2, FolderOpen, PanelLeftOpen, PanelLeftClose, ArrowLeft, Calendar, Eye } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
@@ -102,6 +102,7 @@ export default function RinkBuilderPage() {
 
 function RinkBuilderInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const currentUser = getUser();
   const { setActivePxiContext } = useBenchTalk();
 
@@ -353,11 +354,14 @@ function RinkBuilderInner() {
   const drillIdParam = searchParams.get("drill_id");
   const [previewDrillName, setPreviewDrillName] = useState("");
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isSystemDrill, setIsSystemDrill] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
 
   useEffect(() => {
     if (!drillIdParam) return;
     api.get(`/drills/${drillIdParam}`).then(({ data }) => {
       setPreviewDrillName(data.name || "Drill");
+      setIsSystemDrill(!!data.is_system_drill);
       if (data.diagram_data) {
         const raw = typeof data.diagram_data === "string" ? JSON.parse(data.diagram_data) : data.diagram_data;
         const converted = convertApiDiagramData(raw);
@@ -704,12 +708,40 @@ function RinkBuilderInner() {
               <span>
                 Viewing: <strong>{previewDrillName}</strong> — <span className="text-muted">Read Only</span>
               </span>
+              {isSystemDrill && (
+                <span className="ml-2 inline-flex px-2 py-0.5 rounded text-[9px] font-oswald uppercase tracking-wider bg-navy/[0.06] text-navy/50 font-bold">
+                  System
+                </span>
+              )}
             </div>
             <button
-              onClick={() => setIsPreviewMode(false)}
-              className="text-xs font-oswald uppercase tracking-wider text-teal hover:text-teal/80 border border-teal/30 rounded px-3 py-1 hover:bg-teal/5 transition-colors"
+              onClick={async () => {
+                if (!drillIdParam) return;
+                if (isSystemDrill) {
+                  // Create an org-owned copy before editing
+                  setCustomizing(true);
+                  try {
+                    const { data: copy } = await api.post(`/drills/${drillIdParam}/customize`);
+                    setPreviewDrillName(copy.name || "Custom Drill");
+                    setIsSystemDrill(false);
+                    setIsPreviewMode(false);
+                    setChalkSuccess("Created your own copy of this drill");
+                    setTimeout(() => setChalkSuccess(null), 5000);
+                    router.replace(`/rink-builder?drill_id=${copy.id}&mode=edit`);
+                  } catch {
+                    setChalkError("Failed to create copy. Try again.");
+                  } finally {
+                    setCustomizing(false);
+                  }
+                } else {
+                  // Already an org-owned drill — just enter edit mode
+                  setIsPreviewMode(false);
+                }
+              }}
+              disabled={customizing}
+              className="text-xs font-oswald uppercase tracking-wider text-teal hover:text-teal/80 border border-teal/30 rounded px-3 py-1 hover:bg-teal/5 transition-colors disabled:opacity-50"
             >
-              Customize Diagram
+              {customizing ? "Creating copy…" : "Customize Diagram"}
             </button>
           </div>
         )}

@@ -223,6 +223,15 @@ export default function DrillsPage() {
                       <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider bg-navy/[0.05] text-navy/60">
                         {ICE_SURFACES[drill.ice_surface] || drill.ice_surface}
                       </span>
+                      {drill.is_system_drill ? (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider bg-navy/[0.06] text-navy/40 font-bold">
+                          System
+                        </span>
+                      ) : drill.org_id ? (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-oswald uppercase tracking-wider bg-orange/10 text-orange font-bold">
+                          Custom
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-muted">
                       <span className="flex items-center gap-1"><Clock size={10} />{drill.duration_minutes} min</span>
