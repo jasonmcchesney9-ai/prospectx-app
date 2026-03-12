@@ -11199,6 +11199,7 @@ def sync_hockeytech_data_cron():
         now = datetime.utcnow().isoformat()
 
         for code in _HT_LEAGUES:
+            league_start = _time.time()
             try:
                 client = HockeyTechClient(code)
                 season_id = await client.get_current_season_id()
@@ -11206,64 +11207,74 @@ def sync_hockeytech_data_cron():
                     logger.warning("[HT SYNC CRON] %s: no current season found, skipping", code)
                     continue
 
+                logger.info("[HT SYNC CRON] %s: sync started", code)
+
                 # ── Sync game_schedule ──
-                games = await client.get_full_schedule(season_id)
-                for g in games:
-                    ht_game_id = g.get("ht_game_id")
-                    if not ht_game_id:
-                        continue
-                    # Upsert: delete + insert (safe for SQLite + PG)
-                    conn.execute(
-                        "DELETE FROM game_schedule WHERE league = ? AND ht_game_id = ?",
-                        (code, ht_game_id),
-                    )
-                    conn.execute(
-                        """INSERT INTO game_schedule
-                           (id, league, season_id, ht_game_id, game_date, game_date_display,
-                            home_team, away_team, home_team_id, away_team_id,
-                            venue, status, home_score, away_score, synced_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            gen_id(), code, str(season_id), ht_game_id,
-                            g.get("game_date", ""), g.get("game_date_display", ""),
-                            g.get("home_team", ""), g.get("away_team", ""),
-                            g.get("home_team_id"), g.get("away_team_id"),
-                            g.get("venue", ""), g.get("status", "Scheduled"),
-                            g.get("home_score"), g.get("away_score"),
-                            now,
-                        ),
-                    )
-                    total_games += 1
+                games = []
+                try:
+                    games = await client.get_full_schedule(season_id)
+                    for g in games:
+                        ht_game_id = g.get("ht_game_id")
+                        if not ht_game_id:
+                            continue
+                        # Upsert: delete + insert (safe for SQLite + PG)
+                        conn.execute(
+                            "DELETE FROM game_schedule WHERE league = ? AND ht_game_id = ?",
+                            (code, ht_game_id),
+                        )
+                        conn.execute(
+                            """INSERT INTO game_schedule
+                               (id, league, season_id, ht_game_id, game_date, game_date_display,
+                                home_team, away_team, home_team_id, away_team_id,
+                                venue, status, home_score, away_score, synced_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                gen_id(), code, str(season_id), ht_game_id,
+                                g.get("game_date", ""), g.get("game_date_display", ""),
+                                g.get("home_team", ""), g.get("away_team", ""),
+                                g.get("home_team_id"), g.get("away_team_id"),
+                                g.get("venue", ""), g.get("status", "Scheduled"),
+                                g.get("home_score"), g.get("away_score"),
+                                now,
+                            ),
+                        )
+                        total_games += 1
+                except Exception as sched_err:
+                    logger.error("[HT SYNC CRON] %s game_schedule sync failed: %s", code, sched_err)
 
                 # ── Sync ht_team_stats ──
-                team_stats = await client.get_team_stats(season_id)
-                for ts in team_stats:
-                    team_id = ts.get("team_id")
-                    if not team_id:
-                        continue
-                    # Upsert: delete + insert
-                    conn.execute(
-                        "DELETE FROM ht_team_stats WHERE league = ? AND season_id = ? AND team_id = ?",
-                        (code, str(season_id), team_id),
-                    )
-                    conn.execute(
-                        """INSERT INTO ht_team_stats
-                           (id, league, season_id, team_name, team_id,
-                            gp, wins, losses, otl, points, points_pct,
-                            gf, ga, goal_diff, pp_pct, pk_pct, reg_wins, streak, synced_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            gen_id(), code, str(season_id),
-                            ts.get("team_name", ""), team_id,
-                            ts.get("gp", 0), ts.get("wins", 0), ts.get("losses", 0),
-                            ts.get("otl", 0), ts.get("points", 0), ts.get("points_pct", 0),
-                            ts.get("gf", 0), ts.get("ga", 0), ts.get("goal_diff", 0),
-                            ts.get("pp_pct", 0), ts.get("pk_pct", 0),
-                            ts.get("reg_wins", 0), ts.get("streak", ""),
-                            now,
-                        ),
-                    )
-                    total_teams += 1
+                team_stats = []
+                try:
+                    team_stats = await client.get_team_stats(season_id)
+                    for ts in team_stats:
+                        team_id = ts.get("team_id")
+                        if not team_id:
+                            continue
+                        # Upsert: delete + insert
+                        conn.execute(
+                            "DELETE FROM ht_team_stats WHERE league = ? AND season_id = ? AND team_id = ?",
+                            (code, str(season_id), team_id),
+                        )
+                        conn.execute(
+                            """INSERT INTO ht_team_stats
+                               (id, league, season_id, team_name, team_id,
+                                gp, wins, losses, otl, points, points_pct,
+                                gf, ga, goal_diff, pp_pct, pk_pct, reg_wins, streak, synced_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                gen_id(), code, str(season_id),
+                                ts.get("team_name", ""), team_id,
+                                ts.get("gp", 0), ts.get("wins", 0), ts.get("losses", 0),
+                                ts.get("otl", 0), ts.get("points", 0), ts.get("points_pct", 0),
+                                ts.get("gf", 0), ts.get("ga", 0), ts.get("goal_diff", 0),
+                                ts.get("pp_pct", 0), ts.get("pk_pct", 0),
+                                ts.get("reg_wins", 0), ts.get("streak", ""),
+                                now,
+                            ),
+                        )
+                        total_teams += 1
+                except Exception as ts_err:
+                    logger.error("[HT SYNC CRON] %s ht_team_stats sync failed: %s", code, ts_err)
 
                 # ── Sync league_player_stats_cache (leaders) ──
                 total_cached_leaders = 0
@@ -11497,11 +11508,13 @@ def sync_hockeytech_data_cron():
 
                 conn.commit()
                 synced_leagues.append(code)
-                logger.info("[HT SYNC CRON] %s: %d games, %d teams, %d skaters, %d goalies synced",
-                            code, len(games), len(team_stats), total_skaters, total_goalies)
+                league_duration = round(_time.time() - league_start, 1)
+                logger.info("[HT SYNC CRON] %s: %d games, %d teams, %d skaters, %d goalies synced in %.1fs",
+                            code, len(games), len(team_stats), total_skaters, total_goalies, league_duration)
 
             except Exception as e:
-                logger.error("[HT SYNC CRON] %s failed: %s", code, e)
+                league_duration = round(_time.time() - league_start, 1)
+                logger.error("[HT SYNC CRON] %s failed after %.1fs: %s", code, league_duration, e)
                 continue
 
         # ── Run Monte Carlo projections for each synced league ──
@@ -11786,6 +11799,9 @@ except Exception as e:
 import atexit
 if _pxr_scheduler is not None:
     atexit.register(lambda: _pxr_scheduler.shutdown(wait=False))
+
+# ── In-memory sync job tracking for background league sync ──
+_sync_jobs: dict = {}
 
 
 def get_anthropic_client():
@@ -36323,9 +36339,15 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
         if not season_id:
             raise HTTPException(status_code=404, detail="No current season found")
 
+    import time as _time
+    _sync_start = _time.time()
+
     roster = await client.get_roster(team_id, season_id)
     if not roster:
         raise HTTPException(status_code=404, detail="Empty roster returned from HockeyTech")
+
+    logger.info("[SYNC ROSTER] Started: league=%s, team_id=%s, players=%d, sync_stats=%s",
+                league, team_id, len(roster), sync_stats)
 
     # Get league display name for current_league field, normalized via PXR 2B
     ht_display_name = HT_LEAGUES.get(league, {}).get("name", league.upper())
@@ -36723,6 +36745,10 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
     except Exception:
         pass  # Don't let sync history failure break the actual sync
 
+    _sync_duration = round(_time.time() - _sync_start, 1)
+    logger.info("[SYNC ROSTER] Complete: team=%s, league=%s — %d created, %d updated, %d skipped, %d errors, %.1fs",
+                team_name_synced, league, created, updated, skipped, len(sync_errors), _sync_duration)
+
     return roster_result
 
 
@@ -36892,8 +36918,13 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
     league_name = _normalize_league_safe(ht_display_name, "full")
 
     # Fetch stats from HT
+    import time as _time
+    _stats_start = _time.time()
     skater_stats = await client.get_skater_stats(season_id, team_id=team_id, limit=200)
     goalie_stats_list = await client.get_goalie_stats(season_id, team_id=team_id, limit=50)
+
+    logger.info("[SYNC STATS] Started: league=%s, team_id=%s, skaters=%d, goalies=%d",
+                league, team_id, len(skater_stats), len(goalie_stats_list))
 
     conn = get_db()
     now = datetime.now(timezone.utc)
@@ -37109,6 +37140,10 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
         s_conn.close()
     except Exception:
         pass
+
+    _stats_duration = round(_time.time() - _stats_start, 1)
+    logger.info("[SYNC STATS] Complete: league=%s, team_id=%s — %d skaters, %d goalies, %d snapshots, %d errors, %.1fs",
+                league, team_id, synced_skaters, synced_goalies, snapshots_created, len(stat_sync_errors), _stats_duration)
 
     return {
         "synced_skaters": synced_skaters,
@@ -37348,6 +37383,8 @@ async def ht_sync_league(league: str, season_id: Optional[int] = None,
     if not all_teams:
         raise HTTPException(status_code=404, detail="No teams found for this league/season")
 
+    logger.info("[SYNC LEAGUE] Started: league=%s — %d teams, sync_stats=%s", league, len(all_teams), sync_stats)
+
     total_created = 0
     total_updated = 0
     total_skipped = 0
@@ -37378,6 +37415,8 @@ async def ht_sync_league(league: str, season_id: Optional[int] = None,
                 "skipped": result.get("skipped", 0),
                 "status": "success"
             })
+            logger.info("[SYNC LEAGUE] Sync team: %s — %d created, %d updated",
+                        result.get("team_name", team_name), result.get("created", 0), result.get("updated", 0))
         except Exception as e:
             teams_failed += 1
             team_results.append({
@@ -37386,13 +37425,13 @@ async def ht_sync_league(league: str, season_id: Optional[int] = None,
                 "status": "failed",
                 "error": str(e)
             })
-            logger.warning("Bulk sync failed for team %s (%s): %s", team_name, league, str(e))
+            logger.error("[SYNC LEAGUE] Sync error: %s — %s", team_name, str(e))
 
         # Rate limit between teams to avoid hammering HockeyTech API
         await asyncio.sleep(0.5)
 
-    logger.info("Bulk league sync complete: %s — %d teams synced, %d failed, %d created, %d updated",
-                league, teams_synced, teams_failed, total_created, total_updated)
+    logger.info("[SYNC LEAGUE] Complete: %s — %d/%d teams, %d created, %d updated",
+                league, teams_synced, teams_synced + teams_failed, total_created, total_updated)
 
     return {
         "league": league,
@@ -37404,6 +37443,186 @@ async def ht_sync_league(league: str, season_id: Optional[int] = None,
         "total_skipped": total_skipped,
         "team_results": team_results,
     }
+
+
+# ── Background league sync worker ───────────────────────────
+
+def _run_league_sync_background(job_id: str, league: str, org_id: str, user_id: str,
+                                 sync_stats: bool, season_id: Optional[int]):
+    """Background worker for full league sync. Updates _sync_jobs with progress."""
+    import time as _time
+
+    _sync_jobs[job_id]["status"] = "running"
+    _sync_jobs[job_id]["started_at"] = datetime.now(timezone.utc).isoformat()
+    start = _time.time()
+
+    logger.info("[SYNC BG] Job %s started: league=%s, sync_stats=%s", job_id, league, sync_stats)
+
+    async def _do_sync():
+        try:
+            from hockeytech import HockeyTechClient
+        except ImportError:
+            _sync_jobs[job_id]["status"] = "failed"
+            _sync_jobs[job_id]["errors"].append("hockeytech module not available")
+            return
+
+        try:
+            client = HockeyTechClient(league)
+        except ValueError as e:
+            _sync_jobs[job_id]["status"] = "failed"
+            _sync_jobs[job_id]["errors"].append(str(e))
+            return
+
+        sid = season_id
+        if not sid:
+            sid = await client.get_current_season_id()
+            if not sid:
+                _sync_jobs[job_id]["status"] = "failed"
+                _sync_jobs[job_id]["errors"].append("No current season found")
+                return
+
+        all_teams = await client.get_teams(sid)
+        if not all_teams:
+            _sync_jobs[job_id]["status"] = "failed"
+            _sync_jobs[job_id]["errors"].append("No teams found for this league/season")
+            return
+
+        _sync_jobs[job_id]["teams_total"] = len(all_teams)
+        logger.info("[SYNC BG] Job %s: found %d teams in %s", job_id, len(all_teams), league)
+
+        total_created = 0
+        total_updated = 0
+        teams_synced = 0
+        teams_failed = 0
+        team_results = []
+
+        # Build a fake token_data for calling ht_sync_roster
+        token_data = {"org_id": org_id, "user_id": user_id}
+
+        for team in all_teams:
+            team_id_val = team.get("id")
+            team_name = team.get("name", f"Team {team_id_val}")
+            try:
+                logger.info("[SYNC BG] Job %s: syncing team %s (%s)", job_id, team_name, league)
+                result = await ht_sync_roster(
+                    league=league,
+                    team_id=team_id_val,
+                    season_id=sid,
+                    sync_stats=sync_stats,
+                    token_data=token_data
+                )
+                c = result.get("created", 0)
+                u = result.get("updated", 0)
+                total_created += c
+                total_updated += u
+                teams_synced += 1
+                team_results.append({
+                    "team_id": team_id_val,
+                    "team_name": result.get("team_name", team_name),
+                    "created": c, "updated": u,
+                    "status": "success"
+                })
+                logger.info("[SYNC BG] Job %s: team %s — %d created, %d updated",
+                            job_id, team_name, c, u)
+            except Exception as e:
+                teams_failed += 1
+                team_results.append({
+                    "team_id": team_id_val,
+                    "team_name": team_name,
+                    "status": "failed",
+                    "error": str(e)
+                })
+                _sync_jobs[job_id]["errors"].append(f"{team_name}: {e}")
+                logger.error("[SYNC BG] Job %s: team %s FAILED — %s", job_id, team_name, e)
+
+            _sync_jobs[job_id]["teams_completed"] = teams_synced + teams_failed
+            # Rate limit between teams
+            await asyncio.sleep(0.5)
+
+        duration = _time.time() - start
+        _sync_jobs[job_id].update({
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "teams_synced": teams_synced,
+            "teams_failed": teams_failed,
+            "total_created": total_created,
+            "total_updated": total_updated,
+            "team_results": team_results,
+            "duration_seconds": round(duration, 1),
+        })
+        logger.info("[SYNC BG] Job %s complete: %s — %d/%d teams, %d created, %d updated in %.1fs",
+                    job_id, league, teams_synced, teams_synced + teams_failed,
+                    total_created, total_updated, duration)
+
+    try:
+        asyncio.run(_do_sync())
+    except Exception as e:
+        _sync_jobs[job_id]["status"] = "failed"
+        _sync_jobs[job_id]["errors"].append(f"Fatal: {e}")
+        logger.error("[SYNC BG] Job %s FATAL: %s", job_id, e)
+
+
+@app.post("/hockeytech/{league}/sync-league-bg")
+async def ht_sync_league_bg(league: str, season_id: Optional[int] = None,
+                             sync_stats: bool = False,
+                             token_data: dict = Depends(verify_token)):
+    """Start a background league sync. Returns immediately with a job_id for polling progress."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    # Tier permission check — bulk sync requires Pro+
+    perm_conn = get_db()
+    try:
+        _check_tier_permission(user_id, "can_bulk_sync", perm_conn)
+    finally:
+        perm_conn.close()
+
+    try:
+        HockeyTechClient(league)
+    except (ValueError, Exception) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Check for already running sync on this league
+    for jid, job in _sync_jobs.items():
+        if job.get("league") == league and job.get("status") == "running":
+            return {"status": "already_running", "job_id": jid, "message": f"Sync already in progress for {league}"}
+
+    job_id = str(uuid.uuid4())
+    _sync_jobs[job_id] = {
+        "job_id": job_id,
+        "league": league,
+        "status": "queued",
+        "started_at": None,
+        "completed_at": None,
+        "teams_total": 0,
+        "teams_completed": 0,
+        "teams_synced": 0,
+        "teams_failed": 0,
+        "total_created": 0,
+        "total_updated": 0,
+        "errors": [],
+        "team_results": [],
+        "sync_stats": sync_stats,
+        "triggered_by": user_id,
+    }
+
+    t = threading.Thread(
+        target=_run_league_sync_background,
+        args=(job_id, league, org_id, user_id, sync_stats, season_id),
+        daemon=True,
+    )
+    t.start()
+
+    logger.info("[SYNC BG] Queued job %s for league %s (sync_stats=%s)", job_id, league, sync_stats)
+    return {"status": "sync_started", "job_id": job_id, "league": league}
+
+
+@app.get("/admin/sync-status/{job_id}")
+async def admin_sync_status(job_id: str, token_data: dict = Depends(verify_token)):
+    """Poll the progress of a background league sync job."""
+    if job_id not in _sync_jobs:
+        raise HTTPException(status_code=404, detail="Sync job not found")
+    return _sync_jobs[job_id]
 
 
 # ============================================================
