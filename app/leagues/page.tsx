@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -1123,6 +1123,21 @@ interface BulkSyncResult {
   team_results: { team_id: number; team_name: string; created?: number; updated?: number; skipped?: number; status: string; error?: string }[];
 }
 
+interface BgSyncStatus {
+  job_id: string;
+  league: string;
+  status: "queued" | "running" | "completed" | "failed";
+  teams_total: number;
+  teams_completed: number;
+  teams_synced: number;
+  teams_failed: number;
+  total_created: number;
+  total_updated: number;
+  errors: string[];
+  team_results: { team_id: number; team_name: string; created?: number; updated?: number; status: string; error?: string }[];
+  duration_seconds?: number;
+}
+
 function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
   const [syncing, setSyncing] = useState<number | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -1132,6 +1147,65 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
   const [bulkSyncing, setBulkSyncing] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkSyncResult | null>(null);
   const [bulkProgress, setBulkProgress] = useState("");
+  const [bgJobId, setBgJobId] = useState<string | null>(null);
+  const [bgStatus, setBgStatus] = useState<BgSyncStatus | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Stop polling helper
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+      if (dismissRef.current) clearTimeout(dismissRef.current);
+    };
+  }, [stopPolling]);
+
+  // Start polling a background sync job
+  const startPolling = useCallback((jobId: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get<BgSyncStatus>(`/admin/sync-status/${jobId}`);
+        const s = res.data;
+        setBgStatus(s);
+        setBulkProgress(
+          s.status === "queued" ? "Preparing sync..." :
+          s.status === "running" ? `Syncing team ${s.teams_completed} of ${s.teams_total}...` :
+          ""
+        );
+        if (s.status === "completed" || s.status === "failed") {
+          stopPolling();
+          setBulkSyncing(false);
+          setBgJobId(null);
+          if (s.status === "completed") {
+            setBulkResult({
+              league: s.league,
+              season_id: 0,
+              teams_synced: s.teams_synced,
+              teams_failed: s.teams_failed,
+              total_created: s.total_created,
+              total_updated: s.total_updated,
+              total_skipped: 0,
+              team_results: s.team_results.map(r => ({ ...r, skipped: 0 })),
+            });
+            setBulkProgress("");
+            // Auto-dismiss after 5s
+            dismissRef.current = setTimeout(() => setBulkResult(null), 5000);
+          } else {
+            setSyncError(s.errors.length ? s.errors.join("; ") : "League sync failed");
+            setBulkProgress("");
+          }
+        }
+      } catch {
+        // Polling error — don't stop, just skip this tick
+      }
+    }, 3000);
+  }, [stopPolling]);
 
   if (!teams.length) {
     return <EmptyState text="No teams data available" />;
@@ -1142,7 +1216,7 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
     setSyncResult(null);
     setSyncError("");
     try {
-      const res = await api.post<SyncResult>(`/hockeytech/${league}/sync-roster/${teamId}?sync_stats=true`);
+      const res = await api.post<SyncResult>(`/hockeytech/${league}/sync-roster/${teamId}?sync_stats=true`, null, { timeout: 300000 });
       setSyncResult(res.data);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
@@ -1172,19 +1246,29 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
   const handleBulkSync = async () => {
     setBulkSyncing(true);
     setBulkResult(null);
-    setBulkProgress("Syncing all teams...");
+    setBulkProgress("Starting league sync...");
     setSyncError("");
     setSyncResult(null);
+    setBgStatus(null);
+    if (dismissRef.current) { clearTimeout(dismissRef.current); dismissRef.current = null; }
     try {
-      const res = await api.post<BulkSyncResult>(`/hockeytech/${league}/sync-league?sync_stats=true`);
-      setBulkResult(res.data);
-      setBulkProgress("");
+      const res = await api.post<{ status: string; job_id: string; league: string; message?: string }>(
+        `/hockeytech/${league}/sync-league-bg?sync_stats=true`
+      );
+      if (res.data.status === "already_running") {
+        setBulkProgress("Sync already in progress — reconnecting...");
+        setBgJobId(res.data.job_id);
+        startPolling(res.data.job_id);
+      } else {
+        setBgJobId(res.data.job_id);
+        setBulkProgress("Sync started — waiting for progress...");
+        startPolling(res.data.job_id);
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
-                  (err as { message?: string })?.message || "Bulk sync failed";
+                  (err as { message?: string })?.message || "Failed to start league sync";
       setSyncError(msg);
       setBulkProgress("");
-    } finally {
       setBulkSyncing(false);
     }
   };
@@ -1207,7 +1291,11 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
           className="flex items-center gap-2 px-4 py-2 bg-teal/10 text-teal border border-teal/20 rounded-lg text-sm font-semibold hover:bg-teal/20 transition-colors disabled:opacity-50"
         >
           {bulkSyncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          {bulkSyncing ? "Syncing League..." : "Sync All Teams"}
+          {bulkSyncing
+            ? (bgStatus && bgStatus.teams_total > 0
+                ? `Syncing ${bgStatus.teams_completed}/${bgStatus.teams_total}...`
+                : "Starting Sync...")
+            : "Sync All Teams"}
         </button>
         <button
           onClick={handleDetectTransfers}
@@ -1221,6 +1309,38 @@ function TeamsTab({ teams, league }: { teams: HTTeam[]; league: string }) {
           Sync imports all rosters into ProspectX — or click individual team sync buttons below
         </p>
       </div>
+
+      {/* Background Sync Progress Banner */}
+      {bulkSyncing && bulkProgress && (
+        <div style={{ background: "rgba(13,148,136,0.06)", border: "1px solid rgba(13,148,136,0.2)" }} className="rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Loader2 size={16} className="animate-spin" style={{ color: "#0D9488" }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: "#0F2942" }}>{bulkProgress}</p>
+              {bgStatus && bgStatus.teams_total > 0 && (
+                <div className="mt-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1 h-2 rounded-full" style={{ background: "rgba(13,148,136,0.15)" }}>
+                      <div
+                        className="h-2 rounded-full transition-all duration-500"
+                        style={{ background: "#0D9488", width: `${Math.round((bgStatus.teams_completed / bgStatus.teams_total) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-medium" style={{ color: "#0D9488" }}>
+                      {bgStatus.teams_completed}/{bgStatus.teams_total}
+                    </span>
+                  </div>
+                  {bgStatus.total_created + bgStatus.total_updated > 0 && (
+                    <p className="text-[11px]" style={{ color: "#0F2942", opacity: 0.6 }}>
+                      {bgStatus.total_created} created · {bgStatus.total_updated} updated so far
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sync Result Banner */}
       {syncResult && (
