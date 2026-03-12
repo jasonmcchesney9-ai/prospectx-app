@@ -11858,12 +11858,119 @@ if _pxr_scheduler is not None:
 _sync_jobs: dict = {}
 
 
+class _FallbackResponse:
+    """Sentinel returned by call_anthropic_safe() when all retries are exhausted."""
+    fallback = True
+    stop_reason = "end_turn"
+    model = "fallback"
+    id = "msg_fallback"
+
+    FALLBACK_TEXT = "AI analysis temporarily unavailable. Please try again in a few minutes."
+
+    def __init__(self):
+        self.content = [type("_TextBlock", (), {"text": self.FALLBACK_TEXT, "type": "text"})()]
+        self.usage = type("_Usage", (), {"input_tokens": 0, "output_tokens": 0})()
+
+
+def call_anthropic_safe(create_fn, *, max_retries: int = 3, **kwargs):
+    """
+    Wrapper for client.messages.create() with 3-retry exponential backoff.
+
+    Args:
+        create_fn: The bound messages.create method to call.
+        max_retries: Number of retry attempts (default 3).
+        **kwargs: Passed directly to messages.create().
+
+    Returns:
+        anthropic.types.Message on success, _FallbackResponse on final failure.
+    """
+    from anthropic import APIError, APITimeoutError, RateLimitError
+
+    backoff_times = [1, 2, 4]
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            return create_fn(**kwargs)
+        except RateLimitError as e:
+            last_exception = e
+            retry_after = backoff_times[min(attempt, len(backoff_times) - 1)]
+            resp = getattr(e, "response", None)
+            if resp and hasattr(resp, "headers"):
+                try:
+                    retry_after = float(resp.headers.get("retry-after", retry_after))
+                except (ValueError, TypeError):
+                    pass
+            logger.warning(
+                "Anthropic rate limit (attempt %d/%d), waiting %.1fs: %s",
+                attempt + 1, max_retries, retry_after, str(e)[:200],
+            )
+            time.sleep(retry_after)
+        except APITimeoutError as e:
+            last_exception = e
+            logger.warning(
+                "Anthropic timeout (attempt %d/%d): %s",
+                attempt + 1, max_retries, str(e)[:200],
+            )
+            if attempt < max_retries - 1:
+                time.sleep(backoff_times[attempt])
+        except APIError as e:
+            last_exception = e
+            logger.warning(
+                "Anthropic API error (attempt %d/%d): %s",
+                attempt + 1, max_retries, str(e)[:200],
+            )
+            if attempt < max_retries - 1:
+                time.sleep(backoff_times[attempt])
+        except Exception as e:
+            last_exception = e
+            logger.error(
+                "Unexpected Anthropic error (attempt %d/%d): %s",
+                attempt + 1, max_retries, str(e)[:200],
+            )
+            if attempt < max_retries - 1:
+                time.sleep(backoff_times[attempt])
+
+    logger.error(
+        "Anthropic call failed after %d retries — returning fallback: %s",
+        max_retries, str(last_exception)[:300],
+    )
+    return _FallbackResponse()
+
+
+class _ResilientMessages:
+    """Proxy for client.messages with automatic retry on .create()."""
+
+    def __init__(self, real_messages):
+        self._real = real_messages
+
+    def create(self, **kwargs):
+        return call_anthropic_safe(self._real.create, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+class _ResilientClient:
+    """Wraps Anthropic client — .messages.create() has built-in retry + fallback."""
+
+    def __init__(self, real_client):
+        self._client = real_client
+        self.messages = _ResilientMessages(real_client.messages)
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+    def __bool__(self):
+        return True
+
+
 def get_anthropic_client():
     from anthropic import Anthropic
     key = ANTHROPIC_API_KEY
     if not key or key == "your_anthropic_api_key_here":
         return None
-    return Anthropic(api_key=key)
+    return _ResilientClient(Anthropic(api_key=key))
 
 
 # ============================================================
@@ -18547,12 +18654,9 @@ async def analyse_roster_board(body: dict, token_data: dict = Depends(verify_tok
             roster_text += f"  {jersey} {name} ({pos}) {age} | {stats} {pxr}\n"
 
         # Check for API key
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
+        client = get_anthropic_client()
+        if not client:
             return {"analysis": f"**Roster Analysis — {team_name}**\n\n{len(player_rows)} players on roster. Connect an API key to generate full PXI analysis with lineup recommendations, depth chart evaluation, and trade target suggestions."}
-
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
 
         msg = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -18789,8 +18893,8 @@ async def generate_playbook_from_identity(body: dict, token_data: dict = Depends
             except (json.JSONDecodeError, TypeError):
                 identity_context = str(identity_row["content"])[:3000]
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
+        client = get_anthropic_client()
+        if not client:
             return {"recommendations": [
                 {"system_name": "1-2-2 Forecheck", "category": "forecheck", "description": "Standard 1-2-2 aggressive forecheck — F1 pressures puck carrier, F2/F3 seal the boards."},
                 {"system_name": "Quick Up Breakout", "category": "breakout", "description": "D-to-D or quick up the boards breakout — speed through the neutral zone."},
@@ -18799,9 +18903,6 @@ async def generate_playbook_from_identity(body: dict, token_data: dict = Depends
                 {"system_name": "Tight DZ Coverage", "category": "defensive_zone", "description": "Man-on-man in the defensive zone with strong-side overload and net-front presence."},
                 {"system_name": "Cycle Offense", "category": "offensive_zone", "description": "Puck possession cycle game — low to high, create shooting lanes from the point."},
             ], "source": "demo"}
-
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
 
         prompt = f"""You are PXI, a professional hockey systems analyst. Generate a complete system playbook for {team_name}.
 
@@ -19046,12 +19147,9 @@ async def analyse_draft_board(body: dict, token_data: dict = Depends(verify_toke
             grade = f"Grade:{r['scout_grade']}" if r["scout_grade"] else ""
             board_text += f"  #{r['board_rank']} {name} ({pos}) {team}/{league} {age} | {stats} {pxr} | Tier:{tier} {grade}\n"
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
+        client = get_anthropic_client()
+        if not client:
             return {"analysis": f"**Draft Board Analysis**\n\n{len(rows)} prospects on board. Connect an API key to generate full PXI analysis with tier assessments, positional gap analysis, and draft strategy recommendations."}
-
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
 
         msg = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -19271,12 +19369,9 @@ async def analyse_trade_board(body: dict, token_data: dict = Depends(verify_toke
                     board_text += f"  {name} ({pos}) {team}/{league} {age} | {stats} {pxr} {price} {notes}\n"
 
         team_name = body.get("team_name", "our team")
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
+        client = get_anthropic_client()
+        if not client:
             return {"analysis": f"**Trade Board Analysis**\n\n{len(rows)} players on board. Connect an API key to generate full PXI trade analysis with target fit assessment, value comparisons, and recommended moves."}
-
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
 
         msg = client.messages.create(
             model="claude-sonnet-4-20250514",
@@ -24716,13 +24811,12 @@ async def summarize_series_context(series_id: str, current_game_number: int) -> 
         return concatenated
 
     # Summarize with Claude if over ~500 tokens
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
+    client = get_anthropic_client()
+    if not client:
         # No API key — return truncated raw text
         return concatenated[:2000]
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=600,
@@ -41757,14 +41851,11 @@ async def generate_series_state_summary(series_id: str, request: Request, token_
         conn.close()
 
     # Call Claude for series state summary
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
+    client = get_anthropic_client()
+    if not client:
         return {"summary_text": "API key not configured. Series state summary unavailable.", "momentum_percent": 50}
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-
         system_prompt = """You are PXI — the ProspectX Intelligence engine for hockey series analysis.
 Generate a series state summary after the specified game. Be concise and actionable.
 
@@ -46722,10 +46813,9 @@ async def coaching_next_game_intel(token_data: dict = Depends(verify_token)):
         api_key = ANTHROPIC_API_KEY
         if api_key and opponent_name:
             try:
-                import anthropic
                 from pxi_prompt_core import PRE_GAME_INTEL_BRIEF
 
-                client = anthropic.Anthropic(api_key=api_key)
+                client = get_anthropic_client()
                 user_msg = (
                     f"Our team: {our_team_name}\n"
                     f"Next game: vs {opponent_name} on {game_date} ({home_away})\n"
@@ -46840,8 +46930,8 @@ async def chalk_talk_pre_populate(request: Request, token_data: dict = Depends(v
         conn.close()
 
     # ── Call Claude for pre-population ──
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
+    client = get_anthropic_client()
+    if not client:
         # Return empty pre-population if no API key (mock mode)
         return {
             "opponent_analysis": "",
@@ -46853,8 +46943,6 @@ async def chalk_talk_pre_populate(request: Request, token_data: dict = Depends(v
         }
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
 
         system_prompt = """You are PXI — the ProspectX Intelligence engine for hockey coaching.
 You are helping a coach prepare a game plan. Based on the team and opponent data provided,
@@ -50730,7 +50818,6 @@ async def generate_highlight_suggestions(reel_id: str, token_data: dict = Depend
         conn.commit()
 
         from pxi_prompt_core import RECRUITING_HIGHLIGHT_BUILDER
-        import anthropic
 
         prompt_context = f"""PLAYER INFO:
 {json.dumps(player_info, indent=2)}
@@ -50748,7 +50835,7 @@ CLIPS ({len(clips_data)} total):
             prompt_context += f"start={clip.get('start_time_seconds', 0)}s, end={clip.get('end_time_seconds', 0)}s, "
             prompt_context += f"tags={clip.get('tags', [])}, description=\"{clip.get('description', '')}\""
 
-        client = anthropic.Anthropic(api_key=api_key)
+        client = get_anthropic_client()
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=2000,

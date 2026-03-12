@@ -1256,9 +1256,16 @@ export default function BenchTalkDrawer() {
                       className={`rounded-xl px-3 py-2.5 ${
                         msg.role === "user"
                           ? "bg-navy text-white"
-                          : "bg-white border border-teal/20 shadow-sm"
+                          : "bg-white border shadow-sm"
                       }`}
+                      style={msg.role !== "user" ? { borderColor: msg.content?.includes("AI analysis temporarily unavailable") ? "#F59E0B" : "rgba(13,148,136,0.2)" } : undefined}
                     >
+                      {msg.role !== "user" && msg.content?.includes("AI analysis temporarily unavailable") && (
+                        <div className="flex items-center gap-1.5 mb-1.5 text-xs font-oswald font-bold tracking-wider" style={{ color: "#F59E0B" }}>
+                          <AlertCircle size={14} />
+                          <span>SERVICE DEGRADED — RETRYING SHORTLY</span>
+                        </div>
+                      )}
                       {msg.role === "user" ? (
                         <p className="text-sm">{msg.content}</p>
                       ) : (
