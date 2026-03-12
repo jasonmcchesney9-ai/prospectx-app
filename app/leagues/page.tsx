@@ -58,7 +58,7 @@ const LEAGUE_OPTIONS: { code: string; label: string; full: string; logo?: string
   { code: "cchl", label: "CCHL", full: "Central Canada Hockey League" },
   { code: "nojhl", label: "NOJHL", full: "Northern Ontario Junior Hockey League" },
   { code: "mhl", label: "MHL", full: "Maritime Hockey League" },
-  { code: "gojhl", label: "GOHL", full: "Greater Ontario Hockey League", logo: "/logos/gojhl.png" },
+  { code: "gojhl", label: "GOJHL", full: "Greater Ontario Junior Hockey League", logo: "/logos/gojhl.png" },
   // Junior B
   { code: "kijhl", label: "KIJHL", full: "Kootenay International Junior Hockey League" },
   { code: "pjhl", label: "PJHL", full: "Provincial Junior Hockey League" },

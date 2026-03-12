@@ -115,7 +115,7 @@ LEAGUES = {
         "client_code": "mhl",
     },
     "gojhl": {
-        "name": "Greater Ontario Hockey League",
+        "name": "Greater Ontario Junior Hockey League",
         "key": "34b10d4d34d7b59a",
         "client_code": "gojhl",
     },
