@@ -200,6 +200,9 @@ function SeriesDetail() {
   const [dossierReport, setDossierReport] = useState<{ output_text?: string; title?: string; generated_at?: string } | null>(null);
   const [dossierLoading, setDossierLoading] = useState(false);
   const [dossierFetchKey, setDossierFetchKey] = useState(0);
+  const [linkedGames, setLinkedGames] = useState<GameSession[]>([]);
+  const [linkedGamesLoading, setLinkedGamesLoading] = useState(false);
+  const [addingGamePlan, setAddingGamePlan] = useState(false);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -297,6 +300,25 @@ function SeriesDetail() {
     return () => { cancelled = true; };
   }, [activeTab, seriesId, dossierFetchKey]);
 
+  // ── Fetch linked game plans when Games tab activates ──
+  useEffect(() => {
+    if (activeTab !== "games" || !seriesId) return;
+    let cancelled = false;
+    async function fetchLinkedGames() {
+      setLinkedGamesLoading(true);
+      try {
+        const { data } = await api.get<GameSession[]>(`/chalk-talk/series/${seriesId}/games`);
+        if (!cancelled) setLinkedGames(data);
+      } catch {
+        if (!cancelled) setLinkedGames([]);
+      } finally {
+        if (!cancelled) setLinkedGamesLoading(false);
+      }
+    }
+    fetchLinkedGames();
+    return () => { cancelled = true; };
+  }, [activeTab, seriesId]);
+
   // ── Save helper ────────────────────────────────────────────
   const saveField = useCallback(async (updates: Record<string, unknown>) => {
     setSaving(true);
@@ -336,6 +358,26 @@ function SeriesDetail() {
       toast.error("Failed to create game session");
     } finally {
       setCreatingSession(null);
+    }
+  };
+
+  const handleAddGamePlan = async () => {
+    if (!series || addingGamePlan) return;
+    setAddingGamePlan(true);
+    try {
+      const gameNumber = linkedGames.length + 1;
+      const { data } = await api.post("/chalk-talk-sessions", {
+        session_type: "Pre-Game",
+        team_id: series.team_name,
+        opponent_team_id: series.opponent_team_name,
+        series_plan_id: seriesId,
+        game_number: gameNumber,
+      });
+      router.push(`/chalk-talk/sessions/${data.id}`);
+    } catch {
+      toast.error("Failed to create game plan");
+    } finally {
+      setAddingGamePlan(false);
     }
   };
 
@@ -1003,6 +1045,81 @@ function SeriesDetail() {
       {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Game Notes</h2>}
       {(activeTab === "games" || printMode) && (
         <div className="space-y-4">
+          {/* Linked Game Plans (War Room Sessions) */}
+          <div className="bg-white rounded-xl border p-5" style={{ borderColor: "rgba(13,148,136,0.2)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-oswald uppercase tracking-wider flex items-center gap-2" style={{ color: "#0F2942" }}>
+                <Crosshair size={14} style={{ color: "#0D9488" }} />
+                Game Plans
+              </h3>
+              <button
+                onClick={handleAddGamePlan}
+                disabled={addingGamePlan}
+                className="no-print flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                style={{ backgroundColor: "#0D9488", color: "#FFFFFF", opacity: addingGamePlan ? 0.6 : 1 }}
+              >
+                {addingGamePlan ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                {addingGamePlan ? "Creating…" : "Add Game Plan"}
+              </button>
+            </div>
+
+            {linkedGamesLoading ? (
+              <div className="flex items-center justify-center py-6 gap-2">
+                <Loader2 size={16} className="animate-spin" style={{ color: "#0D9488" }} />
+                <span className="text-xs font-oswald uppercase tracking-wider" style={{ color: "rgba(15,41,66,0.4)" }}>Loading game plans…</span>
+              </div>
+            ) : linkedGames.length === 0 ? (
+              <div className="text-center py-6">
+                <Crosshair size={20} style={{ color: "rgba(13,148,136,0.3)", margin: "0 auto 8px" }} />
+                <p className="text-sm font-oswald uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                  No game plans created yet
+                </p>
+                <p className="text-xs mt-1" style={{ color: "rgba(15,41,66,0.5)" }}>
+                  Click <strong>Add Game Plan</strong> to prepare for Game 1.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {linkedGames.map((g) => (
+                  <Link
+                    key={g.id}
+                    href={`/chalk-talk/sessions/${g.id}`}
+                    className="flex items-center justify-between px-4 py-3 rounded-lg border transition-colors hover:shadow-sm"
+                    style={{ borderColor: "rgba(13,148,136,0.15)", backgroundColor: "rgba(13,148,136,0.03)" }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-oswald font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                        Game {g.game_number}
+                      </span>
+                      {series?.opponent_team_name && (
+                        <span className="text-xs" style={{ color: "rgba(15,41,66,0.6)" }}>
+                          vs {series.opponent_team_name}
+                        </span>
+                      )}
+                      {g.created_at && (
+                        <span className="text-[10px]" style={{ color: "rgba(15,41,66,0.35)" }}>
+                          — {new Date(g.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider"
+                        style={{
+                          backgroundColor: g.status === "completed" ? "rgba(34,197,94,0.1)" : g.status === "generated" ? "rgba(13,148,136,0.1)" : "rgba(15,41,66,0.06)",
+                          color: g.status === "completed" ? "#16a34a" : g.status === "generated" ? "#0D9488" : "rgba(15,41,66,0.5)",
+                        }}
+                      >
+                        {g.status || "Draft"}
+                      </span>
+                      <ChevronRight size={14} style={{ color: "rgba(15,41,66,0.3)" }} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Add Game */}
           <div className="bg-white rounded-xl border border-teal/20 p-5">
             <div className="flex items-center justify-between mb-3">

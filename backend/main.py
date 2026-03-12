@@ -46809,6 +46809,25 @@ async def link_report_to_series(series_id: str, body: dict = Body(...), token_da
         conn.close()
 
 
+@app.get("/chalk-talk/series/{series_id}/games")
+async def get_series_linked_games(series_id: str, token_data: dict = Depends(verify_token)):
+    """Return all chalk_talk_sessions linked to a series, ordered by game_number then created_at."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT id, game_number, session_type, status, created_at, game_date,
+                      opponent_team_id, chalk_talk_id, team_id
+               FROM chalk_talk_sessions
+               WHERE series_plan_id = ? AND org_id = ?
+               ORDER BY game_number ASC, created_at ASC""",
+            (series_id, org_id),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 # ============================================================
 # CHALK TALK SESSIONS API
 # ============================================================
