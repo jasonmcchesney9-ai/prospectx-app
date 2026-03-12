@@ -11,7 +11,7 @@ import {
   Users,
   Building2,
   Star,
-  Heart,
+
   Search,
   Globe,
   Loader2,
@@ -26,17 +26,16 @@ import { getUser, setUser } from "@/lib/auth";
 import type { SubscriptionTier, User } from "@/types/api";
 import MarketingLayout from "@/components/MarketingLayout";
 
-const INDIVIDUAL_KEYS = ["rookie", "parent", "scout", "pro", "elite"] as const;
-const ORG_KEYS = ["team_org", "program_org", "enterprise"] as const;
+const INDIVIDUAL_KEYS = ["rookie", "coach", "pro", "elite"] as const;
+const ORG_KEYS = ["team_org", "org", "enterprise"] as const;
 
 const TIER_META: Record<string, { icon: React.ElementType; color: string; borderColor: string; bgGradient: string; popular?: boolean }> = {
   rookie: { icon: Star, color: "text-gray-500", borderColor: "border-gray-200", bgGradient: "from-gray-50 to-white" },
-  parent: { icon: Heart, color: "text-pink-500", borderColor: "border-pink-200", bgGradient: "from-pink-50 to-white" },
-  scout: { icon: Search, color: "text-teal", borderColor: "border-teal/30", bgGradient: "from-teal/5 to-white" },
+  coach: { icon: Search, color: "text-teal", borderColor: "border-teal/30", bgGradient: "from-teal/5 to-white" },
   pro: { icon: Crown, color: "text-orange", borderColor: "border-orange", bgGradient: "from-orange/5 to-white", popular: true },
   elite: { icon: Zap, color: "text-violet-600", borderColor: "border-violet-300", bgGradient: "from-violet-50 to-white" },
   team_org: { icon: Users, color: "text-navy", borderColor: "border-navy/30", bgGradient: "from-navy/5 to-white" },
-  program_org: { icon: Building2, color: "text-teal", borderColor: "border-teal/30", bgGradient: "from-teal/5 to-white" },
+  org: { icon: Building2, color: "text-teal", borderColor: "border-teal/30", bgGradient: "from-teal/5 to-white" },
   enterprise: { icon: Globe, color: "text-navy", borderColor: "border-navy/30", bgGradient: "from-navy/5 to-white" },
 };
 
@@ -55,73 +54,72 @@ const FEATURE_MATRIX: FeatureCategory[] = [
   {
     name: "PLAYER & DATA ACCESS",
     features: [
-      { label: "Browse player profiles", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
-      { label: "League Data Sync", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
-      { label: "Elite Prospects link", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
-      { label: "Basic search (name, team)", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
-      { label: "Search with ratings/stats", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
-      { label: "Player search in nav bar", values: { rookie: false, parent: true, scout: true, pro: true, elite: true } },
-      { label: "Game Stats & Data", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
+      { label: "Browse player profiles", values: { rookie: true, coach: true, pro: true, elite: true } },
+      { label: "League Data Sync", values: { rookie: true, coach: true, pro: true, elite: true } },
+      { label: "Elite Prospects link", values: { rookie: true, coach: true, pro: true, elite: true } },
+      { label: "Basic search (name, team)", values: { rookie: true, coach: true, pro: true, elite: true } },
+      { label: "Search with ratings/stats", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Player search in nav bar", values: { rookie: true, coach: true, pro: true, elite: true } },
+      { label: "Game Stats & Data", values: { rookie: false, coach: false, pro: true, elite: true } },
     ],
   },
   {
     name: "SCOUTING",
     features: [
-      { label: "View shared scout notes", values: { rookie: false, parent: "Filtered", scout: true, pro: true, elite: true } },
-      { label: "Create scout notes", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
-      { label: "Quick Note (60-sec path)", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
-      { label: "Detailed Note (full ratings)", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
-      { label: "Prospect status tagging", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
-      { label: "Scouting list management", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
-      { label: "Aggregate scouting board", values: { rookie: false, parent: false, scout: false, pro: false, elite: true } },
+      { label: "View shared scout notes", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Create scout notes", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Quick Note (60-sec path)", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Detailed Note (full ratings)", values: { rookie: false, coach: false, pro: true, elite: true } },
+      { label: "Prospect status tagging", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Scouting list management", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Aggregate scouting board", values: { rookie: false, coach: false, pro: false, elite: true } },
     ],
   },
   {
     name: "REPORTS & AI",
     features: [
-      { label: "AI reports (per month)", values: { rookie: false, parent: "3", scout: "10", pro: "Unlimited", elite: "Unlimited" } },
-      { label: "Report templates", values: { rookie: false, parent: "Player Guide", scout: "Basic set", pro: "All 21", elite: "All 21" } },
-      { label: "PXI AI assistant", values: { rookie: false, parent: false, scout: "Basic", pro: "Full (10 modes)", elite: "Full + Auto-Scout" } },
-      { label: "Bulk report generation", values: { rookie: false, parent: false, scout: false, pro: false, elite: true } },
-      { label: "Export / share reports", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
+      { label: "AI reports (per month)", values: { rookie: "3", coach: "10", pro: "Unlimited", elite: "Unlimited" } },
+      { label: "Report templates", values: { rookie: "Player Guide", coach: "Basic set", pro: "All 21", elite: "All 21" } },
+      { label: "PXI AI assistant", values: { rookie: false, coach: "Basic", pro: "Full (10 modes)", elite: "Full + Auto-Scout" } },
+      { label: "Bulk report generation", values: { rookie: false, coach: false, pro: false, elite: true } },
+      { label: "Export / share reports", values: { rookie: false, coach: false, pro: true, elite: true } },
     ],
   },
   {
     name: "COMMUNICATION",
     features: [
-      { label: "Bench Talk messages/day", values: { rookie: "5", parent: "20", scout: "50", pro: "Unlimited", elite: "Unlimited" } },
-      { label: "AI Custom Reports", values: { rookie: false, parent: false, scout: "10/mo", pro: "Unlimited", elite: "Unlimited+" } },
-      { label: "Messaging (direct)", values: { rookie: false, parent: true, scout: true, pro: true, elite: true } },
-      { label: "Parental safety controls", values: { rookie: false, parent: true, scout: "N/A", pro: "N/A", elite: "N/A" } },
+      { label: "Bench Talk messages/day", values: { rookie: "10", coach: "50", pro: "Unlimited", elite: "Unlimited" } },
+      { label: "AI Custom Reports", values: { rookie: false, coach: "10/mo", pro: "Unlimited", elite: "Unlimited+" } },
+      { label: "Messaging (direct)", values: { rookie: true, coach: true, pro: true, elite: true } },
     ],
   },
   {
-    name: "PARENT FEATURES",
+    name: "PLAYER & FAMILY",
     features: [
-      { label: "Profile analytics (views)", values: { rookie: false, parent: true, scout: "N/A", pro: "N/A", elite: "N/A" } },
-      { label: "Development tracking", values: { rookie: false, parent: true, scout: "N/A", pro: "N/A", elite: "N/A" } },
-      { label: "Advisor directory", values: { rookie: false, parent: true, scout: false, pro: true, elite: true } },
-      { label: "Add / claim your player", values: { rookie: false, parent: true, scout: "N/A", pro: "N/A", elite: "N/A" } },
+      { label: "Profile analytics (views)", values: { rookie: true, coach: false, pro: true, elite: true } },
+      { label: "Development tracking", values: { rookie: true, coach: false, pro: true, elite: true } },
+      { label: "Advisor directory", values: { rookie: true, coach: false, pro: true, elite: true } },
+      { label: "Add / claim your player", values: { rookie: true, coach: false, pro: true, elite: true } },
     ],
   },
   {
     name: "COACHING TOOLS",
     features: [
-      { label: "Game plans", values: { rookie: false, parent: false, scout: "3/mo", pro: "Unlimited", elite: "Unlimited" } },
-      { label: "Practice plans & drills", values: { rookie: false, parent: false, scout: "3/mo", pro: "Unlimited", elite: "Unlimited" } },
-      { label: "Systems library", values: { rookie: false, parent: false, scout: "View only", pro: "Full", elite: "Full" } },
-      { label: "Line combos / builder", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
-      { label: "Series planning", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
-      { label: "Calendar / schedule", values: { rookie: false, parent: false, scout: true, pro: true, elite: true } },
-      { label: "Multi-team views", values: { rookie: false, parent: false, scout: false, pro: true, elite: true } },
+      { label: "Game plans", values: { rookie: false, coach: "3/mo", pro: "Unlimited", elite: "Unlimited" } },
+      { label: "Practice plans & drills", values: { rookie: false, coach: "3/mo", pro: "Unlimited", elite: "Unlimited" } },
+      { label: "Systems library", values: { rookie: false, coach: "View only", pro: "Full", elite: "Full" } },
+      { label: "Line combos / builder", values: { rookie: false, coach: false, pro: true, elite: true } },
+      { label: "Series planning", values: { rookie: false, coach: false, pro: true, elite: true } },
+      { label: "Calendar / schedule", values: { rookie: false, coach: true, pro: true, elite: true } },
+      { label: "Multi-team views", values: { rookie: false, coach: false, pro: true, elite: true } },
     ],
   },
   {
     name: "PLATFORM",
     features: [
-      { label: "Role-based dashboard", values: { rookie: true, parent: true, scout: true, pro: true, elite: true } },
-      { label: "API access", values: { rookie: false, parent: false, scout: false, pro: false, elite: true } },
-      { label: "Priority support", values: { rookie: false, parent: false, scout: false, pro: false, elite: true } },
+      { label: "Role-based dashboard", values: { rookie: true, coach: true, pro: true, elite: true } },
+      { label: "API access", values: { rookie: false, coach: false, pro: false, elite: true } },
+      { label: "Priority support", values: { rookie: false, coach: false, pro: false, elite: true } },
     ],
   },
 ];
@@ -336,12 +334,8 @@ export default function PricingPage() {
                                 : "bg-navy hover:bg-navy/90"
                             }`}
                           >
-                            {key === "rookie" ? "Sign Up Free" : "Get Started"}
+                            Start Free Trial
                           </Link>
-                        ) : key === "rookie" ? (
-                          <div className="text-center text-xs text-muted py-2.5">
-                            Free forever
-                          </div>
                         ) : (
                           <button
                             onClick={() => handleUpgrade(key)}
@@ -371,7 +365,7 @@ export default function PricingPage() {
                   Organization Plans
                 </h2>
                 <p className="text-center text-sm text-muted mb-8 max-w-xl mx-auto">
-                  For teams, programs, and enterprises. Every seat gets Pro-level access with shared scouting data.
+                  For teams, organizations, and enterprises. Every seat gets Pro-level access with shared scouting data.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto pt-4">
                   {ORG_KEYS.map((key) => {
@@ -388,7 +382,7 @@ export default function PricingPage() {
                         key={key}
                         className={`relative overflow-visible flex flex-col rounded-2xl border-2 ${meta.borderColor} bg-gradient-to-b ${meta.bgGradient} p-6 shadow-sm hover:shadow-lg transition-shadow`}
                       >
-                        {/* Founders badge for Team/Program */}
+                        {/* Founders badge for Team/Org */}
                         {foundersPrice && foundersPrice > 0 && (
                           <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
                             <span className="bg-teal text-white text-[10px] font-oswald font-bold uppercase tracking-widest px-3 py-1 rounded-full shadow-sm">
@@ -528,7 +522,7 @@ export default function PricingPage() {
                       {FEATURE_MATRIX.map((category, ci) => (
                         <>
                           <tr key={`cat-${ci}`}>
-                            <td colSpan={6} className="font-oswald font-bold text-navy text-xs uppercase tracking-wider bg-navy/[0.03] p-3 border-t border-border">
+                            <td colSpan={5} className="font-oswald font-bold text-navy text-xs uppercase tracking-wider bg-navy/[0.03] p-3 border-t border-border">
                               {category.name}
                             </td>
                           </tr>
@@ -548,7 +542,7 @@ export default function PricingPage() {
                   </table>
                 </div>
                 <p className="text-center text-xs text-muted mt-3">
-                  Organization plans (Team, Program, Enterprise) include all Pro features per seat.
+                  Organization plans (Team, Org, Enterprise) include all Pro features per seat.
                 </p>
               </div>
             </>
@@ -573,16 +567,16 @@ export default function PricingPage() {
           <div className="max-w-3xl mx-auto pb-16 px-4">
             <div className="bg-teal/10 border border-teal/20 rounded-2xl p-8 sm:p-12 text-center">
               <h2 className="font-oswald text-2xl sm:text-3xl font-bold text-navy">
-                Start Free Today
+                Start Your Free Trial
               </h2>
               <p className="text-navy/80 text-sm mt-3 max-w-lg mx-auto">
-                Create a free Rookie account. No credit card required. Upgrade anytime.
+                Try ProspectX free for 7 days. No credit card required. Cancel anytime.
               </p>
               <Link
                 href="/login?mode=register"
                 className="inline-flex items-center gap-2 mt-6 px-8 py-3 bg-teal text-white font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors text-sm"
               >
-                Get Started Free
+                Start Free Trial
               </Link>
             </div>
           </div>
