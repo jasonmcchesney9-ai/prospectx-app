@@ -31921,6 +31921,8 @@ async def recalculate_pxr(
     start = _time.time()
     conn = get_db()
     try:
+        # Snapshot current scores to pxr_history before recalculation
+        snapshot_count = snapshot_pxr_to_history(conn)
         result = calculate_pxr_scores(conn, season)
     except Exception as e:
         duration = _time.time() - start
@@ -31933,6 +31935,7 @@ async def recalculate_pxr(
     return {
         'status': 'complete',
         'season': season,
+        'snapshot_archived': snapshot_count,
         'players_scored': result['scored'],
         'players_null_toi': result['null_toi'],
         'players_null_data': result['null_data'],
