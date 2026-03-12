@@ -3018,6 +3018,34 @@ def init_db():
         conn.commit()
         logger.info("Migration: added list_type column to scouting_list")
 
+    # ── Migration: Add stage + assigned_scout_id to scouting_pipeline ──
+    sp_cols = _get_table_columns(conn, "scouting_pipeline")
+    for col_name, col_def in [
+        ("stage", "TEXT DEFAULT 'identified'"),
+        ("assigned_scout_id", "TEXT"),
+    ]:
+        if col_name not in sp_cols:
+            conn.execute(f"ALTER TABLE scouting_pipeline ADD COLUMN {col_name} {col_def}")
+            conn.commit()
+            logger.info("Migration: added %s column to scouting_pipeline", col_name)
+    # Back-fill stage from status for existing rows
+    if "stage" not in sp_cols:
+        conn.execute("""
+            UPDATE scouting_pipeline SET stage = CASE status
+                WHEN 'new' THEN 'identified'
+                WHEN 'watching' THEN 'watching'
+                WHEN 'evaluated' THEN 'evaluated'
+                WHEN 'target' THEN 'target'
+                WHEN 'pass' THEN 'pass'
+                ELSE 'identified'
+            END
+            WHERE stage = 'identified' OR stage IS NULL
+        """)
+        conn.commit()
+        logger.info("Migration: back-filled stage from status on scouting_pipeline")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_scouting_pipeline_unique ON scouting_pipeline(org_id, player_id)")
+    conn.commit()
+
     # ── Migration: Add diagram_data column to drills ──────────
     drill_cols = _get_table_columns(conn, "drills")
     if "diagram_data" not in drill_cols:
@@ -41614,6 +41642,280 @@ async def list_scouting_pipeline(token_data: dict = Depends(verify_token)):
                 "updated_at": r["updated_at"] or "",
             })
         return result
+    finally:
+        conn.close()
+
+
+# ============================================================
+# SCOUTING PIPELINE — Stage-based player tracking
+# ============================================================
+
+PIPELINE_ROLES = {"scout", "gm", "coach", "admin"}
+PIPELINE_STAGES = {"identified", "watching", "evaluated", "target", "pass"}
+PIPELINE_PRIORITIES = {"high", "normal", "low"}
+
+
+@app.get("/scouting/pipeline")
+async def get_scouting_pipeline(
+    token_data: dict = Depends(verify_token),
+):
+    """Return all players in org's pipeline, grouped by stage."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT sp.id, sp.player_id, sp.stage, sp.priority, sp.status,
+                   sp.notes, sp.pxi_summary, sp.assigned_scout_id,
+                   sp.added_by, sp.created_at, sp.updated_at, sp.sourced_via,
+                   p.first_name, p.last_name, p.position, p.current_team,
+                   p.current_league, p.dob, p.image_url,
+                   pxr.pxr_score, pxr.confidence_tier,
+                   (SELECT COUNT(*) FROM scout_notes sn
+                    WHERE sn.player_id = sp.player_id AND sn.org_id = ?) AS note_count,
+                   au.first_name AS added_by_first, au.last_name AS added_by_last,
+                   su.first_name AS scout_first, su.last_name AS scout_last
+            FROM scouting_pipeline sp
+            JOIN players p ON sp.player_id = p.id
+            LEFT JOIN pxr_scores pxr ON pxr.player_id = sp.player_id
+                AND pxr.season = (SELECT MAX(pxr2.season) FROM pxr_scores pxr2 WHERE pxr2.player_id = sp.player_id)
+            LEFT JOIN users au ON au.id = sp.added_by
+            LEFT JOIN users su ON su.id = sp.assigned_scout_id
+            WHERE sp.org_id = ?
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            ORDER BY
+                CASE sp.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 WHEN 'low' THEN 2 ELSE 1 END,
+                pxr.pxr_score DESC NULLS LAST,
+                p.last_name ASC
+        """, (org_id, org_id)).fetchall()
+
+        stages: dict = {s: [] for s in ["identified", "watching", "evaluated", "target", "pass"]}
+        for r in rows:
+            entry = {
+                "id": r["id"],
+                "player_id": r["player_id"],
+                "stage": r["stage"] or "identified",
+                "priority": r["priority"] or "normal",
+                "notes": r["notes"] or "",
+                "pxi_summary": r["pxi_summary"] or "",
+                "assigned_scout_id": r["assigned_scout_id"],
+                "assigned_scout": (f"{r['scout_first'] or ''} {r['scout_last'] or ''}".strip() or None) if r["assigned_scout_id"] else None,
+                "added_by": f"{r['added_by_first'] or ''} {r['added_by_last'] or ''}".strip() or "Unknown",
+                "sourced_via": r["sourced_via"] or "",
+                "created_at": r["created_at"] or "",
+                "updated_at": r["updated_at"] or "",
+                "first_name": r["first_name"] or "",
+                "last_name": r["last_name"] or "",
+                "position": r["position"] or "",
+                "current_team": r["current_team"] or "",
+                "current_league": r["current_league"] or "",
+                "dob": r["dob"],
+                "image_url": r["image_url"],
+                "pxr_score": r["pxr_score"],
+                "confidence_tier": r["confidence_tier"],
+                "note_count": r["note_count"] or 0,
+            }
+            stage_key = entry["stage"] if entry["stage"] in stages else "identified"
+            stages[stage_key].append(entry)
+
+        return {"stages": stages}
+    finally:
+        conn.close()
+
+
+@app.post("/scouting/pipeline/add")
+async def add_to_scouting_pipeline(
+    request: Request,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Add a player to the org's scouting pipeline."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    hockey_role = _get_effective_hockey_role(request, token_data)
+    if hockey_role not in PIPELINE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Scout, GM, Coach, or Admin roles can manage the pipeline.")
+
+    player_id = body.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+
+    stage = body.get("stage", "identified")
+    if stage not in PIPELINE_STAGES:
+        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {', '.join(PIPELINE_STAGES)}")
+
+    priority = body.get("priority", "normal")
+    if priority not in PIPELINE_PRIORITIES:
+        priority = "normal"
+
+    conn = get_db()
+    try:
+        player = conn.execute(
+            "SELECT id FROM players WHERE id = ? AND (is_deleted = 0 OR is_deleted IS NULL)", (player_id,)
+        ).fetchone()
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+
+        existing = conn.execute(
+            "SELECT id FROM scouting_pipeline WHERE org_id = ? AND player_id = ?",
+            (org_id, player_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Player already in pipeline")
+
+        item_id = gen_id()
+        conn.execute("""
+            INSERT INTO scouting_pipeline (id, org_id, player_id, added_by, notes, priority, stage,
+                status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'new', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (item_id, org_id, player_id, user_id, body.get("notes", ""), priority, stage))
+        conn.commit()
+
+        row = conn.execute("""
+            SELECT sp.id, sp.player_id, sp.stage, sp.priority, sp.created_at,
+                   p.first_name, p.last_name, p.position, p.current_team, p.current_league
+            FROM scouting_pipeline sp
+            JOIN players p ON sp.player_id = p.id
+            WHERE sp.id = ?
+        """, (item_id,)).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@app.put("/scouting/pipeline/{player_id}/move")
+async def move_pipeline_player(
+    player_id: str,
+    request: Request,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Move a player to a different pipeline stage."""
+    org_id = token_data["org_id"]
+
+    hockey_role = _get_effective_hockey_role(request, token_data)
+    if hockey_role not in PIPELINE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Scout, GM, Coach, or Admin roles can manage the pipeline.")
+
+    stage = body.get("stage")
+    if not stage or stage not in PIPELINE_STAGES:
+        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {', '.join(PIPELINE_STAGES)}")
+
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM scouting_pipeline WHERE org_id = ? AND player_id = ?",
+            (org_id, player_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Player not in pipeline")
+
+        sets = ["stage = ?", "updated_at = CURRENT_TIMESTAMP"]
+        params: list = [stage]
+        priority = body.get("priority")
+        if priority and priority in PIPELINE_PRIORITIES:
+            sets.append("priority = ?")
+            params.append(priority)
+
+        params.append(existing["id"])
+        conn.execute(f"UPDATE scouting_pipeline SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        return {"status": "moved", "player_id": player_id, "stage": stage}
+    finally:
+        conn.close()
+
+
+@app.put("/scouting/pipeline/{player_id}/assign")
+async def assign_pipeline_scout(
+    player_id: str,
+    request: Request,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Assign a scout to evaluate a pipeline player."""
+    org_id = token_data["org_id"]
+
+    hockey_role = _get_effective_hockey_role(request, token_data)
+    if hockey_role not in PIPELINE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Scout, GM, Coach, or Admin roles can manage the pipeline.")
+
+    scout_id = body.get("scout_id")
+    if not scout_id:
+        raise HTTPException(status_code=400, detail="scout_id is required")
+
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM scouting_pipeline WHERE org_id = ? AND player_id = ?",
+            (org_id, player_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Player not in pipeline")
+
+        scout = conn.execute(
+            "SELECT id FROM users WHERE id = ? AND org_id = ?", (scout_id, org_id)
+        ).fetchone()
+        if not scout:
+            raise HTTPException(status_code=404, detail="Scout not found in this organization")
+
+        conn.execute(
+            "UPDATE scouting_pipeline SET assigned_scout_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (scout_id, existing["id"]),
+        )
+        conn.commit()
+        return {"status": "assigned", "player_id": player_id, "scout_id": scout_id}
+    finally:
+        conn.close()
+
+
+@app.delete("/scouting/pipeline/{player_id}")
+async def remove_from_pipeline(
+    player_id: str,
+    request: Request,
+    token_data: dict = Depends(verify_token),
+):
+    """Remove a player from the org's scouting pipeline."""
+    org_id = token_data["org_id"]
+
+    hockey_role = _get_effective_hockey_role(request, token_data)
+    if hockey_role not in PIPELINE_ROLES:
+        raise HTTPException(status_code=403, detail="Only Scout, GM, Coach, or Admin roles can manage the pipeline.")
+
+    conn = get_db()
+    try:
+        result = conn.execute(
+            "DELETE FROM scouting_pipeline WHERE org_id = ? AND player_id = ?",
+            (org_id, player_id),
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Player not in pipeline")
+        return {"status": "removed", "player_id": player_id}
+    finally:
+        conn.close()
+
+
+@app.get("/scouting/pipeline/summary")
+async def pipeline_summary(
+    token_data: dict = Depends(verify_token),
+):
+    """Return counts per pipeline stage for this org."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT sp.stage, COUNT(*) AS cnt
+            FROM scouting_pipeline sp
+            JOIN players p ON sp.player_id = p.id
+            WHERE sp.org_id = ?
+              AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+            GROUP BY sp.stage
+        """, (org_id,)).fetchall()
+        counts = {s: 0 for s in ["identified", "watching", "evaluated", "target", "pass"]}
+        for r in rows:
+            stage_key = r["stage"] if r["stage"] in counts else "identified"
+            counts[stage_key] = r["cnt"]
+        return counts
     finally:
         conn.close()
 
