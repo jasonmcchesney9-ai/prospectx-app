@@ -19,6 +19,9 @@ import {
   Ban,
   FileText,
   Sparkles,
+  MoreVertical,
+  Star,
+  Trash2,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -85,8 +88,36 @@ interface OrgUser {
   hockey_role: string;
 }
 
+interface StagePipelinePlayer {
+  id: string;
+  player_id: string;
+  stage: string;
+  priority: string;
+  notes: string;
+  pxi_summary: string;
+  assigned_scout_id: string | null;
+  assigned_scout: string | null;
+  added_by: string;
+  first_name: string;
+  last_name: string;
+  position: string;
+  current_team: string;
+  current_league: string;
+  pxr_score: number | null;
+  confidence_tier: string | null;
+  note_count: number;
+}
+
 /* ── Constants ────────────────────────────────────────────── */
 const MONO = "ui-monospace, monospace";
+
+const STAGE_COLS = [
+  { key: "identified", label: "Identified", color: "#94A3B8", bg: "rgba(148,163,184,0.10)" },
+  { key: "watching", label: "Watching", color: "#3B82F6", bg: "rgba(59,130,246,0.10)" },
+  { key: "evaluated", label: "Evaluated", color: "#F59E0B", bg: "rgba(245,158,11,0.10)" },
+  { key: "target", label: "Target", color: "#0D9488", bg: "rgba(13,148,136,0.10)" },
+  { key: "pass", label: "Pass", color: "#EF4444", bg: "rgba(239,68,68,0.10)" },
+] as const;
 
 const COLUMNS = [
   { key: "assigned", label: "Assigned", icon: Clock, color: "#3B82F6", bg: "rgba(59,130,246,0.10)" },
@@ -191,6 +222,106 @@ export default function ScoutingPipeline() {
     fetchScouts();
     fetchPipelinePlayers();
   }, [fetchPipeline, fetchScouts, fetchPipelinePlayers]);
+
+  /* ── Player Pipeline (stage-based) ──────────────────────── */
+  const [stageData, setStageData] = useState<Record<string, StagePipelinePlayer[]>>({});
+  const [stageLoading, setStageLoading] = useState(true);
+  const [stageDragPlayer, setStageDragPlayer] = useState<string | null>(null);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [addPlayerSearch, setAddPlayerSearch] = useState("");
+  const [addPlayerResults, setAddPlayerResults] = useState<{ id: string; first_name: string; last_name: string; position: string; current_team: string }[]>([]);
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [kebabOpen, setKebabOpen] = useState<string | null>(null);
+  const kebabRef = useRef<HTMLDivElement>(null);
+
+  const fetchStageData = useCallback(async () => {
+    setStageLoading(true);
+    try {
+      const res = await api.get("/scouting/pipeline");
+      setStageData(res.data?.stages || {});
+    } catch { /* silent */ }
+    finally { setStageLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchStageData(); }, [fetchStageData]);
+
+  // Close kebab on outside click
+  useEffect(() => {
+    if (!kebabOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (kebabRef.current && !kebabRef.current.contains(e.target as Node)) setKebabOpen(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [kebabOpen]);
+
+  const stageTotalCount = Object.values(stageData).reduce((s, arr) => s + arr.length, 0);
+
+  const handleStageDrop = async (targetStage: string) => {
+    if (!stageDragPlayer) return;
+    const playerId = stageDragPlayer;
+    setStageDragPlayer(null);
+    // Optimistic: move in local state
+    let movedEntry: StagePipelinePlayer | null = null;
+    setStageData((prev) => {
+      const next = { ...prev };
+      for (const stage of Object.keys(next)) {
+        const idx = next[stage].findIndex((p) => p.player_id === playerId);
+        if (idx >= 0) { movedEntry = next[stage][idx]; next[stage] = next[stage].filter((_, i) => i !== idx); break; }
+      }
+      if (movedEntry) { next[targetStage] = [...(next[targetStage] || []), { ...movedEntry, stage: targetStage }]; }
+      return next;
+    });
+    try { await api.put(`/scouting/pipeline/${playerId}/move`, { stage: targetStage }); } catch { await fetchStageData(); }
+  };
+
+  const handleAddPlayer = async (playerId: string) => {
+    setAddingPlayer(true);
+    try {
+      await api.post("/scouting/pipeline/add", { player_id: playerId });
+      setShowAddPlayerModal(false);
+      setAddPlayerSearch("");
+      setAddPlayerResults([]);
+      await fetchStageData();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      if (msg?.includes("already")) alert("Player already in pipeline");
+    } finally { setAddingPlayer(false); }
+  };
+
+  const handleRemoveFromPipeline = async (playerId: string) => {
+    setKebabOpen(null);
+    try { await api.delete(`/scouting/pipeline/${playerId}`); await fetchStageData(); } catch { /* silent */ }
+  };
+
+  const handleSetPriority = async (playerId: string, priority: string) => {
+    setKebabOpen(null);
+    // Find current stage
+    let currentStage = "identified";
+    for (const [stage, players] of Object.entries(stageData)) {
+      if (players.some((p) => p.player_id === playerId)) { currentStage = stage; break; }
+    }
+    try { await api.put(`/scouting/pipeline/${playerId}/move`, { stage: currentStage, priority }); await fetchStageData(); } catch { /* silent */ }
+  };
+
+  const handleAssignScout = async (playerId: string, scoutId: string) => {
+    setKebabOpen(null);
+    try { await api.put(`/scouting/pipeline/${playerId}/assign`, { scout_id: scoutId }); await fetchStageData(); } catch { /* silent */ }
+  };
+
+  // Search players for add modal
+  useEffect(() => {
+    if (addPlayerSearch.length < 2) { setAddPlayerResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get(`/players?search=${encodeURIComponent(addPlayerSearch)}&limit=8`);
+        setAddPlayerResults((res.data || []).map((p: { id: string; first_name: string; last_name: string; position: string; current_team: string }) => ({
+          id: p.id, first_name: p.first_name, last_name: p.last_name, position: p.position || "", current_team: p.current_team || "",
+        })));
+      } catch { setAddPlayerResults([]); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [addPlayerSearch]);
 
   /* ── Team autocomplete ─────────────────────────────────── */
   const searchTeams = useCallback(async (q: string) => {
@@ -392,6 +523,220 @@ export default function ScoutingPipeline() {
                   </div>
                 </div>
               )}
+
+              {/* ── Player Pipeline (stage-based) ────────── */}
+              <div className="mb-6">
+                <div
+                  className="flex items-center justify-between px-4 py-2.5 mb-3"
+                  style={{ borderRadius: "12px 12px 0 0", background: "#0F2942" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ background: "#10B981" }} />
+                    <span className="font-bold uppercase text-white" style={{ fontSize: 10, fontFamily: MONO, letterSpacing: 2 }}>
+                      Player Pipeline
+                    </span>
+                    <span className="text-white/40 font-bold uppercase" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1 }}>
+                      {stageTotalCount} player{stageTotalCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowAddPlayerModal(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-white font-bold uppercase transition-colors hover:opacity-90"
+                    style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1, background: "#0D9488" }}
+                  >
+                    <Plus size={11} /> Add Player
+                  </button>
+                </div>
+                {stageLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={20} className="animate-spin" style={{ color: "#0D9488" }} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    {STAGE_COLS.map((col) => {
+                      const players = stageData[col.key] || [];
+                      return (
+                        <div
+                          key={col.key}
+                          className="flex flex-col"
+                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                          onDrop={() => handleStageDrop(col.key)}
+                          style={{ minHeight: 160 }}
+                        >
+                          {/* Column header */}
+                          <div
+                            className="flex items-center gap-2 px-3 py-2 mb-2"
+                            style={{ borderRadius: 8, background: col.bg }}
+                          >
+                            <span className="w-2 h-2 rounded-full" style={{ background: col.color }} />
+                            <span className="font-bold uppercase" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1.5, color: col.color }}>
+                              {col.label}
+                            </span>
+                            <span
+                              className="ml-auto px-1.5 py-0.5 rounded font-bold"
+                              style={{ fontSize: 10, fontFamily: MONO, color: col.color, background: "rgba(255,255,255,0.6)" }}
+                            >
+                              {players.length}
+                            </span>
+                          </div>
+
+                          {/* Cards */}
+                          <div className="flex flex-col gap-2 flex-1">
+                            {players.length === 0 && (
+                              <div className="py-6 text-center" style={{ borderRadius: 8, border: "1px dashed #DDE6EF" }}>
+                                <span className="text-xs" style={{ color: "#8BA4BB" }}>Drop here</span>
+                              </div>
+                            )}
+                            {players.map((p) => {
+                              const pcfg = PRIORITY_CFG[p.priority] || PRIORITY_CFG.normal;
+                              return (
+                                <div
+                                  key={p.player_id}
+                                  draggable
+                                  onDragStart={() => setStageDragPlayer(p.player_id)}
+                                  className="group cursor-grab active:cursor-grabbing relative"
+                                  style={{ borderRadius: 10, border: "1.5px solid #DDE6EF", background: "#FFFFFF", overflow: "visible", borderLeft: `3px solid ${col.color}` }}
+                                >
+                                  <div className="px-3 py-2.5">
+                                    <div className="flex items-start justify-between mb-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <GripVertical size={12} style={{ color: "#CCD6E0" }} className="shrink-0" />
+                                        <Link
+                                          href={`/players/${p.player_id}`}
+                                          className="font-bold text-xs truncate hover:underline"
+                                          style={{ color: "#0F2942" }}
+                                        >
+                                          {p.first_name} {p.last_name}
+                                        </Link>
+                                      </div>
+                                      <div className="relative" ref={kebabOpen === p.player_id ? kebabRef : undefined}>
+                                        <button
+                                          onClick={() => setKebabOpen(kebabOpen === p.player_id ? null : p.player_id)}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                                          style={{ color: "#8BA4BB" }}
+                                        >
+                                          <MoreVertical size={13} />
+                                        </button>
+                                        {kebabOpen === p.player_id && (
+                                          <div
+                                            className="absolute right-0 top-6 z-20 py-1 shadow-lg"
+                                            style={{ borderRadius: 8, border: "1px solid #DDE6EF", background: "#FFFFFF", minWidth: 160 }}
+                                          >
+                                            {/* Priority */}
+                                            <div className="px-3 py-1.5">
+                                              <span className="font-bold uppercase" style={{ fontSize: 8, fontFamily: MONO, letterSpacing: 1, color: "#8BA4BB" }}>Priority</span>
+                                              <div className="flex gap-1 mt-1">
+                                                {["high", "normal", "low"].map((pr) => (
+                                                  <button
+                                                    key={pr}
+                                                    onClick={() => handleSetPriority(p.player_id, pr)}
+                                                    className="px-2 py-0.5 rounded font-bold uppercase"
+                                                    style={{
+                                                      fontSize: 8,
+                                                      fontFamily: MONO,
+                                                      letterSpacing: 0.5,
+                                                      color: PRIORITY_CFG[pr].color,
+                                                      background: p.priority === pr ? PRIORITY_CFG[pr].bg : "transparent",
+                                                      border: `1px solid ${p.priority === pr ? PRIORITY_CFG[pr].color : "#DDE6EF"}`,
+                                                    }}
+                                                  >
+                                                    {PRIORITY_CFG[pr].label}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </div>
+                                            {/* Assign Scout */}
+                                            {scoutOptions.length > 0 && (
+                                              <div className="px-3 py-1.5 border-t" style={{ borderColor: "#EEF3F8" }}>
+                                                <span className="font-bold uppercase" style={{ fontSize: 8, fontFamily: MONO, letterSpacing: 1, color: "#8BA4BB" }}>Assign Scout</span>
+                                                <div className="flex flex-col gap-0.5 mt-1">
+                                                  {scoutOptions.map((s) => (
+                                                    <button
+                                                      key={s.id}
+                                                      onClick={() => handleAssignScout(p.player_id, s.id)}
+                                                      className="text-left text-xs px-2 py-1 rounded hover:bg-gray-50"
+                                                      style={{ color: p.assigned_scout_id === s.id ? "#0D9488" : "#0F2942", fontWeight: p.assigned_scout_id === s.id ? 700 : 400 }}
+                                                    >
+                                                      {s.name}
+                                                    </button>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {/* View Profile */}
+                                            <Link
+                                              href={`/players/${p.player_id}`}
+                                              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 border-t"
+                                              style={{ color: "#0F2942", borderColor: "#EEF3F8" }}
+                                              onClick={() => setKebabOpen(null)}
+                                            >
+                                              <Eye size={11} /> View Profile
+                                            </Link>
+                                            {/* Remove */}
+                                            <button
+                                              onClick={() => handleRemoveFromPipeline(p.player_id)}
+                                              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-gray-50 border-t"
+                                              style={{ color: "#EF4444", borderColor: "#EEF3F8" }}
+                                            >
+                                              <Trash2 size={11} /> Remove
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {/* Position + team */}
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      {p.position && (
+                                        <span className="font-bold uppercase" style={{ fontSize: 8, fontFamily: MONO, letterSpacing: 0.5, color: "#5A7291" }}>
+                                          {p.position}
+                                        </span>
+                                      )}
+                                      {p.current_team && (
+                                        <span className="text-xs truncate" style={{ color: "#8BA4BB" }}>{p.current_team}</span>
+                                      )}
+                                    </div>
+                                    {/* PXR + Priority + Notes row */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {p.pxr_score != null && (
+                                        <span
+                                          className="px-1.5 py-0.5 rounded font-bold"
+                                          style={{
+                                            fontSize: 10,
+                                            fontFamily: MONO,
+                                            color: p.confidence_tier === "estimated" ? "#F59E0B" : "#0D9488",
+                                            background: p.confidence_tier === "estimated" ? "rgba(245,158,11,0.10)" : "rgba(13,148,136,0.10)",
+                                          }}
+                                        >
+                                          {p.confidence_tier === "estimated" ? "~" : ""}{p.pxr_score.toFixed(1)}
+                                        </span>
+                                      )}
+                                      <span
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ background: pcfg.color }}
+                                        title={`Priority: ${pcfg.label}`}
+                                      />
+                                      {p.assigned_scout && (
+                                        <span className="flex items-center gap-1 text-xs" style={{ color: "#8BA4BB" }}>
+                                          <User size={9} /> {p.assigned_scout}
+                                        </span>
+                                      )}
+                                      {p.note_count > 0 && (
+                                        <span className="flex items-center gap-0.5 text-xs" style={{ color: "#8BA4BB" }}>
+                                          <FileText size={9} /> {p.note_count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* ── Section 2: Assignments Board ────────────── */}
               <div className="mb-6">
@@ -815,6 +1160,65 @@ export default function ScoutingPipeline() {
                       {submitting ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
                       Create Assignment
                     </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Add Player to Pipeline Modal ─────────── */}
+          {showAddPlayerModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div
+                className="mx-4 w-full max-w-md"
+                style={{ borderRadius: 12, border: "1.5px solid #DDE6EF", background: "#FFFFFF", overflow: "hidden" }}
+              >
+                <div className="flex items-center justify-between px-5 py-3" style={{ background: "#0F2942" }}>
+                  <div className="flex items-center gap-2">
+                    <Plus size={14} className="text-white/80" />
+                    <span className="font-bold uppercase text-white" style={{ fontSize: 11, fontFamily: MONO, letterSpacing: 2 }}>
+                      Add to Pipeline
+                    </span>
+                  </div>
+                  <button onClick={() => { setShowAddPlayerModal(false); setAddPlayerSearch(""); setAddPlayerResults([]); }} className="text-white/40 hover:text-white">
+                    <XIcon size={16} />
+                  </button>
+                </div>
+                <div className="px-5 py-4">
+                  <div className="relative mb-3">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#8BA4BB" }} />
+                    <input
+                      type="text"
+                      value={addPlayerSearch}
+                      onChange={(e) => setAddPlayerSearch(e.target.value)}
+                      placeholder="Search players..."
+                      className="w-full pl-8 pr-3 py-2 rounded-md text-xs"
+                      style={{ border: "1px solid #DDE6EF", color: "#0F2942", fontFamily: MONO, background: "#F8FAFC" }}
+                      autoFocus
+                    />
+                  </div>
+                  {addPlayerSearch.length >= 2 && addPlayerResults.length === 0 && (
+                    <p className="text-xs text-center py-3" style={{ color: "#8BA4BB" }}>No players found</p>
+                  )}
+                  <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                    {addPlayerResults.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleAddPlayer(p.id)}
+                        disabled={addingPlayer}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-gray-50 disabled:opacity-50"
+                        style={{ border: "1px solid #EEF3F8" }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-xs" style={{ color: "#0F2942" }}>{p.first_name} {p.last_name}</div>
+                          <div className="flex items-center gap-2">
+                            {p.position && <span className="font-bold uppercase" style={{ fontSize: 8, fontFamily: MONO, color: "#5A7291" }}>{p.position}</span>}
+                            {p.current_team && <span className="text-xs" style={{ color: "#8BA4BB" }}>{p.current_team}</span>}
+                          </div>
+                        </div>
+                        <Plus size={14} style={{ color: "#0D9488" }} />
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

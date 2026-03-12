@@ -54,6 +54,7 @@ import {
   Mail,
   Film,
   Share2,
+  GitBranch,
 } from "lucide-react";
 import {
   RadarChart,
@@ -444,6 +445,9 @@ export default function PlayerDetailPage() {
   // Top Prospects
   const canManageTP = new Set(["scout", "gm", "coach", "admin"]).has(userRole);
   const [isTopProspect, setIsTopProspect] = useState(false);
+
+  // Pipeline
+  const [pipelineStage, setPipelineStage] = useState<string | null>(null);
 
   // Correction form
   const [showCorrectionForm, setShowCorrectionForm] = useState(false);
@@ -1146,6 +1150,37 @@ export default function PlayerDetailPage() {
       try {
         await api.post("/watchlist/top-prospects/add", { player_id: playerId });
         setIsTopProspect(true);
+      } catch { /* ignore */ }
+    }
+  }
+
+  // Check if player is in pipeline
+  useEffect(() => {
+    if (!canManageTP) return;
+    api.get("/scouting/pipeline")
+      .then((res) => {
+        const stages = res.data?.stages || {};
+        for (const [stage, players] of Object.entries(stages)) {
+          if ((players as { player_id: string }[]).some((p) => p.player_id === playerId)) {
+            setPipelineStage(stage);
+            return;
+          }
+        }
+        setPipelineStage(null);
+      })
+      .catch(() => {});
+  }, [playerId, canManageTP]);
+
+  async function togglePipeline() {
+    if (pipelineStage) {
+      try {
+        await api.delete(`/scouting/pipeline/${playerId}`);
+        setPipelineStage(null);
+      } catch { /* ignore */ }
+    } else {
+      try {
+        await api.post("/scouting/pipeline/add", { player_id: playerId });
+        setPipelineStage("identified");
       } catch { /* ignore */ }
     }
   }
@@ -3903,6 +3938,11 @@ export default function PlayerDetailPage() {
                   {canManageTP && (
                     <button onClick={toggleTopProspect} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: isTopProspect ? "#0D9488" : "white", color: isTopProspect ? "white" : "#0F2942", border: isTopProspect ? "1.5px solid #0D9488" : "1.5px solid #DDE6EF", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
                       <Star size={12} fill={isTopProspect ? "white" : "none"} /> {isTopProspect ? "On Top Prospects" : "Add to Top Prospects"}
+                    </button>
+                  )}
+                  {canManageTP && (
+                    <button onClick={togglePipeline} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: pipelineStage ? "#3B82F6" : "white", color: pipelineStage ? "white" : "#0F2942", border: pipelineStage ? "1.5px solid #3B82F6" : "1.5px solid #DDE6EF", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                      <GitBranch size={12} /> {pipelineStage ? `In Pipeline: ${pipelineStage.charAt(0).toUpperCase() + pipelineStage.slice(1)}` : "Push to Pipeline"}
                     </button>
                   )}
                   <Link href={`/players/${playerId}/card`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
