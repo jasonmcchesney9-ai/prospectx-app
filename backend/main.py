@@ -190,12 +190,12 @@ if _stripe_available and STRIPE_SECRET_KEY:
 
 # Map internal tier slugs → Stripe Price IDs (env-configurable)
 STRIPE_PRICE_MAP = {
-    "parent": os.getenv("STRIPE_PRICE_PARENT", "price_placeholder_parent"),
-    "scout": os.getenv("STRIPE_PRICE_SCOUT", "price_placeholder_scout"),
+    "rookie": os.getenv("STRIPE_PRICE_ROOKIE", "price_placeholder_rookie"),
+    "coach": os.getenv("STRIPE_PRICE_COACH", "price_placeholder_coach"),
     "pro": os.getenv("STRIPE_PRICE_PRO", "price_placeholder_pro"),
     "elite": os.getenv("STRIPE_PRICE_ELITE", "price_placeholder_elite"),
     "team_org": os.getenv("STRIPE_PRICE_TEAM", "price_placeholder_team"),
-    "program_org": os.getenv("STRIPE_PRICE_ORG", "price_placeholder_org"),
+    "org": os.getenv("STRIPE_PRICE_ORG", "price_placeholder_org"),
 }
 
 # Reverse lookup: Stripe Price ID → internal tier slug
@@ -206,41 +206,16 @@ SUBSCRIPTION_TIERS = {
     # ── Individual Plans ──────────────────────────────────
     "rookie": {
         "name": "Rookie",
-        "price": 0,
-        "annual_price": 0,
-        "monthly_reports": 0,
-        "monthly_bench_talks": 150,  # 5/day × 30
-        "monthly_practice_plans": 0,
-        "monthly_highlight_reels": 0,
-        "max_seats": 1,
-        "description": "Browse players, live stats, and basic Bench Talk.",
-        "target_user": "Casual browsers",
-        "features": ["Browse player profiles", "HockeyTech live stats", "Elite Prospects links", "Basic search", "5 Bench Talk messages/day"],
-        # Permissions
-        "can_sync_data": False,
-        "can_bulk_sync": False,
-        "can_upload_files": False,
-        "can_access_live_stats": True,
-        "can_submit_corrections": False,
-        "can_create_game_plans": False,
-        "can_create_series": False,
-        "can_use_scouting_list": False,
-        "max_scouting_list": 0,
-        "max_uploads_per_month": 0,
-        "max_file_size_mb": 0,
-        "players_tracked": 0,
-    },
-    "parent": {
-        "name": "Parent",
-        "price": 10.00,
-        "annual_price": 100.00,
+        "price": 9.99,
+        "annual_price": 99.00,
+        "trial_days": 7,
         "monthly_reports": 3,
         "monthly_bench_talks": 600,  # 20/day × 30
         "monthly_practice_plans": 0,
         "monthly_highlight_reels": 1,
         "max_seats": 1,
         "description": "Development tracking, reports, and advisor directory for hockey parents.",
-        "target_user": "Hockey parents",
+        "target_user": "Hockey parents, casual users",
         "features": ["3 reports/month", "20 Bench Talk/day", "Profile analytics", "Development tracking", "Advisor directory", "Add/claim your player", "Direct messaging"],
         # Permissions
         "can_sync_data": False,
@@ -256,10 +231,11 @@ SUBSCRIPTION_TIERS = {
         "max_file_size_mb": 0,
         "players_tracked": 1,
     },
-    "scout": {
-        "name": "Scout",
-        "price": 25.00,
-        "annual_price": 250.00,
+    "coach": {
+        "name": "Coach",
+        "price": 24.99,
+        "annual_price": 249.00,
+        "trial_days": 7,
         "monthly_reports": 10,
         "monthly_bench_talks": 1500,  # 50/day × 30
         "monthly_practice_plans": 3,
@@ -285,8 +261,9 @@ SUBSCRIPTION_TIERS = {
     },
     "pro": {
         "name": "Pro",
-        "price": 49.00,
-        "annual_price": 490.00,
+        "price": 39.99,
+        "annual_price": 399.00,
+        "trial_days": 10,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
@@ -313,6 +290,7 @@ SUBSCRIPTION_TIERS = {
         "name": "Elite",
         "price": 99.00,
         "annual_price": 990.00,
+        "trial_days": 10,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
@@ -339,9 +317,9 @@ SUBSCRIPTION_TIERS = {
     # ── Organization Plans ────────────────────────────────
     "team_org": {
         "name": "Team",
-        "price": 249.00,
-        "annual_price": 1990.00,
-        "founders_price": 199.00,
+        "price": 179.99,
+        "annual_price": 1799.00,
+        "trial_days": 10,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
@@ -364,11 +342,11 @@ SUBSCRIPTION_TIERS = {
         "max_file_size_mb": 100,
         "players_tracked": 250,
     },
-    "program_org": {
-        "name": "Program",
-        "price": 599.00,
-        "annual_price": 4990.00,
-        "founders_price": 499.00,
+    "org": {
+        "name": "Org",
+        "price": 249.99,
+        "annual_price": 2499.00,
+        "trial_days": 10,
         "monthly_reports": -1,
         "monthly_bench_talks": -1,
         "monthly_practice_plans": -1,
@@ -2697,7 +2675,7 @@ def init_db():
     stripe_cols = {
         "stripe_customer_id": "TEXT",
         "stripe_subscription_id": "TEXT",
-        "subscription_status": "TEXT DEFAULT 'inactive'",
+        "subscription_status": "TEXT DEFAULT 'trialing'",
     }
     for col_name, col_type in stripe_cols.items():
         if col_name not in user_cols:
@@ -3424,14 +3402,25 @@ def init_db():
 
     # ── Migration: rename old subscription tiers (CR-009) ──
     try:
-        n1 = conn.execute("UPDATE users SET subscription_tier = 'scout' WHERE subscription_tier = 'novice'").rowcount
+        n1 = conn.execute("UPDATE users SET subscription_tier = 'coach' WHERE subscription_tier = 'novice'").rowcount
         n2 = conn.execute("UPDATE users SET subscription_tier = 'team_org' WHERE subscription_tier = 'team'").rowcount
-        n3 = conn.execute("UPDATE users SET subscription_tier = 'program_org' WHERE subscription_tier = 'aaa_org'").rowcount
+        n3 = conn.execute("UPDATE users SET subscription_tier = 'org' WHERE subscription_tier = 'aaa_org'").rowcount
         if n1 or n2 or n3:
             conn.commit()
-            logger.info("Tier migration: novice→scout:%d, team→team_org:%d, aaa_org→program_org:%d", n1, n2, n3)
+            logger.info("Tier migration: novice→coach:%d, team→team_org:%d, aaa_org→org:%d", n1, n2, n3)
     except Exception as e:
         logger.warning("Tier migration note: %s", e)
+
+    # ── Migration: rename V1 tier names to V2 (Pricing V2) ──
+    try:
+        v2_n1 = conn.execute("UPDATE users SET subscription_tier = 'rookie' WHERE subscription_tier = 'parent'").rowcount
+        v2_n2 = conn.execute("UPDATE users SET subscription_tier = 'coach' WHERE subscription_tier = 'scout'").rowcount
+        v2_n3 = conn.execute("UPDATE users SET subscription_tier = 'org' WHERE subscription_tier = 'program_org'").rowcount
+        if v2_n1 or v2_n2 or v2_n3:
+            conn.commit()
+            logger.info("Tier V2 migration: parent→rookie:%d, scout→coach:%d, program_org→org:%d", v2_n1, v2_n2, v2_n3)
+    except Exception as e:
+        logger.warning("Tier V2 migration note: %s", e)
 
     # ── Migration: set superadmin role for jason@prospectx.com ──
     try:
@@ -12354,7 +12343,7 @@ async def register(request: Request, req: RegisterRequest):
     )
     hockey_role = req.hockey_role if req.hockey_role in ("scout", "gm", "coach", "player", "parent", "broadcaster", "producer", "agent") else "scout"
     conn.execute(
-        "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        "INSERT INTO users (id, org_id, email, password_hash, first_name, last_name, role, hockey_role, email_verified, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'rookie', 'trialing')",
         (user_id, org_id, req.email.lower().strip(), password_hash, req.first_name, req.last_name, "admin", hockey_role),
     )
     # Mark invite as accepted
@@ -13258,7 +13247,7 @@ async def superadmin_list_orgs(token_data: dict = Depends(verify_token)):
             user_count = len(user_list)
 
             # Determine highest tier
-            tier_order = ["rookie", "parent", "scout", "pro", "elite", "team_org", "program_org", "enterprise"]
+            tier_order = ["rookie", "coach", "pro", "elite", "team_org", "org", "enterprise"]
             highest_tier = "rookie"
             for u in user_list:
                 t = u.get("tier", "rookie")
@@ -13862,12 +13851,12 @@ async def create_org_invite(req: InviteRequest, token_data: dict = Depends(verif
         tier_row = conn.execute(
             "SELECT subscription_tier FROM users WHERE org_id = ? ORDER BY CASE "
             "WHEN subscription_tier = 'enterprise' THEN 9 "
-            "WHEN subscription_tier = 'program_org' THEN 8 "
+            "WHEN subscription_tier = 'org' THEN 8 "
             "WHEN subscription_tier = 'team_org' THEN 7 "
             "WHEN subscription_tier = 'elite' THEN 6 "
             "WHEN subscription_tier = 'pro' THEN 5 "
-            "WHEN subscription_tier = 'scout' THEN 4 "
-            "WHEN subscription_tier = 'parent' THEN 3 "
+            "WHEN subscription_tier = 'coach' THEN 4 "
+            "WHEN subscription_tier = 'rookie' THEN 3 "
             "ELSE 1 END DESC LIMIT 1",
             (org_id,)
         ).fetchone()
@@ -14038,12 +14027,12 @@ async def accept_org_invite(token: str, req: InviteAcceptRequest):
         tier_row = conn.execute(
             "SELECT subscription_tier FROM users WHERE org_id = ? ORDER BY CASE "
             "WHEN subscription_tier = 'enterprise' THEN 9 "
-            "WHEN subscription_tier = 'program_org' THEN 8 "
+            "WHEN subscription_tier = 'org' THEN 8 "
             "WHEN subscription_tier = 'team_org' THEN 7 "
             "WHEN subscription_tier = 'elite' THEN 6 "
             "WHEN subscription_tier = 'pro' THEN 5 "
-            "WHEN subscription_tier = 'scout' THEN 4 "
-            "WHEN subscription_tier = 'parent' THEN 3 "
+            "WHEN subscription_tier = 'coach' THEN 4 "
+            "WHEN subscription_tier = 'rookie' THEN 3 "
             "ELSE 1 END DESC LIMIT 1",
             (invite["org_id"],)
         ).fetchone()
