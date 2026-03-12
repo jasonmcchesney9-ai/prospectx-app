@@ -8,8 +8,19 @@ import { assetUrl, hasRealImage } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { formatLeague } from "@/lib/leagues";
 import { useBenchTalk } from "./BenchTalkProvider";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 const GOALIE_POSITIONS = new Set(["G", "GK", "Goalie"]);
+
+const TIER_TOOLTIP_MAP: Record<string, string> = {
+  "1A": TOOLTIPS.pxr_tier_elite,
+  "1B": TOOLTIPS.pxr_tier_1b,
+  "2A": TOOLTIPS.pxr_tier_2a,
+  "2B": TOOLTIPS.pxr_tier_2b,
+  "3A": TOOLTIPS.pxr_tier_3a,
+  "3B": TOOLTIPS.pxr_tier_fringe,
+};
 
 const GRADE_TO_SCORE: Record<string, number> = {
   "A+": 10, "A": 9.5, "A-": 9, "B+": 8.5, "B": 8, "B-": 7.5,
@@ -282,17 +293,23 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
             {pxrScore != null ? (
               <>
-                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 20, color: pxrEstimated ? "#F59E0B" : "#0D9488", lineHeight: 1 }}>
-                  {typeof pxrScore === "number" ? pxrScore.toFixed(1) : pxrScore}
-                </span>
-                {pxrTier && (
-                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", padding: "2px 5px", borderRadius: 4, background: pxrEstimated ? "rgba(245,158,11,0.12)" : "rgba(13,148,136,0.12)", color: pxrEstimated ? "#F59E0B" : "#0D9488" }}>
-                    {pxrTier}
+                <Tooltip text={pxrEstimated ? TOOLTIPS.pxr_estimated : TOOLTIPS.pxr_score}>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 20, color: pxrEstimated ? "#F59E0B" : "#0D9488", lineHeight: 1 }}>
+                    {typeof pxrScore === "number" ? pxrScore.toFixed(1) : pxrScore}
                   </span>
+                </Tooltip>
+                {pxrTier && (
+                  <Tooltip text={TIER_TOOLTIP_MAP[pxrTier] || TOOLTIPS.pxr_tier_fringe}>
+                    <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", padding: "2px 5px", borderRadius: 4, background: pxrEstimated ? "rgba(245,158,11,0.12)" : "rgba(13,148,136,0.12)", color: pxrEstimated ? "#F59E0B" : "#0D9488" }}>
+                      {pxrTier}
+                    </span>
+                  </Tooltip>
                 )}
               </>
             ) : (
-              <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 20, color: "#94A3B8", lineHeight: 1 }}>—</span>
+              <Tooltip text={TOOLTIPS.pxr_null}>
+                <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 20, color: "#94A3B8", lineHeight: 1 }}>—</span>
+              </Tooltip>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
