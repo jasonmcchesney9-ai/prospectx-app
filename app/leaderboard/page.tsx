@@ -363,13 +363,13 @@ export default function LeaderboardPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-border">
                         <tr>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12">#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12"><Tooltip text={TOOLTIPS.leaderboard_rank} position="bottom"><span className="cursor-help">#</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PPG" : "PXR Score"}</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PPG" : <Tooltip text={TOOLTIPS.leaderboard_pxr} position="bottom"><span className="cursor-help">PXR Score</span></Tooltip>}</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{ppgFallbackMode ? "PXR Status" : <Tooltip text={TOOLTIPS.league_pct} position="bottom"><span className="cursor-help">League %</span></Tooltip>}</th>
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>}
-                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Mod</th>}
+                          {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.leaderboard_age_mod} position="bottom"><span className="cursor-help">Age Mod</span></Tooltip></th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>}
                           {!ppgFallbackMode && <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>}
                         </tr>
@@ -459,11 +459,11 @@ export default function LeaderboardPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-border">
                         <tr>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12">#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12"><Tooltip text={TOOLTIPS.leaderboard_rank} position="bottom"><span className="cursor-help">#</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.leaderboard_pxr} position="bottom"><span className="cursor-help">PXR Score</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.league_pct} position="bottom"><span className="cursor-help">League %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>
@@ -543,12 +543,12 @@ export default function LeaderboardPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-border">
                         <tr>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12">#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12"><Tooltip text={TOOLTIPS.leaderboard_rank} position="bottom"><span className="cursor-help">#</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Birth Year</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.leaderboard_pxr} position="bottom"><span className="cursor-help">PXR Score</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.league_pct} position="bottom"><span className="cursor-help">League %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Gap</th>
@@ -620,11 +620,11 @@ export default function LeaderboardPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-border">
                         <tr>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12">#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12"><Tooltip text={TOOLTIPS.leaderboard_rank} position="bottom"><span className="cursor-help">#</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League</th>
-                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR Score</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.leaderboard_pxr} position="bottom"><span className="cursor-help">PXR Score</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60"><Tooltip text={TOOLTIPS.cohort_pct} position="bottom"><span className="cursor-help">Cohort %</span></Tooltip></th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Age Advantage</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Confidence</th>

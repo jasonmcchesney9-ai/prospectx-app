@@ -82,7 +82,7 @@ export const TOOLTIPS = {
   leaderboard_by_cohort:
     "Rankings by birth year across all leagues. Shows who the best 2007-born forwards are globally, regardless of what league they play in. The draft scout\u2019s view.",
   leaderboard_rising:
-    "Players whose cohort percentile increased most in the last 30 days. These players are improving faster than their peers right now.",
+    "Rising \u2014 players whose PXR score increased the most since the last nightly recalculation. Early indicator of breakout performance.",
   leaderboard_undervalued:
     "Players with a high cohort percentile but a lower league percentile. High global rank, playing in a strong league where they\u2019re not a standout yet. Hidden gems.",
   leaderboard_rank:
