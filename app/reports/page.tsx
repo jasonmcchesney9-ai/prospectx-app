@@ -10,8 +10,31 @@ import PXIBadge from "@/components/PXIBadge";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
 import type { Report } from "@/types/api";
 import { REPORT_TYPE_LABELS, REPORT_CATEGORIES, REPORT_AUDIENCE_MAP, WIRED_REPORT_TYPES, PLAYER_REPORT_TYPES, TEAM_REPORT_TYPES } from "@/types/api";
+
+const REPORT_TYPE_TOOLTIP_MAP: Record<string, string> = {
+  elite_profile: TOOLTIPS.report_elite_profile,
+  pro_skater: TOOLTIPS.report_scout_report,
+  unified_prospect: TOOLTIPS.report_scout_report,
+  parent_report: TOOLTIPS.report_parent_report,
+  family_card: TOOLTIPS.report_parent_report,
+  agent_pack: TOOLTIPS.report_agent_pack,
+  team_identity: TOOLTIPS.report_team_identity,
+  opponent_gameplan: TOOLTIPS.report_opponent_gameplan,
+  playoff_series: TOOLTIPS.report_playoff_series,
+  playoff_series_prep: TOOLTIPS.report_playoff_series,
+  full_team_coaching: TOOLTIPS.report_full_team_coaching,
+  personnel_suggestion: TOOLTIPS.report_personnel_suggestion,
+  role_adjustment: TOOLTIPS.report_role_adjustment,
+  in_season_projections: TOOLTIPS.report_in_season_projections,
+  development_roadmap: TOOLTIPS.report_dev_roadmap,
+  player_season_roadmap: TOOLTIPS.report_dev_roadmap,
+  bias_controlled_eval: TOOLTIPS.report_bias_controlled,
+  bench_card: TOOLTIPS.report_bench_card,
+};
 
 export default function ReportsPage() {
   const currentUser = getUser();
@@ -384,9 +407,17 @@ export default function ReportsPage() {
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <FileText size={16} className={`shrink-0 ${cat.accent === "teal" ? "text-teal" : "text-orange"}`} />
-                                <h3 className="text-sm font-oswald font-bold uppercase tracking-wider text-navy truncate">
-                                  {label}
-                                </h3>
+                                {REPORT_TYPE_TOOLTIP_MAP[type] ? (
+                                  <Tooltip text={REPORT_TYPE_TOOLTIP_MAP[type]} position="bottom" maxWidth={300}>
+                                    <h3 className="text-sm font-oswald font-bold uppercase tracking-wider text-navy truncate cursor-help">
+                                      {label}
+                                    </h3>
+                                  </Tooltip>
+                                ) : (
+                                  <h3 className="text-sm font-oswald font-bold uppercase tracking-wider text-navy truncate">
+                                    {label}
+                                  </h3>
+                                )}
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 {!isWired && (
