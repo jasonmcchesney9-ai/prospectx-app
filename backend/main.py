@@ -697,7 +697,29 @@ _R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "")
 _R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "")
 _R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "")
 _R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL", "")  # e.g. https://assets.prospectxintelligence.com
-STATIC_ASSETS_URL = _R2_PUBLIC_URL.rstrip("/") if _R2_PUBLIC_URL else "/static/assets"
+
+
+def _sanitize_r2_public_url(raw: str) -> str:
+    """Sanitize R2_PUBLIC_URL to prevent doubled protocol/domain/bucket."""
+    if not raw:
+        return ""
+    url = raw.strip().rstrip("/")
+    # Fix doubled https:// (e.g. "https://https://...")
+    while "https://https:" in url:
+        url = url.replace("https://https:", "https:", 1)
+    # Ensure proper https:// prefix (fix single-slash "https:/...")
+    if url.startswith("https:/") and not url.startswith("https://"):
+        url = "https://" + url[len("https:/"):]
+    # Fix doubled domain (e.g. "...com/bucket.r2.cloudflarestorage.com/bucket")
+    if ".r2.cloudflarestorage.com" in url:
+        parts = url.split(".r2.cloudflarestorage.com")
+        if len(parts) > 2:
+            # Keep only first domain occurrence + last path
+            url = parts[0] + ".r2.cloudflarestorage.com" + parts[-1]
+    return url
+
+
+STATIC_ASSETS_URL = _sanitize_r2_public_url(_R2_PUBLIC_URL) if _R2_PUBLIC_URL else "/static/assets"
 
 _r2_client = None
 if _R2_ACCOUNT_ID and _R2_ACCESS_KEY_ID and _R2_SECRET_ACCESS_KEY:
@@ -730,7 +752,7 @@ async def cache_remote_asset(url: str, prefix: str = "asset") -> str | None:
             ext = "png"
         filename = f"{prefix}_{url_hash}.{ext}"
         object_key = f"assets/{filename}"
-        public_url = f"{STATIC_ASSETS_URL}/{filename}"
+        public_url = f"{STATIC_ASSETS_URL}/{object_key}"
         # Skip if already in R2
         try:
             _r2_client.head_object(Bucket=_R2_BUCKET_NAME, Key=object_key)
@@ -32249,7 +32271,7 @@ async def backfill_assets(token_data: dict = Depends(verify_token)):
                         Body=file_bytes,
                         ContentType=content_type,
                     )
-                    r2_url = f"{STATIC_ASSETS_URL}/team_{lt['id']}.{ext}"
+                    r2_url = f"{STATIC_ASSETS_URL}/{object_key}"
                     conn.execute(
                         "UPDATE teams SET logo_url = ? WHERE id = ?",
                         (r2_url, lt["id"]),
