@@ -108,6 +108,15 @@ interface Adjustment {
   used_in_game: string;
 }
 
+interface SeriesAdjustment {
+  id: string;
+  adjustment_text: string;
+  triggered: number;
+  triggered_after_game: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
 interface GameSession {
   id: string;
   game_number: number;
@@ -209,6 +218,9 @@ function SeriesDetail() {
   const [tiChecks, setTiChecks] = useState<{ team: boolean; opponent: boolean }>({ team: false, opponent: false });
   const [tiGenerating, setTiGenerating] = useState<string | null>(null);
   const [seriesScore, setSeriesScore] = useState<{ your_wins: number; opponent_wins: number; otl: number; games_played: number; summary: string } | null>(null);
+  const [seededAdjustments, setSeededAdjustments] = useState<SeriesAdjustment[]>([]);
+  const [seededAdjLoading, setSeededAdjLoading] = useState(false);
+  const [seedingAdj, setSeedingAdj] = useState(false);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -305,6 +317,25 @@ function SeriesDetail() {
     fetchDossier();
     return () => { cancelled = true; };
   }, [activeTab, seriesId, dossierFetchKey]);
+
+  // ── Fetch seeded adjustments when Adjustments tab activates ──
+  useEffect(() => {
+    if (activeTab !== "adjustments" || !seriesId) return;
+    let cancelled = false;
+    async function fetchAdjustments() {
+      setSeededAdjLoading(true);
+      try {
+        const { data } = await api.get<SeriesAdjustment[]>(`/chalk-talk/series/${seriesId}/adjustments`);
+        if (!cancelled) setSeededAdjustments(data);
+      } catch {
+        if (!cancelled) setSeededAdjustments([]);
+      } finally {
+        if (!cancelled) setSeededAdjLoading(false);
+      }
+    }
+    fetchAdjustments();
+    return () => { cancelled = true; };
+  }, [activeTab, seriesId]);
 
   // ── Fetch linked game plans + series score when Games tab activates ──
   const fetchSeriesScore = useCallback(async () => {
@@ -457,7 +488,12 @@ function SeriesDetail() {
       // 2. Link report to this series
       await api.post(`/chalk-talk/series/${seriesId}/link-report`, { report_id: reportId });
 
-      // 3. Switch to Dossier tab and trigger refetch
+      // 3. Auto-seed adjustments from the report
+      try {
+        await api.post(`/chalk-talk/series/${seriesId}/adjustments/seed`);
+      } catch { /* non-fatal */ }
+
+      // 4. Switch to Dossier tab and trigger refetch
       setActiveTab("dossier");
       setDossierFetchKey(k => k + 1);
       toast.success("Series intelligence generated");
@@ -640,6 +676,41 @@ function SeriesDetail() {
     const updated = adjustments.filter((_, i) => i !== idx);
     setAdjustments(updated);
     saveField({ adjustments: updated });
+  };
+
+  const handleSeedAdjustments = async () => {
+    if (!seriesId) return;
+    setSeedingAdj(true);
+    try {
+      const { data } = await api.post<{ seeded: boolean; adjustments: SeriesAdjustment[] }>(`/chalk-talk/series/${seriesId}/adjustments/seed`);
+      setSeededAdjustments(data.adjustments);
+      if (data.seeded) toast.success(`${data.adjustments.length} adjustments seeded from report`);
+    } catch {
+      toast.error("Failed to seed adjustments");
+    } finally {
+      setSeedingAdj(false);
+    }
+  };
+
+  const handleToggleAdjustment = async (adj: SeriesAdjustment, triggered: boolean, gameNum?: number | null) => {
+    try {
+      const { data } = await api.patch<SeriesAdjustment>(`/chalk-talk/series/${seriesId}/adjustments/${adj.id}`, {
+        triggered,
+        triggered_after_game: triggered ? (gameNum ?? adj.triggered_after_game ?? 1) : null,
+      });
+      setSeededAdjustments(prev => prev.map(a => a.id === adj.id ? data : a));
+    } catch {
+      toast.error("Failed to update adjustment");
+    }
+  };
+
+  const handleAdjustmentNotes = async (adj: SeriesAdjustment, notes: string) => {
+    try {
+      const { data } = await api.patch<SeriesAdjustment>(`/chalk-talk/series/${seriesId}/adjustments/${adj.id}`, { notes });
+      setSeededAdjustments(prev => prev.map(a => a.id === adj.id ? data : a));
+    } catch {
+      toast.error("Failed to save notes");
+    }
   };
 
   // ── Loading / Error states ─────────────────────────────────
@@ -1467,73 +1538,188 @@ function SeriesDetail() {
       {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Adjustments</h2>}
       {(activeTab === "adjustments" || printMode) && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-teal/20 p-5">
+          {/* Seeded Adjustments from PXI Report */}
+          <div className="bg-white rounded-xl border p-5" style={{ borderColor: "rgba(13,148,136,0.2)" }}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2">
-                <Crosshair size={14} className="text-orange" />
-                If / Then Adjustments
+              <h3 className="text-sm font-oswald uppercase tracking-wider flex items-center gap-2" style={{ color: "#0F2942" }}>
+                <Zap size={14} style={{ color: "#0D9488" }} />
+                PXI Adjustment Framework
+              </h3>
+              {seededAdjustments.length === 0 && !seededAdjLoading && (
+                <button
+                  onClick={handleSeedAdjustments}
+                  disabled={seedingAdj}
+                  className="no-print flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  style={{ backgroundColor: "#0D9488", color: "#FFFFFF", opacity: seedingAdj ? 0.6 : 1 }}
+                >
+                  {seedingAdj ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {seedingAdj ? "Seeding…" : "Seed Adjustments"}
+                </button>
+              )}
+            </div>
+
+            {seededAdjLoading ? (
+              <div className="flex items-center justify-center py-6 gap-2">
+                <Loader2 size={16} className="animate-spin" style={{ color: "#0D9488" }} />
+                <span className="text-xs font-oswald uppercase tracking-wider" style={{ color: "rgba(15,41,66,0.4)" }}>Loading adjustments…</span>
+              </div>
+            ) : seededAdjustments.length === 0 ? (
+              <div className="text-center py-6">
+                <Zap size={20} style={{ color: "rgba(13,148,136,0.3)", margin: "0 auto 8px" }} />
+                <p className="text-sm font-oswald uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                  No adjustments seeded yet
+                </p>
+                <p className="text-xs mt-1" style={{ color: "rgba(15,41,66,0.5)" }}>
+                  Generate a Series Plan first to populate the adjustment framework, or click <strong>Seed Adjustments</strong> if a report already exists.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {seededAdjustments.map((adj) => (
+                  <div
+                    key={adj.id}
+                    className="rounded-lg border p-3 transition-colors"
+                    style={{
+                      backgroundColor: adj.triggered ? "rgba(13,148,136,0.05)" : "#FFFFFF",
+                      borderColor: adj.triggered ? "rgba(13,148,136,0.3)" : "rgba(15,41,66,0.1)",
+                      borderLeftWidth: adj.triggered ? "3px" : "1px",
+                      borderLeftColor: adj.triggered ? "#0D9488" : undefined,
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => handleToggleAdjustment(adj, !adj.triggered)}
+                        className="mt-0.5 shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                        style={{
+                          backgroundColor: adj.triggered ? "#0D9488" : "#FFFFFF",
+                          borderColor: adj.triggered ? "#0D9488" : "rgba(15,41,66,0.2)",
+                        }}
+                      >
+                        {adj.triggered ? <CheckCircle size={14} style={{ color: "#FFFFFF" }} /> : null}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs" style={{ color: "#0F2942", textDecoration: adj.triggered ? "none" : "none" }}>
+                          {adj.adjustment_text}
+                        </p>
+                        {adj.triggered && (
+                          <div className="flex items-center gap-3 mt-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-oswald uppercase tracking-wider" style={{ color: "rgba(15,41,66,0.4)" }}>After Game:</span>
+                              <select
+                                value={adj.triggered_after_game ?? ""}
+                                onChange={(e) => handleToggleAdjustment(adj, true, e.target.value ? Number(e.target.value) : null)}
+                                className="border rounded px-1.5 py-0.5 text-[10px]"
+                                style={{ borderColor: "rgba(13,148,136,0.2)", color: "#0F2942" }}
+                              >
+                                <option value="">Select</option>
+                                {linkedGames.map((g) => (
+                                  <option key={g.id} value={g.game_number}>Game {g.game_number}</option>
+                                ))}
+                                {linkedGames.length === 0 && [1, 2, 3, 4, 5, 6, 7].map(n => (
+                                  <option key={n} value={n}>Game {n}</option>
+                                ))}
+                              </select>
+                            </div>
+                            {adj.triggered_after_game && (
+                              <span
+                                className="text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider"
+                                style={{ backgroundColor: "rgba(13,148,136,0.1)", color: "#0D9488" }}
+                              >
+                                Triggered G{adj.triggered_after_game}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {adj.triggered && (
+                          <input
+                            type="text"
+                            placeholder="Notes on this adjustment…"
+                            value={adj.notes || ""}
+                            onChange={(e) => setSeededAdjustments(prev => prev.map(a => a.id === adj.id ? { ...a, notes: e.target.value } : a))}
+                            onBlur={(e) => handleAdjustmentNotes(adj, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                            className="mt-2 w-full border rounded px-2 py-1 text-[11px]"
+                            style={{ borderColor: "rgba(13,148,136,0.15)", color: "#0F2942" }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Manual If/Then Adjustments (existing) */}
+          <div className="bg-white rounded-xl border p-5" style={{ borderColor: "rgba(13,148,136,0.2)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-oswald uppercase tracking-wider flex items-center gap-2" style={{ color: "#0F2942" }}>
+                <Crosshair size={14} style={{ color: "#E67E22" }} />
+                Manual If / Then Adjustments
               </h3>
               <button
                 onClick={addAdjustment}
-                className="no-print text-xs text-teal hover:text-teal/70 flex items-center gap-1"
+                className="no-print flex items-center gap-1 text-xs font-medium transition-colors"
+                style={{ color: "#0D9488" }}
               >
                 <Plus size={12} /> Add Adjustment
               </button>
             </div>
 
             {adjustments.length === 0 ? (
-              <p className="text-xs text-muted">
-                No adjustments defined yet. Plan your if/then scenarios.
+              <p className="text-xs" style={{ color: "rgba(15,41,66,0.5)" }}>
+                No manual adjustments defined yet. Plan your if/then scenarios.
               </p>
             ) : (
               <div className="space-y-3">
                 {adjustments.map((adj, i) => (
-                  <div key={i} className="border border-teal/20 rounded-lg p-3 bg-gray-50/50">
+                  <div key={i} className="border rounded-lg p-3" style={{ borderColor: "rgba(13,148,136,0.15)", backgroundColor: "rgba(15,41,66,0.015)" }}>
                     <div className="flex items-start gap-2 mb-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-oswald uppercase tracking-wider shrink-0 mt-0.5 ${
-                        adj.priority === "high" ? "bg-red-100 text-red-700"
-                          : adj.priority === "medium" ? "bg-orange/10 text-orange"
-                          : "bg-gray-100 text-gray-500"
-                      }`}>
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded font-oswald uppercase tracking-wider shrink-0 mt-0.5"
+                        style={{
+                          backgroundColor: adj.priority === "high" ? "rgba(220,38,38,0.1)" : adj.priority === "medium" ? "rgba(230,126,34,0.1)" : "rgba(15,41,66,0.06)",
+                          color: adj.priority === "high" ? "#DC2626" : adj.priority === "medium" ? "#E67E22" : "rgba(15,41,66,0.5)",
+                        }}
+                      >
                         {adj.priority}
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
                           <div>
-                            <label className="block text-[10px] text-muted uppercase tracking-wider mb-0.5">
-                              If...
-                            </label>
+                            <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "rgba(15,41,66,0.4)" }}>If...</label>
                             <input
                               type="text"
                               value={adj.trigger}
                               onChange={(e) => updateAdjustment(i, "trigger", e.target.value)}
                               onBlur={saveAdjustments}
                               placeholder="They start trapping in the neutral zone..."
-                              className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1"
+                              style={{ borderColor: "rgba(13,148,136,0.2)", color: "#0F2942" }}
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-muted uppercase tracking-wider mb-0.5">
-                              Then...
-                            </label>
+                            <label className="block text-[10px] uppercase tracking-wider mb-0.5" style={{ color: "rgba(15,41,66,0.4)" }}>Then...</label>
                             <input
                               type="text"
                               value={adj.action}
                               onChange={(e) => updateAdjustment(i, "action", e.target.value)}
                               onBlur={saveAdjustments}
                               placeholder="Use stretch passes, chip and chase..."
-                              className="w-full border border-teal/20 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1"
+                              style={{ borderColor: "rgba(13,148,136,0.2)", color: "#0F2942" }}
                             />
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-1.5">
-                            <label className="text-[10px] text-muted uppercase tracking-wider">Priority:</label>
+                            <label className="text-[10px] uppercase tracking-wider" style={{ color: "rgba(15,41,66,0.4)" }}>Priority:</label>
                             <select
                               value={adj.priority}
                               onChange={(e) => { updateAdjustment(i, "priority", e.target.value); }}
                               onBlur={saveAdjustments}
-                              className="border border-teal/20 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="border rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                              style={{ borderColor: "rgba(13,148,136,0.2)", color: "#0F2942" }}
                             >
                               <option value="high">High</option>
                               <option value="medium">Medium</option>
@@ -1541,22 +1727,24 @@ function SeriesDetail() {
                             </select>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <label className="text-[10px] text-muted uppercase tracking-wider">Used in:</label>
+                            <label className="text-[10px] uppercase tracking-wider" style={{ color: "rgba(15,41,66,0.4)" }}>Used in:</label>
                             <input
                               type="text"
                               value={adj.used_in_game}
                               onChange={(e) => updateAdjustment(i, "used_in_game", e.target.value)}
                               onBlur={saveAdjustments}
                               placeholder="e.g. Game 3"
-                              className="w-20 border border-teal/20 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-teal/30"
+                              className="w-20 border rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                              style={{ borderColor: "rgba(13,148,136,0.2)", color: "#0F2942" }}
                             />
                           </div>
                         </div>
                       </div>
                       <button
                         onClick={() => removeAdjustment(i)}
-                        className="no-print text-muted hover:text-red-500 shrink-0"
+                        className="no-print shrink-0 transition-colors"
                         title="Remove adjustment"
+                        style={{ color: "rgba(15,41,66,0.3)" }}
                       >
                         <Trash2 size={12} />
                       </button>

@@ -4594,6 +4594,21 @@ def init_db():
                 conn.rollback()
                 logger.warning("Migration skip %s on chalk_talk_sessions: %s", col_name, e)
 
+    # ── Table: series_adjustments (individual if/then adjustment items for a series) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS series_adjustments (
+            id TEXT PRIMARY KEY,
+            series_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
+            adjustment_text TEXT NOT NULL,
+            triggered INTEGER DEFAULT 0,
+            triggered_after_game INTEGER,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_adjustments_series ON series_adjustments(series_id)")
+
     # ── Table: series_reports (links playoff_series reports to series plans) ──
     conn.execute("""
         CREATE TABLE IF NOT EXISTS series_reports (
@@ -47040,6 +47055,201 @@ async def get_series_score(series_id: str, token_data: dict = Depends(verify_tok
             "team_name": team_name,
             "opponent_name": opponent_name,
         }
+    finally:
+        conn.close()
+
+
+def _sync_adjustments_to_series_json(series_id: str, org_id: str, conn):
+    """Sync series_adjustments table rows back to series_plans.adjustments JSON
+    so _build_series_intelligence_block can read triggered items without modification."""
+    try:
+        rows = conn.execute(
+            "SELECT adjustment_text, triggered, triggered_after_game, notes FROM series_adjustments WHERE series_id = ? AND org_id = ? ORDER BY created_at ASC",
+            (series_id, org_id),
+        ).fetchall()
+        adj_list = []
+        for r in rows:
+            text = r["adjustment_text"] if hasattr(r, "keys") else r[0]
+            trig = r["triggered"] if hasattr(r, "keys") else r[1]
+            trig_game = r["triggered_after_game"] if hasattr(r, "keys") else r[2]
+            # Split "If X Then Y" into trigger/action
+            parts = text.split(" Then ", 1) if " Then " in text else text.split(" then ", 1) if " then " in text else [text, ""]
+            trigger_text = parts[0].replace("If ", "").replace("if ", "").strip()
+            action_text = parts[1].strip() if len(parts) > 1 else ""
+            adj_list.append({
+                "trigger": trigger_text,
+                "action": action_text,
+                "priority": "medium",
+                "used_in_game": f"Game {trig_game}" if trig and trig_game else "",
+            })
+        conn.execute(
+            "UPDATE series_plans SET adjustments = ? WHERE id = ? AND org_id = ?",
+            (json.dumps(adj_list), series_id, org_id),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning("_sync_adjustments_to_series_json failed (non-fatal): %s", e)
+
+
+@app.post("/chalk-talk/series/{series_id}/adjustments/seed")
+async def seed_series_adjustments(series_id: str, token_data: dict = Depends(verify_token)):
+    """Parse Section 8 of the linked playoff_series report and seed adjustment items."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        # Check if already seeded
+        existing = conn.execute(
+            "SELECT COUNT(*) FROM series_adjustments WHERE series_id = ? AND org_id = ?",
+            (series_id, org_id),
+        ).fetchone()
+        existing_count = existing[0] if existing else 0
+        if existing_count > 0:
+            rows = conn.execute(
+                "SELECT id, adjustment_text, triggered, triggered_after_game, notes, created_at FROM series_adjustments WHERE series_id = ? AND org_id = ? ORDER BY created_at ASC",
+                (series_id, org_id),
+            ).fetchall()
+            return {"seeded": False, "count": existing_count, "adjustments": [dict(r) for r in rows]}
+
+        # Fetch linked playoff_series report
+        report_row = conn.execute("""
+            SELECT r.output_text FROM series_reports sr
+            JOIN reports r ON r.id = sr.report_id
+            WHERE sr.series_id = ? ORDER BY sr.created_at DESC LIMIT 1
+        """, (series_id,)).fetchone()
+        if not report_row:
+            return {"seeded": False, "count": 0, "adjustments": [], "message": "No linked playoff_series report found"}
+
+        output_text = report_row["output_text"] if hasattr(report_row, "keys") else report_row[0]
+        if not output_text:
+            return {"seeded": False, "count": 0, "adjustments": [], "message": "Report has no content"}
+
+        # Extract Section 8 (Adjustment Framework)
+        import re
+        section_text = ""
+        # Try to find section 8 by header patterns
+        patterns = [
+            r"(?:SECTION\s*8|8[\.\)]\s*)[:\s]*ADJUST(?:MENT)?.*?\n(.*?)(?=(?:SECTION\s*\d|^\d+[\.\)]\s*[A-Z]{2,}|\Z))",
+            r"ADJUSTMENT\s*FRAMEWORK[:\s]*\n(.*?)(?=(?:SECTION|\Z))",
+            r"IF[/\s]*THEN\s*ADJUST(?:MENT)?[S]?[:\s]*\n(.*?)(?=(?:SECTION|\Z))",
+        ]
+        for pat in patterns:
+            match = re.search(pat, output_text, re.IGNORECASE | re.DOTALL)
+            if match:
+                section_text = match.group(1).strip()
+                break
+
+        if not section_text:
+            # Fallback: look for "If" patterns anywhere in the text
+            if_matches = re.findall(r"(?:^|\n)\s*(?:\d+[\.\)]\s*)?(?:[-•]\s*)?If\s+.+?(?:Then|then|→|->|:)\s*.+", output_text, re.IGNORECASE)
+            section_text = "\n".join(if_matches)
+
+        if not section_text:
+            return {"seeded": False, "count": 0, "adjustments": [], "message": "Could not parse adjustment items from report"}
+
+        # Parse individual items
+        items = []
+        # Split on numbered items, bullets, or "If" at line start
+        lines = section_text.split("\n")
+        current_item = ""
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if current_item.strip():
+                    items.append(current_item.strip())
+                    current_item = ""
+                continue
+            # Check if this line starts a new item
+            is_new_item = bool(re.match(r"^\d+[\.\)]\s*", stripped)) or \
+                          bool(re.match(r"^[-•▪]\s*", stripped)) or \
+                          bool(re.match(r"^If\s+", stripped, re.IGNORECASE))
+            if is_new_item and current_item.strip():
+                items.append(current_item.strip())
+                current_item = ""
+            # Clean prefix
+            cleaned = re.sub(r"^\d+[\.\)]\s*", "", stripped)
+            cleaned = re.sub(r"^[-•▪]\s*", "", cleaned)
+            current_item += (" " if current_item else "") + cleaned
+        if current_item.strip():
+            items.append(current_item.strip())
+
+        # Filter out empty/too-short items
+        items = [it for it in items if len(it) > 10]
+
+        if not items:
+            return {"seeded": False, "count": 0, "adjustments": [], "message": "No adjustment items extracted"}
+
+        # Insert items
+        seeded = []
+        for item_text in items:
+            adj_id = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO series_adjustments (id, series_id, org_id, adjustment_text) VALUES (?, ?, ?, ?)",
+                (adj_id, series_id, org_id, item_text),
+            )
+            seeded.append({"id": adj_id, "adjustment_text": item_text, "triggered": 0, "triggered_after_game": None, "notes": None})
+        conn.commit()
+
+        # Sync to series_plans.adjustments JSON
+        _sync_adjustments_to_series_json(series_id, org_id, conn)
+
+        return {"seeded": True, "count": len(seeded), "adjustments": seeded}
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk/series/{series_id}/adjustments")
+async def get_series_adjustments(series_id: str, token_data: dict = Depends(verify_token)):
+    """Return all adjustment items for a series."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, adjustment_text, triggered, triggered_after_game, notes, created_at FROM series_adjustments WHERE series_id = ? AND org_id = ? ORDER BY created_at ASC",
+            (series_id, org_id),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.patch("/chalk-talk/series/{series_id}/adjustments/{adj_id}")
+async def update_series_adjustment(series_id: str, adj_id: str, body: dict, token_data: dict = Depends(verify_token)):
+    """Update triggered status, triggered_after_game, or notes for an adjustment."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM series_adjustments WHERE id = ? AND series_id = ? AND org_id = ?",
+            (adj_id, series_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Adjustment not found")
+
+        updates = []
+        params = []
+        if "triggered" in body:
+            updates.append("triggered = ?")
+            params.append(1 if body["triggered"] else 0)
+        if "triggered_after_game" in body:
+            updates.append("triggered_after_game = ?")
+            params.append(body["triggered_after_game"])
+        if "notes" in body:
+            updates.append("notes = ?")
+            params.append(body["notes"])
+
+        if updates:
+            params.extend([adj_id])
+            conn.execute(f"UPDATE series_adjustments SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+
+            # Sync back to series_plans.adjustments JSON for _build_series_intelligence_block
+            _sync_adjustments_to_series_json(series_id, org_id, conn)
+
+        updated = conn.execute(
+            "SELECT id, adjustment_text, triggered, triggered_after_game, notes, created_at FROM series_adjustments WHERE id = ?",
+            (adj_id,),
+        ).fetchone()
+        return dict(updated)
     finally:
         conn.close()
 
