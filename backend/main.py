@@ -4852,6 +4852,49 @@ def init_db():
     except Exception as e:
         logger.warning("Migration: GOHL→GOJHL rename skipped — %s", e)
 
+    # ── Normalize full-name league strings → abbreviations ──
+    # teams.league and players.current_league sometimes store full names
+    # (e.g. "Greater Ontario Junior Hockey League") instead of abbreviations.
+    # Also clean garbage current_league values (schedule-derived strings with dates).
+    try:
+        _league_fullname_map = {
+            "Greater Ontario Junior Hockey League": "GOJHL",
+            "Greater Ontario Hockey League": "GOJHL",
+            "Ontario Hockey League": "OHL",
+            "Western Hockey League": "WHL",
+            "Quebec Major Junior Hockey League": "QMJHL",
+            "British Columbia Hockey League": "BCHL",
+            "Alberta Junior Hockey League": "AJHL",
+            "Saskatchewan Junior Hockey League": "SJHL",
+            "Manitoba Junior Hockey League": "MJHL",
+            "Ontario Junior Hockey League": "OJHL",
+            "Central Canada Hockey League": "CCHL",
+            "Northern Ontario Junior Hockey League": "NOJHL",
+            "Maritime Hockey League": "MHL",
+            "North American Hockey League": "NAHL",
+            "United States Hockey League": "USHL",
+            "American Hockey League": "AHL",
+            "Southern Professional Hockey League": "SPHL",
+            "Professional Women's Hockey League": "PWHL",
+        }
+        norm_changed = 0
+        for full_name, abbr in _league_fullname_map.items():
+            r = conn.execute("UPDATE teams SET league = ? WHERE league = ?", (abbr, full_name))
+            norm_changed += r.rowcount
+            r = conn.execute("UPDATE players SET current_league = ? WHERE current_league = ?", (abbr, full_name))
+            norm_changed += r.rowcount
+        # Clean garbage current_league values (schedule-derived strings with dates/scores)
+        r_garbage = conn.execute(
+            "UPDATE players SET current_league = NULL WHERE current_league LIKE '%-%' AND current_league LIKE '%20%' AND LENGTH(current_league) > 10"
+        )
+        norm_changed += r_garbage.rowcount
+        conn.commit()
+        if norm_changed > 0:
+            logger.info("Migration: normalized %d full-name league strings to abbreviations (garbage cleaned: %d)",
+                        norm_changed, r_garbage.rowcount)
+    except Exception as e:
+        logger.warning("Migration: full-name league normalization skipped — %s", e)
+
     # ── Normalize player_stats season strings (two-step) ────────────────
     try:
         import re as _re
@@ -6584,7 +6627,7 @@ def deduplicate_players():
     - 1,449 groups are name collisions across different teams/leagues (leave alone)
 
     Model example — Braeden Burke x5:
-      ✅ KEEPER:  ht_id=18453, team=Chatham Maroons, league=GOHL, created=Feb 13 (HT sync)
+      ✅ KEEPER:  ht_id=18453, team=Chatham Maroons, league=GOJHL, created=Feb 13 (HT sync)
       ❌ JUNK:    team=Chatham Maroons, league=GOJHL (old name), no ht_id, created=Feb 21
       ❌ JUNK:    team=Burlington, league=OJHL, no ht_id, created=Feb 21 (different team — transfer?)
       ❌ JUNK:    team=None, league="Chatham Maroons-Strathroy Rockets", no ht_id (schedule garbage)
@@ -6621,7 +6664,7 @@ def deduplicate_players():
        data that was misinterpreted as player records.
 
     b) Old league name: current_league = "Greater Ontario Junior Hockey League" or
-       "GOJHL" — the league rebranded to GOHL. These are stale copies from before
+       "GOHL" — the league canonical is now GOJHL. These are stale copies from before
        the rename.
 
     c) No metadata: hockeytech_id is null, current_team is null or empty, league is
@@ -24832,7 +24875,7 @@ Structure your report as:
 6. REMAINING_SCHEDULE — Assess schedule difficulty for remaining games
 7. RISK_FACTORS — Injuries, goaltending consistency, schedule difficulty, competitive balance concerns
 8. BOTTOM_LINE — Clear projection with confidence level
-Base projections on the actual stats provided. Use points pace (current_points / games_played * total_season_games). Today's date is {datetime.now().date().isoformat()}. The GOHL regular season is typically 52 games."""
+Base projections on the actual stats provided. Use points pace (current_points / games_played * total_season_games). Today's date is {datetime.now().date().isoformat()}. The GOJHL regular season is typically 52 games."""
 
             elif request.report_type == "free_agent_market":
                 system_prompt += f"""
@@ -32342,6 +32385,124 @@ async def admin_ht_sync_full(token_data: dict = Depends(verify_token)):
     }
 
 
+@app.post("/admin/populate-league-cache/{league}")
+async def admin_populate_league_cache(league: str, token_data: dict = Depends(verify_token)):
+    """Admin: populate league_player_stats_cache and league_teams_cache for a single league.
+
+    Same logic as the nightly cron but on-demand for a single league.
+    """
+    _require_admin(token_data)
+    import time as _time
+
+    try:
+        from hockeytech import HockeyTechClient
+    except ImportError:
+        raise HTTPException(status_code=500, detail="hockeytech module not available")
+
+    code = league.lower()
+    start = _time.time()
+    conn = get_db()
+    total_leaders = 0
+    total_teams = 0
+    errors = []
+
+    try:
+        client = HockeyTechClient(code)
+        season_id = await client.get_current_season_id()
+        if not season_id:
+            raise HTTPException(status_code=404, detail=f"No current season found for {code}")
+
+        # ── Populate league_player_stats_cache ──
+        try:
+            leaders = await client.get_top_scorers(season_id, limit=200)
+            conn.execute(
+                "DELETE FROM league_player_stats_cache WHERE league = ?",
+                (code,),
+            )
+            for ldr in leaders:
+                raw_photo = ldr.get("photo", "")
+                cached_photo = await cache_remote_asset(raw_photo, prefix="player") if raw_photo else None
+                photo = cached_photo or raw_photo
+                raw_logo = ldr.get("logo", "")
+                cached_logo = await cache_remote_asset(raw_logo, prefix="team") if raw_logo else None
+                logo = cached_logo or raw_logo
+                conn.execute(
+                    """INSERT INTO league_player_stats_cache
+                       (league, season, player_id, player_name, team_name, team_code,
+                        team_id, position, gp, g, a, pts, pim, plus_minus,
+                        ppg, ppa, shg, shots, shooting_pct, rookie, photo, logo)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        code, str(season_id),
+                        str(ldr.get("player_id", "")), ldr.get("name", ""),
+                        ldr.get("team_name", ""), ldr.get("team_code", ""),
+                        ldr.get("team_id"), ldr.get("position", ""),
+                        ldr.get("gp", 0), ldr.get("goals", 0),
+                        ldr.get("assists", 0), ldr.get("points", 0),
+                        ldr.get("pim", 0), ldr.get("plus_minus", 0),
+                        ldr.get("ppg", 0), ldr.get("ppa", 0),
+                        ldr.get("shg", 0), ldr.get("shots", 0),
+                        ldr.get("shooting_pct", ""),
+                        1 if ldr.get("rookie") else 0,
+                        photo, logo,
+                    ),
+                )
+                total_leaders += 1
+            logger.info("[CACHE WARMUP] %s: cached %d scoring leaders", code, total_leaders)
+        except Exception as ldr_err:
+            errors.append(f"leaders: {str(ldr_err)[:200]}")
+            logger.error("[CACHE WARMUP] %s leaders cache failed: %s", code, ldr_err)
+
+        # ── Populate league_teams_cache ──
+        try:
+            ht_teams = await client.get_teams(season_id)
+            conn.execute(
+                "DELETE FROM league_teams_cache WHERE league = ?",
+                (code,),
+            )
+            for t in ht_teams:
+                raw_logo = t.get("logo", "")
+                cached_logo = await cache_remote_asset(raw_logo, prefix="team") if raw_logo else None
+                logo_url = cached_logo or raw_logo
+                conn.execute(
+                    """INSERT INTO league_teams_cache
+                       (league, team_id, team_name, city, nickname,
+                        abbreviation, division, logo_url)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        code, t.get("id"), t.get("name", ""),
+                        t.get("city", ""), t.get("nickname", ""),
+                        t.get("code", ""), t.get("division", ""),
+                        logo_url,
+                    ),
+                )
+                total_teams += 1
+            logger.info("[CACHE WARMUP] %s: cached %d teams", code, total_teams)
+        except Exception as team_err:
+            errors.append(f"teams: {str(team_err)[:200]}")
+            logger.error("[CACHE WARMUP] %s teams cache failed: %s", code, team_err)
+
+        conn.commit()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        errors.append(str(e)[:200])
+        logger.error("[CACHE WARMUP] %s failed: %s", code, e)
+    finally:
+        conn.close()
+
+    duration = _time.time() - start
+    return {
+        "status": "ok",
+        "league": code,
+        "duration_seconds": round(duration, 2),
+        "leaders_cached": total_leaders,
+        "teams_cached": total_teams,
+        "errors": errors,
+    }
+
+
 # ── League Hub — stored-data endpoints (DB-first, live HT fallback) ────────
 #
 # These endpoints serve from game_schedule and ht_team_stats tables
@@ -37788,7 +37949,7 @@ When analytics data is available, reference it. When it's not, note what additio
 
 # YOUR CAPABILITIES
 You have access to the ProspectX database with:
-- Junior hockey players across GOHL, OJHL, OHL and other leagues
+- Junior hockey players across GOJHL, OJHL, OHL and other leagues
 - Full season stats, per-game breakdowns, and historical data
 - ProspectX Intelligence profiles (grades, metrics, archetypes)
 - 19 professional report templates
@@ -37898,7 +38059,7 @@ BENCH_TALK_TOOLS = [
                 },
                 "league": {
                     "type": "string",
-                    "description": "Filter by league (GOHL, OJHL, OHL, etc.)"
+                    "description": "Filter by league (GOJHL, OJHL, OHL, etc.)"
                 },
                 "team": {
                     "type": "string",
@@ -37982,7 +38143,7 @@ BENCH_TALK_TOOLS = [
             "properties": {
                 "league": {
                     "type": "string",
-                    "description": "League name (e.g. 'GOHL', 'OHL', 'OJHL')"
+                    "description": "League name (e.g. 'GOJHL', 'OHL', 'OJHL')"
                 },
                 "stat": {
                     "type": "string",
@@ -40787,11 +40948,11 @@ async def get_bench_talk_suggestions(token_data: dict = Depends(verify_token)):
         # ── 2 core role-based suggestions (always shown) ──────────────
         role_suggestions = {
             "scout": [
-                {"text": "Show me GOHL scoring leaders", "icon": "trophy"},
+                {"text": "Show me GOJHL scoring leaders", "icon": "trophy"},
                 {"text": "Compare two players side by side", "icon": "compare"},
             ],
             "gm": [
-                {"text": "Show me the top scorers in the GOHL", "icon": "trophy"},
+                {"text": "Show me the top scorers in the GOJHL", "icon": "trophy"},
                 {"text": "Compare two players for a trade target", "icon": "compare"},
             ],
             "coach": [
@@ -45679,8 +45840,8 @@ FAMILY_GUIDE_SEED = [
     # ── Pathway / College ──
     {"category": "pathway", "age_band": "u15", "title": "CHL Pathway — OHL, WHL, QMJHL",
      "content": "The CHL (Canadian Hockey League) includes the OHL, WHL, and QMJHL. Players are drafted by CHL teams starting at age 15 (varies by league). The OHL Priority Selection typically occurs in April. Scouts evaluate players throughout the U15/U16 season. Playing in the CHL means forfeiting NCAA eligibility (you can still play U SPORTS in Canada). Education packages are provided — tuition covered for each year played. What scouts look for: skating, compete level, hockey sense, physical maturity, character. Realistic timeline: most drafted players have been on elite pathways since U13/U14."},
-    {"category": "pathway", "age_band": "u15", "title": "Junior A Pathway — GOHL, BCHL, AJHL",
-     "content": "Junior A leagues (GOHL, BCHL, AJHL, OJHL, etc.) are an excellent development pathway that preserves NCAA eligibility. Players typically join at ages 16-20. How to get noticed: attend camps and combines, play in showcases, have your coach reach out to Jr. A contacts. Jr. A combines education with competitive hockey — many players attend college or university while playing. Typical player profile: skilled, competitive, developing physically. Don't burn bridges — maintain relationships with coaches, be a good teammate, keep your social media clean."},
+    {"category": "pathway", "age_band": "u15", "title": "Junior A Pathway — GOJHL, BCHL, AJHL",
+     "content": "Junior A leagues (GOJHL, BCHL, AJHL, OJHL, etc.) are an excellent development pathway that preserves NCAA eligibility. Players typically join at ages 16-20. How to get noticed: attend camps and combines, play in showcases, have your coach reach out to Jr. A contacts. Jr. A combines education with competitive hockey — many players attend college or university while playing. Typical player profile: skilled, competitive, developing physically. Don't burn bridges — maintain relationships with coaches, be a good teammate, keep your social media clean."},
     {"category": "pathway", "age_band": "u18", "title": "NCAA Hockey — Division I and Division III",
      "content": "NCAA hockey is a top destination for development-minded players. Division I: ~60 programs, highly competitive, full and partial scholarships available. Division III: ~80+ programs, no athletic scholarships but strong academics and financial aid. Eligibility rules: maintain amateur status, register with NCAA Eligibility Center, meet academic standards (SAT/ACT, GPA requirements). Recruiting timeline: coaches can contact you starting June 15 after sophomore year (rules may vary). Campus visits matter. Academic performance is critical — many programs weight character and grades heavily. The average NCAA D1 player commits between ages 17-19."},
     {"category": "pathway", "age_band": "u18", "title": "U SPORTS — Canadian University Hockey",
@@ -45701,7 +45862,7 @@ FAMILY_GUIDE_SEED = [
     {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — Game Terms",
      "content": "Forecheck: pressuring the other team in their own zone to win the puck back. Breakout: how a team moves the puck out of their defensive zone. Cycling: passing and moving in a circular pattern in the offensive zone to maintain possession. Transition: switching from defense to offense (or vice versa). PK (Penalty Kill): playing short-handed while a teammate serves a penalty. PP (Power Play): having an extra player on the ice due to an opponent's penalty. Faceoff: how play starts — two players compete for the puck at center ice or in the circles. Zone Entry: how a team moves the puck from the neutral zone into the offensive zone."},
     {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — League Terms",
-     "content": "Jr. A: top tier of junior hockey that preserves NCAA eligibility (GOHL, BCHL, AJHL, OJHL). Jr. B: developmental junior hockey, more accessible, still competitive. AAA: highest level of minor hockey — rep/travel. AA: second tier of competitive minor hockey. A / Rep: competitive level below AAA/AA. House League: recreational hockey, all skill levels. GOHL: Greater Ontario Hockey League (Jr. A in Ontario). OHL: Ontario Hockey League (Major Junior, part of CHL). WHL: Western Hockey League (Major Junior, part of CHL). QMJHL: Quebec Major Junior Hockey League (part of CHL). NCAA: National Collegiate Athletic Association — US college hockey. U SPORTS: Canadian university athletics organization."},
+     "content": "Jr. A: top tier of junior hockey that preserves NCAA eligibility (GOJHL, BCHL, AJHL, OJHL). Jr. B: developmental junior hockey, more accessible, still competitive. AAA: highest level of minor hockey — rep/travel. AA: second tier of competitive minor hockey. A / Rep: competitive level below AAA/AA. House League: recreational hockey, all skill levels. GOJHL: Greater Ontario Junior Hockey League (Jr. A in Ontario). OHL: Ontario Hockey League (Major Junior, part of CHL). WHL: Western Hockey League (Major Junior, part of CHL). QMJHL: Quebec Major Junior Hockey League (part of CHL). NCAA: National Collegiate Athletic Association — US college hockey. U SPORTS: Canadian university athletics organization."},
     {"category": "glossary", "age_band": "all", "title": "Hockey Glossary — Development Terms",
      "content": "LTPD: Long-Term Player Development — Hockey Canada's framework for age-appropriate development. LTAD: Long-Term Athlete Development — the broader sports science framework LTPD is based on. ADM: American Development Model — USA Hockey's player development program. Birth Year: the year a player was born — determines age division. Overager: a player in the oldest year of their age group. Draft Eligible: a player old enough to be selected in a league's draft. Import Player: a player from outside the league's geographic region (rules vary by league). Age Out: when a player reaches the maximum age for their league."},
 ]

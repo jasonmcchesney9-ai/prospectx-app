@@ -1,7 +1,7 @@
 /**
  * League name formatting utility — single source of truth for display names.
  *
- * DB stores abbreviations (e.g. "GOHL", "OHL"). This maps them to
+ * DB stores abbreviations (e.g. "GOJHL", "OHL"). This maps them to
  * "ABBR — Full Name" for consistent display across the app.
  */
 
@@ -32,8 +32,8 @@ const LEAGUE_MAP: Record<string, LeagueInfo> = {
   CCHL:  { abbr: "CCHL",  full: "Central Canada Hockey League",              code: "cchl" },
   NOJHL: { abbr: "NOJHL", full: "Northern Ontario Junior Hockey League",     code: "nojhl" },
   MHL:   { abbr: "MHL",   full: "Maritime Hockey League",                    code: "mhl" },
-  GOHL:  { abbr: "GOHL",  full: "Greater Ontario Hockey League",             code: "gojhl" },
-  GOJHL: { abbr: "GOHL",  full: "Greater Ontario Hockey League",             code: "gojhl" },
+  GOHL:  { abbr: "GOJHL", full: "Greater Ontario Junior Hockey League",       code: "gojhl" },
+  GOJHL: { abbr: "GOJHL", full: "Greater Ontario Junior Hockey League",      code: "gojhl" },
   NAHL:  { abbr: "NAHL",  full: "North American Hockey League",              code: "nahl" },
   // Junior B
   KIJHL: { abbr: "KIJHL", full: "Kootenay International Junior Hockey League", code: "kijhl" },
@@ -58,7 +58,7 @@ function resolve(league: string): LeagueInfo | null {
 
 /**
  * Format a league for display: "ABBR — Full Name"
- * Accepts abbreviations ("GOHL", "GOJHL") OR full names ("Greater Ontario Hockey League").
+ * Accepts abbreviations ("GOJHL", "GOHL") OR full names ("Greater Ontario Junior Hockey League").
  * Returns the input unchanged if not found in the map.
  */
 export function formatLeague(league: string | null | undefined): string {
@@ -70,7 +70,7 @@ export function formatLeague(league: string | null | undefined): string {
 
 /**
  * Get just the abbreviation for a league (short display).
- * Normalizes GOJHL → GOHL, LHJMQ → QMJHL, "Greater Ontario Hockey League" → GOHL, etc.
+ * Normalizes GOHL → GOJHL, LHJMQ → QMJHL, "Greater Ontario Junior Hockey League" → GOJHL, etc.
  */
 export function leagueAbbr(league: string | null | undefined): string {
   if (!league) return "";
