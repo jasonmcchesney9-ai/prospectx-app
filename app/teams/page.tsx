@@ -156,7 +156,7 @@ export default function TeamsPage() {
 
   // Add Team form state
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newTeam, setNewTeam] = useState({ name: "", league: "GOHL", city: "", abbreviation: "" });
+  const [newTeam, setNewTeam] = useState({ name: "", league: "GOJHL", city: "", abbreviation: "" });
   const [saving, setSaving] = useState(false);
 
   // Sync state
@@ -250,7 +250,7 @@ export default function TeamsPage() {
     try {
       await api.post("/teams", newTeam);
       setShowAddForm(false);
-      setNewTeam({ name: "", league: "GOHL", city: "", abbreviation: "" });
+      setNewTeam({ name: "", league: "GOJHL", city: "", abbreviation: "" });
       await loadData();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to create team";

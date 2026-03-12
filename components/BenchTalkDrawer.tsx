@@ -728,7 +728,7 @@ export default function BenchTalkDrawer() {
       setSuggestions(res.data.suggestions || []);
     } catch {
       setSuggestions([
-        { text: "Show me GOHL scoring leaders", icon: "trophy" },
+        { text: "Show me GOJHL scoring leaders", icon: "trophy" },
         { text: "Find all centers on the Chatham Maroons", icon: "search" },
         { text: "Compare two players side by side", icon: "compare" },
       ]);

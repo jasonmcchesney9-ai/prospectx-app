@@ -255,7 +255,7 @@ export default function BatchImportPage() {
                     type="text"
                     value={leagueName}
                     onChange={(e) => setLeagueName(e.target.value)}
-                    placeholder="e.g. GOHL"
+                    placeholder="e.g. GOJHL"
                     className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
                   />
                 )}
@@ -298,9 +298,9 @@ export default function BatchImportPage() {
               <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Example CSV Format</p>
               <pre className="text-xs bg-navy/[0.03] p-3 rounded-lg border border-teal/20 overflow-x-auto">
 {`First Name,Last Name,Position,DOB,Team,League,GP,G,A,P
-Ewan,McChesney,C,2005-03-15,Chatham Maroons,GOHL,25,12,18,30
-Connor,Smith,LW,2006-01-20,Chatham Maroons,GOHL,24,8,10,18
-Jake,Wilson,D,2005-11-05,Chatham Maroons,GOHL,25,2,8,10`}
+Ewan,McChesney,C,2005-03-15,Chatham Maroons,GOJHL,25,12,18,30
+Connor,Smith,LW,2006-01-20,Chatham Maroons,GOJHL,24,8,10,18
+Jake,Wilson,D,2005-11-05,Chatham Maroons,GOJHL,25,2,8,10`}
               </pre>
             </div>
           </div>

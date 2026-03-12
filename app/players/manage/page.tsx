@@ -556,11 +556,11 @@ function BulkOperations() {
             {assigningLeague ? "Assigning..." : "Auto-Detect Leagues"}
           </button>
           <button
-            onClick={() => handleBulkAssignLeague("GOHL")}
+            onClick={() => handleBulkAssignLeague("GOJHL")}
             disabled={assigningLeague}
             className="px-4 py-2 bg-navy text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-navy/90 transition-colors disabled:opacity-50"
           >
-            Assign All → GOHL
+            Assign All → GOJHL
           </button>
         </div>
 
@@ -686,7 +686,7 @@ function BulkOperations() {
               type="text"
               value={targetLeague}
               onChange={(e) => setTargetLeague(e.target.value)}
-              placeholder="e.g. GOHL"
+              placeholder="e.g. GOJHL"
               className="w-full border border-teal/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30"
             />
           </div>
