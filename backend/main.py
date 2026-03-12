@@ -25375,6 +25375,75 @@ async def check_report_exists(
         conn.close()
 
 
+@app.get("/reports/bench-card-extract")
+async def extract_bench_card(
+    team_name: str = Query(None),
+    series_id: str = Query(None),
+    token_data: dict = Depends(verify_token),
+):
+    """Extract bench card content from available reports.
+
+    Searches in order:
+    1. Standalone bench_card report for the team
+    2. SERIES_BENCH_CARD section in linked playoff_series report (if series_id provided)
+    3. BENCH_CARD section in any opponent_gameplan report for the team
+    Returns {"found": bool, "content": str, "source": str}
+    """
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        import re as _re
+
+        # 1. Check for standalone bench_card report
+        if team_name:
+            row = conn.execute(
+                "SELECT output_text FROM reports WHERE org_id = ? AND LOWER(team_name) = LOWER(?) AND report_type = 'bench_card' AND status = 'completed' ORDER BY generated_at DESC LIMIT 1",
+                (org_id, team_name),
+            ).fetchone()
+            if row:
+                text = row["output_text"] if hasattr(row, "keys") else row[0]
+                if text and text.strip():
+                    return {"found": True, "content": text.strip(), "source": "bench_card"}
+
+        # 2. Check linked playoff_series report for SERIES_BENCH_CARD section
+        if series_id:
+            report_row = conn.execute("""
+                SELECT r.output_text FROM series_reports sr
+                JOIN reports r ON r.id = sr.report_id
+                WHERE sr.series_id = ? ORDER BY sr.created_at DESC LIMIT 1
+            """, (series_id,)).fetchone()
+            if report_row:
+                text = report_row["output_text"] if hasattr(report_row, "keys") else report_row[0]
+                if text:
+                    # Extract SERIES_BENCH_CARD or BENCH_CARD section
+                    match = _re.search(
+                        r"(?:SERIES_BENCH_CARD|BENCH.?CARD)[:\s—\-]*\n([\s\S]*?)(?=\n[A-Z_]{5,}[:\s]|\Z)",
+                        text, _re.IGNORECASE
+                    )
+                    if match:
+                        return {"found": True, "content": match.group(1).strip(), "source": "playoff_series"}
+
+        # 3. Check opponent_gameplan reports
+        if team_name:
+            row = conn.execute(
+                "SELECT output_text FROM reports WHERE org_id = ? AND LOWER(team_name) = LOWER(?) AND report_type = 'opponent_gameplan' AND status = 'completed' ORDER BY generated_at DESC LIMIT 1",
+                (org_id, team_name),
+            ).fetchone()
+            if row:
+                text = row["output_text"] if hasattr(row, "keys") else row[0]
+                if text:
+                    match = _re.search(
+                        r"(?:BENCH.?CARD)[:\s—\-]*\n([\s\S]*?)(?=\n[A-Z_]{5,}[:\s]|\Z)",
+                        text, _re.IGNORECASE
+                    )
+                    if match:
+                        return {"found": True, "content": match.group(1).strip(), "source": "opponent_gameplan"}
+
+        return {"found": False, "content": "", "source": ""}
+    finally:
+        conn.close()
+
+
 @app.get("/reports/custom-options")
 async def get_custom_report_options(token_data: dict = Depends(verify_token)):
     """Return the available configuration options for custom report builder."""

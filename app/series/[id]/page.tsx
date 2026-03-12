@@ -23,7 +23,9 @@ import {
   Sparkles,
   AlertCircle,
   Loader2,
+  Printer,
 } from "lucide-react";
+import BenchCardView from "@/components/BenchCardView";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ReportSection from "@/components/ReportSection";
@@ -221,6 +223,8 @@ function SeriesDetail() {
   const [seededAdjustments, setSeededAdjustments] = useState<SeriesAdjustment[]>([]);
   const [seededAdjLoading, setSeededAdjLoading] = useState(false);
   const [seedingAdj, setSeedingAdj] = useState(false);
+  const [benchCardContent, setBenchCardContent] = useState<string | null>(null);
+  const [benchCardLoading, setBenchCardLoading] = useState(false);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -466,6 +470,27 @@ function SeriesDetail() {
         setPrintMode(false);
       }, 1000);
     }, 100);
+  };
+
+  const handlePrintBenchCard = async () => {
+    if (!series) return;
+    setBenchCardLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("team_name", series.opponent_team_name);
+      params.set("series_id", seriesId);
+      const { data } = await api.get<{ found: boolean; content: string }>(`/reports/bench-card-extract?${params.toString()}`);
+      if (data.found && data.content) {
+        setBenchCardContent(data.content);
+      } else {
+        setBenchCardContent(null);
+        toast.error("No bench card content found. Generate a Series Plan or Bench Card report first.");
+      }
+    } catch {
+      toast.error("Failed to fetch bench card content.");
+    } finally {
+      setBenchCardLoading(false);
+    }
   };
 
   const handleStatusChange = (newStatus: string) => {
@@ -772,6 +797,16 @@ function SeriesDetail() {
           >
             <Download size={14} />
             PDF
+          </button>
+          <button
+            onClick={handlePrintBenchCard}
+            disabled={benchCardLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors no-print"
+            style={{ backgroundColor: "rgba(13,148,136,0.08)", color: "#0D9488", border: "1.5px solid rgba(13,148,136,0.2)" }}
+            title="Print Bench Card"
+          >
+            {benchCardLoading ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+            Bench Card
           </button>
           <select
             value={series.status}
@@ -1755,6 +1790,16 @@ function SeriesDetail() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Bench Card Modal ────────────────────────────────── */}
+      {benchCardContent && series && (
+        <BenchCardView
+          content={benchCardContent}
+          teamName={series.team_name}
+          opponentName={series.opponent_team_name}
+          onClose={() => setBenchCardContent(null)}
+        />
       )}
 
       {/* ── TI Validation Modal ──────────────────────────────── */}

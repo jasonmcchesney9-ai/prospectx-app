@@ -31,7 +31,9 @@ import {
   Link2,
   Unlink,
   Zap,
+  Printer,
 } from "lucide-react";
+import BenchCardView from "@/components/BenchCardView";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
@@ -125,6 +127,8 @@ function WarRoom() {
   const [clipSearchLoading, setClipSearchLoading] = useState(false);
   const [filmSessions, setFilmSessions] = useState<{ id: string; name: string; created_at: string }[]>([]);
   const [selectedFilmSession, setSelectedFilmSession] = useState<string | null>(null);
+  const [benchCardContent, setBenchCardContent] = useState<string | null>(null);
+  const [benchCardLoading, setBenchCardLoading] = useState(false);
 
   /* ── Derived ───────────────────────────────────────────── */
   const teamName = teams.find((t) => t.id === teamId)?.name || "";
@@ -240,6 +244,25 @@ function WarRoom() {
   }, [sessionId]);
 
   useEffect(() => { loadLinkedClips(); }, [loadLinkedClips]);
+
+  const handlePrintBenchCard = async () => {
+    setBenchCardLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (opponentName) params.set("team_name", opponentName);
+      const { data } = await api.get<{ found: boolean; content: string }>(`/reports/bench-card-extract?${params.toString()}`);
+      if (data.found && data.content) {
+        setBenchCardContent(data.content);
+      } else {
+        setBenchCardContent(null);
+        alert("No bench card content found. Generate a Bench Card report for " + (opponentName || "this team") + " first.");
+      }
+    } catch {
+      alert("Failed to fetch bench card content.");
+    } finally {
+      setBenchCardLoading(false);
+    }
+  };
 
   const openClipModal = async () => {
     setShowClipModal(true);
@@ -418,7 +441,28 @@ function WarRoom() {
           <Film size={12} />
           Link Film Clip
         </button>
+        <button
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors hover:opacity-90"
+          style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(13,148,136,0.08)", color: "#0D9488", border: "1.5px solid rgba(13,148,136,0.2)" }}
+          title="Print Bench Card"
+          onClick={handlePrintBenchCard}
+          disabled={benchCardLoading}
+        >
+          {benchCardLoading ? <Loader2 size={12} className="animate-spin" /> : <Printer size={12} />}
+          Bench Card
+        </button>
       </div>
+
+      {/* Bench Card Modal */}
+      {benchCardContent && (
+        <BenchCardView
+          content={benchCardContent}
+          teamName={teamName}
+          opponentName={opponentName}
+          date={displayDate}
+          onClose={() => setBenchCardContent(null)}
+        />
+      )}
 
       {/* Alerts */}
       {error && (
