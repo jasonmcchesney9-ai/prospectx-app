@@ -203,6 +203,9 @@ function SeriesDetail() {
   const [linkedGames, setLinkedGames] = useState<GameSession[]>([]);
   const [linkedGamesLoading, setLinkedGamesLoading] = useState(false);
   const [addingGamePlan, setAddingGamePlan] = useState(false);
+  const [showTiModal, setShowTiModal] = useState(false);
+  const [tiChecks, setTiChecks] = useState<{ team: boolean; opponent: boolean }>({ team: false, opponent: false });
+  const [tiGenerating, setTiGenerating] = useState<string | null>(null);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -414,7 +417,7 @@ function SeriesDetail() {
     saveField({ status: newStatus });
   };
 
-  const handlePxiAnalyse = async () => {
+  const runPxiAnalyse = async () => {
     if (!series || analysing) return;
     setAnalysing(true);
     setAnalyseError("");
@@ -441,6 +444,51 @@ function SeriesDetail() {
       setAnalyseError(typeof msg === "string" ? msg : "PXI analysis failed. Please try again.");
     } finally {
       setAnalysing(false);
+    }
+  };
+
+  const handlePxiAnalyse = async () => {
+    if (!series) return;
+    // Check if Team Identity reports exist for both teams
+    try {
+      const [teamRes, oppRes] = await Promise.all([
+        api.get<{ exists: boolean }>(`/reports/check-exists?team_name=${encodeURIComponent(series.team_name)}&report_type=team_identity`),
+        api.get<{ exists: boolean }>(`/reports/check-exists?team_name=${encodeURIComponent(series.opponent_team_name)}&report_type=team_identity`),
+      ]);
+      const teamExists = teamRes.data.exists;
+      const oppExists = oppRes.data.exists;
+      if (teamExists && oppExists) {
+        runPxiAnalyse();
+      } else {
+        setTiChecks({ team: teamExists, opponent: oppExists });
+        setShowTiModal(true);
+      }
+    } catch {
+      // If check fails, proceed anyway (soft gate)
+      runPxiAnalyse();
+    }
+  };
+
+  const handleGenerateMissingTi = async () => {
+    if (!series) return;
+    try {
+      if (!tiChecks.team) {
+        setTiGenerating(series.team_name);
+        await api.post("/reports/generate", { report_type: "team_identity", team_name: series.team_name });
+        setTiChecks(prev => ({ ...prev, team: true }));
+      }
+      if (!tiChecks.opponent) {
+        setTiGenerating(series.opponent_team_name);
+        await api.post("/reports/generate", { report_type: "team_identity", team_name: series.opponent_team_name });
+        setTiChecks(prev => ({ ...prev, opponent: true }));
+      }
+      setTiGenerating(null);
+      setShowTiModal(false);
+      toast.success("Team Identity reports generated");
+      runPxiAnalyse();
+    } catch {
+      setTiGenerating(null);
+      toast.error("Failed to generate Team Identity report");
     }
   };
 
@@ -1432,6 +1480,67 @@ function SeriesDetail() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TI Validation Modal ──────────────────────────────── */}
+      {showTiModal && series && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(15,41,66,0.5)" }}>
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4" style={{ border: "1px solid rgba(13,148,136,0.2)" }}>
+            <h3 className="text-base font-oswald font-bold uppercase tracking-wider mb-4" style={{ color: "#0F2942" }}>
+              Team Identity Reports Recommended
+            </h3>
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                {tiChecks.team ? (
+                  <CheckCircle size={16} style={{ color: "#0D9488" }} />
+                ) : (
+                  <X size={16} style={{ color: "#ef4444" }} />
+                )}
+                <span className="text-sm" style={{ color: "#0F2942" }}>
+                  <strong>{series.team_name}</strong> — Internal Team Identity
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                {tiChecks.opponent ? (
+                  <CheckCircle size={16} style={{ color: "#0D9488" }} />
+                ) : (
+                  <X size={16} style={{ color: "#ef4444" }} />
+                )}
+                <span className="text-sm" style={{ color: "#0F2942" }}>
+                  <strong>{series.opponent_team_name}</strong> — External Team Identity
+                </span>
+              </div>
+            </div>
+            <p className="text-xs mb-5" style={{ color: "rgba(15,41,66,0.6)" }}>
+              For best results, generate Team Identity reports before creating a Series Plan.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleGenerateMissingTi}
+                disabled={!!tiGenerating}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider transition-colors"
+                style={{ backgroundColor: "#0D9488", color: "#FFFFFF", opacity: tiGenerating ? 0.7 : 1 }}
+              >
+                {tiGenerating ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span className="text-xs normal-case" style={{ letterSpacing: 0 }}>Generating {tiGenerating}…</span>
+                  </>
+                ) : (
+                  "Generate Missing"
+                )}
+              </button>
+              <button
+                onClick={() => { setShowTiModal(false); runPxiAnalyse(); }}
+                disabled={!!tiGenerating}
+                className="px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider transition-colors"
+                style={{ color: "rgba(15,41,66,0.6)", border: "1.5px solid rgba(15,41,66,0.15)" }}
+              >
+                Skip
+              </button>
+            </div>
           </div>
         </div>
       )}

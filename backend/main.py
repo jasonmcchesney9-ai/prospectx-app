@@ -25337,6 +25337,27 @@ This report was generated in demo mode. Add your API key to backend/.env and re-
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/reports/check-exists")
+async def check_report_exists(
+    team_name: str = Query(...),
+    report_type: str = Query(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Check if a completed report exists for a team + report_type combination."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, generated_at FROM reports WHERE org_id = ? AND LOWER(team_name) = LOWER(?) AND report_type = ? AND status = 'completed' ORDER BY generated_at DESC LIMIT 1",
+            (org_id, team_name, report_type),
+        ).fetchone()
+        if row:
+            return {"exists": True, "report_id": row["id"] if hasattr(row, "keys") else row[0], "generated_at": row["generated_at"] if hasattr(row, "keys") else row[1]}
+        return {"exists": False}
+    finally:
+        conn.close()
+
+
 @app.get("/reports/custom-options")
 async def get_custom_report_options(token_data: dict = Depends(verify_token)):
     """Return the available configuration options for custom report builder."""
