@@ -17,6 +17,8 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { DRILL_CATEGORIES } from "@/types/api";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
 import type { RinkDiagramData } from "@/types/rink";
 import { RINK_DIMENSIONS } from "@/types/rink";
 import type { ChalkTalkSession } from "@/types/api";
@@ -562,26 +564,30 @@ function RinkBuilderInner() {
         {/* Mode Toggle */}
         <div className="flex items-center justify-center mb-6">
           <div className="inline-flex rounded-full border-2 border-navy/20 p-0.5 bg-navy/[0.03]">
-            <button
-              onClick={() => setMode("custom_drill")}
-              className={`px-5 py-2 rounded-full text-xs font-oswald uppercase tracking-wider font-bold transition-all ${
-                mode === "custom_drill"
-                  ? "bg-navy text-white border-2 border-teal shadow-sm"
-                  : "text-navy hover:bg-navy/[0.05] border-2 border-transparent"
-              }`}
-            >
-              Custom Drill
-            </button>
-            <button
-              onClick={() => setMode("chalk_talk")}
-              className={`px-5 py-2 rounded-full text-xs font-oswald uppercase tracking-wider font-bold transition-all ${
-                mode === "chalk_talk"
-                  ? "bg-navy text-white border-2 border-teal shadow-sm"
-                  : "text-navy hover:bg-navy/[0.05] border-2 border-transparent"
-              }`}
-            >
-              Chalk Talk
-            </button>
+            <Tooltip text={TOOLTIPS.rink_custom_drill_mode} position="bottom">
+              <button
+                onClick={() => setMode("custom_drill")}
+                className={`px-5 py-2 rounded-full text-xs font-oswald uppercase tracking-wider font-bold transition-all cursor-help ${
+                  mode === "custom_drill"
+                    ? "bg-navy text-white border-2 border-teal shadow-sm"
+                    : "text-navy hover:bg-navy/[0.05] border-2 border-transparent"
+                }`}
+              >
+                Custom Drill
+              </button>
+            </Tooltip>
+            <Tooltip text={TOOLTIPS.rink_chalk_talk_mode} position="bottom">
+              <button
+                onClick={() => setMode("chalk_talk")}
+                className={`px-5 py-2 rounded-full text-xs font-oswald uppercase tracking-wider font-bold transition-all cursor-help ${
+                  mode === "chalk_talk"
+                    ? "bg-navy text-white border-2 border-teal shadow-sm"
+                    : "text-navy hover:bg-navy/[0.05] border-2 border-transparent"
+                }`}
+              >
+                Chalk Talk
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -656,25 +662,29 @@ function RinkBuilderInner() {
         {/* ── Chalk Talk Save Button + My Boards toggle (only in chalk_talk mode) ── */}
         {mode === "chalk_talk" && (
           <div className="mt-6 flex items-center justify-center gap-3">
-            <button
-              onClick={() => setShowMyBoards((prev) => !prev)}
-              className={`flex items-center gap-2 px-4 py-3 border text-sm font-oswald uppercase tracking-wider rounded-lg transition-colors ${
-                showMyBoards
-                  ? "border-teal bg-teal/5 text-teal"
-                  : "border-teal/30 text-teal hover:bg-teal/5"
-              }`}
-            >
-              {showMyBoards ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
-              My Boards
-            </button>
-            <button
-              onClick={openChalkSave}
-              disabled={chalkSaving}
-              className="flex items-center gap-2 px-6 py-3 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save size={14} />
-              {chalkSaving ? "Saving..." : "Save Board"}
-            </button>
+            <Tooltip text={TOOLTIPS.rink_my_boards} position="top">
+              <button
+                onClick={() => setShowMyBoards((prev) => !prev)}
+                className={`flex items-center gap-2 px-4 py-3 border text-sm font-oswald uppercase tracking-wider rounded-lg transition-colors cursor-help ${
+                  showMyBoards
+                    ? "border-teal bg-teal/5 text-teal"
+                    : "border-teal/30 text-teal hover:bg-teal/5"
+                }`}
+              >
+                {showMyBoards ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+                My Boards
+              </button>
+            </Tooltip>
+            <Tooltip text={TOOLTIPS.rink_save_chalk} position="top">
+              <button
+                onClick={openChalkSave}
+                disabled={chalkSaving}
+                className="flex items-center gap-2 px-6 py-3 bg-teal text-white text-sm font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save size={14} />
+                {chalkSaving ? "Saving..." : "Save Board"}
+              </button>
+            </Tooltip>
           </div>
         )}
 

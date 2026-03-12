@@ -57,6 +57,9 @@ import { useUpload } from "@/contexts/UploadContext";
 import HelpDrawer from "./ui/HelpDrawer";
 import HelpButton from "./ui/HelpButton";
 
+import { Tooltip } from "./ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
+
 // ── Role Group Mapping ─────────────────────────────────────────
 // Maps hockey_role to a nav group. Each group is an isolated environment.
 // PRO = staff (GM/Coach/Scout/Analyst/Admin), MEDIA = broadcaster/producer,
@@ -234,9 +237,18 @@ function getNavItems(group: RoleGroup): {
 }
 
 // ── NavLink Component ──────────────────────────────────────────
+const NAV_TOOLTIPS: Record<string, string> = {
+  "League Hub": TOOLTIPS.nav_league_hub,
+  "Film Hub": TOOLTIPS.nav_film_room,
+  "Org Hub": TOOLTIPS.nav_org_hub,
+  "PXR Leaderboard": TOOLTIPS.nav_leaderboard,
+  "Draft Board": TOOLTIPS.nav_draft_board,
+};
+
 function NavLink({ href, label, icon: Icon, pathname, badge }: { href: string; label: string; icon: React.ElementType; pathname: string; badge?: number }) {
   const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-  return (
+  const tip = NAV_TOOLTIPS[label];
+  const inner = (
     <Link
       href={href}
       className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
@@ -255,6 +267,7 @@ function NavLink({ href, label, icon: Icon, pathname, badge }: { href: string; l
       )}
     </Link>
   );
+  return tip ? <Tooltip text={tip} position="bottom">{inner}</Tooltip> : inner;
 }
 
 // ── Role Override Mapping (admin preview → hockey_role equivalent) ───

@@ -51,6 +51,8 @@ import type {
 import { REPORT_TYPE_LABELS, TEAM_REPORT_TYPES } from "@/types/api";
 import UpgradeModal from "./UpgradeModal";
 import HockeyRink from "./HockeyRink";
+import { Tooltip } from "./ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 // ── Suggestion Icons ─────────────────────────────────────────
 const SUGGESTION_ICONS: Record<string, React.ElementType> = {
@@ -1133,9 +1135,11 @@ export default function BenchTalkDrawer() {
               <div className="mb-3 drop-shadow-lg">
                 <img src="/images/pxi-logo.svg" alt="PXI" className="h-12 w-auto mx-auto" />
               </div>
-              <h2 className="font-oswald text-xl font-bold text-navy tracking-wider uppercase mb-1">
-                {effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}
-              </h2>
+              <Tooltip text={TOOLTIPS.benchtalk_open} position="bottom">
+                <h2 className="font-oswald text-xl font-bold text-navy tracking-wider uppercase mb-1 cursor-help">
+                  {effectiveRoleGroup === "FAMILY" ? "Ask PXI" : "Bench Talk"}
+                </h2>
+              </Tooltip>
               <p className="text-muted text-sm text-center mb-3 max-w-xs leading-relaxed">
                 {(() => {
                   const pid = pageContext?.page?.id;
