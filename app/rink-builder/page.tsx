@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle, Search, Trash2, FolderOpen, PanelLeftOpen, PanelLeftClose, ArrowLeft, Calendar } from "lucide-react";
+import { Save, Copy, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Clock, Users, Flame, Zap, X as XIcon, HelpCircle, Search, Trash2, FolderOpen, PanelLeftOpen, PanelLeftClose, ArrowLeft, Calendar, Eye } from "lucide-react";
 import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -19,7 +19,7 @@ import { useBenchTalk } from "@/components/BenchTalkProvider";
 import { DRILL_CATEGORIES } from "@/types/api";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { TOOLTIPS } from "@/lib/tooltips";
-import type { RinkDiagramData } from "@/types/rink";
+import type { RinkDiagramData, RinkType, RinkElement } from "@/types/rink";
 import { RINK_DIMENSIONS } from "@/types/rink";
 import type { ChalkTalkSession } from "@/types/api";
 
@@ -39,6 +39,58 @@ const INTENSITY_OPTIONS = [
   { value: "medium", label: "Medium", color: "bg-orange-100 text-orange-700" },
   { value: "high", label: "High", color: "bg-red-100 text-red-700" },
 ];
+
+// ── Convert API/migration diagram_data → native RinkDiagramData ──
+function convertApiDiagramData(raw: Record<string, unknown>): RinkDiagramData | null {
+  if (!raw || !raw.elements) return null;
+  const rawElements = raw.elements as Record<string, unknown>[];
+
+  // Already in native RinkCanvas format (has "marker" or "freehand" types)
+  const isNativeFormat = rawElements.some(
+    (e) => e.type === "marker" || e.type === "freehand" || e.type === "player_token"
+  );
+  if (isNativeFormat) {
+    return raw as unknown as RinkDiagramData;
+  }
+
+  // Map migration rinkType → canvas rinkType
+  const rt = (raw.rinkType as string) || "full";
+  const rinkType: RinkType = rt === "half" ? "half" : "full";
+
+  const elements: RinkElement[] = [];
+  let idCounter = 0;
+  for (const e of rawElements) {
+    idCounter++;
+    const id = (e.id as string) || `conv_${idCounter}`;
+    switch (e.type) {
+      case "player": {
+        const label = (e.label as string) || "F1";
+        const mt = label.startsWith("D") ? "O" : label.startsWith("G") ? "G" : "X";
+        elements.push({ type: "marker", id, x: e.x as number, y: e.y as number, markerType: mt as "X" | "O" | "G" | "C", label });
+        break;
+      }
+      case "arrow": {
+        const pts = (e.points as number[]) || [0, 0, 100, 100];
+        elements.push({
+          type: "arrow", id,
+          x1: pts[0] || 0, y1: pts[1] || 0,
+          x2: pts[pts.length - 2] || 100, y2: pts[pts.length - 1] || 100,
+          style: (e.dashed ? "dashed" : "solid") as "solid" | "dashed",
+          color: (e.color as string) || "#1F4E79",
+        });
+        break;
+      }
+      case "puck":
+        elements.push({ type: "puck", id, x: e.x as number, y: e.y as number });
+        break;
+      case "cone":
+        elements.push({ type: "pylon", id, x: e.x as number, y: e.y as number });
+        break;
+    }
+  }
+
+  return { rinkType, width: (raw.width as number) || 800, height: (raw.height as number) || 400, elements, version: 1 };
+}
 
 export default function RinkBuilderPage() {
   return (
@@ -296,6 +348,33 @@ function RinkBuilderInner() {
     const matchesTeam = !boardTeamFilter || b.team_id === boardTeamFilter;
     return matchesSearch && matchesTeam;
   });
+
+  // ── Drill Preview mode (from /drills "Open in Rink Builder" link) ──
+  const drillIdParam = searchParams.get("drill_id");
+  const [previewDrillName, setPreviewDrillName] = useState("");
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  useEffect(() => {
+    if (!drillIdParam) return;
+    api.get(`/drills/${drillIdParam}`).then(({ data }) => {
+      setPreviewDrillName(data.name || "Drill");
+      if (data.diagram_data) {
+        const raw = typeof data.diagram_data === "string" ? JSON.parse(data.diagram_data) : data.diagram_data;
+        const converted = convertApiDiagramData(raw);
+        if (converted) {
+          // Set background based on rink type
+          const bg = converted.rinkType === "half" ? "half_rink" : "full_rink";
+          setBackgroundMode(bg as BackgroundMode);
+          setLoadedBoardData(converted);
+          setCanvasKey((k: number) => k + 1);
+        }
+      }
+      if (modeParam === "preview") {
+        setIsPreviewMode(true);
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drillIdParam]);
 
   // Canvas ref for getting SVG + diagram data at save time
   const canvasRef = useRef<RinkCanvasHandle>(null);
@@ -617,6 +696,24 @@ function RinkBuilderInner() {
           </div>
         )}
 
+        {/* Preview Banner (when viewing a drill diagram) */}
+        {isPreviewMode && previewDrillName && (
+          <div className="mb-4 bg-navy/[0.04] border border-navy/15 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-navy text-sm">
+              <Eye size={16} className="text-teal" />
+              <span>
+                Viewing: <strong>{previewDrillName}</strong> — <span className="text-muted">Read Only</span>
+              </span>
+            </div>
+            <button
+              onClick={() => setIsPreviewMode(false)}
+              className="text-xs font-oswald uppercase tracking-wider text-teal hover:text-teal/80 border border-teal/30 rounded px-3 py-1 hover:bg-teal/5 transition-colors"
+            >
+              Customize Diagram
+            </button>
+          </div>
+        )}
+
         {/* Canvas */}
         <RinkCanvas
           key={canvasKey}
@@ -624,7 +721,8 @@ function RinkBuilderInner() {
           initialData={loadedBoardData}
           onChange={handleDiagramChange}
           showToolbar={true}
-          editable={true}
+          editable={!isPreviewMode}
+          isReadOnly={isPreviewMode}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
           backgroundMode={backgroundMode}
           onBackgroundModeChange={setBackgroundMode}

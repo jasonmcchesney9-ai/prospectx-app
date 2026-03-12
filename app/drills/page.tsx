@@ -278,6 +278,15 @@ export default function DrillsPage() {
                             onChange={(e) => handleDiagramUpload(drill.id, e)}
                           />
                         </label>
+                        {/* Open in Rink Builder (only if diagram_data exists) */}
+                        {!!(drill as Drill & { diagram_data?: unknown }).diagram_data && (
+                          <Link
+                            href={`/rink-builder?drill_id=${drill.id}&mode=preview`}
+                            className="text-[10px] font-oswald uppercase tracking-wider text-teal hover:text-teal/80 flex items-center gap-1 transition-colors border border-teal/30 rounded px-2 py-0.5 hover:bg-teal/5"
+                          >
+                            Open in Rink Builder
+                          </Link>
+                        )}
                       </div>
 
                       <div className="space-y-3 text-sm text-navy/80">

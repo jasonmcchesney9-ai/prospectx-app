@@ -42,6 +42,7 @@ interface RinkCanvasProps {
   onSave?: (data: RinkDiagramData, svgString: string) => void;
   showToolbar?: boolean;
   editable?: boolean;
+  isReadOnly?: boolean;
   className?: string;
   onToggleHelp?: () => void;
   backgroundMode?: BackgroundMode;
@@ -204,12 +205,14 @@ const RinkCanvas = forwardRef<RinkCanvasHandle, RinkCanvasProps>(function RinkCa
   onChange,
   onSave,
   showToolbar = true,
-  editable = true,
+  editable: editableProp = true,
+  isReadOnly = false,
   className = "",
   onToggleHelp,
   backgroundMode = "full_rink",
   onBackgroundModeChange,
 }, ref) {
+  const editable = editableProp && !isReadOnly;
   // ── State ──
   const [rinkType, setRinkType] = useState<RinkType>(initialData?.rinkType || "full");
   const [elements, setElements] = useState<RinkElement[]>(initialData?.elements || []);
