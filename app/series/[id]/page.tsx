@@ -26,11 +26,45 @@ import {
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ReportSection from "@/components/ReportSection";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import type { SeriesPlan } from "@/types/api";
-import { SERIES_FORMATS } from "@/types/api";
+import { SERIES_FORMATS, SECTION_LABELS } from "@/types/api";
+
+// ── Report section parser (mirrors app/reports/[id]/page.tsx) ──
+function parseReportSections(text: string): Array<{ key: string; content: string }> {
+  const lines = text.split("\n");
+  const sections: Array<{ key: string; content: string }> = [];
+  let currentKey = "";
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const headerMatch = trimmed.match(
+      /^(?:#{1,3}\s+)?([A-Z][A-Z0-9_]+(?:_[A-Z0-9]+)*)[\s:—\-]*$/
+    );
+    if (headerMatch && (headerMatch[1] in SECTION_LABELS || headerMatch[1].length >= 4)) {
+      if (currentKey) {
+        sections.push({ key: currentKey, content: currentLines.join("\n").trim() });
+      }
+      currentKey = headerMatch[1];
+      currentLines = [];
+    } else if (currentKey) {
+      currentLines.push(line);
+    } else if (trimmed) {
+      currentLines.push(line);
+    }
+  }
+  if (currentKey) {
+    sections.push({ key: currentKey, content: currentLines.join("\n").trim() });
+  }
+  if (sections.length === 0 && text.trim()) {
+    sections.push({ key: "REPORT", content: text.trim() });
+  }
+  return sections;
+}
 
 // ── Types ────────────────────────────────────────────────────
 interface GameNote {
@@ -163,6 +197,9 @@ function SeriesDetail() {
   const [generatingState, setGeneratingState] = useState<number | null>(null);
   const [analysing, setAnalysing] = useState(false);
   const [analyseError, setAnalyseError] = useState("");
+  const [dossierReport, setDossierReport] = useState<{ output_text?: string; title?: string; generated_at?: string } | null>(null);
+  const [dossierLoading, setDossierLoading] = useState(false);
+  const [dossierFetchKey, setDossierFetchKey] = useState(0);
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -239,6 +276,26 @@ function SeriesDetail() {
     }
     if (seriesId) load();
   }, [seriesId]);
+
+  // ── Fetch linked dossier report when Dossier tab activates ──
+  useEffect(() => {
+    if (activeTab !== "dossier" || !seriesId) return;
+    let cancelled = false;
+    async function fetchDossier() {
+      setDossierLoading(true);
+      try {
+        const { data } = await api.get(`/chalk-talk/series/${seriesId}/report`);
+        if (!cancelled) setDossierReport(data);
+      } catch {
+        // 404 = no report linked yet — not an error
+        if (!cancelled) setDossierReport(null);
+      } finally {
+        if (!cancelled) setDossierLoading(false);
+      }
+    }
+    fetchDossier();
+    return () => { cancelled = true; };
+  }, [activeTab, seriesId, dossierFetchKey]);
 
   // ── Save helper ────────────────────────────────────────────
   const saveField = useCallback(async (updates: Record<string, unknown>) => {
@@ -331,8 +388,9 @@ function SeriesDetail() {
       // 2. Link report to this series
       await api.post(`/chalk-talk/series/${seriesId}/link-report`, { report_id: reportId });
 
-      // 3. Switch to Dossier tab
+      // 3. Switch to Dossier tab and trigger refetch
       setActiveTab("dossier");
+      setDossierFetchKey(k => k + 1);
       toast.success("Series intelligence generated");
     } catch (err: unknown) {
       const msg = (err && typeof err === "object" && "response" in err)
@@ -716,6 +774,46 @@ function SeriesDetail() {
       {printMode && <h2 className="print-only font-oswald text-lg text-navy uppercase tracking-wider mt-6 mb-3 print-break-before">Opponent Dossier</h2>}
       {(activeTab === "dossier" || printMode) && (
         <div className="space-y-4">
+          {/* PXI Series Intelligence Report */}
+          {dossierLoading ? (
+            <div className="bg-white rounded-xl border border-teal/20 p-8 flex flex-col items-center justify-center gap-3">
+              <Loader2 size={24} className="animate-spin text-teal" />
+              <p className="text-xs font-oswald uppercase tracking-wider text-navy/50">Loading series intelligence…</p>
+            </div>
+          ) : dossierReport?.output_text ? (
+            <div className="bg-white rounded-xl border border-teal/20 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #0D9488, #0F2942)" }}>
+                  <Sparkles size={14} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-oswald font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                    Series Intelligence
+                  </h3>
+                  {dossierReport.generated_at && (
+                    <span className="text-[10px] font-oswald uppercase tracking-widest" style={{ color: "rgba(13,148,136,0.6)" }}>
+                      Generated {new Date(dossierReport.generated_at).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="ice-stripe mb-4 rounded-full" />
+              {parseReportSections(dossierReport.output_text).map((s) => (
+                <ReportSection key={s.key} sectionKey={s.key} content={s.content} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-teal/20 p-8 flex flex-col items-center justify-center gap-2 text-center">
+              <Sparkles size={20} style={{ color: "#0D9488" }} />
+              <p className="text-sm font-oswald uppercase tracking-wider" style={{ color: "#0F2942" }}>
+                No series intelligence generated yet
+              </p>
+              <p className="text-xs" style={{ color: "rgba(15,41,66,0.5)" }}>
+                Click <strong>PXI Analyse Series</strong> above to generate an AI-powered series dossier.
+              </p>
+            </div>
+          )}
+
           {/* Opponent Systems */}
           <div className="bg-white rounded-xl border border-teal/20 p-5">
             <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-4">
