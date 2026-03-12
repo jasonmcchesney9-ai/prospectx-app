@@ -24840,6 +24840,116 @@ def _get_recent_film_context(conn, org_id: str, player_id: str = None, team_name
     return "\n".join(parts)
 
 
+def _build_series_intelligence_block(series_id: str, game_number: int, conn) -> str | None:
+    """Build comprehensive series context for PXI prompt injection.
+
+    Includes: series metadata, linked playoff_series report intelligence,
+    previous game plan summaries, and triggered adjustments.
+    Returns None if no useful context found. All reads are non-fatal.
+    """
+    try:
+        # 1. Series plan metadata
+        sp = conn.execute(
+            "SELECT series_name, team_name, opponent_team_name, current_score, adjustments, game_notes FROM series_plans WHERE id = ?",
+            (series_id,),
+        ).fetchone()
+        if not sp:
+            return None
+        sp_name = sp["series_name"] if hasattr(sp, "keys") else sp[0]
+        sp_opp = sp["opponent_team_name"] if hasattr(sp, "keys") else sp[2]
+        current_score = (sp["current_score"] if hasattr(sp, "keys") else sp[3]) or "0-0"
+        adj_raw = sp["adjustments"] if hasattr(sp, "keys") else sp[4]
+        notes_raw = sp["game_notes"] if hasattr(sp, "keys") else sp[5]
+
+        # Determine series phase
+        if game_number <= 2:
+            phase = "Phase 1 (Games 1-2) — identity establishment"
+        elif game_number <= 4:
+            phase = "Phase 2 (Games 3-4) — first adjustments, bench compression"
+        else:
+            phase = "Phase 3 (Games 5-7) — desperation / closeout"
+
+        lines = [
+            "=== SERIES CONTEXT ===",
+            f"This is Game {game_number} of a playoff series.",
+            f"Series: {sp_name}",
+            f"Series opponent: {sp_opp}",
+            f"Series record: {current_score}",
+            f"Phase: {phase}",
+        ]
+
+        # 2. Linked playoff_series report intelligence
+        try:
+            report_row = conn.execute("""
+                SELECT r.output_text
+                FROM series_reports sr
+                JOIN reports r ON r.id = sr.report_id
+                WHERE sr.series_id = ?
+                ORDER BY sr.created_at DESC LIMIT 1
+            """, (series_id,)).fetchone()
+            if report_row:
+                output_text = report_row["output_text"] if hasattr(report_row, "keys") else report_row[0]
+                if output_text and output_text.strip():
+                    lines.append("")
+                    lines.append("SERIES INTELLIGENCE (from Series Plan):")
+                    lines.append(output_text[:3000])
+        except Exception:
+            pass  # series_reports may not have data yet
+
+        # 3. Previous games in this series (from chalk_talk_sessions)
+        try:
+            prior_sessions = conn.execute(
+                "SELECT game_number, status, keys_to_game, opponent_analysis "
+                "FROM chalk_talk_sessions WHERE series_plan_id = ? AND game_number < ? ORDER BY game_number ASC",
+                (series_id, game_number),
+            ).fetchall()
+            if prior_sessions:
+                lines.append("")
+                lines.append("PREVIOUS GAMES IN THIS SERIES:")
+                for ps in prior_sessions:
+                    gn = ps["game_number"] if hasattr(ps, "keys") else ps[0]
+                    status = ps["status"] if hasattr(ps, "keys") else ps[1]
+                    keys = ps["keys_to_game"] if hasattr(ps, "keys") else ps[2]
+                    keys_text = f" — Keys: {keys[:200]}" if keys else ""
+                    lines.append(f"  Game {gn} ({status or 'draft'}){keys_text}")
+        except Exception:
+            pass
+
+        # Also include game_notes from series plan (win/loss results)
+        try:
+            game_notes = json.loads(notes_raw) if isinstance(notes_raw, str) and notes_raw else []
+            for gn in game_notes:
+                if isinstance(gn, dict) and gn.get("game_number", 0) < game_number:
+                    result = gn.get("result", "").upper()
+                    notes = gn.get("notes", "")
+                    if result or notes:
+                        lines.append(f"  Game {gn['game_number']} result: {result} — {notes[:200]}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # 4. Triggered adjustments
+        try:
+            adjustments = json.loads(adj_raw) if isinstance(adj_raw, str) and adj_raw else []
+            fired = [a for a in adjustments if isinstance(a, dict) and a.get("used_in_game")]
+            if fired:
+                lines.append("")
+                lines.append("TRIGGERED ADJUSTMENTS:")
+                for a in fired:
+                    lines.append(f"  - IF {a.get('trigger', '?')} THEN {a.get('action', '?')} [FIRED G{a.get('used_in_game')}]")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        lines.append("")
+        lines.append("Use this series context to make this Game Plan specific to the current series state. Reference what has already happened and what adjustments are needed.")
+        lines.append("=== END SERIES CONTEXT ===")
+
+        # Only return if we have more than just the header lines
+        return "\n".join(lines) if len(lines) > 8 else None
+    except Exception as exc:
+        logger.warning("_build_series_intelligence_block failed (non-fatal): %s", exc)
+        return None
+
+
 async def summarize_series_context(series_id: str, current_game_number: int) -> str:
     """Summarize prior game PXI outputs for series context injection.
 
@@ -25112,23 +25222,31 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
             # ── Series context injection ──
             if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
                 try:
+                    # Build comprehensive series intelligence block (metadata + playoff_series report + prior games + adjustments)
+                    intel_block = _build_series_intelligence_block(request.series_id, request.game_number, conn)
+                    # Also get prior PXI output summaries
                     series_ctx = await summarize_series_context(request.series_id, request.game_number)
-                    if series_ctx:
+                    # Include film observations from the series period
+                    series_film = _get_recent_film_context(conn, org_id, team_name=team_name, days=14, max_reports=3, max_chars=600)
+                    film_block = f"\nFilm Room observations from this series period:\n{series_film}" if series_film else ""
+
+                    if intel_block or series_ctx:
                         n_prior = request.game_number - 1
-                        # Include film observations from the series period
-                        series_film = _get_recent_film_context(conn, org_id, team_name=team_name, days=14, max_reports=3, max_chars=600)
-                        film_block = f"\nFilm Room observations from this series period:\n{series_film}" if series_film else ""
-                        context_block = (
-                            f"\n\n--- PRIOR SERIES CONTEXT ---\n"
-                            f"This series has had {n_prior} prior game(s) analyzed.\n"
-                            f"Here is a summary of prior analysis:\n{series_ctx}\n"
-                            f"{film_block}\n"
-                            f"Use this context to identify trends, evolving matchups, "
-                            f"and carry-over themes. Do not repeat prior analysis verbatim.\n"
-                            f"--- END PRIOR CONTEXT ---\n\n"
-                        )
-                        user_prompt = context_block + user_prompt
-                        logger.info("Series context injected: series=%s game=%d (%d chars)", request.series_id, request.game_number, len(series_ctx))
+                        parts = []
+                        if intel_block:
+                            parts.append(intel_block)
+                        if series_ctx:
+                            parts.append(
+                                f"--- PRIOR PXI ANALYSIS ---\n"
+                                f"This series has had {n_prior} prior game(s) analyzed.\n"
+                                f"Here is a summary of prior analysis:\n{series_ctx}\n"
+                                f"--- END PRIOR PXI ANALYSIS ---"
+                            )
+                        if film_block:
+                            parts.append(film_block)
+                        context_block = "\n\n".join(parts)
+                        user_prompt = context_block + "\n\n" + user_prompt
+                        logger.info("Series context injected: series=%s game=%d (%d chars, intel=%s)", request.series_id, request.game_number, len(context_block), "yes" if intel_block else "no")
                 except Exception as sc_err:
                     logger.warning("Series context injection failed (non-fatal): %s", str(sc_err))
 
