@@ -4684,6 +4684,65 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_player_outcomes_player ON player_outcomes(player_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_player_outcomes_leagues ON player_outcomes(from_league, to_league)")
 
+    # ── Table: pxr_history (nightly PXR score snapshots) ──
+    if USE_PG:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pxr_history (
+                id TEXT PRIMARY KEY,
+                player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                season TEXT,
+                pxr_score REAL,
+                p1_offense REAL,
+                p2_defense REAL,
+                p3_possession REAL,
+                p4_physical REAL,
+                p5_goalie REAL,
+                age_modifier REAL,
+                league_percentile REAL,
+                cohort_percentile REAL,
+                score_type TEXT,
+                confidence_tier TEXT,
+                league TEXT,
+                team_id TEXT,
+                snapshot_date TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pxr_history (
+                id TEXT PRIMARY KEY,
+                player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                season TEXT,
+                pxr_score REAL,
+                p1_offense REAL,
+                p2_defense REAL,
+                p3_possession REAL,
+                p4_physical REAL,
+                p5_goalie REAL,
+                age_modifier REAL,
+                league_percentile REAL,
+                cohort_percentile REAL,
+                score_type TEXT,
+                confidence_tier TEXT,
+                league TEXT,
+                team_id TEXT,
+                snapshot_date TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_history_player ON pxr_history(player_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_history_date ON pxr_history(snapshot_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_history_player_season ON pxr_history(player_id, season)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pxr_history_score_type ON pxr_history(score_type)")
+
+    # ── Migration: pxr_score_at_transition on player_outcomes ──
+    po_cols = _get_table_columns(conn, "player_outcomes")
+    if "pxr_score_at_transition" not in po_cols:
+        conn.execute("ALTER TABLE player_outcomes ADD COLUMN pxr_score_at_transition REAL")
+        conn.commit()
+        logger.info("Migration: added pxr_score_at_transition to player_outcomes")
+
     # ── Migration: add source_filename to instat stat tables ──
     ips_cols = _get_table_columns(conn, "instat_player_stats")
     if "source_filename" not in ips_cols:
@@ -10982,6 +11041,61 @@ def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, erro
         logger.error("Failed to log PXR run: %s", e)
 
 
+def snapshot_pxr_to_history(conn):
+    """Copy all current pxr_scores rows to pxr_history before recalculation.
+
+    Preserves score trajectory over time. Called once per nightly cron run,
+    before scores are updated. Idempotent — skips if today's snapshot already exists.
+    """
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
+    # Idempotency guard — skip if already snapshotted today
+    existing = conn.execute(
+        "SELECT COUNT(*) FROM pxr_history WHERE snapshot_date = ?", (today,)
+    ).fetchone()[0]
+    if existing > 0:
+        logger.info(f"PXR history snapshot already exists for {today}, skipping")
+        return 0
+
+    # Fetch all current scored rows
+    rows = conn.execute("""
+        SELECT ps.id, ps.player_id, ps.season, ps.pxr_score,
+               ps.p1_offense, ps.p2_defense, ps.p3_possession,
+               ps.p4_physical, ps.p5_goalie, ps.age_modifier,
+               ps.league_percentile, ps.cohort_percentile,
+               ps.score_type, ps.confidence_tier,
+               p.current_league, p.current_team
+        FROM pxr_scores ps
+        LEFT JOIN players p ON ps.player_id = p.id
+        WHERE ps.pxr_score IS NOT NULL
+    """).fetchall()
+
+    count = 0
+    for row in rows:
+        history_id = gen_id()
+        conn.execute("""
+            INSERT INTO pxr_history (
+                id, player_id, season, pxr_score,
+                p1_offense, p2_defense, p3_possession,
+                p4_physical, p5_goalie, age_modifier,
+                league_percentile, cohort_percentile,
+                score_type, confidence_tier,
+                league, team_id, snapshot_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            history_id, row[1], row[2], row[3],
+            row[4], row[5], row[6],
+            row[7], row[8], row[9],
+            row[10], row[11],
+            row[12], row[13],
+            row[14], row[15], today
+        ))
+        count += 1
+    conn.commit()
+    logger.info(f"PXR history snapshot: {count} scores archived for {today}")
+    return count
+
+
 def recalculate_pxr_scores_cron():
     """Cron wrapper for nightly PXR recalculation. Logs start/end/errors."""
     import time as _time
@@ -10989,6 +11103,9 @@ def recalculate_pxr_scores_cron():
     start = _time.time()
     try:
         conn = get_db()
+        # Snapshot current scores to pxr_history before recalculation
+        snapshot_count = snapshot_pxr_to_history(conn)
+        logger.info(f"Pre-recalc snapshot: {snapshot_count} scores archived")
         result = calculate_pxr_scores(conn, '2025-26')
         conn.close()
         scored_t1 = result.get('scored', 0)
@@ -32946,6 +33063,57 @@ async def pxr_draft_board(
     }
 
 
+@app.get("/pxr/history/{player_id}")
+async def get_pxr_history(
+    player_id: str,
+    token_data: dict = Depends(verify_token),
+):
+    """PXR score history for a player. Returns daily snapshots sorted oldest to newest.
+    Access: Pro+ roles only."""
+    role = token_data.get("role", "")
+    allowed = {"scout", "gm", "analyst", "admin", "superadmin"}
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT snapshot_date, pxr_score, p1_offense, p2_defense,
+                   p3_possession, p4_physical, p5_goalie, age_modifier,
+                   league_percentile, cohort_percentile, score_type,
+                   confidence_tier, league, team_id
+            FROM pxr_history
+            WHERE player_id = ?
+            ORDER BY snapshot_date ASC
+        """, (player_id,)).fetchall()
+
+        return {
+            "player_id": player_id,
+            "snapshots": [
+                {
+                    "date": r[0],
+                    "pxr_score": r[1],
+                    "p1_offense": r[2],
+                    "p2_defense": r[3],
+                    "p3_possession": r[4],
+                    "p4_physical": r[5],
+                    "p5_goalie": r[6],
+                    "age_modifier": r[7],
+                    "league_pct": r[8],
+                    "cohort_pct": r[9],
+                    "score_type": r[10],
+                    "confidence_tier": r[11],
+                    "league": r[12],
+                    "team_id": r[13],
+                }
+                for r in rows
+            ],
+            "total_snapshots": len(rows),
+        }
+    finally:
+        conn.close()
+
+
 # ============================================================
 # DEVELOPMENT PLANS
 # ============================================================
@@ -36129,13 +36297,24 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                         _lo_now = datetime.now(timezone.utc)
                         _lo_sy = _lo_now.year if _lo_now.month >= 9 else _lo_now.year - 1
                         _lo_season = f"{_lo_sy}-{(_lo_sy + 1) % 100:02d}"
+                        # Fetch current PXR score at transition time (non-fatal)
+                        _lo_pxr = None
+                        try:
+                            _lo_pxr_row = conn.execute(
+                                "SELECT pxr_score FROM pxr_scores WHERE player_id = ? ORDER BY calc_timestamp DESC LIMIT 1",
+                                (existing[0],)
+                            ).fetchone()
+                            if _lo_pxr_row:
+                                _lo_pxr = _lo_pxr_row[0]
+                        except Exception:
+                            pass
                         conn.execute("""
                             INSERT INTO player_outcomes
-                            (player_id, from_league, to_league, from_team, to_team, transition_season)
-                            VALUES (?, ?, ?, ?, ?, ?)
+                            (player_id, from_league, to_league, from_team, to_team, transition_season, pxr_score_at_transition)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT DO NOTHING
-                        """, (existing[0], old_league_val, league_name, old_team, team_name, _lo_season))
-                        logger.info("League transition logged: %s %s from %s to %s", first, last, old_league_val, league_name)
+                        """, (existing[0], old_league_val, league_name, old_team, team_name, _lo_season, _lo_pxr))
+                        logger.info("League transition logged: %s %s from %s to %s (PXR: %s)", first, last, old_league_val, league_name, _lo_pxr)
                     except Exception as _lo_err:
                         logger.warning("Failed to log league transition for %s %s: %s", first, last, _lo_err)
 
@@ -36215,13 +36394,24 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                         _lo_now2 = datetime.now(timezone.utc)
                         _lo_sy2 = _lo_now2.year if _lo_now2.month >= 9 else _lo_now2.year - 1
                         _lo_season2 = f"{_lo_sy2}-{(_lo_sy2 + 1) % 100:02d}"
+                        # Fetch current PXR score at transition time (non-fatal)
+                        _lo_pxr2 = None
+                        try:
+                            _lo_pxr_row2 = conn.execute(
+                                "SELECT pxr_score FROM pxr_scores WHERE player_id = ? ORDER BY calc_timestamp DESC LIMIT 1",
+                                (matched_id,)
+                            ).fetchone()
+                            if _lo_pxr_row2:
+                                _lo_pxr2 = _lo_pxr_row2[0]
+                        except Exception:
+                            pass
                         conn.execute("""
                             INSERT INTO player_outcomes
-                            (player_id, from_league, to_league, from_team, to_team, transition_season)
-                            VALUES (?, ?, ?, ?, ?, ?)
+                            (player_id, from_league, to_league, from_team, to_team, transition_season, pxr_score_at_transition)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT DO NOTHING
-                        """, (matched_id, fm_old_league, league_name, fm_old_team, team_name, _lo_season2))
-                        logger.info("League transition logged (fuzzy): %s %s from %s to %s", first, last, fm_old_league, league_name)
+                        """, (matched_id, fm_old_league, league_name, fm_old_team, team_name, _lo_season2, _lo_pxr2))
+                        logger.info("League transition logged (fuzzy): %s %s from %s to %s (PXR: %s)", first, last, fm_old_league, league_name, _lo_pxr2)
                     except Exception as _lo_err2:
                         logger.warning("Failed to log league transition (fuzzy) for %s %s: %s", first, last, _lo_err2)
 
