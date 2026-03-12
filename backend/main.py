@@ -1076,7 +1076,7 @@ LEAGUE_TIERS = {
     "CCHL": "Tier2", "NOJHL": "Tier2", "SJHL": "Tier2", "MHL": "Tier2",
     "MJHL": "Tier2",
     # Tier 3 — Junior B / Tier 2 Jr
-    "GOHL": "Tier3", "NAHL": "Tier3", "GMHL": "Tier3", "PJHL": "Tier3",
+    "GOJHL": "Tier3", "GOHL": "Tier3", "NAHL": "Tier3", "GMHL": "Tier3", "PJHL": "Tier3",
     "WOAA": "Tier3", "SIJHL": "Tier3",
     # College / University
     "NCAA": "NCAA", "NCAA DI": "NCAA", "NCAA DIII": "NCAA_D3",
@@ -1135,7 +1135,7 @@ LEAGUE_CANONICAL: dict[str, tuple[str, str]] = {
     "MJHL":  ("MJHL", "Manitoba Junior Hockey League"),
     "NAHL":  ("NAHL", "North American Hockey League"),
     # --- Junior B ---
-    "GOHL":  ("GOHL", "Greater Ontario Hockey League"),
+    "GOJHL": ("GOJHL", "Greater Ontario Junior Hockey League"),
     "KIJHL": ("KIJHL", "Kootenay International Junior Hockey League"),
     "PJHL":  ("PJHL", "Provincial Junior Hockey League"),
     "VIJHL": ("VIJHL", "Vancouver Island Junior Hockey League"),
@@ -1150,10 +1150,10 @@ LEAGUE_CANONICAL: dict[str, tuple[str, str]] = {
 
 # Legacy / variant aliases → canonical abbreviation key
 _LEAGUE_LEGACY_ALIASES: dict[str, str] = {
-    # GOJHL → GOHL rebrand
-    "GOJHL": "GOHL",
-    "gojhl": "GOHL",
-    "Greater Ontario Junior Hockey League": "GOHL",
+    # GOHL → GOJHL (canonical is GOJHL — Greater Ontario Junior Hockey League)
+    "GOHL": "GOJHL",
+    "gohl": "GOJHL",
+    "Greater Ontario Junior Hockey League": "GOJHL",
     # QMJHL French variant
     "LHJMQ": "QMJHL",
     # Common full-name lookups (case-sensitive entries; case-insensitive handled below)
@@ -1170,7 +1170,7 @@ _LEAGUE_LEGACY_ALIASES: dict[str, str] = {
     "Maritime Hockey League": "MHL",
     "Manitoba Junior Hockey League": "MJHL",
     "North American Hockey League": "NAHL",
-    "Greater Ontario Hockey League": "GOHL",
+    "Greater Ontario Hockey League": "GOJHL",
     "Provincial Junior Hockey League": "PJHL",
     "Kootenay International Junior Hockey League": "KIJHL",
     "Vancouver Island Junior Hockey League": "VIJHL",
@@ -1203,8 +1203,8 @@ def _normalize_league(raw: str | None, form: str = "abbreviation") -> str | None
 
     Args:
         raw:  Any league string (abbreviation, full name, legacy variant).
-        form: "abbreviation" → returns e.g. "GOHL"
-              "full"         → returns e.g. "Greater Ontario Hockey League"
+        form: "abbreviation" → returns e.g. "GOJHL"
+              "full"         → returns e.g. "Greater Ontario Junior Hockey League"
 
     Returns:
         Canonical string, or None if raw is None/empty.
@@ -4820,19 +4820,37 @@ def init_db():
     except Exception as e:
         logger.warning("Migration: HT league fix skipped — %s", e)
 
-    # ── Normalize orphan teams: 'Greater Ontario Junior Hockey League' → 'GOHL' ──
+    # ── Normalize orphan teams: 'Greater Ontario Junior Hockey League' → 'GOJHL' ──
     try:
         result = conn.execute("""
             UPDATE teams
-            SET league = 'GOHL'
+            SET league = 'GOJHL'
             WHERE league = 'Greater Ontario Junior Hockey League'
         """)
         conn.commit()
         if result.rowcount > 0:
-            logger.info("Migration: normalized %d orphan teams league name to GOHL",
+            logger.info("Migration: normalized %d orphan teams league name to GOJHL",
                         result.rowcount)
     except Exception as e:
         logger.warning("Migration: orphan team league rename skipped — %s", e)
+
+    # ── Normalize GOHL → GOJHL across teams, players, leagues ──
+    try:
+        changed = 0
+        r1 = conn.execute("UPDATE teams SET league = 'GOJHL' WHERE league = 'GOHL'")
+        changed += r1.rowcount
+        r2 = conn.execute("UPDATE players SET current_league = 'GOJHL' WHERE current_league = 'GOHL'")
+        changed += r2.rowcount
+        r3 = conn.execute("UPDATE leagues SET abbreviation = 'GOJHL', name = 'Greater Ontario Junior Hockey League' WHERE abbreviation = 'GOHL'")
+        changed += r3.rowcount
+        r4 = conn.execute("UPDATE player_stats SET league = 'GOJHL' WHERE league = 'GOHL'")
+        changed += r4.rowcount
+        conn.commit()
+        if changed > 0:
+            logger.info("Migration: normalized GOHL → GOJHL across %d rows (teams=%d, players=%d, leagues=%d, player_stats=%d)",
+                        changed, r1.rowcount, r2.rowcount, r3.rowcount, r4.rowcount)
+    except Exception as e:
+        logger.warning("Migration: GOHL→GOJHL rename skipped — %s", e)
 
     # ── Normalize player_stats season strings (two-step) ────────────────
     try:
@@ -6342,7 +6360,7 @@ def seed_leagues():
         ("MHL", "Maritime Hockey League", "Canada", "junior_a", 28),
         ("NAHL", "North American Hockey League", "USA", "junior_a", 30),
         # Junior B
-        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_b", 39),
+        ("GOJHL", "Greater Ontario Junior Hockey League", "Canada", "junior_b", 39),
         ("KIJHL", "Kootenay International Junior Hockey League", "Canada", "junior_b", 40),
         ("PJHL", "Provincial Junior Hockey League", "Canada", "junior_b", 41),
         ("VIJHL", "Vancouver Island Junior Hockey League", "Canada", "junior_b", 42),
@@ -6365,15 +6383,15 @@ def migrate_leagues():
     """Upsert leagues for existing databases — adds missing leagues, fixes level/sort_order."""
     conn = get_db()
 
-    # Handle GOJHL → GOHL rebrand (abbreviation changed)
-    old_gojhl = conn.execute("SELECT id FROM leagues WHERE abbreviation = 'GOJHL'").fetchone()
-    if old_gojhl:
+    # Handle GOHL → GOJHL normalization (canonical is now GOJHL)
+    old_gohl = conn.execute("SELECT id FROM leagues WHERE abbreviation = 'GOHL'").fetchone()
+    if old_gohl:
         conn.execute(
-            "UPDATE leagues SET abbreviation = 'GOHL', name = 'Greater Ontario Hockey League', level = 'junior_b', sort_order = 39 WHERE abbreviation = 'GOJHL'"
+            "UPDATE leagues SET abbreviation = 'GOJHL', name = 'Greater Ontario Junior Hockey League', level = 'junior_b', sort_order = 39 WHERE abbreviation = 'GOHL'"
         )
         # Also update any teams that reference the old abbreviation
-        conn.execute("UPDATE teams SET league = 'GOHL' WHERE league = 'GOJHL'")
-        logger.info("Renamed GOJHL → GOHL in leagues and teams")
+        conn.execute("UPDATE teams SET league = 'GOJHL' WHERE league = 'GOHL'")
+        logger.info("Renamed GOHL → GOJHL in leagues and teams")
 
     # Canonical league data (must match seed_leagues above)
     leagues = [
@@ -6398,7 +6416,7 @@ def migrate_leagues():
         ("MHL", "Maritime Hockey League", "Canada", "junior_a", 28),
         ("NAHL", "North American Hockey League", "USA", "junior_a", 30),
         # Junior B
-        ("GOHL", "Greater Ontario Hockey League", "Canada", "junior_b", 39),
+        ("GOJHL", "Greater Ontario Junior Hockey League", "Canada", "junior_b", 39),
         ("KIJHL", "Kootenay International Junior Hockey League", "Canada", "junior_b", 40),
         ("PJHL", "Provincial Junior Hockey League", "Canada", "junior_b", 41),
         ("VIJHL", "Vancouver Island Junior Hockey League", "Canada", "junior_b", 42),
@@ -6434,7 +6452,7 @@ def migrate_leagues():
 
 
 def seed_teams():
-    """Seed reference teams for GOHL (all conferences)."""
+    """Seed reference teams for GOJHL (all conferences)."""
     conn = get_db()
     count = conn.execute("SELECT COUNT(*) FROM teams WHERE org_id = '__global__'").fetchone()[0]
     if count > 0:
@@ -6451,32 +6469,32 @@ def seed_teams():
 
     gojhl_teams = [
         # Western Conference
-        ("Chatham Maroons", "GOHL", "Chatham", "CM"),
-        ("Leamington Flyers", "GOHL", "Leamington", "LF"),
-        ("LaSalle Vipers", "GOHL", "LaSalle", "LV"),
-        ("London Nationals", "GOHL", "London", "LN"),
-        ("Komoka Kings", "GOHL", "Komoka", "KK"),
-        ("Strathroy Rockets", "GOHL", "Strathroy", "SR"),
-        ("St. Thomas Stars", "GOHL", "St. Thomas", "STS"),
-        ("St. Marys Lincolns", "GOHL", "St. Marys", "STM"),
-        ("Sarnia Legionnaires", "GOHL", "Sarnia", "SAR"),
+        ("Chatham Maroons", "GOJHL", "Chatham", "CM"),
+        ("Leamington Flyers", "GOJHL", "Leamington", "LF"),
+        ("LaSalle Vipers", "GOJHL", "LaSalle", "LV"),
+        ("London Nationals", "GOJHL", "London", "LN"),
+        ("Komoka Kings", "GOJHL", "Komoka", "KK"),
+        ("Strathroy Rockets", "GOJHL", "Strathroy", "SR"),
+        ("St. Thomas Stars", "GOJHL", "St. Thomas", "STS"),
+        ("St. Marys Lincolns", "GOJHL", "St. Marys", "STM"),
+        ("Sarnia Legionnaires", "GOJHL", "Sarnia", "SAR"),
         # Midwestern Conference
-        ("Brantford Bandits", "GOHL", "Brantford", "BB"),
-        ("Cambridge Redhawks", "GOHL", "Cambridge", "CAM"),
-        ("Elmira Sugar Kings", "GOHL", "Elmira", "ESK"),
-        ("KW Siskins", "GOHL", "Kitchener", "KWS"),
-        ("Listowel Cyclones", "GOHL", "Listowel", "LC"),
-        ("Stratford Warriors", "GOHL", "Stratford", "SW"),
-        ("Ayr Centennials", "GOHL", "Ayr", "AC"),
+        ("Brantford Bandits", "GOJHL", "Brantford", "BB"),
+        ("Cambridge Redhawks", "GOJHL", "Cambridge", "CAM"),
+        ("Elmira Sugar Kings", "GOJHL", "Elmira", "ESK"),
+        ("KW Siskins", "GOJHL", "Kitchener", "KWS"),
+        ("Listowel Cyclones", "GOJHL", "Listowel", "LC"),
+        ("Stratford Warriors", "GOJHL", "Stratford", "SW"),
+        ("Ayr Centennials", "GOJHL", "Ayr", "AC"),
         # Golden Horseshoe Conference
-        ("Caledonia Corvairs", "GOHL", "Caledonia", "CC"),
-        ("Hamilton Kilty B's", "GOHL", "Hamilton", "HKB"),
-        ("Pelham Panthers", "GOHL", "Pelham", "PP"),
-        ("St. Catharines Falcons", "GOHL", "St. Catharines", "SCF"),
-        ("Thorold Blackhawks", "GOHL", "Thorold", "TB"),
-        ("Niagara Falls Canucks", "GOHL", "Niagara Falls", "NFC"),
+        ("Caledonia Corvairs", "GOJHL", "Caledonia", "CC"),
+        ("Hamilton Kilty B's", "GOJHL", "Hamilton", "HKB"),
+        ("Pelham Panthers", "GOJHL", "Pelham", "PP"),
+        ("St. Catharines Falcons", "GOJHL", "St. Catharines", "SCF"),
+        ("Thorold Blackhawks", "GOJHL", "Thorold", "TB"),
+        ("Niagara Falls Canucks", "GOJHL", "Niagara Falls", "NFC"),
         # Northern Conference
-        ("Caledon Bombers", "GOHL", "Caledon", "CB"),
+        ("Caledon Bombers", "GOJHL", "Caledon", "CB"),
     ]
     for name, league, city, abbr in gojhl_teams:
         conn.execute(
@@ -29759,7 +29777,7 @@ def _import_league_teams(rows, season, org_id, team_name_override=None):
             else:
                 conn.execute(
                     "INSERT INTO team_stats (id, org_id, team_name, league, season, extended_stats, data_source) VALUES (?, ?, ?, ?, ?, ?, 'instat')",
-                    (gen_id(), org_id, team_name, _normalize_league_safe("GOHL"), season, json.dumps(extended))
+                    (gen_id(), org_id, team_name, _normalize_league_safe("GOJHL"), season, json.dumps(extended))
                 )
             stats_imported += 1
         except Exception as e:
@@ -32678,9 +32696,18 @@ async def league_hub_player_stats_stored(league: str, request: Request, limit: i
         ).fetchall()
 
         if rows:
+            # Build hockeytech_id → ProspectX UUID lookup for player links
+            ht_lookup: dict[str, str] = {}
+            px_rows = conn.execute(
+                "SELECT id, hockeytech_id FROM players WHERE hockeytech_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)"
+            ).fetchall()
+            for pr in px_rows:
+                ht_lookup[str(pr["hockeytech_id"])] = pr["id"]
+
             return [
                 {
                     "player_id": r["player_id"],
+                    "px_player_id": ht_lookup.get(r["player_id"]),
                     "name": r["player_name"],
                     "team_name": r["team_name"],
                     "team_code": r["team_code"],
@@ -35987,7 +36014,7 @@ async def bulk_assign_league(
     """Assign league to players based on their team membership.
     Uses global + org-specific teams to look up the league for each team.
 
-    Body: { "league": "GOHL" }  — optional, if not provided uses teams table
+    Body: { "league": "GOJHL" }  — optional, if not provided uses teams table
     """
     org_id = token_data["org_id"]
     league = request.get("league")
@@ -44956,7 +44983,7 @@ def get_pro_analysis(entry_id: str, token_data: dict = Depends(verify_token)):
 # ── Agent / Advisor Module ────────────────────────────────────
 
 AGENT_LEAGUE_CONTEXTS = {
-    "gojhl": "GOHL",
+    "gojhl": "GOJHL",
     "ohl": "OHL",
     "ojhl": "OJHL",
     "whl": "WHL",

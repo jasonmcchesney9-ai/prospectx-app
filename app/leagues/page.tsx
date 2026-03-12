@@ -519,6 +519,7 @@ function PlayerStatsTab({
   const [posFilter, setPosFilter] = useState<PosFilter>("all");
   const [sortBy, setSortBy] = useState<SortKey>("points");
   const [searchQuery, setSearchQuery] = useState("");
+  const [brokenPhotos, setBrokenPhotos] = useState<Set<string>>(new Set());
 
   const isGoalieView = quickFilter === "goalies" || posFilter === "goalies";
 
@@ -804,15 +805,15 @@ function PlayerStatsTab({
                           <td style={{ padding: "8px 12px", color: "#999", fontSize: 12 }}>{i + 1}</td>
                           <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                             <div className="flex items-center gap-2">
-                              {p.photo ? (
-                                <Image src={p.photo} alt={p.name} width={28} height={28} className="rounded-full object-cover" unoptimized />
+                              {p.photo && !brokenPhotos.has(String(p.player_id)) ? (
+                                <Image src={p.photo} alt={p.name} width={28} height={28} className="rounded-full object-cover" unoptimized onError={() => setBrokenPhotos(prev => new Set(prev).add(String(p.player_id)))} />
                               ) : (
                                 <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "rgba(15,41,66,0.1)" }}>
                                   <Users size={12} style={{ color: "rgba(15,41,66,0.4)" }} />
                                 </div>
                               )}
                               <div>
-                                <Link href={`/players/${p.player_id || ""}`} style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0F2942" }} className="hover:underline">
+                                <Link href={`/players/${p.px_player_id || p.player_id || ""}`} style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, color: "#0F2942" }} className="hover:underline">
                                   {p.name}
                                 </Link>
                                 {p.rookie && <span style={{ fontSize: 10, color: "#F36F21", fontWeight: 600, marginLeft: 4 }}>R</span>}
@@ -822,7 +823,7 @@ function PlayerStatsTab({
                           <td style={{ padding: "8px 12px", fontSize: 12, whiteSpace: "nowrap" }}>
                             <Link href={`/teams/${encodeURIComponent(p.team_name)}`} className="flex items-center gap-1.5 hover:underline transition-colors" style={{ color: "#0F2942" }}>
                               {p.logo && (
-                                <Image src={p.logo} alt={p.team_code} width={18} height={18} className="object-contain" unoptimized />
+                                <Image src={p.logo} alt={p.team_code} width={18} height={18} className="object-contain" unoptimized onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                               )}
                               {p.team_code || p.team_name}
                             </Link>

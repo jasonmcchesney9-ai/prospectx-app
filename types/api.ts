@@ -1826,6 +1826,7 @@ export interface HTRosterPlayer {
 
 export interface HTSkaterStats {
   player_id: number;
+  px_player_id?: string;
   name: string;
   first_name: string;
   last_name: string;
