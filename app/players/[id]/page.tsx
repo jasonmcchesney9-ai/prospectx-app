@@ -77,6 +77,8 @@ import PlayerStatusBadges from "@/components/PlayerStatusBadges";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import TrendlineChart from "@/components/TrendlineChart";
 import ConfidenceBadge from "@/components/ConfidenceBadge";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { TOOLTIPS } from "@/lib/tooltips";
 import ShotMap from "@/components/ShotMap";
 import type { Player, PlayerStats, GoalieStats, Report, ScoutNote, TeamSystem, SystemLibraryEntry, PlayerIntelligence, PlayerMetrics, League, TeamReference, Progression, GameStatsResponse, RecentForm, PlayerCorrection, DevelopmentPlan, DevelopmentPlanSection, PlayerDrillLogsResponse, PlayerTransfer, PlayerAchievement, TeamSplit } from "@/types/api";
 import CareerHistoryAccordion from "@/components/player/CareerHistoryAccordion";
@@ -1424,10 +1426,17 @@ export default function PlayerDetailPage() {
                 ["PIM", currentSeason.pim, null],
                 ["PXI", pxiAvg != null ? pxiAvg : "—", "#14B8A8"],
               ];
+              const statTips: Record<string, string> = { "PPG": TOOLTIPS.player_ppg, "+/-": TOOLTIPS.player_plus_minus, "PIM": TOOLTIPS.player_pim };
               return statItems.map(([label, value, colorOverride]) => (
                 <div key={label as string} style={{ flex: 1, textAlign: "center", padding: "10px 8px", borderRight: "1px solid rgba(255,255,255,.05)" }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: colorOverride || (label === "PTS" ? "#14B8A8" : "white"), lineHeight: 1, letterSpacing: -0.3 }}>{value}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.3)", marginTop: 2 }}>{label as string}</div>
+                  {statTips[label as string] ? (
+                    <Tooltip text={statTips[label as string]} position="bottom">
+                      <span className="cursor-help" style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,.3)", marginTop: 2, display: "inline-block" }}>{label as string}</span>
+                    </Tooltip>
+                  ) : (
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 8.5, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.3)", marginTop: 2 }}>{label as string}</div>
+                  )}
                 </div>
               ));
             })()}
@@ -1436,41 +1445,44 @@ export default function PlayerDetailPage() {
 
         {/* ── Tabs Bar ── attached to hero bottom */}
         <div className="no-print" style={{ display: "flex", background: "#0F2942", borderRadius: "0 0 14px 14px", border: "1px solid rgba(255,255,255,.06)", borderTop: "none", overflow: "hidden", marginBottom: 18, position: "sticky", top: 48, zIndex: 50 }}>
-          {([
-            { key: "profile" as Tab, label: "Overview", count: null },
-            { key: "stats" as Tab, label: "Stats", count: stats.length },
-            { key: "shot_map" as Tab, label: "Shot Map", count: null },
-            { key: "notes" as Tab, label: "Notes", count: notes.length },
-            { key: "reports" as Tab, label: "Reports", count: reports.length },
-            { key: "player" as Tab, label: "Dev Plan", count: devPlanV2History.length || devPlanVersions.length || null },
-            { key: "video" as Tab, label: "Video", count: filmClips.length || null },
-          ]).map(({ key, label, count }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              style={{
-                flex: 1,
-                textAlign: "center",
-                padding: "10px 4px",
-                fontSize: 11.5,
-                fontWeight: 600,
-                color: activeTab === key ? "#14B8A8" : "rgba(255,255,255,.38)",
-                cursor: "pointer",
-                transition: "all .12s",
-                borderBottom: activeTab === key ? "2px solid #0D9488" : "2px solid transparent",
-                background: activeTab === key ? "rgba(13,148,136,.08)" : "transparent",
-                whiteSpace: "nowrap",
-                border: "none",
-                borderBottomWidth: 2,
-                borderBottomStyle: "solid",
-                borderBottomColor: activeTab === key ? "#0D9488" : "transparent",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
-              {label}
-              {count !== null && count > 0 && <span style={{ marginLeft: 4, opacity: 0.6, fontSize: 10 }}>({count})</span>}
-            </button>
-          ))}
+          {(() => {
+            const tabTips: Record<string, string> = { notes: TOOLTIPS.player_scout_notes, player: TOOLTIPS.player_dev_plan };
+            return ([
+              { key: "profile" as Tab, label: "Overview", count: null },
+              { key: "stats" as Tab, label: "Stats", count: stats.length },
+              { key: "shot_map" as Tab, label: "Shot Map", count: null },
+              { key: "notes" as Tab, label: "Notes", count: notes.length },
+              { key: "reports" as Tab, label: "Reports", count: reports.length },
+              { key: "player" as Tab, label: "Dev Plan", count: devPlanV2History.length || devPlanVersions.length || null },
+              { key: "video" as Tab, label: "Video", count: filmClips.length || null },
+            ]).map(({ key, label, count }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                style={{
+                  flex: 1,
+                  textAlign: "center",
+                  padding: "10px 4px",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  color: activeTab === key ? "#14B8A8" : "rgba(255,255,255,.38)",
+                  cursor: "pointer",
+                  transition: "all .12s",
+                  borderBottom: activeTab === key ? "2px solid #0D9488" : "2px solid transparent",
+                  background: activeTab === key ? "rgba(13,148,136,.08)" : "transparent",
+                  whiteSpace: "nowrap",
+                  border: "none",
+                  borderBottomWidth: 2,
+                  borderBottomStyle: "solid",
+                  borderBottomColor: activeTab === key ? "#0D9488" : "transparent",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                {tabTips[key] ? <Tooltip text={tabTips[key]} position="bottom"><span className="cursor-help">{label}</span></Tooltip> : label}
+                {count !== null && count > 0 && <span style={{ marginLeft: 4, opacity: 0.6, fontSize: 10 }}>({count})</span>}
+              </button>
+            ));
+          })()}
         </div>
 
         {/* ── Two-Column Layout (shared across all tabs) ── */}
@@ -1548,10 +1560,12 @@ export default function PlayerDetailPage() {
             <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
               <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, borderRadius: "14px 0 0 14px", background: "#EA580C" }} />
               <div style={{ background: "linear-gradient(145deg, #091C30, #0F2942 60%, #1A3A5C)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace", display: "flex", alignItems: "center", gap: 6 }}>
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1 3.5H11L8 6.5l1 3.5L6 8l-3 2 1-3.5L1 4.5h4L6 1Z" fill="#EA580C"/></svg>
-                  Player Archetype
-                </span>
+                <Tooltip text={TOOLTIPS.player_archetype} position="bottom">
+                  <span className="cursor-help" style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,.5)", fontFamily: "'DM Mono', monospace", display: "flex", alignItems: "center", gap: 6 }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1 3.5H11L8 6.5l1 3.5L6 8l-3 2 1-3.5L1 4.5h4L6 1Z" fill="#EA580C"/></svg>
+                    Player Archetype
+                  </span>
+                </Tooltip>
                 {!editingArchetype && (
                   <button onClick={() => setEditingArchetype(true)} style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: ".08em", padding: "2px 7px", borderRadius: 3, background: "rgba(255,255,255,.1)", color: "rgba(255,255,255,.5)", textTransform: "uppercase", border: "none", cursor: "pointer" }}>
                     <Edit3 size={10} />
@@ -1694,7 +1708,7 @@ export default function PlayerDetailPage() {
                 <div style={{ padding: "14px 16px 16px" }}>
                   {/* ── PROSPECTX METRICS heading ── */}
                   <div style={{ marginBottom: 6 }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase", color: "#0F2942", marginBottom: 2 }}>ProspectX Metrics</div>
+                    <Tooltip text={TOOLTIPS.player_grade_tile} position="bottom"><span className="cursor-help" style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".14em", textTransform: "uppercase" as const, color: "#0F2942", marginBottom: 2, display: "inline-block" }}>ProspectX Metrics</span></Tooltip>
                     <div style={{ fontSize: 11, color: "#8BA4BB" }}>PXI scores across 6 dimensions — derived from stats, scouting notes, and AI analysis</div>
                   </div>
 
