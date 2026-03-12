@@ -5293,6 +5293,7 @@ def init_db():
                     rookie BOOLEAN DEFAULT FALSE,
                     photo TEXT,
                     logo TEXT,
+                    px_player_id TEXT,
                     cached_at TIMESTAMPTZ DEFAULT NOW()
                 )
             """)
@@ -5322,6 +5323,7 @@ def init_db():
                     rookie INTEGER DEFAULT 0,
                     photo TEXT,
                     logo TEXT,
+                    px_player_id TEXT,
                     cached_at TEXT DEFAULT (datetime('now'))
                 )
             """)
@@ -5330,6 +5332,38 @@ def init_db():
     except Exception as e:
         conn.rollback()
         logger.warning("league_player_stats_cache table DDL skipped: %s", e)
+
+    # Migration: add px_player_id column to league_player_stats_cache if missing
+    try:
+        lpc_cols = _get_table_columns(conn, "league_player_stats_cache")
+        if "px_player_id" not in lpc_cols:
+            conn.execute("ALTER TABLE league_player_stats_cache ADD COLUMN px_player_id TEXT")
+            conn.commit()
+            logger.info("Migration: added px_player_id column to league_player_stats_cache")
+    except Exception as e:
+        conn.rollback()
+        logger.warning("league_player_stats_cache px_player_id migration skipped: %s", e)
+
+    # Startup backfill: set px_player_id from players.hockeytech_id for existing cached rows
+    try:
+        backfilled = conn.execute("""
+            UPDATE league_player_stats_cache
+            SET px_player_id = (
+                SELECT p.id FROM players p
+                WHERE CAST(p.hockeytech_id AS TEXT) = league_player_stats_cache.player_id
+                AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                LIMIT 1
+            )
+            WHERE px_player_id IS NULL
+            AND player_id IS NOT NULL
+            AND player_id != ''
+        """)
+        conn.commit()
+        if backfilled.rowcount and backfilled.rowcount > 0:
+            logger.info("Startup backfill: linked %d league_player_stats_cache rows to px_player_id", backfilled.rowcount)
+    except Exception as e:
+        conn.rollback()
+        logger.warning("league_player_stats_cache px_player_id backfill skipped: %s", e)
 
     # ── league_teams_cache (League Hub teams list) ──
     try:
@@ -11411,6 +11445,20 @@ def sync_hockeytech_data_cron():
                             ),
                         )
                         total_cached_leaders += 1
+                    # Backfill px_player_id from players.hockeytech_id
+                    conn.execute("""
+                        UPDATE league_player_stats_cache
+                        SET px_player_id = (
+                            SELECT p.id FROM players p
+                            WHERE CAST(p.hockeytech_id AS TEXT) = league_player_stats_cache.player_id
+                            AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                            LIMIT 1
+                        )
+                        WHERE league = ?
+                        AND px_player_id IS NULL
+                        AND player_id IS NOT NULL
+                        AND player_id != ''
+                    """, (code,))
                     logger.info("[HT SYNC CRON] %s: cached %d scoring leaders", code, total_cached_leaders)
                 except Exception as ldr_err:
                     logger.error("[HT SYNC CRON] %s leaders cache failed: %s", code, ldr_err)
@@ -32637,6 +32685,20 @@ async def admin_populate_league_cache(league: str, token_data: dict = Depends(ve
                     ),
                 )
                 total_leaders += 1
+            # Backfill px_player_id from players.hockeytech_id
+            conn.execute("""
+                UPDATE league_player_stats_cache
+                SET px_player_id = (
+                    SELECT p.id FROM players p
+                    WHERE CAST(p.hockeytech_id AS TEXT) = league_player_stats_cache.player_id
+                    AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                    LIMIT 1
+                )
+                WHERE league = ?
+                AND px_player_id IS NULL
+                AND player_id IS NOT NULL
+                AND player_id != ''
+            """, (code,))
             logger.info("[CACHE WARMUP] %s: cached %d scoring leaders", code, total_leaders)
         except Exception as ldr_err:
             errors.append(f"leaders: {str(ldr_err)[:200]}")
@@ -33037,7 +33099,8 @@ async def league_hub_player_stats_stored(league: str, request: Request, limit: i
         rows = conn.execute(
             """SELECT player_id, player_name, team_name, team_code, team_id,
                       position, gp, g, a, pts, pim, plus_minus,
-                      ppg, ppa, shg, shots, shooting_pct, rookie, photo, logo
+                      ppg, ppa, shg, shots, shooting_pct, rookie, photo, logo,
+                      px_player_id
                FROM league_player_stats_cache
                WHERE league = ?
                ORDER BY pts DESC
@@ -33046,18 +33109,19 @@ async def league_hub_player_stats_stored(league: str, request: Request, limit: i
         ).fetchall()
 
         if rows:
-            # Build hockeytech_id → ProspectX UUID lookup for player links
+            # Live fallback lookup for rows where px_player_id was not backfilled
             ht_lookup: dict[str, str] = {}
-            px_rows = conn.execute(
-                "SELECT id, hockeytech_id FROM players WHERE hockeytech_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)"
-            ).fetchall()
-            for pr in px_rows:
-                ht_lookup[str(pr["hockeytech_id"])] = pr["id"]
+            if any(not r["px_player_id"] for r in rows):
+                px_rows = conn.execute(
+                    "SELECT id, hockeytech_id FROM players WHERE hockeytech_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)"
+                ).fetchall()
+                for pr in px_rows:
+                    ht_lookup[str(pr["hockeytech_id"])] = pr["id"]
 
             return [
                 {
                     "player_id": r["player_id"],
-                    "px_player_id": ht_lookup.get(r["player_id"]),
+                    "px_player_id": r["px_player_id"] or ht_lookup.get(r["player_id"]),
                     "name": r["player_name"],
                     "team_name": r["team_name"],
                     "team_code": r["team_code"],
