@@ -3192,6 +3192,13 @@ def init_db():
         conn.commit()
         logger.info("Migration: added game_issue_text column to practice_plans")
 
+    # ── Migration: source_session_id on practice_plans ──
+    pp_cols3 = _get_table_columns(conn, "practice_plans")
+    if "source_session_id" not in pp_cols3:
+        conn.execute("ALTER TABLE practice_plans ADD COLUMN source_session_id TEXT")
+        conn.commit()
+        logger.info("Migration: added source_session_id column to practice_plans")
+
     # ── Migration: Country framework columns on organizations ──
     org_cols = _get_table_columns(conn, "organizations")
     for col_name, col_type in [
@@ -15649,6 +15656,9 @@ class PracticePlanGenerateRequest(BaseModel):
     focus_areas: List[str] = []
     age_level: str = "JUNIOR_COLLEGE_PRO"
     notes: Optional[str] = None
+    selected_drill_ids: List[str] = []
+    source_session_id: Optional[str] = None
+    tactical_context: Optional[str] = None
 
 class PracticeCompleteRequest(BaseModel):
     absent_player_ids: List[str] = []
@@ -20745,6 +20755,32 @@ HOCKEY TERMINOLOGY:
     except Exception as fc_err:
         logger.warning("Film context injection for practice plan failed (non-fatal): %s", str(fc_err))
 
+    # ── Selected drill injection (from Game Plan) ──
+    if body.selected_drill_ids:
+        try:
+            _sel_placeholders = ",".join(["?" for _ in body.selected_drill_ids])
+            _sel_rows = conn.execute(
+                f"SELECT id, name, category, description, duration_minutes, intensity, tags FROM drills WHERE id IN ({_sel_placeholders})",
+                body.selected_drill_ids,
+            ).fetchall()
+            if _sel_rows:
+                _sel_drills_text = "\n".join([
+                    f"  - {r['name']} ({r['category']}, {r['duration_minutes']} min, {r['intensity']}): {(r['description'] or '')[:150]}"
+                    for r in _sel_rows
+                ])
+                user_prompt += (
+                    f"\n\nCOACH-SELECTED DRILLS (from Game Plan analysis):\n"
+                    f"The coaching staff has specifically selected these drills for this practice. "
+                    f"Incorporate them into the plan structure:\n{_sel_drills_text}"
+                )
+                logger.info("Injected %d coach-selected drills into practice plan prompt", len(_sel_rows))
+        except Exception as _sel_err:
+            logger.warning("Selected drill injection failed (non-fatal): %s", str(_sel_err))
+
+    # ── Tactical context injection (from Game Plan) ──
+    if body.tactical_context:
+        user_prompt += f"\n\nGAME PLAN TACTICAL CONTEXT:\n{body.tactical_context}"
+
     # 5. Call Claude (or mock)
     plan_data = None
     client = get_anthropic_client()
@@ -20804,12 +20840,12 @@ HOCKEY TERMINOLOGY:
     title = plan_data.get("title", f"Practice Plan — {body.team_name}")
     conn.execute("""
         INSERT INTO practice_plans (id, org_id, user_id, team_name, title, age_level,
-            duration_minutes, focus_areas, plan_data, notes, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+            duration_minutes, focus_areas, plan_data, notes, status, created_at, updated_at, source_session_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)
     """, (
         plan_id, org_id, user_id, body.team_name, title, body.age_level,
         body.duration_minutes, json.dumps(body.focus_areas),
-        json.dumps(plan_data), body.notes, now, now
+        json.dumps(plan_data), body.notes, now, now, body.source_session_id
     ))
 
     # 7. Create junction records for referenced drills
@@ -25677,6 +25713,31 @@ async def get_session_drill_recommendations(session_id: str, token_data: dict = 
 
         drills = _get_drill_recommendations(keywords[:15], org_id, conn, limit=5)
         return {"drills": drills, "source": "session_matched"}
+    finally:
+        conn.close()
+
+
+@app.get("/chalk-talk/sessions/{session_id}/practice-plans")
+async def get_session_practice_plans(session_id: str, token_data: dict = Depends(verify_token)):
+    """Return practice plans linked to a chalk talk session via source_session_id."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, title, duration_minutes, focus_areas, status, created_at FROM practice_plans WHERE org_id = ? AND source_session_id = ? ORDER BY created_at DESC",
+            (org_id, session_id),
+        ).fetchall()
+        plans = []
+        for r in rows:
+            plans.append({
+                "id": r["id"] if hasattr(r, "keys") else r[0],
+                "title": r["title"] if hasattr(r, "keys") else r[1],
+                "duration_minutes": r["duration_minutes"] if hasattr(r, "keys") else r[2],
+                "focus_areas": r["focus_areas"] if hasattr(r, "keys") else r[3],
+                "status": r["status"] if hasattr(r, "keys") else r[4],
+                "created_at": r["created_at"] if hasattr(r, "keys") else r[5],
+            })
+        return {"plans": plans}
     finally:
         conn.close()
 

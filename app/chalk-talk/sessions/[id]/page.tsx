@@ -33,6 +33,8 @@ import {
   Zap,
   Printer,
   Dumbbell,
+  ClipboardList,
+  Check,
 } from "lucide-react";
 import BenchCardView from "@/components/BenchCardView";
 import NavBar from "@/components/NavBar";
@@ -133,6 +135,11 @@ function WarRoom() {
   const [drillRecs, setDrillRecs] = useState<{ id: string; name: string; category: string; description: string; duration: number; intensity: string; tags: string; skill_focus?: string }[]>([]);
   const [drillRecsLoading, setDrillRecsLoading] = useState(false);
   const [selectedDrillIds, setSelectedDrillIds] = useState<string[]>([]);
+  const [practicePlanDuration, setPracticePlanDuration] = useState(90);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [generatedPlanId, setGeneratedPlanId] = useState<string | null>(null);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [linkedPracticePlans, setLinkedPracticePlans] = useState<{ id: string; title: string }[]>([]);
 
   /* ── Derived ───────────────────────────────────────────── */
   const teamName = teams.find((t) => t.id === teamId)?.name || "";
@@ -265,6 +272,51 @@ function WarRoom() {
     })();
     return () => { cancelled = true; };
   }, [sessionId, loading]);
+
+  /* ── Fetch linked practice plans ────────────────────────── */
+  useEffect(() => {
+    if (!sessionId || loading) return;
+    (async () => {
+      try {
+        const { data } = await api.get<{ plans: { id: string; title: string }[] }>(`/chalk-talk/sessions/${sessionId}/practice-plans`);
+        if (data.plans && data.plans.length > 0) {
+          setLinkedPracticePlans(data.plans);
+          setGeneratedPlanId(data.plans[0].id);
+        }
+      } catch { /* non-fatal */ }
+    })();
+  }, [sessionId, loading]);
+
+  const handleGeneratePracticePlan = async () => {
+    if (!teamName) return;
+    setGeneratingPlan(true);
+    try {
+      // Build tactical context from session data
+      const contextParts: string[] = [];
+      if (opponentName) contextParts.push(`Practice focus areas based on Game Plan vs ${opponentName}.`);
+      if (opponentAnalysis) contextParts.push(`Opponent analysis: ${opponentAnalysis.slice(0, 300)}`);
+      if (ourStrategy) contextParts.push(`Our strategy: ${ourStrategy.slice(0, 200)}`);
+      if (keysToGame) contextParts.push(`Keys to game: ${keysToGame.slice(0, 200)}`);
+
+      const { data } = await api.post<{ id: string; title: string }>("/practice-plans/generate", {
+        team_name: teamName,
+        duration_minutes: practicePlanDuration,
+        focus_areas: [forecheck, breakout, defensiveSystem].filter(Boolean),
+        age_level: "JUNIOR_COLLEGE_PRO",
+        notes: opponentName ? `Pre-game practice for ${teamName} vs ${opponentName}` : undefined,
+        selected_drill_ids: selectedDrillIds,
+        source_session_id: sessionId,
+        tactical_context: contextParts.join(" "),
+      });
+      setGeneratedPlanId(data.id);
+      setLinkedPracticePlans((prev) => [{ id: data.id, title: data.title || "Practice Plan" }, ...prev]);
+      setShowDurationPicker(false);
+    } catch {
+      alert("Failed to generate practice plan. Please try again.");
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
 
   const handlePrintBenchCard = async () => {
     setBenchCardLoading(true);
@@ -906,10 +958,72 @@ function WarRoom() {
                   {drillRecs.length}
                 </span>
               </h3>
-              <span className="text-[10px] uppercase font-semibold" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "rgba(255,255,255,0.4)" }}>
-                Matched from your drill library
-              </span>
+              <div className="flex items-center gap-2">
+                {generatedPlanId ? (
+                  <Link
+                    href={`/practice-plans/${generatedPlanId}`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                    style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "rgba(22,163,74,0.15)", color: "#16A34A" }}
+                  >
+                    <Check size={12} />
+                    View Practice Plan
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => setShowDurationPicker(!showDurationPicker)}
+                    disabled={generatingPlan}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                    style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
+                  >
+                    {generatingPlan ? <Loader2 size={12} className="animate-spin" /> : <ClipboardList size={12} />}
+                    Generate Practice Plan{selectedDrillIds.length > 0 ? ` (${selectedDrillIds.length})` : ""}
+                  </button>
+                )}
+              </div>
             </div>
+            {/* Duration picker */}
+            {showDurationPicker && !generatedPlanId && (
+              <div className="px-5 py-3 flex items-center gap-3 flex-wrap" style={{ borderBottom: "1px solid rgba(13,148,136,0.15)", background: "rgba(13,148,136,0.03)" }}>
+                <span className="text-[10px] font-bold uppercase" style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, color: "#0F2942" }}>Duration:</span>
+                {[60, 75, 90, 120].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setPracticePlanDuration(d)}
+                    className="text-[10px] px-3 py-1 rounded font-bold transition-colors"
+                    style={{
+                      fontFamily: "ui-monospace, monospace",
+                      background: practicePlanDuration === d ? "#0D9488" : "rgba(15,41,66,0.06)",
+                      color: practicePlanDuration === d ? "#FFFFFF" : "#0F2942",
+                      border: practicePlanDuration === d ? "1.5px solid #0D9488" : "1.5px solid rgba(15,41,66,0.1)",
+                    }}
+                  >
+                    {d} min
+                  </button>
+                ))}
+                <button
+                  onClick={handleGeneratePracticePlan}
+                  disabled={generatingPlan}
+                  className="ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors"
+                  style={{ fontFamily: "ui-monospace, monospace", letterSpacing: 1, background: "#0D9488", color: "#FFFFFF" }}
+                >
+                  {generatingPlan ? <><Loader2 size={12} className="animate-spin" /> Generating...</> : <><ClipboardList size={12} /> Generate</>}
+                </button>
+              </div>
+            )}
+            {/* Success link for already generated plans */}
+            {linkedPracticePlans.length > 0 && !showDurationPicker && (
+              <div className="px-5 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid rgba(13,148,136,0.15)", background: "rgba(22,163,74,0.03)" }}>
+                <Check size={12} style={{ color: "#16A34A" }} />
+                <span className="text-[10px]" style={{ color: "#16A34A" }}>Practice Plan generated from this Game Plan</span>
+                <Link
+                  href={`/practice-plans/${linkedPracticePlans[0].id}`}
+                  className="text-[10px] font-bold underline ml-1"
+                  style={{ color: "#0D9488" }}
+                >
+                  View →
+                </Link>
+              </div>
+            )}
             <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {drillRecs.map((drill) => {
                 const isSelected = selectedDrillIds.includes(drill.id);

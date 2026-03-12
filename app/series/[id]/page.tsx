@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Loader2,
   Printer,
+  ClipboardList,
 } from "lucide-react";
 import BenchCardView from "@/components/BenchCardView";
 import NavBar from "@/components/NavBar";
@@ -225,6 +226,7 @@ function SeriesDetail() {
   const [seedingAdj, setSeedingAdj] = useState(false);
   const [benchCardContent, setBenchCardContent] = useState<string | null>(null);
   const [benchCardLoading, setBenchCardLoading] = useState(false);
+  const [gamePracticePlans, setGamePracticePlans] = useState<Record<string, { id: string; title: string }>>({});
 
   // Edit state
   const [editingScore, setEditingScore] = useState(false);
@@ -370,6 +372,23 @@ function SeriesDetail() {
     fetchSeriesScore();
     return () => { cancelled = true; };
   }, [activeTab, seriesId, fetchSeriesScore]);
+
+  // ── Fetch practice plans linked to game sessions ──
+  useEffect(() => {
+    if (linkedGames.length === 0) return;
+    (async () => {
+      const ppMap: Record<string, { id: string; title: string }> = {};
+      for (const g of linkedGames) {
+        try {
+          const { data } = await api.get<{ plans: { id: string; title: string }[] }>(`/chalk-talk/sessions/${g.id}/practice-plans`);
+          if (data.plans && data.plans.length > 0) {
+            ppMap[g.id] = data.plans[0];
+          }
+        } catch { /* non-fatal */ }
+      }
+      if (Object.keys(ppMap).length > 0) setGamePracticePlans(ppMap);
+    })();
+  }, [linkedGames]);
 
   // ── Save helper ────────────────────────────────────────────
   const saveField = useCallback(async (updates: Record<string, unknown>) => {
@@ -1308,6 +1327,17 @@ function SeriesDetail() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
+                        {gamePracticePlans[g.id] && (
+                          <Link
+                            href={`/practice-plans/${gamePracticePlans[g.id].id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider font-bold no-print"
+                            style={{ backgroundColor: "rgba(13,148,136,0.1)", color: "#0D9488" }}
+                          >
+                            <ClipboardList size={10} />
+                            Practice
+                          </Link>
+                        )}
                         <span
                           className="text-[10px] px-2 py-0.5 rounded font-oswald uppercase tracking-wider"
                           style={{
