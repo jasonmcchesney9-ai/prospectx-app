@@ -4310,6 +4310,7 @@ def init_db():
         ("visibility", "TEXT DEFAULT 'org'"),
         ("video_clip_id", "TEXT"),
         ("tagged_player_ids", "TEXT DEFAULT '[]'"),
+        ("series_plan_id", "TEXT"),
     ]:
         if col_name not in ct_cols:
             conn.execute(f"ALTER TABLE chalk_talks ADD COLUMN {col_name} {col_def}")
@@ -4590,6 +4591,19 @@ def init_db():
             except Exception as e:
                 conn.rollback()
                 logger.warning("Migration skip %s on chalk_talk_sessions: %s", col_name, e)
+
+    # ── Table: series_reports (links playoff_series reports to series plans) ──
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS series_reports (
+            id TEXT PRIMARY KEY,
+            series_id TEXT NOT NULL,
+            report_id TEXT,
+            report_type TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (report_id) REFERENCES reports(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_series_reports_series ON series_reports(series_id)")
 
     # ── Table: chalk_talk_session_clips (junction: chalk talk sessions ↔ film clips) ──
     c.execute("""
@@ -46664,6 +46678,69 @@ async def delete_chalk_talk(chalk_id: str, token_data: dict = Depends(verify_tok
         conn.execute("DELETE FROM chalk_talks WHERE id = ? AND org_id = ?", (chalk_id, org_id))
         conn.commit()
         return {"deleted": True, "id": chalk_id}
+    finally:
+        conn.close()
+
+
+# ── Series ↔ Report linking endpoints ──────────────────────────
+
+@app.get("/chalk-talk/series/{series_id}/report")
+async def get_series_report(series_id: str, token_data: dict = Depends(verify_token)):
+    """Retrieve the report linked to a series plan. Returns 404 if none linked."""
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute("""
+            SELECT sr.id AS link_id, sr.series_id, sr.report_type, sr.created_at AS linked_at,
+                   r.id AS report_id, r.title, r.report_type AS r_type, r.status,
+                   r.output_json, r.output_text, r.generated_at, r.llm_model
+            FROM series_reports sr
+            JOIN reports r ON r.id = sr.report_id
+            WHERE sr.series_id = ? AND r.org_id = ?
+            ORDER BY sr.created_at DESC
+            LIMIT 1
+        """, (series_id, org_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="No report linked to this series")
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@app.post("/chalk-talk/series/{series_id}/link-report")
+async def link_report_to_series(series_id: str, body: dict = Body(...), token_data: dict = Depends(verify_token)):
+    """Link an existing report to a series plan via the series_reports table."""
+    org_id = token_data["org_id"]
+    report_id = body.get("report_id")
+    if not report_id:
+        raise HTTPException(status_code=400, detail="report_id is required")
+
+    conn = get_db()
+    try:
+        # Verify report exists and belongs to this org
+        report = conn.execute(
+            "SELECT id, report_type, title, status, output_text FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id),
+        ).fetchone()
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+
+        link_id = str(uuid.uuid4())
+        report_type = report["report_type"] or "playoff_series"
+        conn.execute(
+            "INSERT INTO series_reports (id, series_id, report_id, report_type, created_at) VALUES (?, ?, ?, ?, ?)",
+            (link_id, series_id, report_id, report_type, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+
+        return {
+            "id": link_id,
+            "series_id": series_id,
+            "report_id": report_id,
+            "report_type": report_type,
+            "title": report["title"],
+            "status": report["status"],
+        }
     finally:
         conn.close()
 
