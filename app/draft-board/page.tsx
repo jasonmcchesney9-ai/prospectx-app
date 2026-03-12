@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronUp, ChevronDown, Download, RotateCcw, ArrowLeft } from "lucide-react";
+import { ChevronUp, ChevronDown, Download, RotateCcw, ArrowLeft, Star } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
@@ -174,6 +174,35 @@ export default function DraftBoardPage() {
       .then((res) => setUnfilteredTotal(res.data.total || 0))
       .catch(() => {});
   }, [season]);
+
+  // Top Prospects star toggle
+  const userRole = currentUser?.hockey_role || "scout";
+  const canManageTP = new Set(["scout", "gm", "coach", "admin"]).has(userRole);
+  const [tpIds, setTpIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    api.get("/watchlist/top-prospects")
+      .then((res) => {
+        const ids = new Set<string>((res.data || []).map((r: { player_id: string }) => r.player_id));
+        setTpIds(ids);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function toggleTopProspect(e: React.MouseEvent, playerId: string) {
+    e.stopPropagation();
+    if (tpIds.has(playerId)) {
+      try {
+        await api.delete(`/watchlist/top-prospects/${playerId}`);
+        setTpIds((prev) => { const n = new Set(prev); n.delete(playerId); return n; });
+      } catch { /* ignore */ }
+    } else {
+      try {
+        await api.post("/watchlist/top-prospects/add", { player_id: playerId });
+        setTpIds((prev) => new Set(prev).add(playerId));
+      } catch { /* ignore */ }
+    }
+  }
 
   // Sorted + grouped by tier
   const sorted = useMemo(() => sortPlayers(players, sortKey, sortAsc), [players, sortKey, sortAsc]);
@@ -378,6 +407,7 @@ export default function DraftBoardPage() {
               <thead className="sticky top-0 z-10 bg-gray-50 border-b border-border">
                 <tr>
                   <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12">#</th>
+                  {canManageTP && <th className="px-2 py-2.5 w-8" title="Top Prospects" />}
                   <SortHeader label="Player" sortId="player_name" />
                   <SortHeader label="Team" sortId="current_team" />
                   <SortHeader label="League" sortId="current_league" />
@@ -398,7 +428,7 @@ export default function DraftBoardPage() {
                   Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                 ) : rowsWithTiers.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="px-4 py-12 text-center text-muted text-sm">
+                    <td colSpan={canManageTP ? 15 : 14} className="px-4 py-12 text-center text-muted text-sm">
                       No players match these filters. Try adjusting your criteria.
                     </td>
                   </tr>
@@ -407,7 +437,7 @@ export default function DraftBoardPage() {
                     if (row.type === "tier") {
                       return (
                         <tr key={`tier-${row.tier.id}`} className="border-t-2" style={{ borderColor: row.tier.color }}>
-                          <td colSpan={14} className={`px-4 py-1.5 ${row.tier.bgColor}`}>
+                          <td colSpan={canManageTP ? 15 : 14} className={`px-4 py-1.5 ${row.tier.bgColor}`}>
                             <span
                               className="text-[10px] font-oswald font-bold uppercase tracking-widest"
                               style={{ color: row.tier.color }}
@@ -441,6 +471,22 @@ export default function DraftBoardPage() {
                         }}
                       >
                         <td className="px-3 py-2.5 text-xs text-muted font-oswald">{row.rank}</td>
+                        {canManageTP && (
+                          <td className="px-2 py-2.5 text-center">
+                            <button
+                              onClick={(e) => toggleTopProspect(e, p.player_id)}
+                              className="transition-colors"
+                              title={tpIds.has(p.player_id) ? "Remove from Top Prospects" : "Add to Top Prospects"}
+                            >
+                              <Star
+                                size={14}
+                                fill={tpIds.has(p.player_id) ? "#0D9488" : "none"}
+                                stroke={tpIds.has(p.player_id) ? "#0D9488" : "rgba(255,255,255,.4)"}
+                                className={tpIds.has(p.player_id) ? "" : "text-muted/30 hover:text-teal/60"}
+                              />
+                            </button>
+                          </td>
+                        )}
                         <td className="px-3 py-2.5">
                           <Link
                             href={`/players/${p.player_id}`}

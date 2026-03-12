@@ -441,6 +441,10 @@ export default function PlayerDetailPage() {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
+  // Top Prospects
+  const canManageTP = new Set(["scout", "gm", "coach", "admin"]).has(userRole);
+  const [isTopProspect, setIsTopProspect] = useState(false);
+
   // Correction form
   const [showCorrectionForm, setShowCorrectionForm] = useState(false);
   const [correctionField, setCorrectionField] = useState("");
@@ -1120,6 +1124,31 @@ export default function PlayerDetailPage() {
       return () => document.removeEventListener("mousedown", handler);
     }
   }, [overflowOpen]);
+
+  // Check if player is on Top Prospects list
+  useEffect(() => {
+    if (!canManageTP) return;
+    api.get("/watchlist/top-prospects")
+      .then((res) => {
+        const ids = (res.data || []).map((r: { player_id: string }) => r.player_id);
+        setIsTopProspect(ids.includes(playerId));
+      })
+      .catch(() => {});
+  }, [playerId, canManageTP]);
+
+  async function toggleTopProspect() {
+    if (isTopProspect) {
+      try {
+        await api.delete(`/watchlist/top-prospects/${playerId}`);
+        setIsTopProspect(false);
+      } catch { /* ignore */ }
+    } else {
+      try {
+        await api.post("/watchlist/top-prospects/add", { player_id: playerId });
+        setIsTopProspect(true);
+      } catch { /* ignore */ }
+    }
+  }
 
   // Lazy-load progression/game log when sub-view switches
   useEffect(() => {
@@ -3871,6 +3900,11 @@ export default function PlayerDetailPage() {
                   <Link href="/watchlist" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
                     <ListPlus size={12} /> Add to Tracking
                   </Link>
+                  {canManageTP && (
+                    <button onClick={toggleTopProspect} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: isTopProspect ? "#0D9488" : "white", color: isTopProspect ? "white" : "#0F2942", border: isTopProspect ? "1.5px solid #0D9488" : "1.5px solid #DDE6EF", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
+                      <Star size={12} fill={isTopProspect ? "white" : "none"} /> {isTopProspect ? "On Top Prospects" : "Add to Top Prospects"}
+                    </button>
+                  )}
                   <Link href={`/players/${playerId}/card`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
                     <Eye size={12} /> Player Card
                   </Link>
