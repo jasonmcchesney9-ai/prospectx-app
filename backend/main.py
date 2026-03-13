@@ -5600,6 +5600,22 @@ def init_db():
     conn.commit()
     logger.info("coach_feedback table ready")
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS pre_game_briefs (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            created_by_user_id TEXT NOT NULL,
+            opponent_team_id TEXT NOT NULL,
+            opponent_team_name TEXT NOT NULL,
+            game_date TEXT,
+            brief_content TEXT NOT NULL,
+            top_players TEXT DEFAULT '[]',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    logger.info("pre_game_briefs table ready")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -53592,6 +53608,153 @@ async def gemini_video_analyze(req: dict = Body(...),
     except Exception:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Video analysis failed")
+    finally:
+        conn.close()
+
+
+# ============================================================
+# PRE-GAME INTEL BRIEFS
+# ============================================================
+
+
+@app.post("/api/pre-game-brief/generate")
+async def generate_pre_game_brief(req: dict = Body(...),
+                                   token_data: dict = Depends(verify_token)):
+    """Generate an AI-powered pre-game threat assessment brief."""
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    opponent_team_id = req.get("opponent_team_id")
+    game_date = req.get("game_date")
+
+    if not opponent_team_id:
+        raise HTTPException(status_code=400, detail="opponent_team_id is required")
+
+    conn = get_db()
+    try:
+        # Step 1: Look up opponent team name
+        team_row = conn.execute(
+            "SELECT name FROM teams WHERE id = ? AND org_id = ?",
+            (opponent_team_id, org_id),
+        ).fetchone()
+        if not team_row:
+            raise HTTPException(status_code=404, detail="Opponent team not found")
+        opponent_team_name = team_row["name"]
+
+        # Step 2: Pull top 5 players by pxr_score DESC
+        top_rows = conn.execute(
+            """SELECT p.id AS player_id,
+                      p.first_name || ' ' || p.last_name AS name,
+                      p.position,
+                      ps.pxr_score,
+                      ps.confidence_tier,
+                      p.birth_year
+               FROM pxr_scores ps
+               JOIN players p ON ps.player_id = p.id
+               WHERE p.current_team = ? AND p.org_id = ?
+                 AND ps.pxr_score IS NOT NULL
+               ORDER BY ps.pxr_score DESC
+               LIMIT 5""",
+            (opponent_team_name, org_id),
+        ).fetchall()
+
+        top_players = [dict(r) for r in top_rows]
+
+        # Step 3: Minimum data check
+        if len(top_players) < 3:
+            raise HTTPException(status_code=400, detail="Insufficient PXR data for this team")
+
+        # Step 4: Call Claude API
+        client = get_anthropic_client()
+        if not client:
+            raise HTTPException(status_code=500, detail="Brief generation failed")
+
+        player_lines = []
+        for tp in top_players:
+            age_str = ""
+            if tp.get("birth_year"):
+                age_str = f", Age {datetime.now().year - tp['birth_year']}"
+            player_lines.append(
+                f"- {tp['name']} ({tp['position']}{age_str}): PXR {tp['pxr_score']:.1f}, Confidence: {tp.get('confidence_tier', 'N/A')}"
+            )
+
+        user_prompt = f"Opponent: {opponent_team_name}\n"
+        if game_date:
+            user_prompt += f"Game Date: {game_date}\n"
+        user_prompt += f"\nTop PXR-scored players:\n" + "\n".join(player_lines)
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=600,
+                system="You are a hockey intelligence analyst. Generate a pre-game threat assessment brief. Max 400 words. Structure: Opening (1 sentence), Top Threats (one paragraph per player, 2-3 sentences), Tactical Note (1 paragraph).",
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            brief_content = response.content[0].text
+        except Exception:
+            raise HTTPException(status_code=500, detail="Brief generation failed")
+
+        if getattr(response, "fallback", False):
+            raise HTTPException(status_code=500, detail="Brief generation failed")
+
+        # Step 5: Store in pre_game_briefs
+        brief_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        conn.execute(
+            """INSERT INTO pre_game_briefs
+               (id, org_id, created_by_user_id, opponent_team_id, opponent_team_name,
+                game_date, brief_content, top_players, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brief_id, org_id, user_id, opponent_team_id, opponent_team_name,
+             game_date, brief_content, json.dumps(top_players), now),
+        )
+        conn.commit()
+
+        # Step 6: Return
+        return {
+            "id": brief_id,
+            "opponent_team_name": opponent_team_name,
+            "game_date": game_date,
+            "brief_content": brief_content,
+            "top_players": top_players,
+            "created_at": now,
+        }
+
+    except HTTPException:
+        raise
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Brief generation failed")
+    finally:
+        conn.close()
+
+
+@app.get("/api/pre-game-brief/{brief_id}")
+async def get_pre_game_brief(brief_id: str,
+                              token_data: dict = Depends(verify_token)):
+    """Retrieve a stored pre-game brief by ID."""
+    org_id = token_data["org_id"]
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            """SELECT id, org_id, created_by_user_id, opponent_team_id,
+                      opponent_team_name, game_date, brief_content,
+                      top_players, created_at
+               FROM pre_game_briefs
+               WHERE id = ? AND org_id = ?""",
+            (brief_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Brief not found")
+        result = dict(row)
+        result["top_players"] = json.loads(result.get("top_players") or "[]")
+        return result
+    except HTTPException:
+        raise
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Unable to retrieve brief")
     finally:
         conn.close()
 
