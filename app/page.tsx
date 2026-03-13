@@ -629,7 +629,7 @@ function Dashboard() {
                       <Swords size={11} /> Game Plan
                     </Link>
                     <Link href="/game-plans/new" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
-                      <Swords size={11} /> Chalk Talk
+                      <Swords size={11} /> Game Plan
                     </Link>
                     <Link href={`/players?team=${encodeURIComponent(opponent)}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
                       <Target size={11} /> Scout Opp.
@@ -861,11 +861,11 @@ function Dashboard() {
                 </DashboardCard>
                 )}
 
-                {/* Chalk Talk Sessions */}
+                {/* Game Plan Sessions */}
                 {showWidget("chalk_talk") && (
                 <DashboardCard
                   icon={<Swords size={15} className="text-teal" />}
-                  title="Chalk Talk"
+                  title="Game Plan"
                   viewAllHref="/game-plans"
                   loading={loading}
                   empty={activeGamePlans.length === 0}
@@ -950,7 +950,7 @@ function Dashboard() {
                     <Zap size={14} /> New Report
                   </Link>
                   <Link href="/game-plans/new" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-teal/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
-                    <Swords size={14} /> Chalk Talk
+                    <Swords size={14} /> Game Plan
                   </Link>
                 </div>
                 )}
@@ -968,7 +968,7 @@ function Dashboard() {
                       { label: "New Report", icon: <FileText size={16} style={{ color: "#0D9488" }} />, href: "/reports" },
                       { label: "Practice Plan", icon: <ClipboardList size={16} style={{ color: "#0D9488" }} />, href: "/practice-plans" },
                       { label: "Scout a Player", icon: <Search size={16} style={{ color: "#0D9488" }} />, href: "/players" },
-                      { label: "Chalk Talk", icon: <MessageSquare size={16} style={{ color: "#0D9488" }} />, href: "/bench-talk" },
+                      { label: "Game Plan", icon: <MessageSquare size={16} style={{ color: "#0D9488" }} />, href: "/bench-talk" },
                     ].map((action) => (
                       <Link
                         key={action.label}
