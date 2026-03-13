@@ -95,8 +95,9 @@ export default function GenerateReportPage() {
 function GenerateReportContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const preselectedPlayer = searchParams.get("player") || "";
+  const preselectedPlayer = searchParams.get("player") || searchParams.get("player_id") || "";
   const preselectedTeam = searchParams.get("team") || "";
+  const preselectedType = searchParams.get("report_type") || searchParams.get("type") || "";
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<TeamReference[]>([]);
@@ -146,7 +147,9 @@ function GenerateReportContent() {
 
         // Default to a sensible report type
         if (templatesRes.data.length > 0 && !selectedType) {
-          if (preselectedTeam) {
+          if (preselectedType && templatesRes.data.some((t: ReportTemplate) => t.report_type === preselectedType)) {
+            setSelectedType(preselectedType);
+          } else if (preselectedTeam) {
             setSelectedType("team_identity");
           } else {
             // Default to pro_skater (most common), fall back to first template
@@ -164,6 +167,24 @@ function GenerateReportContent() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-fetch player when pre-selected via query param (player_id or player)
+  useEffect(() => {
+    if (!preselectedPlayer || selectedPlayerCache) return;
+    (async () => {
+      try {
+        const { data } = await api.get<Player>(`/players/${preselectedPlayer}`);
+        if (data) {
+          setSelectedPlayer(data.id);
+          setSelectedPlayerCache(data);
+        }
+      } catch {
+        // Player not found — clear preselection
+        setSelectedPlayer("");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedPlayer]);
 
   // Server-side player search — debounced, min 2 chars
   useEffect(() => {

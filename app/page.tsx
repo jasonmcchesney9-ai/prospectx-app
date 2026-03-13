@@ -625,10 +625,10 @@ function Dashboard() {
                   )}
                   {/* Action buttons 2x2 */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: "0 16px 14px" }}>
-                    <Link href={`/game-plans/new?opponent=${encodeURIComponent(opponent)}&date=${nextGame.game_date}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(13,148,136,0.2)", color: "#14B8A8", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
+                    <Link href="/game-plans" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(13,148,136,0.2)", color: "#14B8A8", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
                       <Swords size={11} /> Game Plan
                     </Link>
-                    <Link href="/game-plans/new" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
+                    <Link href="/game-plans" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
                       <Swords size={11} /> Game Plan
                     </Link>
                     <Link href={`/players?team=${encodeURIComponent(opponent)}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 7, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 10, textTransform: "uppercase", textDecoration: "none", letterSpacing: "0.04em" }}>
@@ -807,7 +807,7 @@ function Dashboard() {
                               {g.venue && <p className="text-[10px] text-muted truncate">{g.venue}</p>}
                             </div>
                             <Link
-                              href={`/game-plans/new?opponent=${encodeURIComponent(opponent)}&date=${g.game_date}`}
+                              href="/game-plans"
                               className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-oswald font-bold uppercase tracking-wider text-teal bg-teal/10 rounded-lg hover:bg-teal/20 transition-colors"
                             >
                               <Swords size={10} />
@@ -871,7 +871,7 @@ function Dashboard() {
                   empty={activeGamePlans.length === 0}
                   emptyIcon={<Swords size={24} className="text-muted/30" />}
                   emptyText="No active sessions"
-                  emptyLink="/game-plans/new"
+                  emptyLink="/game-plans"
                   emptyLinkText="Create a session"
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -949,7 +949,7 @@ function Dashboard() {
                   <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all">
                     <Zap size={14} /> New Report
                   </Link>
-                  <Link href="/game-plans/new" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-teal/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
+                  <Link href="/game-plans" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-teal/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
                     <Swords size={14} /> Game Plan
                   </Link>
                 </div>
@@ -968,7 +968,7 @@ function Dashboard() {
                       { label: "New Report", icon: <FileText size={16} style={{ color: "#0D9488" }} />, href: "/reports" },
                       { label: "Practice Plan", icon: <ClipboardList size={16} style={{ color: "#0D9488" }} />, href: "/practice-plans" },
                       { label: "Scout a Player", icon: <Search size={16} style={{ color: "#0D9488" }} />, href: "/players" },
-                      { label: "Game Plan", icon: <MessageSquare size={16} style={{ color: "#0D9488" }} />, href: "/bench-talk" },
+                      { label: "Game Plan", icon: <MessageSquare size={16} style={{ color: "#0D9488" }} />, href: "/game-plans" },
                     ].map((action) => (
                       <Link
                         key={action.label}

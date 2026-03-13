@@ -554,7 +554,7 @@ export default function TeamDetailPage() {
                   className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-white/[0.08] text-white/70 border border-white/10 hover:bg-white/[0.12] hover:text-white transition-colors">
                   <FileText size={11} /> Generate Report
                 </Link>
-                <Link href={`/game-plans/new?team=${encodeURIComponent(teamName)}`}
+                <Link href="/game-plans"
                   className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-oswald uppercase tracking-wider rounded-lg bg-white/[0.08] text-white/70 border border-white/10 hover:bg-white/[0.12] hover:text-white transition-colors">
                   <Swords size={11} /> Game Plan
                 </Link>
@@ -1755,7 +1755,7 @@ export default function TeamDetailPage() {
                             Game Details — {game.opponent} ({game.game_date})
                           </h3>
                           <Link
-                            href={`/game-plans/new?opponent=${encodeURIComponent(game.opponent || "")}&date=${game.game_date || ""}`}
+                            href="/game-plans"
                             className="text-xs text-teal hover:underline flex items-center gap-1"
                           >
                             <Zap size={10} /> Create Game Plan
