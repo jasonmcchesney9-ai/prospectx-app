@@ -87,6 +87,16 @@ except ImportError:
         "stripe not available — billing integration disabled"
     )
 
+try:
+    import google.generativeai as genai
+    _gemini_available = True
+except ImportError:
+    genai = None
+    _gemini_available = False
+    logging.getLogger("prospectx").warning(
+        "google-generativeai not available — Gemini video analysis disabled"
+    )
+
 from pxi_prompt_core import (
     PXI_CORE_GUARDRAILS,
     PXI_MODE_BLOCKS,
@@ -180,6 +190,7 @@ if ENVIRONMENT != "development":
             "(>= 32 chars, not a default). Current environment: %s" % ENVIRONMENT
         )
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 
 # ── Stripe Billing ────────────────────────────────────────
@@ -4520,6 +4531,8 @@ def init_db():
         ("outcome", "TEXT"),
         ("source", "TEXT DEFAULT 'manual_tag'"),
         ("metadata", "TEXT DEFAULT '{}'"),
+        ("confidence", "REAL"),
+        ("raw_payload", "TEXT"),
     ]:
         if col_name not in ve_cols:
             conn.execute(f"ALTER TABLE video_events ADD COLUMN {col_name} {col_def}")
@@ -53273,6 +53286,149 @@ async def list_coach_feedback(org_id: str = Query(...),
     except Exception:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Unable to retrieve feedback")
+    finally:
+        conn.close()
+
+
+# ============================================================
+# GEMINI VIDEO ANALYSIS ENDPOINT
+# ============================================================
+
+_GEMINI_EVENT_SYSTEM_PROMPT = """You are an ice hockey event detection system analyzing game footage. Output ONLY valid JSON. No prose, no markdown, no explanation.
+Detect these event types only:
+zone_entry, zone_exit, dump_in, shot_attempt, faceoff, hit, breakout, penalty
+For ice_zone use: offensive | neutral | defensive from home team perspective.
+For outcome use: possession_maintained | turnover | on_net | blocked | wide | won | lost | null.
+Capture player jersey number as string if visible, null if not.
+Assign confidence score 0.0-1.0 per event.
+Return this exact structure:
+{
+  "events": [
+    {
+      "event_type": "zone_entry",
+      "event_label": "controlled",
+      "ice_zone": "offensive",
+      "outcome": "possession_maintained",
+      "period": 2,
+      "time_seconds": 1253.4,
+      "team": "home",
+      "player_jersey": "17",
+      "confidence": 0.82
+    }
+  ]
+}
+Return {"events": []} if no clear events detected. Never hallucinate events."""
+
+
+@app.post("/video/analyze")
+async def gemini_video_analyze(req: dict = Body(...),
+                                token_data: dict = Depends(verify_token)):
+    """Analyze game video via Gemini and auto-tag events into video_events."""
+    if not _gemini_available or not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Video analysis service not configured")
+
+    session_id = req.get("session_id")
+    org_id = req.get("org_id")
+    if not session_id or not org_id:
+        raise HTTPException(status_code=400, detail="session_id and org_id are required")
+
+    conn = get_db()
+    try:
+        # Step 1: Look up video_sessions — get upload_id
+        session_row = conn.execute(
+            "SELECT id, org_id, upload_id FROM video_sessions WHERE id = ? AND org_id = ?",
+            (session_id, org_id),
+        ).fetchone()
+        if not session_row:
+            raise HTTPException(status_code=404, detail="Session not found")
+        upload_id = session_row["upload_id"]
+        if not upload_id:
+            raise HTTPException(status_code=400, detail="Session has no associated upload")
+
+        # Step 2: Look up video_uploads — get mux_playback_id
+        upload_row = conn.execute(
+            "SELECT id, mux_playback_id FROM video_uploads WHERE id = ? AND org_id = ?",
+            (upload_id, org_id),
+        ).fetchone()
+        if not upload_row or not upload_row["mux_playback_id"]:
+            raise HTTPException(status_code=400, detail="Upload has no playback URL")
+        playback_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}.m3u8"
+
+        # Step 3: Build roster dict { jersey_number: player_id }
+        roster_rows = conn.execute(
+            "SELECT id, jersey_number FROM players WHERE org_id = ? AND jersey_number IS NOT NULL AND jersey_number != ''",
+            (org_id,),
+        ).fetchall()
+        roster = {str(r["jersey_number"]): r["id"] for r in roster_rows}
+
+        # Step 4: Upload video to Gemini File API
+        genai.configure(api_key=GEMINI_API_KEY)
+        try:
+            video_file = genai.upload_file(playback_url)
+            # Wait for file processing
+            import time as _time
+            while video_file.state.name == "PROCESSING":
+                _time.sleep(2)
+                video_file = genai.get_file(video_file.name)
+            if video_file.state.name == "FAILED":
+                raise HTTPException(status_code=500, detail="Video upload to Gemini failed")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=500, detail="Video upload to Gemini failed")
+
+        # Step 5: Send multimodal prompt to gemini-2.5-flash
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            response = model.generate_content(
+                [video_file, _GEMINI_EVENT_SYSTEM_PROMPT],
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json",
+                ),
+            )
+            result = json.loads(response.text)
+            events = result.get("events", [])
+        except Exception:
+            raise HTTPException(status_code=500, detail="Video analysis failed")
+
+        # Step 6 & 7: Map jerseys to player_ids and insert events
+        now = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        for ev in events:
+            jersey = ev.get("player_jersey")
+            player_id = roster.get(str(jersey)) if jersey else None
+            event_id = str(uuid.uuid4())
+            try:
+                conn.execute(
+                    """INSERT INTO video_events
+                        (id, org_id, session_id, upload_id, event_type, event_label,
+                         ice_zone, outcome, period, time_seconds, player_id,
+                         source, confidence, raw_payload, created_by, created_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        event_id, org_id, session_id, upload_id,
+                        ev.get("event_type"), ev.get("event_label"),
+                        ev.get("ice_zone"), ev.get("outcome"),
+                        ev.get("period"), ev.get("time_seconds"),
+                        player_id, "auto_detected",
+                        ev.get("confidence"), json.dumps(ev),
+                        "system", now,
+                    ),
+                )
+                inserted += 1
+            except Exception:
+                conn.rollback()
+                continue
+        conn.commit()
+
+        # Step 8: Return summary
+        return {"events_detected": inserted, "session_id": session_id}
+
+    except HTTPException:
+        raise
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Video analysis failed")
     finally:
         conn.close()
 
