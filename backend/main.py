@@ -2406,6 +2406,39 @@ def init_db():
         conn.execute("ALTER TABLE report_templates ADD COLUMN subcategory TEXT")
         conn.commit()
         logger.info("Migration: added subcategory column to report_templates")
+    if "description" not in tmpl_cols:
+        conn.execute("ALTER TABLE report_templates ADD COLUMN description TEXT")
+        conn.commit()
+        logger.info("Migration: added description column to report_templates")
+
+    # Populate template descriptions
+    _TEMPLATE_DESCRIPTIONS = {
+        "elite_profile": "Comprehensive scouting profile covering skating, hockey IQ, compete level, and projection ceiling.",
+        "player_season_roadmap": "Full-season development plan with monthly focus areas, measurable targets, and coaching priorities.",
+        "bias_controlled_eval": "Objective evaluation designed to minimize scouting bias with structured criteria and blind comparison.",
+        "agent_projection": "Draft and career projection report formatted for agent use, including comparable players and timeline.",
+        "player_outcomes": "Historical outcome analysis showing development trajectories for similar player profiles.",
+        "game_readiness": "Pre-game player assessment covering recent form, matchup advantages, and deployment recommendations.",
+        "development_plan": "Personalized skill development plan with drills, focus areas, and progress benchmarks.",
+        "goalie_eval": "Goaltender-specific evaluation covering technique, positioning, rebound control, and mental game.",
+        "team_identity": "Defines how a team plays — system, personnel strengths, vulnerabilities, and player archetype fit.",
+        "opponent_gameplan": "12-section tactical game plan with opponent analysis, matchup strategy, and bench card.",
+        "line_chemistry": "Line combination analysis evaluating chemistry, production, and deployment optimization.",
+        "st_optimization": "Special teams breakdown covering PP structure, PK formation, and personnel recommendations.",
+        "practice_plan": "Structured practice session built from development priorities and drill library.",
+        "playoff_series": "Multi-game series preparation with opponent tendencies, adjustment framework, and game-by-game strategy.",
+        "broadcast_pack": "Broadcaster preparation package with storylines, player profiles, and talking points.",
+        "parent_guide": "Parent-friendly development overview with age-appropriate expectations and support guidance.",
+        "operating_profile": "Detailed player operating profile covering strengths, tendencies, and optimal deployment.",
+        "draft_comparative": "Side-by-side prospect comparison for draft evaluation and board positioning.",
+        "scouting_report": "Standard scouting report with grades, observations, and projection.",
+    }
+    for _rt, _desc in _TEMPLATE_DESCRIPTIONS.items():
+        conn.execute(
+            "UPDATE report_templates SET description = ? WHERE report_type = ? AND (description IS NULL OR description = '')",
+            (_desc, _rt),
+        )
+    conn.commit()
 
     # Seed template categories
     _seed_template_categories(conn)
@@ -31017,7 +31050,7 @@ async def list_templates(token_data: dict = Depends(verify_token)):
     org_id = token_data["org_id"]
     conn = get_db()
     rows = conn.execute("""
-        SELECT id, template_name, report_type, prompt_text AS description, is_global, version, created_at
+        SELECT id, template_name, report_type, COALESCE(description, 'Intelligence report') AS description, is_global, version, created_at
         FROM report_templates
         WHERE org_id = ? OR is_global = 1
         ORDER BY template_name
