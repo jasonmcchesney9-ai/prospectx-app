@@ -11284,6 +11284,111 @@ def calculate_tier2_pxr_scores(conn=None, season: str = '2025-26') -> dict:
     }
 
 
+def format_pxr_context(player_id: str, season: str, conn) -> str:
+    """Natural-language PXR summary for injection into PXI report prompts.
+
+    Returns a human-readable string describing the player's PXR score,
+    percentile rankings, pillar profile, and confidence tier. Returns
+    empty string on any failure — never blocks report generation.
+    """
+    try:
+        row = conn.execute("""
+            SELECT ps.pxr_score, ps.score_type, ps.confidence_tier,
+                   ps.league_percentile, ps.cohort_percentile,
+                   ps.p1_offense, ps.p2_defense, ps.p3_possession, ps.p4_physical,
+                   ps.age_modifier, ps.gp,
+                   pl.position, pl.current_league, pl.birth_year
+            FROM pxr_scores ps
+            JOIN players pl ON ps.player_id = pl.id
+            WHERE ps.player_id = ?
+              AND ps.season = ?
+            ORDER BY
+              CASE ps.score_type
+                WHEN 'full' THEN 1
+                WHEN 'estimated' THEN 2
+              END
+            LIMIT 1
+        """, (player_id, season)).fetchone()
+
+        if not row:
+            return ""
+
+        def _pillar_label(score):
+            if score is None:
+                return "not scored"
+            if score >= 80:
+                return "elite"
+            if score >= 65:
+                return "strong"
+            if score >= 50:
+                return "above average"
+            if score >= 35:
+                return "below average"
+            return "developing"
+
+        pxr_score = row["pxr_score"]
+        score_type = row["score_type"] or "full"
+        confidence = row["confidence_tier"] or "small_sample"
+        lp = row["league_percentile"]
+        cp = row["cohort_percentile"]
+        p1 = row["p1_offense"]
+        p2 = row["p2_defense"]
+        p3 = row["p3_possession"]
+        p4 = row["p4_physical"]
+        am = row["age_modifier"]
+        gp = row["gp"]
+        position = row["position"] or "Unknown"
+        league = row["current_league"] or "Unknown"
+        birth_year = row["birth_year"] or "Unknown"
+
+        def _pv(val):
+            """Format pillar value — '—' if None, else integer."""
+            return "—" if val is None else f"{val:.0f}"
+
+        def _pct(val):
+            """Format percentile — 'N/A' if None, else integer + 'th'."""
+            return "N/A" if val is None else f"{val:.0f}th"
+
+        am_str = f"{am:+.1f}" if am is not None else "+0.0"
+        gp_str = str(gp) if gp is not None else "?"
+
+        if score_type == "full":
+            return (
+                f"PXR {pxr_score:.0f} — ranks in the "
+                f"{_pct(lp)} percentile among {position}s "
+                f"in {league} this season, and the "
+                f"{_pct(cp)} percentile among "
+                f"{birth_year} birth-year players across all leagues. "
+                f"Pillar profile: Offense {_pv(p1)}/100 "
+                f"({_pillar_label(p1)}), Defense {_pv(p2)}/100 ({_pillar_label(p2)}), "
+                f"Possession {_pv(p3)}/100 ({_pillar_label(p3)}), Physical "
+                f"{_pv(p4)}/100 ({_pillar_label(p4)}). "
+                f"Age modifier: {am_str} pts. "
+                f"Confidence: {confidence}. "
+                f"Based on {gp_str} games played."
+            )
+
+        # score_type == 'estimated'
+        return (
+            f"PXR~ {pxr_score:.0f} (estimated) — based on "
+            f"counting stats only, ranks approximately "
+            f"{_pct(lp)} percentile in {league}. "
+            f"Cohort percentile: {_pct(cp)} among "
+            f"{birth_year} birth-year players. "
+            f"Confidence: {confidence} ({gp_str} GP). "
+            f"Note: microstat data (InStat) would significantly "
+            f"improve this assessment."
+        )
+
+    except Exception as e:
+        logger.warning("format_pxr_context failed for player %s: %s", player_id, str(e)[:500])
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return ""
+
+
 def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, error_message: str | None = None):
     """Write a row to pxr_run_log for audit trail."""
     try:
