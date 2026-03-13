@@ -17649,7 +17649,7 @@ async def get_player_stat_trends(
         # ── 6. Get PXR pillar percentiles ──
         pxr_row = conn.execute("""
             SELECT p1_offense, p2_defense, p3_possession, p4_physical,
-                   cohort_percentile, league_percentile, pxr_score, confidence_tier
+                   cohort_percentile, league_percentile, pxr_score, confidence_tier, score_type
             FROM pxr_scores WHERE player_id = ? ORDER BY season DESC LIMIT 1
         """, (player_id,)).fetchone()
 
@@ -18737,7 +18737,7 @@ async def get_roster_board(team_name: str, token_data: dict = Depends(verify_tok
                    COALESCE(ps.plus_minus, 0) as plus_minus,
                    COALESCE(ps.pim, 0) as pim, ps.season,
                    gs.gp as g_gp, gs.ga as g_ga, gs.sv as g_sv, gs.gaa, gs.sv_pct,
-                   pxr.pxr_score, pxr.confidence_tier, pxr.gp as pxr_gp
+                   pxr.pxr_score, pxr.confidence_tier, pxr.score_type, pxr.gp as pxr_gp
             FROM players p
             LEFT JOIN (
                 SELECT player_id, gp, g, a, p, plus_minus, pim, season,
@@ -18750,7 +18750,7 @@ async def get_roster_board(team_name: str, token_data: dict = Depends(verify_tok
                 FROM goalie_stats
             ) gs ON p.id = gs.player_id AND gs.rn = 1
             LEFT JOIN (
-                SELECT player_id, pxr_score, confidence_tier, gp,
+                SELECT player_id, pxr_score, confidence_tier, score_type, gp,
                        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) as rn
                 FROM pxr_scores
             ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
@@ -18773,6 +18773,7 @@ async def get_roster_board(team_name: str, token_data: dict = Depends(verify_tok
             } if r["g_gp"] else None
             d["pxr"] = {
                 "score": r["pxr_score"], "confidence_tier": r["pxr_gp"],
+                "score_type": r["score_type"],
                 "gp": r["pxr_gp"],
             } if r["pxr_score"] else None
             players.append(d)
@@ -18843,7 +18844,7 @@ async def analyse_roster_board(body: dict, token_data: dict = Depends(verify_tok
         player_rows = conn.execute("""
             SELECT p.first_name, p.last_name, p.position, p.birth_year, p.jersey_number,
                    ps.gp, ps.g, ps.a, ps.p AS pts,
-                   pxr.pxr_score, pxr.confidence_tier
+                   pxr.pxr_score, pxr.confidence_tier, pxr.score_type
             FROM players p
             LEFT JOIN (
                 SELECT player_id, gp, g, a, p,
@@ -19177,7 +19178,7 @@ async def list_draft_board(token_data: dict = Depends(verify_token)):
                    p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.birth_year, p.jersey_number, p.image_url,
                    ps.gp, ps.g, ps.a, ps.p AS pts, ps.season,
-                   pxr.pxr_score, pxr.confidence_tier AS pxr_confidence, pxr.gp AS pxr_gp
+                   pxr.pxr_score, pxr.confidence_tier AS pxr_confidence, pxr.score_type, pxr.gp AS pxr_gp
             FROM draft_board_entries db
             JOIN players p ON db.player_id = p.id
             LEFT JOIN (
@@ -19334,7 +19335,7 @@ async def analyse_draft_board(body: dict, token_data: dict = Depends(verify_toke
                    p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.birth_year,
                    ps.gp, ps.g, ps.a, ps.p AS pts,
-                   pxr.pxr_score, pxr.confidence_tier
+                   pxr.pxr_score, pxr.confidence_tier, pxr.score_type
             FROM draft_board_entries db
             JOIN players p ON db.player_id = p.id
             LEFT JOIN (
@@ -19343,7 +19344,7 @@ async def analyse_draft_board(body: dict, token_data: dict = Depends(verify_toke
                 FROM player_stats
             ) ps ON p.id = ps.player_id AND ps.rn = 1
             LEFT JOIN (
-                SELECT player_id, pxr_score, confidence_tier,
+                SELECT player_id, pxr_score, confidence_tier, score_type,
                        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
                 FROM pxr_scores
             ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
@@ -19412,7 +19413,7 @@ async def list_trade_board(token_data: dict = Depends(verify_token)):
                    p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.birth_year, p.jersey_number, p.image_url,
                    ps.gp, ps.g, ps.a, ps.p AS pts, ps.season,
-                   pxr.pxr_score, pxr.confidence_tier AS pxr_confidence
+                   pxr.pxr_score, pxr.confidence_tier AS pxr_confidence, pxr.score_type
             FROM trade_board_entries tb
             JOIN players p ON tb.player_id = p.id
             LEFT JOIN (
@@ -19421,7 +19422,7 @@ async def list_trade_board(token_data: dict = Depends(verify_token)):
                 FROM player_stats
             ) ps ON p.id = ps.player_id AND ps.rn = 1
             LEFT JOIN (
-                SELECT player_id, pxr_score, confidence_tier,
+                SELECT player_id, pxr_score, confidence_tier, score_type,
                        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
                 FROM pxr_scores
             ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
@@ -19550,7 +19551,7 @@ async def analyse_trade_board(body: dict, token_data: dict = Depends(verify_toke
                    p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.birth_year,
                    ps.gp, ps.g, ps.a, ps.p AS pts,
-                   pxr.pxr_score, pxr.confidence_tier
+                   pxr.pxr_score, pxr.confidence_tier, pxr.score_type
             FROM trade_board_entries tb
             JOIN players p ON tb.player_id = p.id
             LEFT JOIN (
@@ -19559,7 +19560,7 @@ async def analyse_trade_board(body: dict, token_data: dict = Depends(verify_toke
                 FROM player_stats
             ) ps ON p.id = ps.player_id AND ps.rn = 1
             LEFT JOIN (
-                SELECT player_id, pxr_score, confidence_tier,
+                SELECT player_id, pxr_score, confidence_tier, score_type,
                        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY season DESC) AS rn
                 FROM pxr_scores
             ) pxr ON p.id = pxr.player_id AND pxr.rn = 1
@@ -33146,16 +33147,31 @@ async def recalculate_pxr(
         conn.close()
     duration = _time.time() - start
     _log_pxr_run(result['scored'], duration, 'success')
+
+    # Tier 2: estimated scores for players without InStat data
+    tier2_result = None
+    try:
+        tier2_result = calculate_tier2_pxr_scores(season=season)
+    except Exception as t2_err:
+        logger.warning("Tier 2 PXR failed (non-fatal): %s", str(t2_err)[:500])
+        tier2_result = {"error": str(t2_err)[:500]}
+
+    tier2_written = tier2_result.get('scores_written', 0) if isinstance(tier2_result, dict) and 'error' not in tier2_result else 0
+
     return {
         'status': 'complete',
         'season': season,
         'snapshot_archived': snapshot_count,
-        'players_scored': result['scored'],
-        'players_null_toi': result['null_toi'],
-        'players_null_data': result['null_data'],
+        'tier1': {
+            'players_scored': result['scored'],
+            'players_null_toi': result['null_toi'],
+            'players_null_data': result['null_data'],
+            'duration_ms': result['duration_ms'],
+        },
+        'tier2': tier2_result,
+        'total_scored': result['scored'] + tier2_written,
         'duration_seconds': round(duration, 2),
-        'duration_ms': result['duration_ms'],
-        'message': f"PXR calculated for {result['scored']} players in {result['duration_ms']}ms",
+        'message': f"PXR: {result['scored']} Tier 1 + {tier2_written} Tier 2 scored",
     }
 
 
@@ -34018,14 +34034,14 @@ async def pxr_leaderboard(
                    pxr_score, league_percentile, cohort_percentile,
                    p1_offense, p2_defense, p3_possession, p4_physical,
                    age_modifier, data_completeness,
-                   confidence_tier, gp, toi_minutes
+                   confidence_tier, score_type, gp, toi_minutes
             FROM (
                 SELECT p.first_name || ' ' || p.last_name AS player_name,
                        p.current_league, p.position,
                        px.pxr_score, px.league_percentile, px.cohort_percentile,
                        px.p1_offense, px.p2_defense, px.p3_possession, px.p4_physical,
                        px.age_modifier, px.data_completeness,
-                       px.confidence_tier, px.gp, px.toi_minutes,
+                       px.confidence_tier, px.score_type, px.gp, px.toi_minutes,
                        ROW_NUMBER() OVER (
                            PARTITION BY p.first_name, p.last_name, p.position
                            ORDER BY px.gp DESC NULLS LAST, px.pxr_score DESC
@@ -43206,7 +43222,7 @@ async def get_scouting_pipeline(
                    sp.added_by, sp.created_at, sp.updated_at, sp.sourced_via,
                    p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.dob, p.image_url,
-                   pxr.pxr_score, pxr.confidence_tier,
+                   pxr.pxr_score, pxr.confidence_tier, pxr.score_type,
                    (SELECT COUNT(*) FROM scout_notes sn
                     WHERE sn.player_id = sp.player_id AND sn.org_id = ?) AS note_count,
                    au.first_name AS added_by_first, au.last_name AS added_by_last,
@@ -43249,6 +43265,7 @@ async def get_scouting_pipeline(
                 "image_url": r["image_url"],
                 "pxr_score": r["pxr_score"],
                 "confidence_tier": r["confidence_tier"],
+                "score_type": r["score_type"],
                 "note_count": r["note_count"] or 0,
             }
             stage_key = entry["stage"] if entry["stage"] in stages else "identified"
@@ -43479,7 +43496,7 @@ async def list_top_prospects(
                    sl.created_at, sl.updated_at,
                    p.first_name, p.last_name, p.position, p.current_team,
                    p.current_league, p.dob, p.image_url,
-                   pxr.pxr_score, pxr.confidence_tier, pxr.cohort_percentile,
+                   pxr.pxr_score, pxr.confidence_tier, pxr.score_type, pxr.cohort_percentile,
                    pxr.league_percentile,
                    (SELECT sn.note_text FROM scout_notes sn
                     WHERE sn.player_id = sl.player_id AND sn.org_id = ?
