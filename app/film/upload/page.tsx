@@ -17,6 +17,7 @@ import {
   X,
   Search,
   ExternalLink,
+  Play,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -103,6 +104,19 @@ export default function FilmUploadPage() {
   const [platformSubmitting, setPlatformSubmitting] = useState(false);
   const [platformError, setPlatformError] = useState("");
   const platformSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // YouTube import
+  const [uploadMode, setUploadMode] = useState<"upload" | "youtube">("upload");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeImporting, setYoutubeImporting] = useState(false);
+  const [youtubeError, setYoutubeError] = useState("");
+  const [youtubeResult, setYoutubeResult] = useState<{
+    upload_id: string;
+    title: string;
+    thumbnail_url: string;
+    duration_seconds: number;
+    source_url: string;
+  } | null>(null);
 
   // FFmpeg capability check
   const [ffmpegAvailable, setFfmpegAvailable] = useState<boolean | null>(null); // null = testing
@@ -246,6 +260,29 @@ export default function FilmUploadPage() {
       } catch { setPlatformPlayerResults([]); }
       finally { setPlatformPlayerLoading(false); }
     }, 300);
+  }, []);
+
+  const handleYoutubeImport = useCallback(async () => {
+    const trimmed = youtubeUrl.trim();
+    if (!trimmed) return;
+    setYoutubeImporting(true);
+    setYoutubeError("");
+    setYoutubeResult(null);
+    try {
+      const res = await api.post("/film/import/youtube", { youtube_url: trimmed });
+      setYoutubeResult(res.data);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail || "Could not import video";
+      setYoutubeError(msg);
+    } finally {
+      setYoutubeImporting(false);
+    }
+  }, [youtubeUrl]);
+
+  const handleYoutubeReset = useCallback(() => {
+    setYoutubeUrl("");
+    setYoutubeError("");
+    setYoutubeResult(null);
   }, []);
 
   const handlePlatformImport = useCallback(async () => {
@@ -405,7 +442,178 @@ export default function FilmUploadPage() {
           </div>
         )}
 
+        {/* Mode tabs — Upload vs YouTube */}
+        <div style={{ display: "flex", gap: 6, padding: "0 16px", borderBottom: "1px solid rgba(15,41,66,0.6)" }}>
+          <button
+            onClick={() => setUploadMode("upload")}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              fontFamily: "'Oswald', sans-serif",
+              fontWeight: 600,
+              fontSize: 11,
+              textTransform: "uppercase" as const,
+              letterSpacing: "0.12em",
+              color: "#FFFFFF",
+              background: uploadMode === "upload" ? "#0F2942" : "#14B8A8",
+              boxShadow: uploadMode === "upload" ? "0 0 0 1px #14B8A8" : "none",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Upload size={12} />
+            Upload
+          </button>
+          <button
+            onClick={() => setUploadMode("youtube")}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              fontFamily: "'Oswald', sans-serif",
+              fontWeight: 600,
+              fontSize: 11,
+              textTransform: "uppercase" as const,
+              letterSpacing: "0.12em",
+              color: "#FFFFFF",
+              background: uploadMode === "youtube" ? "#0F2942" : "#14B8A8",
+              boxShadow: uploadMode === "youtube" ? "0 0 0 1px #14B8A8" : "none",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Play size={12} />
+            YouTube
+          </button>
+        </div>
+
+        {/* ── YouTube Import Mode ─────────────────────────────── */}
+        {uploadMode === "youtube" && (
+          <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1.5px solid #DDE6EF", padding: 24 }}>
+            {!youtubeResult ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Play size={16} style={{ color: "#0D9488" }} />
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 13, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "#0F2942" }}>
+                    Import from YouTube
+                  </span>
+                </div>
+                <div>
+                  <input
+                    type="url"
+                    value={youtubeUrl}
+                    onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(""); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleYoutubeImport(); } }}
+                    placeholder="Paste YouTube URL..."
+                    style={{
+                      width: "100%",
+                      border: "1.5px solid #DDE6EF",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      fontSize: 14,
+                      fontFamily: "'Source Serif 4', serif",
+                      color: "#0F2942",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+                {youtubeError && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#E67E22", fontSize: 12, fontFamily: "'Source Serif 4', serif" }}>
+                    <AlertCircle size={14} style={{ color: "#E67E22" }} />
+                    Could not import video
+                  </div>
+                )}
+                <button
+                  onClick={handleYoutubeImport}
+                  disabled={!youtubeUrl.trim() || youtubeImporting}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    border: "none",
+                    fontFamily: "'Oswald', sans-serif",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    textTransform: "uppercase" as const,
+                    letterSpacing: "0.08em",
+                    color: "#FFFFFF",
+                    background: youtubeUrl.trim() && !youtubeImporting ? "#0D9488" : "#DDE6EF",
+                    cursor: youtubeUrl.trim() && !youtubeImporting ? "pointer" : "not-allowed",
+                  }}
+                >
+                  {youtubeImporting ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Play size={14} />
+                  )}
+                  {youtubeImporting ? "Importing..." : "Import"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+                {/* Thumbnail */}
+                {youtubeResult.thumbnail_url && (
+                  <div style={{ width: "100%", maxWidth: 400, borderRadius: 10, overflow: "hidden", border: "1px solid #DDE6EF" }}>
+                    <img
+                      src={youtubeResult.thumbnail_url}
+                      alt={youtubeResult.title}
+                      style={{ width: "100%", display: "block" }}
+                    />
+                  </div>
+                )}
+                {/* Title */}
+                <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 15, color: "#0F2942", textAlign: "center", textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>
+                  {youtubeResult.title}
+                </p>
+                {/* Duration */}
+                <p style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 12, color: "#5A7291" }}>
+                  {Math.floor(youtubeResult.duration_seconds / 60)}:{String(youtubeResult.duration_seconds % 60).padStart(2, "0")}
+                </p>
+                {/* Confirmation */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#16A34A", fontSize: 13, fontFamily: "'Oswald', sans-serif", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.08em" }}>
+                  <CheckCircle size={16} style={{ color: "#16A34A" }} />
+                  Added to Library ✓
+                </div>
+                {/* Import Another */}
+                <button
+                  onClick={handleYoutubeReset}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    padding: "10px 20px",
+                    borderRadius: 8,
+                    border: "none",
+                    fontFamily: "'Oswald', sans-serif",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    textTransform: "uppercase" as const,
+                    letterSpacing: "0.08em",
+                    color: "#FFFFFF",
+                    background: "#0D9488",
+                    cursor: "pointer",
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  Import Another
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Step indicator */}
+        {uploadMode === "upload" && (
         <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1.5px solid #DDE6EF" }}>
           <div className="flex items-center justify-center gap-3 px-5 py-3">
             {["Details", "Select File", "Upload"].map((label, i) => {
@@ -449,9 +657,10 @@ export default function FilmUploadPage() {
             })}
           </div>
         </div>
+        )}
 
         {/* Step 1 — Details */}
-        {step === "details" && (
+        {uploadMode === "upload" && step === "details" && (
           <div className="bg-white rounded-xl border border-border p-6 space-y-5">
             <div>
               <label className="block text-xs font-oswald uppercase tracking-wider text-navy mb-1.5">
@@ -514,7 +723,7 @@ export default function FilmUploadPage() {
         )}
 
         {/* Step 2 — Select File */}
-        {step === "file" && (
+        {uploadMode === "upload" && step === "file" && (
           <div className="bg-white rounded-xl border border-border p-6 space-y-5">
             <VideoUploader
               onFileSelect={setFile}
@@ -748,7 +957,7 @@ export default function FilmUploadPage() {
         )}
 
         {/* Step 3 — Upload & Process */}
-        {step === "uploading" && (
+        {uploadMode === "upload" && step === "uploading" && (
           <div className="bg-white rounded-xl border border-border p-6">
             {/* Compressing (shown when context is in compressing phase) */}
             {uploadStatus === "uploading" && globalUpload.phase === "compressing" && (
