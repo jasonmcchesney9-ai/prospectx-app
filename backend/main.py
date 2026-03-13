@@ -18772,7 +18772,7 @@ async def get_roster_board(team_name: str, token_data: dict = Depends(verify_tok
                 "gaa": r["gaa"], "sv_pct": r["sv_pct"],
             } if r["g_gp"] else None
             d["pxr"] = {
-                "score": r["pxr_score"], "confidence_tier": r["pxr_gp"],
+                "score": r["pxr_score"], "confidence_tier": r["confidence_tier"],
                 "score_type": r["score_type"],
                 "gp": r["pxr_gp"],
             } if r["pxr_score"] else None
