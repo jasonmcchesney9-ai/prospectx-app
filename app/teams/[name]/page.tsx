@@ -72,7 +72,10 @@ function formatWeight(kg: number | null): string {
   return `${Math.round(kg * 2.205)}`;
 }
 function formatDob(dob: string | null, birthYear: number | null): string {
-  if (dob) return new Date(dob + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (dob) {
+    const d = new Date(dob + "T00:00:00");
+    if (!isNaN(d.getTime())) return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
   if (birthYear) return String(birthYear);
   return "\u2014";
 }
@@ -171,6 +174,7 @@ export default function TeamDetailPage() {
   const [rosterSearch, setRosterSearch] = useState("");
   const [rosterPosFilter, setRosterPosFilter] = useState<"all" | "forwards" | "defense" | "goalies">("all");
   const [rosterSort, setRosterSort] = useState<"name" | "pts" | "gp" | "youngest">("name");
+  const [rosterStatusFilter, setRosterStatusFilter] = useState<string>("all");
 
   // ── Development Framework State ───────────────────────────
   const [teamCountry, setTeamCountry] = useState<string>("");
@@ -429,6 +433,7 @@ export default function TeamDetailPage() {
 
   // ── Roster grouping (filtered + sorted) ─────────────────
   const filteredRoster = roster
+    .filter(p => rosterStatusFilter === "all" || (p.roster_status || "active") === rosterStatusFilter)
     .filter(p => rosterPosFilter === "all" || posGroup(p.position) === rosterPosFilter)
     .filter(p => !rosterSearch || `${p.first_name} ${p.last_name}`.toLowerCase().includes(rosterSearch.toLowerCase()))
     .sort((a, b) => {
@@ -565,7 +570,7 @@ export default function TeamDetailPage() {
         )}
 
         {/* Roster Sync Bar — above tabs, visible on all tabs */}
-        {htInfo && (htInfo.linked || htInfo.has_ht_players) && (
+        {htInfo && htInfo.linked && (
           <div className="mb-2 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-navy/[0.02] border border-teal/15">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
@@ -736,6 +741,15 @@ export default function TeamDetailPage() {
                           rosterPosFilter === f ? "bg-navy text-white" : "bg-white border border-border text-muted hover:text-navy"
                         }`}
                       >{f === "all" ? "All" : f === "forwards" ? "FWD" : f === "defense" ? "DEF" : "G"}</button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1">
+                    {(["all", "active", "ap", "inj", "susp", "scrch"] as const).map(s => (
+                      <button key={s} onClick={() => setRosterStatusFilter(s)}
+                        className={`px-2.5 py-1.5 rounded-md font-oswald text-[10px] uppercase tracking-wider transition-colors ${
+                          rosterStatusFilter === s ? "bg-teal text-white" : "bg-white border border-border text-muted hover:text-navy"
+                        }`}
+                      >{s === "all" ? "All" : s === "active" ? "Active" : s === "ap" ? "AP" : s === "inj" ? "INJ" : s === "susp" ? "SUSP" : "SCRCH"}</button>
                     ))}
                   </div>
                   <div className="ml-auto flex items-center gap-1.5 text-[10px] text-muted">
@@ -1685,9 +1699,11 @@ export default function TeamDetailPage() {
                               onClick={() => setExpandedGameId(isExpanded ? null : game.id)}
                             >
                               <td className="px-3 py-2 text-navy whitespace-nowrap">
-                                {game.game_date ? new Date(game.game_date + "T12:00:00").toLocaleDateString("en-US", {
-                                  month: "short", day: "numeric",
-                                }) : "—"}
+                                {(() => {
+                                  if (!game.game_date) return "—";
+                                  const d = new Date(game.game_date + "T12:00:00");
+                                  return isNaN(d.getTime()) ? "TBD" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                                })()}
                               </td>
                               <td className="text-center px-2 py-2">
                                 <span className={`text-[10px] font-oswald font-bold px-1.5 py-0.5 rounded ${
