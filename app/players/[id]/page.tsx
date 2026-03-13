@@ -237,7 +237,7 @@ function PxiDonutCircle({ m }: { m: PxiMetricItem }) {
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0 }}>
           <div style={{ fontSize: 13, lineHeight: 1, marginBottom: 1 }}>{m.icon}</div>
-          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1, letterSpacing: -0.5, color: m.text }}>{m.score}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1, letterSpacing: -0.5, color: m.text }}>{(m.score / 10).toFixed(1)}</div>
         </div>
       </div>
       <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase" as const, color: "#0F2942" }}>{m.key}</div>
@@ -943,7 +943,13 @@ export default function PlayerDetailPage() {
         // Load trendline data (non-blocking — for SeasonSnapshot sparkline)
         try {
           const trendRes = await api.get(`/players/${playerId}/trendline?metric=points&last_n=10`);
-          setTrendlineData(trendRes.data);
+          // Normalize backend trend strings → frontend TREND_STYLES keys
+          const rawTrend = (trendRes.data?.trend || "").toLowerCase();
+          let normalizedTrend = "insufficient_data";
+          if (rawTrend.includes("up") || rawTrend.includes("improv")) normalizedTrend = "improving";
+          else if (rawTrend.includes("dip") || rawTrend.includes("down") || rawTrend.includes("declin")) normalizedTrend = "declining";
+          else if (rawTrend.includes("flat") || rawTrend.includes("stable")) normalizedTrend = "stable";
+          setTrendlineData({ ...trendRes.data, trend: normalizedTrend });
         } catch { /* May not have game data */ }
 
         // Load PXR pillar scores (non-blocking — for SkillBars)
@@ -1400,18 +1406,21 @@ export default function PlayerDetailPage() {
             {/* Right: Draft chips + actions */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {/* PXR Score pill — prominent in hero */}
+                {/* PXI Overall Band — headline pill */}
+                {intelligence?.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
+                  <span
+                    style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: "rgba(230,126,34,.25)", color: "#E67E22", letterSpacing: ".04em", border: "1px solid rgba(230,126,34,.35)" }}
+                  >
+                    {gradeToOverallBand(intelligence.overall_grade)}
+                  </span>
+                )}
+                {/* PXR Score pill — secondary */}
                 {pxrData && pxrData.pxr_score != null && pxrData.pxr_score > 0 && (
                   <span
-                    style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: "rgba(13,148,136,.25)", color: "#14B8A8", letterSpacing: ".04em", border: "1px solid rgba(13,148,136,.35)" }}
+                    style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(13,148,136,.2)", color: "#14B8A8", letterSpacing: ".04em" }}
                     title={`PXR Score — Composite rating: ${pxrData.pxr_score.toFixed(1)} / 100`}
                   >
                     PXR {pxrData.pxr_score.toFixed(1)}
-                  </span>
-                )}
-                {intelligence?.overall_grade && gradeToOverallBand(intelligence.overall_grade) && (
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9.5, fontWeight: 500, padding: "3px 8px", borderRadius: 3, background: "rgba(234,88,12,.2)", color: "#FB923C", letterSpacing: ".04em" }}>
-                    {gradeToOverallBand(intelligence.overall_grade)}
                   </span>
                 )}
                 {(() => {
@@ -1488,7 +1497,7 @@ export default function PlayerDetailPage() {
                 ["+/-", currentSeason.plus_minus != null ? (currentSeason.plus_minus >= 0 ? `+${currentSeason.plus_minus}` : `${currentSeason.plus_minus}`) : "—", null],
                 ["SH%", currentSeason.shooting_pct != null ? `${currentSeason.shooting_pct.toFixed(1)}%` : (currentSeason.sog > 0 ? `${((currentSeason.g / currentSeason.sog) * 100).toFixed(1)}%` : "—"), null],
                 ["PIM", currentSeason.pim, null],
-                ["PXI", pxiAvg != null ? pxiAvg : "—", "#14B8A8"],
+                ["PXI", pxiAvg != null ? (pxiAvg / 10).toFixed(1) : "—", "#14B8A8"],
               ];
               const statTips: Record<string, string> = { "PPG": TOOLTIPS.player_ppg, "+/-": TOOLTIPS.player_plus_minus, "PIM": TOOLTIPS.player_pim };
               return statItems.map(([label, value, colorOverride]) => (
@@ -2171,7 +2180,8 @@ export default function PlayerDetailPage() {
                         .map((s) => (
                           <tr key={s.id} className="border-b border-navy/5 hover:bg-navy/[0.02]">
                             <td className="py-1.5 px-2 font-medium text-navy">{s.season || "—"}</td>
-                            <td className="py-1.5 px-2 text-navy/70">{s.team_name || player.current_team || "—"}</td>
+                            {/* team_name stripped by backend StatsResponse model — fallback to player.current_team */}
+                            <td className="py-1.5 px-2 text-navy/70">{s.team_name || player?.current_team || "—"}</td>
                             <td className="text-center py-1.5 px-2">{s.gp}</td>
                             <td className="text-center py-1.5 px-2">{s.g}</td>
                             <td className="text-center py-1.5 px-2">{s.a}</td>

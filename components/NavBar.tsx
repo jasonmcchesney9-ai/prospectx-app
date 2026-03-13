@@ -466,7 +466,7 @@ export default function NavBar() {
                   href="/pricing"
                   className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal/20 text-teal uppercase font-oswald tracking-wider hover:bg-teal/30 transition-colors"
                 >
-                  {user.subscription_tier || "Rookie"}
+                  {({ rookie: "Rookie", coach: "Coach", pro: "Pro", elite: "Elite", team_org: "Team", TEAM_ORG: "Team", org: "Organization" } as Record<string, string>)[user.subscription_tier || "rookie"] || user.subscription_tier || "Rookie"}
                 </Link>
                 {/* Upgrade pill — free tier only */}
                 {(!user.subscription_tier || user.subscription_tier === "rookie") && (
