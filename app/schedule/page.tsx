@@ -19,6 +19,8 @@ import {
   Star,
   Car,
   MapPin,
+  Shield,
+  X,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -152,6 +154,11 @@ export default function SchedulePage() {
   const [popoverEvent, setPopoverEvent] = useState<CalendarEvent | null>(null);
   const [showConnectDropdown, setShowConnectDropdown] = useState(false);
 
+  // ── Intel Brief state ──────────────────────────────────────
+  const [briefStates, setBriefStates] = useState<Record<string, "idle" | "generating" | "ready" | "error">>({});
+  const [briefData, setBriefData] = useState<Record<string, { id: string; opponent_team_name: string; game_date: string; brief_content: string; top_players: Array<{ position: string; name: string; pxr_score: number }>; created_at: string }>>({});
+  const [showBriefModal, setShowBriefModal] = useState<string | null>(null);
+
   // ── Computed month range ───────────────────────────────────
   const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-01`;
   const monthEnd = (() => {
@@ -259,6 +266,25 @@ export default function SchedulePage() {
   function handleFeedRemoved(feedId: string) {
     setFeeds((prev) => prev.filter((f) => f.id !== feedId));
     loadEvents();
+  }
+
+  // ── Intel Brief handlers ──────────────────────────────────
+  async function handleGenerateBrief(evt: CalendarEvent) {
+    if (briefStates[evt.id] === "generating" || briefStates[evt.id] === "ready") return;
+    setBriefStates((prev) => ({ ...prev, [evt.id]: "generating" }));
+    try {
+      const opponentTeamId = teams.find(
+        (t) => t.name.toLowerCase() === (evt.opponent_name || "").toLowerCase()
+      )?.id || evt.opponent_name || "";
+      const { data } = await api.post("/api/pre-game-brief/generate", {
+        opponent_team_id: opponentTeamId,
+        game_date: evt.start_time.slice(0, 10),
+      });
+      setBriefData((prev) => ({ ...prev, [evt.id]: data }));
+      setBriefStates((prev) => ({ ...prev, [evt.id]: "ready" }));
+    } catch {
+      setBriefStates((prev) => ({ ...prev, [evt.id]: "error" }));
+    }
   }
 
   // ── Can edit events (PRO, AGENT, not FAMILY) ──────────────
@@ -559,6 +585,41 @@ export default function SchedulePage() {
                                   )}
                                 </div>
                               )}
+                              {/* Intel Brief chip — GAME events only */}
+                              {evt.type === "GAME" && new Date(evt.start_time) >= new Date() && (
+                                <div className="flex justify-end mt-1">
+                                  {(!briefStates[evt.id] || briefStates[evt.id] === "idle") && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleGenerateBrief(evt); }}
+                                      style={{ border: "1px solid #0D9488", color: "#0D9488", backgroundColor: "#FFFFFF", fontSize: "11px", fontFamily: "Oswald, sans-serif", padding: "3px 10px", borderRadius: "10px", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                    >
+                                      <Shield size={10} /> INTEL BRIEF
+                                    </button>
+                                  )}
+                                  {briefStates[evt.id] === "generating" && (
+                                    <span
+                                      style={{ border: "1px solid #94A3B8", color: "#94A3B8", backgroundColor: "#FFFFFF", fontSize: "11px", fontFamily: "Oswald, sans-serif", padding: "3px 10px", borderRadius: "10px", textTransform: "uppercase", letterSpacing: "0.05em", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                    >
+                                      <Loader2 size={10} className="animate-spin" /> GENERATING...
+                                    </span>
+                                  )}
+                                  {briefStates[evt.id] === "ready" && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setShowBriefModal(evt.id); }}
+                                      style={{ border: "1px solid #0D9488", color: "#FFFFFF", backgroundColor: "#0D9488", fontSize: "11px", fontFamily: "Oswald, sans-serif", padding: "3px 10px", borderRadius: "10px", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                    >
+                                      <Shield size={10} /> VIEW BRIEF
+                                    </button>
+                                  )}
+                                  {briefStates[evt.id] === "error" && (
+                                    <span
+                                      style={{ border: "1px solid #94A3B8", color: "#94A3B8", backgroundColor: "#FFFFFF", fontSize: "11px", fontFamily: "Oswald, sans-serif", padding: "3px 10px", borderRadius: "10px", textTransform: "uppercase", letterSpacing: "0.05em", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                    >
+                                      <Shield size={10} /> UNAVAILABLE
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <span
                               className="text-[9px] font-oswald uppercase px-1.5 py-0.5 rounded text-white shrink-0"
@@ -596,6 +657,9 @@ export default function SchedulePage() {
                   setSelectedDate(evt.start_time.slice(0, 10));
                   setPopoverEvent(evt);
                 }}
+                briefStates={briefStates}
+                onGenerateBrief={handleGenerateBrief}
+                onViewBrief={(evtId) => setShowBriefModal(evtId)}
               />
             </div>
           </div>
@@ -618,6 +682,81 @@ export default function SchedulePage() {
             />
           </div>
         )}
+
+        {/* ── Intel Brief Modal ─────────────────────────── */}
+        {showBriefModal && briefData[showBriefModal] && (() => {
+          const brief = briefData[showBriefModal];
+          return (
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", backgroundColor: "rgba(0,0,0,0.3)" }}
+              onClick={() => setShowBriefModal(null)}
+            >
+              <div
+                style={{ backgroundColor: "#FFFFFF", maxWidth: "600px", width: "100%", borderRadius: "8px", overflow: "hidden", maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div style={{ backgroundColor: "#0F2942", padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Shield size={16} style={{ color: "#FFFFFF" }} />
+                    <span style={{ color: "#FFFFFF", fontFamily: "Oswald, sans-serif", fontSize: "16px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Pre-Game Intel — {brief.opponent_team_name}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowBriefModal(null)}
+                    style={{ color: "#64748B", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                {/* Body */}
+                <div style={{ padding: "24px", overflowY: "auto", flex: 1 }}>
+                  {brief.game_date && (
+                    <p style={{ fontSize: "12px", color: "#64748B", marginBottom: "16px", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Game Date: {new Date(brief.game_date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                    </p>
+                  )}
+                  {/* Brief content */}
+                  <div style={{ fontSize: "14px", color: "#1E293B", lineHeight: 1.7, whiteSpace: "pre-wrap", marginBottom: "24px" }}>
+                    {brief.brief_content}
+                  </div>
+                  {/* Top players */}
+                  {brief.top_players && brief.top_players.length > 0 && (
+                    <div>
+                      <h4 style={{ fontFamily: "Oswald, sans-serif", fontSize: "13px", fontWeight: 700, color: "#0F2942", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px", borderBottom: "1px solid #E2EAF3", paddingBottom: "6px" }}>
+                        Key Players to Watch
+                      </h4>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {brief.top_players.map((p: { position: string; name: string; pxr_score: number }, idx: number) => (
+                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 8px", backgroundColor: idx === 0 ? "#F0FDFA" : "#F8FAFC", borderRadius: "6px" }}>
+                            <span style={{ fontFamily: "Oswald, sans-serif", fontSize: "14px", fontWeight: 700, color: "#0D9488", minWidth: "20px" }}>
+                              {idx + 1}.
+                            </span>
+                            <span style={{ fontSize: "11px", color: "#64748B", fontFamily: "Oswald, sans-serif", textTransform: "uppercase", minWidth: "24px" }}>
+                              {p.position}
+                            </span>
+                            <span style={{ fontSize: "13px", color: "#0F2942", fontWeight: 600, flex: 1 }}>
+                              {p.name}
+                            </span>
+                            {p.pxr_score != null && (
+                              <span style={{ fontSize: "11px", fontFamily: "Oswald, sans-serif", fontWeight: 700, color: "#0D9488", backgroundColor: "#F0FDFA", border: "1px solid #0D948830", padding: "2px 8px", borderRadius: "8px" }}>
+                                PXR {p.pxr_score.toFixed(1)}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p style={{ fontSize: "10px", color: "#94A3B8", marginTop: "16px", textAlign: "right" }}>
+                    Generated {new Date(brief.created_at).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Add / Edit Event Modal ─────────────────────── */}
         {showAddEvent && (

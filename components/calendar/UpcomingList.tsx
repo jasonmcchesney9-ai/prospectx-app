@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, MapPin, ChevronRight } from "lucide-react";
+import { Clock, MapPin, ChevronRight, Shield, Loader2 } from "lucide-react";
 import type { CalendarEvent } from "@/types/api";
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS, PURPOSE_LABELS, PURPOSE_COLORS } from "@/types/api";
 
@@ -8,9 +8,12 @@ interface UpcomingListProps {
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
   limit?: number;
+  briefStates?: Record<string, "idle" | "generating" | "ready" | "error">;
+  onGenerateBrief?: (evt: CalendarEvent) => void;
+  onViewBrief?: (evtId: string) => void;
 }
 
-export default function UpcomingList({ events, onEventClick, limit = 10 }: UpcomingListProps) {
+export default function UpcomingList({ events, onEventClick, limit = 10, briefStates, onGenerateBrief, onViewBrief }: UpcomingListProps) {
   const now = new Date().toISOString();
   const upcoming = events
     .filter((e) => e.start_time >= now)
@@ -104,6 +107,37 @@ export default function UpcomingList({ events, onEventClick, limit = 10 }: Upcom
                         style={{ backgroundColor: typeColor }}>
                         {EVENT_TYPE_LABELS[evt.type]?.charAt(0) || "?"}
                       </span>
+                      {/* Intel Brief chip — GAME events only */}
+                      {evt.type === "GAME" && onGenerateBrief && (() => {
+                        const st = briefStates?.[evt.id] || "idle";
+                        if (st === "idle") return (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onGenerateBrief(evt); }}
+                            style={{ border: "1px solid #0D9488", color: "#0D9488", backgroundColor: "#FFFFFF", fontSize: "10px", fontFamily: "Oswald, sans-serif", padding: "2px 8px", borderRadius: "10px", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}
+                          >
+                            <Shield size={9} /> INTEL
+                          </button>
+                        );
+                        if (st === "generating") return (
+                          <span style={{ border: "1px solid #94A3B8", color: "#94A3B8", backgroundColor: "#FFFFFF", fontSize: "10px", fontFamily: "Oswald, sans-serif", padding: "2px 8px", borderRadius: "10px", textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}>
+                            <Loader2 size={9} className="animate-spin" /> ...
+                          </span>
+                        );
+                        if (st === "ready") return (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onViewBrief?.(evt.id); }}
+                            style={{ border: "1px solid #0D9488", color: "#FFFFFF", backgroundColor: "#0D9488", fontSize: "10px", fontFamily: "Oswald, sans-serif", padding: "2px 8px", borderRadius: "10px", textTransform: "uppercase", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}
+                          >
+                            <Shield size={9} /> VIEW
+                          </button>
+                        );
+                        if (st === "error") return (
+                          <span style={{ border: "1px solid #94A3B8", color: "#94A3B8", backgroundColor: "#FFFFFF", fontSize: "10px", fontFamily: "Oswald, sans-serif", padding: "2px 8px", borderRadius: "10px", textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}>
+                            <Shield size={9} /> N/A
+                          </span>
+                        );
+                        return null;
+                      })()}
                       <ChevronRight size={12} className="text-muted/30 group-hover:text-teal transition-colors shrink-0" />
                     </button>
                   );
