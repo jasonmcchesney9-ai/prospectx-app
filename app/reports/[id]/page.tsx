@@ -29,6 +29,7 @@ import type { Report, Player, QualityCheck } from "@/types/api";
 import { REPORT_TYPE_LABELS, SECTION_LABELS, PROSPECT_GRADES } from "@/types/api";
 import HockeyRink from "@/components/HockeyRink";
 import ReportQualityPanel from "@/components/ReportQualityPanel";
+import CoachFeedbackButton from "@/components/CoachFeedbackButton";
 
 /** Parse report output_text by ALL_CAPS section headers */
 function parseReportSections(
@@ -650,6 +651,7 @@ export default function ReportViewerPage() {
             {sections.map((s, i) => (
               <div key={i} id={`section-${i}`}>
                 <ReportSection sectionKey={s.key} content={s.content} imageSnapshots={report.image_snapshots} />
+                <CoachFeedbackButton reportId={reportId} sectionKey={s.key.toLowerCase()} />
               </div>
             ))}
 
