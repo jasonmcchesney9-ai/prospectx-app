@@ -5573,6 +5573,20 @@ def init_db():
     conn.commit()
     logger.info("series_state_summaries table ready")
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS coach_feedback (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            report_id TEXT NOT NULL,
+            section_key TEXT NOT NULL,
+            action TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    logger.info("coach_feedback table ready")
+
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
 
@@ -53186,6 +53200,79 @@ CLIPS ({len(clips_data)} total):
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"PXI generation failed: {str(e)[:200]}")
+    finally:
+        conn.close()
+
+
+# ============================================================
+# COACH FEEDBACK ENDPOINTS
+# ============================================================
+
+VALID_COACH_FEEDBACK_ACTIONS = {"helpful", "not_helpful", "too_long", "too_short", "inaccurate", "save"}
+
+
+@app.post("/api/coach-feedback")
+async def create_coach_feedback(req: dict = Body(...),
+                                 token_data: dict = Depends(verify_token)):
+    """Record structured coaching feedback on a report section."""
+    report_id = req.get("report_id")
+    section_key = req.get("section_key")
+    action = req.get("action")
+
+    if not report_id or not section_key or not action:
+        raise HTTPException(status_code=400, detail="report_id, section_key, and action are required")
+
+    if action not in VALID_COACH_FEEDBACK_ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action '{action}'. Valid actions: {', '.join(sorted(VALID_COACH_FEEDBACK_ACTIONS))}",
+        )
+
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+    feedback_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO coach_feedback (id, org_id, user_id, report_id, section_key, action, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (feedback_id, org_id, user_id, report_id, section_key, action, now),
+        )
+        conn.commit()
+        return {"id": feedback_id, "org_id": org_id, "section_key": section_key, "action": action, "created_at": now}
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Unable to save feedback")
+    finally:
+        conn.close()
+
+
+@app.get("/api/coach-feedback")
+async def list_coach_feedback(org_id: str = Query(...),
+                               section_key: str = Query(None),
+                               limit: int = Query(50),
+                               token_data: dict = Depends(verify_token)):
+    """List coaching feedback for an org. Requires admin or superadmin role."""
+    if token_data.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    conn = get_db()
+    try:
+        if section_key:
+            rows = conn.execute(
+                "SELECT id, org_id, user_id, report_id, section_key, action, created_at FROM coach_feedback WHERE org_id = ? AND section_key = ? ORDER BY created_at DESC LIMIT ?",
+                (org_id, section_key, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, org_id, user_id, report_id, section_key, action, created_at FROM coach_feedback WHERE org_id = ? ORDER BY created_at DESC LIMIT ?",
+                (org_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Unable to retrieve feedback")
     finally:
         conn.close()
 
