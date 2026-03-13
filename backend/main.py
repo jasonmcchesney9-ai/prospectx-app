@@ -25461,6 +25461,64 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             except Exception:
                 pass
 
+        # ── Wire game_events aggregates into input_data ──────────────────
+        try:
+            # Get distinct game_dates for last 10 games involving this team
+            recent_games = conn.execute(
+                """SELECT DISTINCT game_date FROM game_events
+                   WHERE org_id = ? AND LOWER(team_name) = LOWER(?)
+                   ORDER BY game_date DESC LIMIT 10""",
+                (org_id, team_name),
+            ).fetchall()
+            if recent_games:
+                cutoff_date = recent_games[-1]["game_date"]
+                ge_rows = conn.execute(
+                    """SELECT action, result, zone, period
+                       FROM game_events
+                       WHERE org_id = ? AND LOWER(team_name) = LOWER(?)
+                             AND game_date >= ?
+                       ORDER BY game_date DESC""",
+                    (org_id, team_name, cutoff_date),
+                ).fetchall()
+                if ge_rows:
+                    summary: dict = {
+                        "games_sampled": len(recent_games),
+                        "total_events": len(ge_rows),
+                    }
+                    # Count by action type
+                    action_counts: dict = {}
+                    shots_by_period: dict = {}
+                    shots_by_zone: dict = {}
+                    result_breakdown: dict = {}
+                    for r in ge_rows:
+                        act = (r["action"] or "unknown").lower()
+                        action_counts[act] = action_counts.get(act, 0) + 1
+                        # Shots breakdown
+                        if "shot" in act:
+                            p_key = f"P{r['period']}" if r["period"] else "unknown"
+                            shots_by_period[p_key] = shots_by_period.get(p_key, 0) + 1
+                            if r["zone"]:
+                                shots_by_zone[r["zone"]] = shots_by_zone.get(r["zone"], 0) + 1
+                        # Result breakdown for zone entries/exits
+                        if r["result"] and act in ("zone_entry", "zone_exit", "zone entry", "zone exit"):
+                            res_key = f"{act}_{r['result'].lower()}"
+                            result_breakdown[res_key] = result_breakdown.get(res_key, 0) + 1
+                    summary["action_counts"] = action_counts
+                    if shots_by_period:
+                        summary["shots_by_period"] = shots_by_period
+                    if shots_by_zone:
+                        summary["shots_by_zone"] = shots_by_zone
+                    if result_breakdown:
+                        summary["zone_result_breakdown"] = result_breakdown
+                    input_data["game_events_summary"] = summary
+                    logger.info("Report: game_events summary built — %d event rows for %s", len(ge_rows), team_name)
+        except Exception as e:
+            logger.warning("Team report: game_events aggregate failed: %s", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
         if client:
             llm_model = "claude-sonnet-4-20250514"
 
