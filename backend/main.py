@@ -13146,10 +13146,18 @@ async def stripe_create_checkout(req: StripeCheckoutRequest, token_data: dict = 
     if not _stripe_available or not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe billing is not configured. Set STRIPE_SECRET_KEY.")
 
-    if req.tier not in STRIPE_PRICE_MAP:
-        raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}. Valid: {', '.join(STRIPE_PRICE_MAP.keys())}")
+    # Alias map: accept old frontend tier slugs gracefully
+    TIER_ALIASES = {
+        "parent": "rookie",
+        "scout": "coach",
+        "program_org": "org",
+    }
+    tier = TIER_ALIASES.get(req.tier, req.tier)
 
-    price_id = STRIPE_PRICE_MAP[req.tier]
+    if tier not in STRIPE_PRICE_MAP:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {tier}. Valid: {', '.join(STRIPE_PRICE_MAP.keys())}")
+
+    price_id = STRIPE_PRICE_MAP[tier]
     user_id = token_data["user_id"]
     conn = get_db()
     try:
@@ -13176,7 +13184,7 @@ async def stripe_create_checkout(req: StripeCheckoutRequest, token_data: dict = 
             mode="subscription",
             success_url=f"{FRONTEND_URL}/billing?success=true",
             cancel_url=f"{FRONTEND_URL}/billing?canceled=true",
-            metadata={"prospectx_user_id": user_id, "tier": req.tier},
+            metadata={"prospectx_user_id": user_id, "tier": tier},
         )
 
         return {"checkout_url": session.url}

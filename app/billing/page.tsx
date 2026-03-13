@@ -33,8 +33,8 @@ interface BillingStatus {
 
 const PLAN_CARDS = [
   {
-    tier: "parent",
-    name: "Parent",
+    tier: "rookie",
+    name: "Rookie",
     price: "$9.99",
     period: "/mo",
     icon: Users,
@@ -42,7 +42,7 @@ const PLAN_CARDS = [
     features: ["3 reports/month", "20 Bench Talk/day", "Profile analytics", "Development tracking"],
   },
   {
-    tier: "scout",
+    tier: "coach",
     name: "Coach",
     price: "$24.99",
     period: "/mo",
@@ -71,7 +71,7 @@ const PLAN_CARDS = [
     features: ["All Pro features", "10 user seats", "Shared scout notes", "Team branding", "Org admin panel"],
   },
   {
-    tier: "program_org",
+    tier: "org",
     name: "Organization",
     price: "$399",
     period: "/mo",
