@@ -192,6 +192,7 @@ if ENVIRONMENT != "development":
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+GOOGLE_TRANSLATE_API_KEY = os.getenv("GOOGLE_TRANSLATE_API_KEY", "")
 
 # ── Stripe Billing ────────────────────────────────────────
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
@@ -5615,6 +5616,25 @@ def init_db():
     """)
     conn.commit()
     logger.info("pre_game_briefs table ready")
+
+    # ── Migration: translated_content + translated_language on reports ──
+    rpt_cols = _get_table_columns(conn, "reports")
+    if "translated_content" not in rpt_cols:
+        try:
+            conn.execute("ALTER TABLE reports ADD COLUMN translated_content TEXT")
+            conn.commit()
+            logger.info("Migration: added translated_content column to reports")
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Migration translated_content skipped: %s", e)
+    if "translated_language" not in rpt_cols:
+        try:
+            conn.execute("ALTER TABLE reports ADD COLUMN translated_language TEXT")
+            conn.commit()
+            logger.info("Migration: added translated_language column to reports")
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Migration translated_language skipped: %s", e)
 
     conn.close()
     logger.info("SQLite database initialized: %s", DB_FILE)
@@ -43018,6 +43038,84 @@ async def email_preview(report_id: str, token_data: dict = Depends(verify_token)
             "body": "\n".join(body_lines),
             "share_url": share_url,
             "share_token": share_token,
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/translate/report")
+async def translate_report(body: dict, token_data: dict = Depends(verify_token)):
+    """Translate a report to French or Spanish via Google Translate API v2.
+    Caches the translation — never regenerates if already exists for that language."""
+    report_id = body.get("report_id")
+    target_language = body.get("target_language")
+
+    if not report_id or not target_language:
+        raise HTTPException(status_code=400, detail="report_id and target_language are required")
+
+    if target_language not in ("fr", "es"):
+        raise HTTPException(status_code=400, detail="Unsupported language")
+
+    org_id = token_data["org_id"]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, output_text, translated_content, translated_language FROM reports WHERE id = ? AND org_id = ?",
+            (report_id, org_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Report not found")
+        report = dict(row)
+
+        # Return cached translation if language matches
+        if report.get("translated_language") == target_language and report.get("translated_content"):
+            return {
+                "report_id": report_id,
+                "translated_content": report["translated_content"],
+                "target_language": target_language,
+                "cached": True,
+            }
+
+        report_content = report.get("output_text", "")
+        if not report_content:
+            raise HTTPException(status_code=400, detail="Report has no content to translate")
+
+        # Call Google Translate API v2
+        if not GOOGLE_TRANSLATE_API_KEY:
+            raise HTTPException(status_code=500, detail="Translation service not configured")
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    "https://translation.googleapis.com/language/translate/v2",
+                    json={
+                        "q": report_content,
+                        "target": target_language,
+                        "key": GOOGLE_TRANSLATE_API_KEY,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                translated_text = data["data"]["translations"][0]["translatedText"]
+        except Exception:
+            raise HTTPException(status_code=500, detail="Translation failed")
+
+        # Cache the translation
+        try:
+            conn.execute(
+                "UPDATE reports SET translated_content = ?, translated_language = ? WHERE id = ?",
+                (translated_text, target_language, report_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail="Translation failed")
+
+        return {
+            "report_id": report_id,
+            "translated_content": translated_text,
+            "target_language": target_language,
+            "cached": False,
         }
     finally:
         conn.close()
