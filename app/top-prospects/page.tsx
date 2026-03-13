@@ -5,8 +5,7 @@ import Link from "next/link";
 import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
-import { getUser } from "@/lib/auth";
-import { Star, X, ArrowLeft } from "lucide-react";
+import { BarChart3, ArrowLeft } from "lucide-react";
 
 // ── PXR Tier Definitions ──
 const PXR_TIERS = [
@@ -24,48 +23,55 @@ function getTierLabel(score: number | null): string {
   return tier ? `${tier.id} ${tier.label}` : "—";
 }
 
-const MANAGE_ROLES = new Set(["scout", "gm", "coach", "admin"]);
-
-interface TopProspect {
-  id: string;
+interface DraftPlayer {
   player_id: string;
   first_name: string;
   last_name: string;
   position: string | null;
   current_team: string | null;
   current_league: string | null;
-  dob: string | null;
+  birth_year: string | number | null;
   pxr_score: number | null;
-  confidence_tier: string | null;
+  score_type?: string | null;
+  pxr_tier?: string | null;
+  confidence_tier?: string | null;
   cohort_percentile: number | null;
   league_percentile: number | null;
-  latest_note: string | null;
+  gp?: number | null;
+  position_group?: string | null;
+}
+
+interface FilterOptions {
+  leagues: string[];
+  birth_years: (string | number)[];
+  positions: string[];
 }
 
 export default function TopProspectsPage() {
-  const currentUser = getUser();
-  const userRole = currentUser?.hockey_role || "scout";
-  const canManage = MANAGE_ROLES.has(userRole);
-
-  const [prospects, setProspects] = useState<TopProspect[]>([]);
+  const [prospects, setProspects] = useState<DraftPlayer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({ leagues: [], birth_years: [], positions: [] });
+  const [league, setLeague] = useState("");
+  const [position, setPosition] = useState("");
+  const [birthYear, setBirthYear] = useState("");
 
   useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (league) params.set("league", league);
+    if (position) params.set("position_group", position);
+    if (birthYear) params.set("birth_year", birthYear);
     api
-      .get("/watchlist/top-prospects")
-      .then((res) => setProspects(res.data))
+      .get(`/pxr/draft-board?${params.toString()}`)
+      .then((res) => {
+        setProspects(res.data.players || []);
+        setTotal(res.data.total || 0);
+        if (res.data.filter_options) setFilterOptions(res.data.filter_options);
+      })
       .catch(() => setProspects([]))
       .finally(() => setLoading(false));
-  }, []);
-
-  async function handleRemove(playerId: string) {
-    try {
-      await api.delete(`/watchlist/top-prospects/${playerId}`);
-      setProspects((prev) => prev.filter((p) => p.player_id !== playerId));
-    } catch {
-      /* ignore */
-    }
-  }
+  }, [league, position, birthYear]);
 
   return (
     <ProtectedRoute>
@@ -83,10 +89,56 @@ export default function TopProspectsPage() {
             </h1>
             <p className="text-sm text-muted mt-0.5">
               {!loading
-                ? `${prospects.length} prospect${prospects.length !== 1 ? "s" : ""} on your org's curated list, ranked by PXR score.`
+                ? `${total} prospect${total !== 1 ? "s" : ""} ranked by PXR score across all leagues.`
                 : "Loading prospects..."}
             </p>
           </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <select
+            value={league}
+            onChange={(e) => setLeague(e.target.value)}
+            className="text-xs border rounded-lg px-3 py-2 font-oswald uppercase tracking-wider"
+            style={{ borderColor: "#E2EAF3", color: "#0F2A3D" }}
+          >
+            <option value="">All Leagues</option>
+            {filterOptions.leagues.map((l) => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <select
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
+            className="text-xs border rounded-lg px-3 py-2 font-oswald uppercase tracking-wider"
+            style={{ borderColor: "#E2EAF3", color: "#0F2A3D" }}
+          >
+            <option value="">All Positions</option>
+            {filterOptions.positions.map((pos) => (
+              <option key={pos} value={pos}>{pos === "F" ? "Forwards" : pos === "D" ? "Defense" : pos === "G" ? "Goalies" : pos}</option>
+            ))}
+          </select>
+          <select
+            value={birthYear}
+            onChange={(e) => setBirthYear(e.target.value)}
+            className="text-xs border rounded-lg px-3 py-2 font-oswald uppercase tracking-wider"
+            style={{ borderColor: "#E2EAF3", color: "#0F2A3D" }}
+          >
+            <option value="">All Birth Years</option>
+            {filterOptions.birth_years.map((y) => (
+              <option key={String(y)} value={String(y)}>{y}</option>
+            ))}
+          </select>
+          {(league || position || birthYear) && (
+            <button
+              onClick={() => { setLeague(""); setPosition(""); setBirthYear(""); }}
+              className="text-xs px-3 py-2 rounded-lg font-oswald uppercase tracking-wider"
+              style={{ color: "#0D9488" }}
+            >
+              Reset
+            </button>
+          )}
         </div>
 
         {/* Table */}
@@ -96,7 +148,7 @@ export default function TopProspectsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-border">
                   <tr>
-                    {["#", "Player", "Pos", "Team / League", "PXR", "Tier", "Cohort %", "Latest Note", ""].map((h) => (
+                    {["#", "Player", "Pos", "Team / League", "Born", "PXR", "Tier", "League %", "Cohort %", "GP"].map((h) => (
                       <th key={h} className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">{h}</th>
                     ))}
                   </tr>
@@ -104,7 +156,7 @@ export default function TopProspectsPage() {
                 <tbody>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 10 }).map((_, j) => (
                         <td key={j} className="px-3 py-3"><div className="h-4 bg-gray-200 rounded w-full" /></td>
                       ))}
                     </tr>
@@ -115,13 +167,12 @@ export default function TopProspectsPage() {
           </div>
         ) : prospects.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl border border-border">
-            <Star size={40} className="mx-auto mb-4" style={{ color: "rgba(13,148,136,.3)" }} />
+            <BarChart3 size={40} className="mx-auto mb-4" style={{ color: "rgba(13,148,136,.3)" }} />
             <h2 className="text-lg font-bold text-navy font-oswald uppercase tracking-wider mb-2">
-              No top prospects yet
+              No PXR-scored prospects found
             </h2>
             <p className="text-sm text-muted max-w-md mx-auto">
-              Add players from their profile page or the{" "}
-              <Link href="/draft-board" className="text-teal hover:underline">Draft Board</Link>.
+              No players with PXR scores found. Scores are calculated nightly — check back after the next PXR recalculation.
             </p>
           </div>
         ) : (
@@ -134,21 +185,20 @@ export default function TopProspectsPage() {
                     <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Player</th>
                     <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Pos</th>
                     <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Team / League</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Born</th>
                     <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">PXR</th>
                     <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Tier</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">League %</th>
                     <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Cohort %</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">Latest Note</th>
-                    {canManage && (
-                      <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60 w-12" />
-                    )}
+                    <th className="px-3 py-2.5 text-left text-[10px] font-oswald uppercase tracking-wider text-navy/60">GP</th>
                   </tr>
                 </thead>
                 <tbody>
                   {prospects.map((p, idx) => {
-                    const isEstimated = p.confidence_tier === "estimated";
+                    const isEstimated = p.score_type === "estimated" || p.confidence_tier === "estimated";
                     return (
                       <tr
-                        key={p.id}
+                        key={p.player_id}
                         className={`hover:bg-teal/5 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
                         style={{
                           borderLeftWidth: "3px",
@@ -169,6 +219,7 @@ export default function TopProspectsPage() {
                         <td className="px-3 py-2.5 text-xs text-muted">
                           {p.current_team || "—"}{p.current_league ? ` · ${p.current_league}` : ""}
                         </td>
+                        <td className="px-3 py-2.5 text-xs text-muted font-oswald">{p.birth_year || "—"}</td>
                         <td className="px-3 py-2.5">
                           <span
                             className="text-sm font-bold font-oswald"
@@ -185,30 +236,14 @@ export default function TopProspectsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-muted font-oswald uppercase">{getTierLabel(p.pxr_score)}</td>
+                        <td className="px-3 py-2.5 text-xs text-muted font-oswald uppercase">{p.pxr_tier ? `${p.pxr_tier} ${(PXR_TIERS.find(t => t.id === p.pxr_tier)?.label) || ""}` : getTierLabel(p.pxr_score)}</td>
+                        <td className="px-3 py-2.5 text-xs text-muted">
+                          {p.league_percentile != null ? `Top ${Math.max(1, Math.round(100 - p.league_percentile))}%` : "—"}
+                        </td>
                         <td className="px-3 py-2.5 text-xs text-muted">
                           {p.cohort_percentile != null ? `Top ${Math.max(1, Math.round(100 - p.cohort_percentile))}%` : "—"}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-muted max-w-[250px]">
-                          {p.latest_note ? (
-                            <span className="truncate block" title={p.latest_note}>
-                              {p.latest_note.length > 80 ? `${p.latest_note.slice(0, 80)}…` : p.latest_note}
-                            </span>
-                          ) : (
-                            <span className="text-muted/40">—</span>
-                          )}
-                        </td>
-                        {canManage && (
-                          <td className="px-3 py-2.5 text-center">
-                            <button
-                              onClick={() => handleRemove(p.player_id)}
-                              className="text-muted/40 hover:text-red-500 transition-colors"
-                              title="Remove from Top Prospects"
-                            >
-                              <X size={14} />
-                            </button>
-                          </td>
-                        )}
+                        <td className="px-3 py-2.5 text-xs text-muted font-oswald">{p.gp != null ? p.gp : "—"}</td>
                       </tr>
                     );
                   })}
