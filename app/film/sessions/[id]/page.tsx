@@ -110,6 +110,7 @@ interface SessionEvent {
   player_id?: string | null;
   notes?: string;
   source?: string;
+  confidence?: number | null;
 }
 
 type EventCategory = "all" | "offensive" | "defensive" | "special_teams" | "other";
@@ -309,6 +310,7 @@ export default function FilmSessionViewerPage() {
 
   // PXI report generation
   const [generating, setGenerating] = useState(false);
+  const [autoTagging, setAutoTagging] = useState(false);
   const [reportType, setReportType] = useState("");
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [pendingReportType, setPendingReportType] = useState<string | null>(null);
@@ -1101,6 +1103,36 @@ export default function FilmSessionViewerPage() {
             >
               <Film size={10} />
               Build Reel
+            </button>
+            <button
+              onClick={async () => {
+                if (autoTagging) return;
+                setAutoTagging(true);
+                try {
+                  const orgId = getUser()?.org_id || "";
+                  const res = await api.post("/video/analyze", { session_id: sessionId, org_id: orgId });
+                  const count = res.data?.events_detected ?? 0;
+                  toast.success(`${count} events detected — review in timeline`, { duration: 8000 });
+                  // Refresh events
+                  try {
+                    const evRes = await api.get("/film/events", { params: { session_id: sessionId, limit: 500 } });
+                    setSessionEvents(Array.isArray(evRes.data) ? evRes.data : []);
+                  } catch { /* silent */ }
+                } catch {
+                  toast.error("Auto-tagging failed — try again", { style: { background: "#E67E22", color: "#FFFFFF" } });
+                } finally {
+                  setAutoTagging(false);
+                }
+              }}
+              disabled={autoTagging}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 5, fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", background: "#0D9488", color: "#FFFFFF", border: "none", cursor: autoTagging ? "not-allowed" : "pointer", opacity: autoTagging ? 0.6 : 1 }}
+            >
+              {autoTagging ? (
+                <Loader2 size={10} className="animate-spin" />
+              ) : (
+                <Sparkles size={10} />
+              )}
+              {autoTagging ? "Analyzing..." : "Auto-Tag"}
             </button>
             <button
               onClick={() => { setShowTypeSelector(!showTypeSelector); setPendingReportType(null); }}
@@ -2439,15 +2471,22 @@ export default function FilmSessionViewerPage() {
                           <div style={{ position: "absolute", left: 50, right: 0, top: 0, bottom: 0 }}>
                             {trackEvents.map((ev) => {
                               const pct = totalDuration > 0 ? (ev.time_seconds / totalDuration) * 100 : 0;
+                              const isAI = ev.source === "auto_detected";
+                              const lowConf = isAI && typeof ev.confidence === "number" && ev.confidence < 0.6;
+                              const baseOpacity = lowConf ? 0.7 : 0.85;
                               return (
-                                <button
-                                  key={ev.id}
-                                  onClick={() => setStartTime(ev.time_seconds)}
-                                  title={`${ev.event_type.replace(/_/g, " ")} at ${formatTimestamp(ev.time_seconds)}`}
-                                  style={{ position: "absolute", left: `${pct}%`, width: "max(8px, 0.8%)", top: 2, bottom: 2, borderRadius: 2, background: track.color, opacity: 0.85, cursor: "pointer", border: "none", padding: 0, transition: "opacity 0.15s" }}
-                                  onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
-                                  onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = "0.85"; }}
-                                />
+                                <div key={ev.id} style={{ position: "absolute", left: `${pct}%`, width: "max(8px, 0.8%)", top: 0, bottom: 0 }}>
+                                  <button
+                                    onClick={() => setStartTime(ev.time_seconds)}
+                                    title={`${isAI ? "[AI] " : ""}${ev.event_type.replace(/_/g, " ")} at ${formatTimestamp(ev.time_seconds)}`}
+                                    style={{ position: "absolute", left: 0, right: 0, top: 2, bottom: 2, borderRadius: 2, background: track.color, opacity: baseOpacity, cursor: "pointer", border: "none", padding: 0, transition: "opacity 0.15s" }}
+                                    onMouseEnter={(e) => { (e.target as HTMLElement).style.opacity = "1"; }}
+                                    onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = String(baseOpacity); }}
+                                  />
+                                  {isAI && (
+                                    <span style={{ position: "absolute", top: -8, left: "50%", transform: "translateX(-50%)", fontSize: 9, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: "#FFFFFF", background: "#0D9488", borderRadius: 10, padding: "2px 6px", lineHeight: 1, pointerEvents: "none", whiteSpace: "nowrap", zIndex: 2 }}>AI</span>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
