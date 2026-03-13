@@ -302,13 +302,13 @@ export const HELP_GUIDES: HelpGuideMap = {
     steps: [
       "Click Game Hub in the left sidebar.",
       "Review the recent games list — click any game to open its detail page.",
-      "Click Upload Game Sheet to scan and parse a game sheet using Claude Vision.",
+      "Click Upload Game Sheet to scan and parse a game sheet using PXI Vision.",
       "Review the parsed boxscore — confirm player names and stats before saving.",
       "Click Save to write the game data to your database.",
       "Click Generate War Room from any game to open a pre-populated Chalk Talk session.",
     ],
     tips: [
-      "Game sheets parse in seconds — Claude Vision handles handwritten and printed formats.",
+      "Game sheets parse in seconds — PXI Vision handles handwritten and printed formats.",
       "Confirm player name matches carefully — the parser uses your roster to auto-match.",
       "War Room sessions pre-load with the parsed line combinations and game stats.",
     ],
