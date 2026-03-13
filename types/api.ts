@@ -1001,6 +1001,11 @@ export const REPORT_TYPE_LABELS: Record<string, string> = {
   parent_season_update: "Parent Season Update",
   trade_impact_simulation: "Trade Impact Simulation",
   draft_class_summary: "Draft Class Summary",
+  // Film Report Types
+  film_clip_breakdown: "Film Clip Breakdown",
+  team_phase_review: "Team Phase Review",
+  film_mini_report: "Film Mini Report",
+  what_went_wrong: "What Went Wrong",
 };
 
 // ── Report Categories: Player vs Team ──────────────────────────
@@ -1032,6 +1037,9 @@ export const PLAYER_REPORT_TYPES = [
   "player_season_roadmap",
   "role_adjustment",
   "free_agent_target",
+  "film_clip_breakdown",
+  "film_mini_report",
+  "what_went_wrong",
 ] as const;
 
 export const TEAM_REPORT_TYPES = [
@@ -1055,6 +1063,7 @@ export const TEAM_REPORT_TYPES = [
   "parent_season_update",
   "trade_impact_simulation",
   "draft_class_summary",
+  "team_phase_review",
 ] as const;
 
 // ── Report Categories (6 groups for report type selector) ──────
@@ -1100,6 +1109,13 @@ export const REPORT_CATEGORIES: { key: string; label: string; description: strin
     description: "Trade analysis, market intelligence, and organizational planning.",
     accent: "orange",
     types: ["trade_target", "operations", "free_agent_market", "free_agent_target", "season_intelligence", "league_benchmarks", "season_projection", "trade_impact_simulation"],
+  },
+  {
+    key: "film",
+    label: "Film Reports",
+    description: "AI analysis of tagged film sessions — clip breakdowns, phase reviews, and game triage.",
+    accent: "teal",
+    types: ["film_clip_breakdown", "team_phase_review", "film_mini_report", "what_went_wrong"],
   },
 ];
 

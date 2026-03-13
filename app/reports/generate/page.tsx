@@ -52,6 +52,9 @@ const AUDIENCE_RECOMMENDED: Record<Exclude<Audience, "all">, string> = {
   parent: "family_card",
 };
 
+// Film report types — disabled in standard flow, require tagged film session
+const FILM_TYPE_SET = new Set(["film_clip_breakdown", "team_phase_review", "film_mini_report", "what_went_wrong"]);
+
 // Map hockey_role → audience for auto-detection
 function roleToAudience(role: string | undefined): Audience {
   if (!role) return "all";
@@ -542,38 +545,78 @@ function GenerateReportContent() {
                       const tmpl = templates.find((t) => t.report_type === type);
                       const isSelected = selectedType === type;
                       const recommended = isRecommended(type, audience);
+                      const isFilmType = FILM_TYPE_SET.has(type);
+                      const filmDisabled = isFilmType; // Requires tagged film session
                       return (
                         <button
                           key={type}
                           type="button"
-                          onClick={() => setSelectedType(type)}
-                          disabled={isGenerating}
+                          onClick={() => !filmDisabled && setSelectedType(type)}
+                          disabled={isGenerating || filmDisabled}
                           className={`relative px-3 py-3 rounded-lg border text-left transition-all animate-in fade-in duration-300 ${
-                            isSelected
-                              ? accentIsTeal
-                                ? "border-teal bg-teal/10 ring-1 ring-teal/30"
-                                : "border-orange bg-orange/10 ring-1 ring-orange/30"
-                              : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
+                            filmDisabled
+                              ? "border-gray-200 bg-gray-50 cursor-not-allowed"
+                              : isSelected
+                                ? accentIsTeal
+                                  ? "border-teal bg-teal/10 ring-1 ring-teal/30"
+                                  : "border-orange bg-orange/10 ring-1 ring-orange/30"
+                                : "border-teal/20 bg-white hover:border-navy/30 hover:bg-navy/[0.02]"
                           }`}
+                          style={filmDisabled ? { borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' } : undefined}
                         >
-                          {recommended && (
+                          {isFilmType && (
+                            <span style={{
+                              position: 'absolute',
+                              top: '8px',
+                              right: '8px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#0D9488',
+                              color: '#FFFFFF',
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              fontFamily: 'Oswald, sans-serif',
+                              textTransform: 'uppercase' as const,
+                              letterSpacing: '0.05em',
+                            }}>
+                              FILM
+                            </span>
+                          )}
+                          {recommended && !isFilmType && (
                             <span className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange/15 text-orange text-[9px] font-bold uppercase tracking-wider">
                               <Star size={9} className="fill-orange" />
                               Recommended
                             </span>
                           )}
-                          <span className={`text-sm font-semibold block ${
-                            isSelected ? (accentIsTeal ? "text-teal" : "text-orange") : "text-navy"
-                          } ${recommended ? "pr-24" : ""}`}>
+                          <span
+                            className={`text-sm font-semibold block ${
+                              filmDisabled
+                                ? ""
+                                : isSelected ? (accentIsTeal ? "text-teal" : "text-orange") : "text-navy"
+                            } ${recommended || isFilmType ? "pr-16" : ""}`}
+                            style={filmDisabled ? { color: '#94A3B8' } : undefined}
+                          >
                             {REPORT_TYPE_LABELS[type] || type}
                           </span>
                           {tmpl?.description && (
-                            <span className={`text-xs mt-1 block leading-relaxed ${
-                              isSelected
-                                ? accentIsTeal ? "text-teal/70 line-clamp-3" : "text-orange/70 line-clamp-3"
-                                : "text-muted/70 line-clamp-2"
-                            }`}>
+                            <span
+                              className={`text-xs mt-1 block leading-relaxed ${
+                                filmDisabled
+                                  ? "line-clamp-2"
+                                  : isSelected
+                                    ? accentIsTeal ? "text-teal/70 line-clamp-3" : "text-orange/70 line-clamp-3"
+                                    : "text-muted/70 line-clamp-2"
+                              }`}
+                              style={filmDisabled ? { color: '#94A3B8' } : undefined}
+                            >
                               {tmpl.description}
+                            </span>
+                          )}
+                          {isFilmType && filmDisabled && (
+                            <span style={{ color: '#94A3B8', fontSize: '10px', display: 'block', marginTop: '4px', fontStyle: 'italic' }}>
+                              Requires tagged film session
                             </span>
                           )}
                         </button>
