@@ -38,6 +38,7 @@ if _this_dir not in sys.path:
 import base64
 import csv
 import io
+import wave
 import xml.etree.ElementTree as ET
 
 import boto3
@@ -53776,6 +53777,145 @@ async def get_pre_game_brief(brief_id: str,
         raise HTTPException(status_code=500, detail="Unable to retrieve brief")
     finally:
         conn.close()
+
+
+# ── TTS — Gemini Text-to-Speech with R2 cache ──────────────────────────
+
+_TTS_VOICE_MAP = {
+    "neutral": "Aoede",
+    "professional": "Charon",
+}
+
+
+@app.post("/tts/generate")
+async def tts_generate(req: dict = Body(...),
+                       token_data: dict = Depends(verify_token)):
+    """Generate TTS audio from report text via Gemini, cached in R2."""
+    text = req.get("text", "").strip()
+    report_id = req.get("report_id", "").strip()
+    voice = req.get("voice", "neutral").strip()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if not report_id:
+        raise HTTPException(status_code=400, detail="report_id is required")
+    if voice not in _TTS_VOICE_MAP:
+        raise HTTPException(status_code=400, detail="voice must be 'neutral' or 'professional'")
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="TTS service not configured")
+    if not _r2_client:
+        raise HTTPException(status_code=503, detail="Audio storage not configured")
+
+    # Cache key
+    object_key = f"tts/{report_id}/{voice}.wav"
+    audio_url = f"{STATIC_ASSETS_URL}/{object_key}"
+
+    # Check R2 cache
+    try:
+        _r2_client.head_object(Bucket=_R2_BUCKET_NAME, Key=object_key)
+        return {"audio_url": audio_url, "voice": voice, "cached": True}
+    except botocore.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] != "404":
+            logger.error("R2 head_object error: %s", e)
+
+    # Call Gemini TTS REST API
+    gemini_voice = _TTS_VOICE_MAP[voice]
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as tts_client:
+            resp = await tts_client.post(
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                "gemini-2.5-flash-preview-tts:generateContent"
+                f"?key={GEMINI_API_KEY}",
+                json={
+                    "contents": [{"parts": [{"text": text}]}],
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {
+                            "voiceConfig": {
+                                "prebuiltVoiceConfig": {
+                                    "voiceName": gemini_voice,
+                                }
+                            }
+                        },
+                    },
+                },
+            )
+            if resp.status_code != 200:
+                logger.error("Gemini TTS API error: HTTP %d", resp.status_code)
+                raise HTTPException(status_code=500, detail="Audio generation failed")
+            data = resp.json()
+            inline = data["candidates"][0]["content"]["parts"][0]["inlineData"]
+            audio_b64 = inline["data"]
+            mime_type = inline.get("mimeType", "audio/L16;rate=24000")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Gemini TTS call failed")
+        raise HTTPException(status_code=500, detail="Audio generation failed")
+
+    # Convert raw PCM to WAV container
+    try:
+        pcm_data = base64.b64decode(audio_b64)
+        sample_rate = 24000
+        if "rate=" in mime_type:
+            try:
+                sample_rate = int(
+                    mime_type.split("rate=")[1].split(";")[0].strip()
+                )
+            except ValueError:
+                pass
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(pcm_data)
+        wav_bytes = wav_buffer.getvalue()
+        duration_seconds = round(len(pcm_data) / (sample_rate * 2), 1)
+    except Exception:
+        logger.exception("Audio conversion failed")
+        raise HTTPException(status_code=500, detail="Audio generation failed")
+
+    # Upload to R2
+    try:
+        _r2_client.put_object(
+            Bucket=_R2_BUCKET_NAME,
+            Key=object_key,
+            Body=wav_bytes,
+            ContentType="audio/wav",
+        )
+    except Exception:
+        logger.exception("R2 upload failed for TTS")
+        raise HTTPException(status_code=500, detail="Audio storage failed")
+
+    return {
+        "audio_url": audio_url,
+        "voice": voice,
+        "duration_seconds": duration_seconds,
+        "cached": False,
+    }
+
+
+@app.get("/tts/audio/{report_id}/{voice}")
+async def tts_audio(report_id: str, voice: str,
+                    token_data: dict = Depends(verify_token)):
+    """Return cached TTS audio URL if it exists."""
+    if voice not in _TTS_VOICE_MAP:
+        raise HTTPException(status_code=400, detail="voice must be 'neutral' or 'professional'")
+    if not _r2_client:
+        raise HTTPException(status_code=503, detail="Audio storage not configured")
+
+    object_key = f"tts/{report_id}/{voice}.wav"
+    audio_url = f"{STATIC_ASSETS_URL}/{object_key}"
+
+    try:
+        _r2_client.head_object(Bucket=_R2_BUCKET_NAME, Key=object_key)
+        return {"audio_url": audio_url, "voice": voice}
+    except botocore.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            raise HTTPException(status_code=404, detail="Audio not yet generated")
+        logger.error("R2 head_object error: %s", e)
+        raise HTTPException(status_code=500, detail="Audio storage error")
 
 
 # ============================================================
