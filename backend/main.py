@@ -26267,6 +26267,27 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
             if team_system:
                 input_data["team_system"] = team_system
 
+            # ── Wire InStat microstats + extended_stats into input_data ──────────
+            # player.microstats: player-level InStat summary stored on players table
+            raw_ms = player.get("microstats")
+            if raw_ms:
+                try:
+                    input_data["microstats_summary"] = json.loads(raw_ms) if isinstance(raw_ms, str) else raw_ms
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Aggregate extended_stats across stat rows → top-level named block
+            # Takes most-recent non-null value per key across all stat seasons
+            aggregated_ext = {}
+            for s in stats_list:
+                ext = s.get("extended_stats")
+                if ext and isinstance(ext, dict):
+                    for k, v in ext.items():
+                        if k not in aggregated_ext and v is not None:
+                            aggregated_ext[k] = v
+            if aggregated_ext:
+                input_data["instat_extended_stats"] = aggregated_ext
+
             # Add ProspectX Indices and Intelligence data for enriched reports
             logger.info("REPORT_DEBUG checkpoint=1 report_id=%s — computing PXI indices", report_id)
             try:
