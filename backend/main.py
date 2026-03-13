@@ -27611,6 +27611,25 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             except Exception as e:
                 logger.warning("REPORT_DEBUG checkpoint=15 FAILED — PXR prompt: %s", e)
 
+            # ── Org preferences injection (learned from coach feedback) ──
+            try:
+                _org_prefs, _org_prefs_count = build_org_preferences(org_id)
+                if _org_prefs is not None:
+                    _prefs_block = (
+                        "\n\n---\n"
+                        "COACHING STAFF PREFERENCES (learned from feedback):\n"
+                        f"- Preferred report length: {_org_prefs['preferred_length']}\n"
+                        f"- Sections to emphasize (saved by staff): {', '.join(_org_prefs['saved_sections']) if _org_prefs['saved_sections'] else 'None identified'}\n"
+                        f"- Sections needing improvement: {', '.join(_org_prefs['flagged_sections']) if _org_prefs['flagged_sections'] else 'None identified'}\n"
+                        f"- Accuracy concerns: {', '.join(_org_prefs['accuracy_concerns']) if _org_prefs['accuracy_concerns'] else 'None identified'}\n"
+                        f"- Based on {_org_prefs['feedback_count']} feedback submissions\n"
+                        "---"
+                    )
+                    user_prompt += _prefs_block
+                    logger.info("Org preferences injected into report prompt: org=%s, feedback_count=%d", org_id, _org_prefs['feedback_count'])
+            except Exception as e:
+                logger.warning("Org preferences injection failed (non-blocking): %s", e)
+
             # Per-report-type token limits
             _type_tokens = {
                 "elite_profile": 12000,
