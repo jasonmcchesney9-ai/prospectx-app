@@ -24,7 +24,8 @@ import {
   TrendingUp,
   CheckCircle,
   Sparkles,
-  Pin,
+  ClipboardList,
+  Search,
   Calendar,
   RefreshCw,
   Loader2,
@@ -224,25 +225,7 @@ function Dashboard() {
   // Helper: check if a widget is enabled (null = show all — backwards compatible)
   const showWidget = (widgetId: string) => dashboardWidgets === null || dashboardWidgets.includes(widgetId);
 
-  // ── Wall Board (pinned players) ───────────────────────────
-  const [pinnedPlayers, setPinnedPlayers] = useState<Player[]>([]);
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("prospectx_pinned_players");
-      if (!saved) return;
-      const ids: string[] = JSON.parse(saved);
-      if (!ids.length) return;
-      Promise.all(
-        ids.slice(0, 6).map((id) =>
-          api.get<Player>(`/players/${id}`).then((r) => r.data).catch(() => null)
-        )
-      ).then((results) => {
-        setPinnedPlayers(results.filter(Boolean) as Player[]);
-      });
-    } catch {
-      // Non-critical
-    }
-  }, []);
+  // ── Quick Actions (replaced Wall Board) ───────────────────
 
   // ── Load team-specific data (Wave 2) ─────────────────────
   const loadTeamData = useCallback(async (team: Team) => {
@@ -975,35 +958,33 @@ function Dashboard() {
 
               {/* RIGHT: Intelligence */}
               <div className="lg:col-span-2 space-y-5">
-                {/* Wall Board */}
-                <DashboardCard
-                  icon={<Pin size={15} className="text-orange" />}
-                  title="Wall Board"
-                  viewAllHref="/players"
-                  loading={false}
-                  empty={pinnedPlayers.length === 0}
-                  emptyIcon={<Pin size={24} className="text-muted/30" />}
-                  emptyText="Your Wall Board is empty. Pin players, reports, or game plans here for quick access."
-                >
+                {/* Quick Actions */}
+                <div style={{ background: "#FFFFFF", borderRadius: 12, border: "1px solid #E2EAF3", padding: "16px 16px 12px" }}>
+                  <h3 style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "#0F2942", marginBottom: 12 }}>
+                    Quick Actions
+                  </h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    {pinnedPlayers.slice(0, 4).map((p) => (
-                      <Link key={p.id} href={`/players/${p.id}`} style={{ display: "block", padding: "10px 12px", borderRadius: 8, background: "#E6F7F6", textDecoration: "none", transition: "opacity 0.15s" }} className="hover:opacity-80">
-                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "#0D9488" }}>Player</span>
-                        <p style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "#0F2942", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                          {p.first_name} {p.last_name}
-                        </p>
-                        <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {p.current_team || p.position || "—"}
-                        </p>
+                    {[
+                      { label: "New Report", icon: <FileText size={16} style={{ color: "#0D9488" }} />, href: "/reports" },
+                      { label: "Practice Plan", icon: <ClipboardList size={16} style={{ color: "#0D9488" }} />, href: "/practice-plans" },
+                      { label: "Scout a Player", icon: <Search size={16} style={{ color: "#0D9488" }} />, href: "/players" },
+                      { label: "Chalk Talk", icon: <MessageSquare size={16} style={{ color: "#0D9488" }} />, href: "/bench-talk" },
+                    ].map((action) => (
+                      <Link
+                        key={action.label}
+                        href={action.href}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", borderRadius: 8, background: "#0F2942", textDecoration: "none", transition: "background 0.15s" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#0D9488")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#0F2942")}
+                      >
+                        {action.icon}
+                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 11, color: "#FFFFFF", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                          {action.label}
+                        </span>
                       </Link>
                     ))}
-                    {Array.from({ length: Math.max(0, 4 - pinnedPlayers.length) }).map((_, i) => (
-                      <div key={`empty-${i}`} style={{ padding: "10px 12px", borderRadius: 8, border: "1.5px dashed #DDE6EF", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 60 }}>
-                        <span style={{ fontFamily: "'Oswald', sans-serif", fontWeight: 600, fontSize: 10, color: "#94A3B8", textTransform: "uppercase" }}>+ Pin Item</span>
-                      </div>
-                    ))}
                   </div>
-                </DashboardCard>
+                </div>
 
                 {/* Scouting List */}
                 {showWidget("scouting_list") && (
