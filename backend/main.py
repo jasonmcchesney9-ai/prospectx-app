@@ -24842,7 +24842,70 @@ Today's date is {datetime.now().date().isoformat()}."""
                 input_data["recommended_drills"] = custom_drill_list
                 system_prompt += DRILL_REPORT_PROMPT_SECTION
 
-            user_prompt = f"Generate a custom team analysis report for {team_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            # ── image_snapshots — optional frozen frames (custom team report) ──
+            try:
+                _snapshots = []
+                _snap_check = conn.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table'
+                    AND name IN (
+                      'video_event_snapshots',
+                      'image_snapshots',
+                      'event_snapshots'
+                    )
+                """).fetchone()
+
+                if _snap_check:
+                    _snap_table = _snap_check[0]
+                    _snap_rows = conn.execute(f"""
+                        SELECT
+                          event_id,
+                          image_ref,
+                          label,
+                          timecode
+                        FROM {_snap_table}
+                        WHERE org_id = ?
+                          AND team_id = ?
+                        ORDER BY timecode ASC
+                        LIMIT 10
+                    """, (org_id, team_name)).fetchall()
+
+                    for row in _snap_rows:
+                        _snapshots.append({
+                            "event_id": row["event_id"],
+                            "image_ref": row["image_ref"],
+                            "label": row["label"],
+                            "timecode": row["timecode"]
+                        })
+
+                if _snapshots:
+                    input_data["image_snapshots"] = _snapshots
+
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logger.warning("image_snapshots fetch failed (custom team): %s", e)
+
+            if input_data.get("image_snapshots"):
+                _img_count = len(input_data["image_snapshots"])
+                _img_section = (
+                    f"\n\nIMAGE SNAPSHOTS ({_img_count} frames):\n"
+                    "You have frozen keyframes from tagged video "
+                    "events. When explaining a specific play, "
+                    "reference the frame using its image_ref "
+                    "token (e.g., 'In [image:3], we see...'). "
+                    "Base your description ONLY on the label "
+                    "and event tags provided. Do NOT invent "
+                    "jersey numbers, player emotions, bench "
+                    "reactions, or any detail not stated in "
+                    "the data fields."
+                )
+            else:
+                _img_section = ""
+
+            user_prompt = f"Generate a custom team analysis report for {team_name}.{_img_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             if client:
                 llm_model = "claude-sonnet-4-20250514"
@@ -25157,6 +25220,52 @@ If data is limited for any focus area, note what additional data would strengthe
             except Exception:
                 pass
 
+        # ── image_snapshots — optional frozen frames (custom player report) ──
+        try:
+            _snapshots = []
+            _snap_check = conn.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table'
+                AND name IN (
+                  'video_event_snapshots',
+                  'image_snapshots',
+                  'event_snapshots'
+                )
+            """).fetchone()
+
+            if _snap_check:
+                _snap_table = _snap_check[0]
+                _snap_rows = conn.execute(f"""
+                    SELECT
+                      event_id,
+                      image_ref,
+                      label,
+                      timecode
+                    FROM {_snap_table}
+                    WHERE org_id = ?
+                      AND player_id = ?
+                    ORDER BY timecode ASC
+                    LIMIT 10
+                """, (org_id, request.player_id)).fetchall()
+
+                for row in _snap_rows:
+                    _snapshots.append({
+                        "event_id": row["event_id"],
+                        "image_ref": row["image_ref"],
+                        "label": row["label"],
+                        "timecode": row["timecode"]
+                    })
+
+            if _snapshots:
+                input_data["image_snapshots"] = _snapshots
+
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.warning("image_snapshots fetch failed (custom player): %s", e)
+
         # ── PXR Natural Language Context (custom player report) ──
         try:
             _pxr_now = datetime.now(timezone.utc)
@@ -25186,7 +25295,24 @@ If data is limited for any focus area, note what additional data would strengthe
                 "assessment when sufficient game data exists."
             )
 
-        user_prompt = f"Generate a custom scouting report for {player_name}.{_pxr_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+        if input_data.get("image_snapshots"):
+            _img_count = len(input_data["image_snapshots"])
+            _img_section = (
+                f"\n\nIMAGE SNAPSHOTS ({_img_count} frames):\n"
+                "You have frozen keyframes from tagged video "
+                "events. When explaining a specific play, "
+                "reference the frame using its image_ref "
+                "token (e.g., 'In [image:3], we see...'). "
+                "Base your description ONLY on the label "
+                "and event tags provided. Do NOT invent "
+                "jersey numbers, player emotions, bench "
+                "reactions, or any detail not stated in "
+                "the data fields."
+            )
+        else:
+            _img_section = ""
+
+        user_prompt = f"Generate a custom scouting report for {player_name}.{_pxr_section}{_img_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         # ── Film observations context injection (custom player report) ──
         try:
@@ -25779,7 +25905,70 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
                 input_data["recommended_drills"] = team_drill_list
                 system_prompt += DRILL_REPORT_PROMPT_SECTION
 
-            user_prompt = f"Generate a {report_type_name} for {team_name}. Here is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            # ── image_snapshots — optional frozen frames (team report) ──
+            try:
+                _snapshots = []
+                _snap_check = conn.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table'
+                    AND name IN (
+                      'video_event_snapshots',
+                      'image_snapshots',
+                      'event_snapshots'
+                    )
+                """).fetchone()
+
+                if _snap_check:
+                    _snap_table = _snap_check[0]
+                    _snap_rows = conn.execute(f"""
+                        SELECT
+                          event_id,
+                          image_ref,
+                          label,
+                          timecode
+                        FROM {_snap_table}
+                        WHERE org_id = ?
+                          AND team_id = ?
+                        ORDER BY timecode ASC
+                        LIMIT 10
+                    """, (org_id, team_name)).fetchall()
+
+                    for row in _snap_rows:
+                        _snapshots.append({
+                            "event_id": row["event_id"],
+                            "image_ref": row["image_ref"],
+                            "label": row["label"],
+                            "timecode": row["timecode"]
+                        })
+
+                if _snapshots:
+                    input_data["image_snapshots"] = _snapshots
+
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logger.warning("image_snapshots fetch failed (team report): %s", e)
+
+            if input_data.get("image_snapshots"):
+                _img_count = len(input_data["image_snapshots"])
+                _img_section = (
+                    f"\n\nIMAGE SNAPSHOTS ({_img_count} frames):\n"
+                    "You have frozen keyframes from tagged video "
+                    "events. When explaining a specific play, "
+                    "reference the frame using its image_ref "
+                    "token (e.g., 'In [image:3], we see...'). "
+                    "Base your description ONLY on the label "
+                    "and event tags provided. Do NOT invent "
+                    "jersey numbers, player emotions, bench "
+                    "reactions, or any detail not stated in "
+                    "the data fields."
+                )
+            else:
+                _img_section = ""
+
+            user_prompt = f"Generate a {report_type_name} for {team_name}.{_img_section}\n\nHere is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             # ── Film observations context injection (team reports) ──
             try:
@@ -26785,6 +26974,54 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     except Exception:
                         pass
 
+            # ── image_snapshots — optional frozen frames linked to video events ──
+            # Non-blocking if table absent.
+            try:
+                _snapshots = []
+                _snap_check = conn.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table'
+                    AND name IN (
+                      'video_event_snapshots',
+                      'image_snapshots',
+                      'event_snapshots'
+                    )
+                """).fetchone()
+
+                if _snap_check:
+                    _snap_table = _snap_check[0]
+                    _snap_rows = conn.execute(f"""
+                        SELECT
+                          event_id,
+                          image_ref,
+                          label,
+                          timecode
+                        FROM {_snap_table}
+                        WHERE org_id = ?
+                          AND player_id = ?
+                        ORDER BY timecode ASC
+                        LIMIT 10
+                    """, (org_id, request.player_id)).fetchall()
+
+                    for row in _snap_rows:
+                        _snapshots.append({
+                            "event_id": row["event_id"],
+                            "image_ref": row["image_ref"],
+                            "label": row["label"],
+                            "timecode": row["timecode"]
+                        })
+
+                if _snapshots:
+                    input_data["image_snapshots"] = _snapshots
+
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logger.warning("image_snapshots fetch failed: %s", e)
+                # Non-blocking — report continues without snapshots
+
             report_type_name = template["template_name"]
 
             # Build the system context block for the prompt — resolve codes to full tactical descriptions
@@ -27051,7 +27288,24 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                     "assessment when sufficient game data exists."
                 )
 
-            user_prompt = f"Generate a {report_type_name} for the following player.{_pxr_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            if input_data.get("image_snapshots"):
+                _img_count = len(input_data["image_snapshots"])
+                _img_section = (
+                    f"\n\nIMAGE SNAPSHOTS ({_img_count} frames):\n"
+                    "You have frozen keyframes from tagged video "
+                    "events. When explaining a specific play, "
+                    "reference the frame using its image_ref "
+                    "token (e.g., 'In [image:3], we see...'). "
+                    "Base your description ONLY on the label "
+                    "and event tags provided. Do NOT invent "
+                    "jersey numbers, player emotions, bench "
+                    "reactions, or any detail not stated in "
+                    "the data fields."
+                )
+            else:
+                _img_section = ""
+
+            user_prompt = f"Generate a {report_type_name} for the following player.{_pxr_section}{_img_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             # ── Film observations context injection ──
             logger.info("REPORT_DEBUG checkpoint=13 report_id=%s — injecting film context", report_id)
@@ -40290,6 +40544,52 @@ When a player has transfers or team splits:
         except Exception as e:
             logger.warning("BG PXR context injection failed for %s: %s", player_id, e)
 
+        # ── image_snapshots — optional frozen frames (background report) ──
+        try:
+            _snapshots = []
+            _snap_check = conn.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table'
+                AND name IN (
+                  'video_event_snapshots',
+                  'image_snapshots',
+                  'event_snapshots'
+                )
+            """).fetchone()
+
+            if _snap_check:
+                _snap_table = _snap_check[0]
+                _snap_rows = conn.execute(f"""
+                    SELECT
+                      event_id,
+                      image_ref,
+                      label,
+                      timecode
+                    FROM {_snap_table}
+                    WHERE org_id = ?
+                      AND player_id = ?
+                    ORDER BY timecode ASC
+                    LIMIT 10
+                """, (org_id, player_id)).fetchall()
+
+                for row in _snap_rows:
+                    _snapshots.append({
+                        "event_id": row["event_id"],
+                        "image_ref": row["image_ref"],
+                        "label": row["label"],
+                        "timecode": row["timecode"]
+                    })
+
+            if _snapshots:
+                input_data["image_snapshots"] = _snapshots
+
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.warning("image_snapshots fetch failed (background): %s", e)
+
         # ── PXR Natural Language Context (background generate) ──
         try:
             _pxr_now = datetime.now(timezone.utc)
@@ -40319,7 +40619,24 @@ When a player has transfers or team splits:
                 "assessment when sufficient game data exists."
             )
 
-        user_prompt = f"Generate a {report_type_name} for the following player.{_pxr_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+        if input_data.get("image_snapshots"):
+            _img_count = len(input_data["image_snapshots"])
+            _img_section = (
+                f"\n\nIMAGE SNAPSHOTS ({_img_count} frames):\n"
+                "You have frozen keyframes from tagged video "
+                "events. When explaining a specific play, "
+                "reference the frame using its image_ref "
+                "token (e.g., 'In [image:3], we see...'). "
+                "Base your description ONLY on the label "
+                "and event tags provided. Do NOT invent "
+                "jersey numbers, player emotions, bench "
+                "reactions, or any detail not stated in "
+                "the data fields."
+            )
+        else:
+            _img_section = ""
+
+        user_prompt = f"Generate a {report_type_name} for the following player.{_pxr_section}{_img_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         # ── PXR Score Context Injection (background path) ──
         try:
