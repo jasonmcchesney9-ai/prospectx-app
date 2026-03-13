@@ -8,7 +8,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
-import ConfidenceBadge from "@/components/ConfidenceBadge";
+import PXRConfidenceBadge from "@/components/PXRConfidenceBadge";
 
 // ── PXR Tier Definitions (from PXR Engine Spec v1.0, Section 6) ──
 const PXR_TIERS = [
@@ -544,7 +544,7 @@ export default function DraftBoardPage() {
                         <td className="px-3 py-2.5 text-xs text-muted">{p.p2_defense?.toFixed(1) ?? "—"}</td>
                         <td className="px-3 py-2.5 text-xs text-muted">{p.p3_possession?.toFixed(1) ?? "—"}</td>
                         <td className="px-3 py-2.5 text-xs text-muted">{p.p4_physical?.toFixed(1) ?? "—"}</td>
-                        <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
+                        <td className="px-3 py-2.5"><PXRConfidenceBadge confidence_tier={p.confidence_tier ?? ""} score_type={p.score_type} compact /></td>
                       </tr>
                     );
                   })

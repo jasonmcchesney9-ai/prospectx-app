@@ -9,7 +9,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
-import ConfidenceBadge from "@/components/ConfidenceBadge";
+import PXRConfidenceBadge from "@/components/PXRConfidenceBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { TOOLTIPS } from "@/lib/tooltips";
 
@@ -425,7 +425,7 @@ export default function LeaderboardPage() {
                                     {p.age_modifier != null ? (p.age_modifier > 0 ? `+${p.age_modifier.toFixed(1)}` : p.age_modifier.toFixed(1)) : "0.0"}
                                   </td>
                                   <td className="px-3 py-2.5"><TierBadge score={p.pxr_score} scoreType={p.score_type} /></td>
-                                  <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
+                                  <td className="px-3 py-2.5"><PXRConfidenceBadge confidence_tier={p.confidence_tier ?? ""} score_type={p.score_type} compact /></td>
                                 </>
                               )}
                             </tr>
@@ -517,7 +517,7 @@ export default function LeaderboardPage() {
                                 </td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
-                                <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
+                                <td className="px-3 py-2.5"><PXRConfidenceBadge confidence_tier={p.confidence_tier ?? ""} score_type={p.score_type} compact /></td>
                               </tr>
                             );
                           })
@@ -594,7 +594,7 @@ export default function LeaderboardPage() {
                               <td className="px-3 py-2.5 text-xs text-muted">{p.cohort_percentile != null ? `${Math.round(p.cohort_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-xs text-muted">{p.league_percentile != null ? `${Math.round(p.league_percentile)}%` : "—"}</td>
                               <td className="px-3 py-2.5 text-sm font-bold text-teal font-oswald">+{Math.round(p.gap)}</td>
-                              <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
+                              <td className="px-3 py-2.5"><PXRConfidenceBadge confidence_tier={p.confidence_tier ?? ""} score_type={p.score_type} compact /></td>
                             </tr>
                             );
                           })
@@ -669,7 +669,7 @@ export default function LeaderboardPage() {
                               <td className="px-3 py-2.5 text-sm font-semibold text-green-600">
                                 +{p.age_modifier?.toFixed(1)}
                               </td>
-                              <td className="px-3 py-2.5"><ConfidenceBadge tier={p.confidence_tier} gp={p.gp} /></td>
+                              <td className="px-3 py-2.5"><PXRConfidenceBadge confidence_tier={p.confidence_tier ?? ""} score_type={p.score_type} compact /></td>
                             </tr>
                             );
                           })

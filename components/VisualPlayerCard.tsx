@@ -10,6 +10,7 @@ import { formatLeague } from "@/lib/leagues";
 import { useBenchTalk } from "./BenchTalkProvider";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { TOOLTIPS } from "@/lib/tooltips";
+import PXRConfidenceBadge from "@/components/PXRConfidenceBadge";
 
 const GOALIE_POSITIONS = new Set(["G", "GK", "Goalie"]);
 
@@ -205,6 +206,8 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
   const pxrScore = (player as unknown as Record<string, unknown>).pxr_score as number | null | undefined;
   const pxrEstimated = (player as unknown as Record<string, unknown>).pxr_estimated as boolean | undefined;
   const pxrTier = (player as unknown as Record<string, unknown>).pxr_tier as string | null | undefined;
+  const pxrConfidenceTier = (player as unknown as Record<string, unknown>).confidence_tier as string | null | undefined;
+  const pxrScoreType = (player as unknown as Record<string, unknown>).score_type as string | null | undefined;
 
   function handleScout(e: React.MouseEvent) {
     e.preventDefault();
@@ -317,6 +320,9 @@ export default function VisualPlayerCard({ player }: { player: PlayerCardData })
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#94A3B8", textTransform: "uppercase" }}>
                 {pxrEstimated ? "PXR~" : "PXR"}
               </span>
+            )}
+            {pxrScore != null && pxrConfidenceTier && (
+              <PXRConfidenceBadge confidence_tier={pxrConfidenceTier} score_type={pxrScoreType} />
             )}
           </div>
           {player.archetype && (
