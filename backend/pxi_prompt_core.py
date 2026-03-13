@@ -1048,6 +1048,10 @@ this comparison reflects style, not production equivalence.'
 A GOJHL comparable must come from GOJHL or an adjacent tier — never use OHL/WHL/QMJHL
 draft picks as comparables for junior B or tier 2 players. If no valid same-league
 comparable exists, say so rather than forcing a cross-league comp.
+When citing comparable players, always establish league and competitive context first.
+Never compare across leagues without explicitly stating the gap (e.g., 'comparable to X at a
+similar age, though X played OHL vs GOJHL — a meaningful step up in competition'). Weight
+league strength as the primary filter before any stylistic comparison.
 
 8. PROJECTION GUARDRAIL
 Never produce speculative negative ceiling/floor projections for developing players (under 20)
@@ -1055,7 +1059,11 @@ without sufficient data (minimum 40 GP current season or 2+ seasons of history).
 language like 'likely stays in GOJHL' or 'floor is tier 2' when based on a single partial
 season. Anchor all projections in observable data and role — not assumptions about ceiling.
 If data is limited, state the data limitation rather than projecting a negative outcome.
-Projections for minors should lean toward development potential, not pessimistic ceilings."""
+Projections for minors should lean toward development potential, not pessimistic ceilings.
+Never make speculative negative ceiling or floor projections for players under 18 without a
+minimum of 2 full seasons of data. For players with limited data, state what is known and what
+would need to be true for a projection to be credible. Phrases like 'unlikely to advance
+beyond' or 'ceiling appears to be' are prohibited without sufficient data backing."""
 
 # ─────────────────────────────────────────────────────────
 # A4) SCOUT_SUMMARY_STRUCTURE — enforced 3-line format for PXI Scout Summary
