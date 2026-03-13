@@ -12356,6 +12356,7 @@ class ReportGenerateRequest(BaseModel):
     perspective: Optional[str] = "internal"  # internal/external/both
     series_id: Optional[str] = None         # Link to series_plans for series memory
     game_number: Optional[int] = None       # Game number within series (1-based)
+    coach_input: Optional[str] = None
 
 class ReportResponse(BaseModel):
     model_config = {"extra": "ignore"}
@@ -25519,6 +25520,10 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             except Exception:
                 pass
 
+        # Wire coach observations into team report input_data
+        if hasattr(request, "coach_input") and request.coach_input and request.coach_input.strip():
+            input_data["coach_input"] = request.coach_input.strip()
+
         if client:
             llm_model = "claude-sonnet-4-20250514"
 
@@ -26370,6 +26375,11 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                             aggregated_ext[k] = v
             if aggregated_ext:
                 input_data["instat_extended_stats"] = aggregated_ext
+
+            # Wire coach observations into report input_data
+            if request.coach_input and request.coach_input.strip():
+                input_data["coach_input"] = request.coach_input.strip()
+                logger.info("Report: coach_input present (%d chars) for %s", len(request.coach_input), player_name)
 
             # ── Wire video event tags into input_data ────────────────────────
             try:

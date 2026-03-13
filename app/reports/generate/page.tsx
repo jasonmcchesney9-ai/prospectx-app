@@ -130,6 +130,7 @@ function GenerateReportContent() {
   const [drillFocus, setDrillFocus] = useState<string[]>([]);
   const [drillAgeLevel, setDrillAgeLevel] = useState("");
   const [drillIntensity, setDrillIntensity] = useState("");
+  const [coachInput, setCoachInput] = useState("");
 
   // Determine if current selection is a team report type
   const isTeamReportType = (TEAM_REPORT_TYPES as readonly string[]).includes(selectedType);
@@ -270,6 +271,7 @@ function GenerateReportContent() {
       } else {
         payload.player_id = selectedPlayer;
       }
+      payload.coach_input = coachInput;
       // Include drill options if enabled
       if (includeDrills) {
         payload.data_scope = {
@@ -710,6 +712,34 @@ function GenerateReportContent() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Coach Observations */}
+            <div>
+              <label
+                htmlFor="coach-input"
+                style={{ fontFamily: "Oswald, sans-serif", color: "#0F2942", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "8px" }}
+              >
+                Coach Observations
+              </label>
+              <textarea
+                id="coach-input"
+                rows={4}
+                value={coachInput}
+                onChange={(e) => setCoachInput(e.target.value)}
+                placeholder="Add context for this report — tactical focus, recent performance notes, specific areas to evaluate..."
+                disabled={isGenerating}
+                style={{
+                  width: "100%",
+                  border: "1px solid #CBD5E0",
+                  borderRadius: "6px",
+                  padding: "12px",
+                  fontFamily: "'Source Serif 4', serif",
+                  fontSize: "14px",
+                  background: "white",
+                  resize: "vertical",
+                }}
+              />
             </div>
 
             {/* Divider */}

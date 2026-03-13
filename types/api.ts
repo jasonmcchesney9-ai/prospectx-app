@@ -535,6 +535,7 @@ export interface ReportGenerateRequest {
   template_id?: string;
   data_scope?: Record<string, unknown>;
   mode?: PXIMode;
+  coach_input?: string;
 }
 
 // PXI Mode System
