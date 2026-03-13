@@ -24466,6 +24466,20 @@ def _resolve_system_code(conn, code: str) -> str:
     return code
 
 
+def _build_data_availability_header(input_data: dict) -> str:
+    """Build a data-source availability header for PXI report user prompts."""
+    tags = []
+    if input_data.get("microstats_summary") or input_data.get("instat_extended_stats"):
+        tags.append("[MICROSTAT] InStat advanced stats available — cite specific metrics")
+    if input_data.get("video_event_tags") or input_data.get("video_event_tags_team_summary"):
+        tags.append("[FILM] Video event tags available — reference tagged events by type/zone/outcome")
+    if input_data.get("coach_input"):
+        tags.append("[COACH] Coach observations provided — weight heavily, they have direct context")
+    if not tags:
+        tags.append("[DATA] Standard stats only — flag that microstat and film data would improve this report")
+    return "DATA SOURCES AVAILABLE FOR THIS REPORT:\n" + "\n".join(f"  • {t}" for t in tags)
+
+
 def _build_system_context_block(conn, team_system: dict) -> str:
     """Build the TEAM SYSTEM CONTEXT prompt block from a team system dict."""
     fc_desc = _resolve_system_code(conn, team_system.get('forecheck', ''))
@@ -24613,7 +24627,8 @@ Today's date is {datetime.now().date().isoformat()}."""
                 input_data["recommended_drills"] = custom_drill_list
                 system_prompt += DRILL_REPORT_PROMPT_SECTION
 
-            user_prompt = f"Generate a custom team analysis report for {team_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            _data_availability = _build_data_availability_header(input_data)
+            user_prompt = f"Generate a custom team analysis report for {team_name}.\n\n{_data_availability}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             if client:
                 llm_model = "claude-sonnet-4-20250514"
@@ -24921,7 +24936,8 @@ If data is limited for any focus area, note what additional data would strengthe
             except Exception:
                 pass
 
-        user_prompt = f"Generate a custom scouting report for {player_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+        _data_availability = _build_data_availability_header(input_data)
+        user_prompt = f"Generate a custom scouting report for {player_name}.\n\n{_data_availability}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         # ── Film observations context injection (custom player report) ──
         try:
@@ -25594,7 +25610,8 @@ Use intelligence grades and archetypes from the player_intelligence_summary in t
                 input_data["recommended_drills"] = team_drill_list
                 system_prompt += DRILL_REPORT_PROMPT_SECTION
 
-            user_prompt = f"Generate a {report_type_name} for {team_name}. Here is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            _data_availability = _build_data_availability_header(input_data)
+            user_prompt = f"Generate a {report_type_name} for {team_name}.\n\n{_data_availability}\n\nHere is all available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             # ── Film observations context injection (team reports) ──
             try:
@@ -26889,7 +26906,8 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             if drill_prompt_addon:
                 system_prompt += drill_prompt_addon
 
-            user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            _data_availability = _build_data_availability_header(input_data)
+            user_prompt = f"Generate a {report_type_name} for the following player.\n\n{_data_availability}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             # ── Film observations context injection ──
             logger.info("REPORT_DEBUG checkpoint=13 report_id=%s — injecting film context", report_id)
@@ -40098,7 +40116,8 @@ When a player has transfers or team splits:
         except Exception as e:
             logger.warning("BG PXR context injection failed for %s: %s", player_id, e)
 
-        user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+        _data_availability = _build_data_availability_header(input_data)
+        user_prompt = f"Generate a {report_type_name} for the following player.\n\n{_data_availability}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         # ── PXR Score Context Injection (background path) ──
         try:
