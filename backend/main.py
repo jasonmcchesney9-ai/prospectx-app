@@ -15213,6 +15213,7 @@ async def list_players(
     has_stats: Optional[bool] = None,
     overall_grade: Optional[str] = None,
     archetype: Optional[str] = None,
+    roster_status: Optional[str] = Query(default="active"),
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = Query(default="asc", pattern="^(asc|desc)$"),
     limit: int = Query(default=100, ge=1, le=5000),
@@ -15234,6 +15235,9 @@ async def list_players(
         from_clause = " FROM players p"
         where_clauses = ["p.org_id = ?", "(p.is_deleted = 0 OR p.is_deleted IS NULL)"]
         params: list = [org_id]
+        if roster_status and roster_status != "all":
+            where_clauses.append("COALESCE(p.roster_status, 'active') = ?")
+            params.append(roster_status)
 
         if needs_stats_join:
             from_clause += """
@@ -15331,6 +15335,9 @@ async def list_players(
         # Simple query (no joins needed) — fast path
         query = "SELECT * FROM players WHERE org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)"
         params = [org_id]
+        if roster_status and roster_status != "all":
+            query += " AND COALESCE(roster_status, 'active') = ?"
+            params.append(roster_status)
 
         if search:
             query += " AND (first_name LIKE ? OR last_name LIKE ? OR (first_name || ' ' || last_name) LIKE ? OR current_team LIKE ?)"
@@ -15414,6 +15421,7 @@ async def list_player_cards(
     has_stats: Optional[bool] = None,
     overall_grade: Optional[str] = None,
     archetype: Optional[str] = None,
+    roster_status: Optional[str] = Query(default="active"),
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = Query(default="asc", pattern="^(asc|desc)$"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -15427,6 +15435,9 @@ async def list_player_cards(
     # Build WHERE clause (same filters as GET /players)
     where_clauses = ["p.org_id = ?", "(p.is_deleted = 0 OR p.is_deleted IS NULL)"]
     params: list = [org_id]
+    if roster_status and roster_status != "all":
+        where_clauses.append("COALESCE(p.roster_status, 'active') = ?")
+        params.append(roster_status)
 
     if search:
         where_clauses.append("(p.first_name LIKE ? OR p.last_name LIKE ? OR (p.first_name || ' ' || p.last_name) LIKE ? OR p.current_team LIKE ?)")
@@ -16155,6 +16166,36 @@ async def patch_player(
     params.append(player_id)
 
     conn.execute(f"UPDATE players SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.patch("/players/{player_id}/roster-status")
+async def update_roster_status(
+    player_id: str,
+    body: dict = Body(...),
+    token_data: dict = Depends(verify_token),
+):
+    """Update a player's roster status (active, inactive, released, traded)."""
+    org_id = token_data["org_id"]
+    new_status = (body.get("roster_status") or "").strip().lower()
+    valid_statuses = {"active", "inactive", "released", "traded"}
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid roster_status. Must be one of: {', '.join(sorted(valid_statuses))}")
+    conn = get_db()
+    existing = conn.execute(
+        "SELECT * FROM players WHERE id = ? AND org_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)",
+        (player_id, org_id)
+    ).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Player not found")
+    conn.execute(
+        "UPDATE players SET roster_status = ?, updated_at = ? WHERE id = ?",
+        (new_status, now_iso(), player_id)
+    )
     conn.commit()
     row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
     conn.close()
@@ -23385,15 +23426,18 @@ async def list_reference_teams(
 
 
 @app.get("/teams/{team_name}/roster")
-async def get_team_roster(team_name: str, token_data: dict = Depends(verify_token)):
+async def get_team_roster(team_name: str, roster_status: Optional[str] = "active", token_data: dict = Depends(verify_token)):
     """Get all players on a team (matched by current_team, case-insensitive)."""
     org_id = token_data["org_id"]
     decoded_name = team_name.replace("%20", " ")
     conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?) ORDER BY position, last_name",
-        (org_id, decoded_name),
-    ).fetchall()
+    query = "SELECT * FROM players WHERE org_id = ? AND LOWER(current_team) = LOWER(?)"
+    params: list = [org_id, decoded_name]
+    if roster_status and roster_status != "all":
+        query += " AND COALESCE(roster_status, 'active') = ?"
+        params.append(roster_status)
+    query += " ORDER BY position, last_name"
+    rows = conn.execute(query, params).fetchall()
     conn.close()
     return [_player_from_row(r) for r in rows]
 
@@ -37428,11 +37472,19 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
 
             # 1. Check by hockeytech_id first (exact match)
             existing = conn.execute(
-                "SELECT id, first_name, last_name, current_team, current_league FROM players WHERE hockeytech_id = ? AND org_id = ?",
+                "SELECT id, first_name, last_name, current_team, current_league, roster_status FROM players WHERE hockeytech_id = ? AND org_id = ?",
                 (ht_id, org_id)
             ).fetchone()
 
             if existing:
+                # ── Roster status protection: skip non-active players ──
+                _rs = (existing["roster_status"] or "active").lower()
+                if _rs in ("inactive", "released", "traded"):
+                    logger.info("Skipping sync for %s %s — roster_status=%s", first, last, _rs)
+                    skipped += 1
+                    results.append({"name": f"{first} {last}", "action": f"skipped (roster_status={_rs})", "player_id": existing[0]})
+                    continue
+
                 # ── Transfer detection: check if team changed ──
                 old_team = existing["current_team"] or ""
                 old_league_val = existing["current_league"] or ""
@@ -37529,6 +37581,15 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     break
 
             if matched_id:
+                # ── Roster status protection: skip non-active players (fuzzy match) ──
+                _fm_rs_row = conn.execute("SELECT roster_status FROM players WHERE id = ?", (matched_id,)).fetchone()
+                _fm_rs = (_fm_rs_row["roster_status"] or "active").lower() if _fm_rs_row else "active"
+                if _fm_rs in ("inactive", "released", "traded"):
+                    logger.info("Skipping sync for %s %s — roster_status=%s", first, last, _fm_rs)
+                    skipped += 1
+                    results.append({"name": f"{first} {last}", "action": f"skipped (roster_status={_fm_rs})", "player_id": matched_id})
+                    continue
+
                 # ── Transfer detection on fuzzy match ──
                 fm_row = conn.execute(
                     "SELECT current_team, current_league FROM players WHERE id = ?", (matched_id,)
