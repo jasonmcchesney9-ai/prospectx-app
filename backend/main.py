@@ -24822,20 +24822,27 @@ Today's date is {datetime.now().date().isoformat()}."""
             except Exception:
                 pass
 
-        intel_row = conn.execute(
-            "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
-            (request.player_id, org_id)
-        ).fetchone()
-        if intel_row:
-            intel = dict(intel_row)
-            for k in ("strengths", "development_areas", "comparable_players", "tags"):
-                if isinstance(intel.get(k), str):
-                    try: intel[k] = json.loads(intel[k])
-                    except Exception: intel[k] = []
-            if isinstance(intel.get("stat_signature"), str):
-                try: intel["stat_signature"] = json.loads(intel["stat_signature"])
-                except Exception: intel["stat_signature"] = {}
-            input_data["intelligence"] = intel
+        try:
+            intel_row = conn.execute(
+                "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
+                (request.player_id, org_id)
+            ).fetchone()
+            if intel_row:
+                intel = dict(intel_row)
+                for k in ("strengths", "development_areas", "comparable_players", "tags"):
+                    if isinstance(intel.get(k), str):
+                        try: intel[k] = json.loads(intel[k])
+                        except Exception: intel[k] = []
+                if isinstance(intel.get("stat_signature"), str):
+                    try: intel["stat_signature"] = json.loads(intel["stat_signature"])
+                    except Exception: intel["stat_signature"] = {}
+                input_data["intelligence"] = intel
+        except Exception as e:
+            logger.warning("Custom report intelligence fetch failed: %s", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         # Build custom prompt from selections
         focus_prompt_parts = []
@@ -24900,10 +24907,18 @@ Age-accurate: Use the provided "age" field. Today's date is {datetime.now().date
 If data is limited for any focus area, note what additional data would strengthen the analysis rather than fabricating observations."""
 
         # ── Gather drills for custom player report if requested ──
-        custom_p_drill_list = _gather_drills_for_report(conn, org_id, "custom", scope, team_name=player.get("current_team"))
-        if custom_p_drill_list:
-            input_data["recommended_drills"] = custom_p_drill_list
-            system_prompt += DRILL_REPORT_PROMPT_SECTION
+        custom_p_drill_list = []
+        try:
+            custom_p_drill_list = _gather_drills_for_report(conn, org_id, "custom", scope, team_name=player.get("current_team"))
+            if custom_p_drill_list:
+                input_data["recommended_drills"] = custom_p_drill_list
+                system_prompt += DRILL_REPORT_PROMPT_SECTION
+        except Exception as e:
+            logger.warning("Custom report drill gather failed: %s", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         user_prompt = f"Generate a custom scouting report for {player_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
@@ -24915,6 +24930,10 @@ If data is limited for any focus area, note what additional data would strengthe
                 logger.info("Film context injected for custom report: player=%s (%d chars)", request.player_id, len(film_ctx))
         except Exception as fc_err:
             logger.warning("Film context injection failed (non-fatal): %s", str(fc_err))
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         if client:
             llm_model = "claude-sonnet-4-20250514"
@@ -24991,12 +25010,19 @@ def _get_recent_film_context(conn, org_id: str, player_id: str = None, team_name
     elif team_name:
         where_parts.append("team_name = ?")
         params.append(team_name)
-    where_parts.append(f"created_at >= datetime('now', '-{days} days')")
+    if USE_PG:
+        where_parts.append(f"created_at >= (NOW() - INTERVAL '{days} days')::text")
+    else:
+        where_parts.append(f"created_at >= datetime('now', '-{days} days')")
     query = f"SELECT title, output_text, created_at FROM reports WHERE {' AND '.join(where_parts)} ORDER BY created_at DESC LIMIT ?"
     params.append(max_reports)
     try:
         rows = conn.execute(query, params).fetchall()
     except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return ""
     if not rows:
         return ""
@@ -26242,6 +26268,7 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                 input_data["team_system"] = team_system
 
             # Add ProspectX Indices and Intelligence data for enriched reports
+            logger.info("REPORT_DEBUG checkpoint=1 report_id=%s — computing PXI indices", report_id)
             try:
                 indices = _compute_prospectx_indices(
                     stats_list[0] if stats_list else {},
@@ -26249,76 +26276,102 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     conn.execute("SELECT ps.* FROM player_stats ps JOIN players p ON ps.player_id = p.id WHERE p.org_id = ?", (org_id,)).fetchall()
                 )
                 input_data["prospectx_indices"] = indices
-            except Exception:
+            except Exception as e:
+                logger.warning("REPORT_DEBUG checkpoint=1 FAILED: %s", e)
                 try:
                     conn.rollback()
                 except Exception:
                     pass
 
-            intel_row = conn.execute(
-                "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
-                (request.player_id, org_id)
-            ).fetchone()
-            if intel_row:
-                intel = dict(intel_row)
-                for k in ("strengths", "development_areas", "comparable_players", "tags"):
-                    if isinstance(intel.get(k), str):
+            logger.info("REPORT_DEBUG checkpoint=2 report_id=%s — fetching player intelligence", report_id)
+            try:
+                intel_row = conn.execute(
+                    "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
+                    (request.player_id, org_id)
+                ).fetchone()
+                if intel_row:
+                    intel = dict(intel_row)
+                    for k in ("strengths", "development_areas", "comparable_players", "tags"):
+                        if isinstance(intel.get(k), str):
+                            try:
+                                intel[k] = json.loads(intel[k])
+                            except Exception:
+                                intel[k] = []
+                    if isinstance(intel.get("stat_signature"), str):
                         try:
-                            intel[k] = json.loads(intel[k])
+                            intel["stat_signature"] = json.loads(intel["stat_signature"])
                         except Exception:
-                            intel[k] = []
-                if isinstance(intel.get("stat_signature"), str):
-                    try:
-                        intel["stat_signature"] = json.loads(intel["stat_signature"])
-                    except Exception:
-                        intel["stat_signature"] = {}
-                input_data["intelligence"] = intel
+                            intel["stat_signature"] = {}
+                    input_data["intelligence"] = intel
+            except Exception as e:
+                logger.warning("REPORT_DEBUG checkpoint=2 FAILED: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Gather transfer history ──
-            fg_transfer_rows = conn.execute("""
-                SELECT from_team_name, to_team_name, transfer_date, season, transfer_type
-                FROM player_transfers
-                WHERE player_id = ?
-                ORDER BY transfer_date DESC
-                LIMIT 5
-            """, (request.player_id,)).fetchall()
+            logger.info("REPORT_DEBUG checkpoint=3 report_id=%s — fetching transfers", report_id)
             fg_transfer_context = []
-            for t in fg_transfer_rows:
-                fg_transfer_context.append({
-                    "season": t["season"],
-                    "from_team": t["from_team_name"],
-                    "to_team": t["to_team_name"],
-                    "date": t["transfer_date"],
-                    "type": t["transfer_type"],
-                })
-            if fg_transfer_context:
-                input_data["transfers"] = fg_transfer_context
+            try:
+                fg_transfer_rows = conn.execute("""
+                    SELECT from_team_name, to_team_name, transfer_date, season, transfer_type
+                    FROM player_transfers
+                    WHERE player_id = ?
+                    ORDER BY transfer_date DESC
+                    LIMIT 5
+                """, (request.player_id,)).fetchall()
+                for t in fg_transfer_rows:
+                    fg_transfer_context.append({
+                        "season": t["season"],
+                        "from_team": t["from_team_name"],
+                        "to_team": t["to_team_name"],
+                        "date": t["transfer_date"],
+                        "type": t["transfer_type"],
+                    })
+                if fg_transfer_context:
+                    input_data["transfers"] = fg_transfer_context
+            except Exception as e:
+                logger.warning("REPORT_DEBUG checkpoint=3 FAILED: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Gather team splits for current season ──
-            _fg_now = datetime.now(timezone.utc)
-            _fg_sy = _fg_now.year if _fg_now.month >= 9 else _fg_now.year - 1
-            _fg_cur_season = f"{_fg_sy}-{(_fg_sy + 1) % 100:02d}"
-            fg_split_rows = conn.execute("""
-                SELECT team_name, league, gp, g, a, p, pim
-                FROM player_stats
-                WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
-                ORDER BY created_at ASC
-            """, (request.player_id, _fg_cur_season)).fetchall()
+            logger.info("REPORT_DEBUG checkpoint=4 report_id=%s — fetching team splits", report_id)
             fg_team_splits = []
-            if len(fg_split_rows) > 1:
-                for ts in fg_split_rows:
-                    fg_team_splits.append({
-                        "team": ts["team_name"],
-                        "league": ts["league"],
-                        "gp": ts["gp"] or 0,
-                        "g": ts["g"] or 0,
-                        "a": ts["a"] or 0,
-                        "p": ts["p"] or 0,
-                        "pim": ts["pim"] or 0,
-                    })
-                input_data["team_splits"] = fg_team_splits
+            try:
+                _fg_now = datetime.now(timezone.utc)
+                _fg_sy = _fg_now.year if _fg_now.month >= 9 else _fg_now.year - 1
+                _fg_cur_season = f"{_fg_sy}-{(_fg_sy + 1) % 100:02d}"
+                fg_split_rows = conn.execute("""
+                    SELECT team_name, league, gp, g, a, p, pim
+                    FROM player_stats
+                    WHERE player_id = ? AND season = ? AND stat_row_type = 'team_season'
+                    ORDER BY created_at ASC
+                """, (request.player_id, _fg_cur_season)).fetchall()
+                if len(fg_split_rows) > 1:
+                    for ts in fg_split_rows:
+                        fg_team_splits.append({
+                            "team": ts["team_name"],
+                            "league": ts["league"],
+                            "gp": ts["gp"] or 0,
+                            "g": ts["g"] or 0,
+                            "a": ts["a"] or 0,
+                            "p": ts["p"] or 0,
+                            "pim": ts["pim"] or 0,
+                        })
+                    input_data["team_splits"] = fg_team_splits
+            except Exception as e:
+                logger.warning("REPORT_DEBUG checkpoint=4 FAILED: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Gather historical progression (season-over-season) ──
+            logger.info("REPORT_DEBUG checkpoint=5 report_id=%s — fetching progression history", report_id)
             try:
                 hist_rows = conn.execute("""
                     SELECT psh.*
@@ -26343,9 +26396,14 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     input_data["historical_progression"] = progression_seasons
                     logger.info("Report: added %d progression seasons for %s", len(progression_seasons), player_name)
             except Exception as e:
-                logger.warning("Failed to load progression for report: %s", e)
+                logger.warning("REPORT_DEBUG checkpoint=5 FAILED — progression: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Gather recent form (last 10 games) ──
+            logger.info("REPORT_DEBUG checkpoint=6 report_id=%s — fetching recent form", report_id)
             try:
                 recent_rows = conn.execute("""
                     SELECT * FROM player_game_stats
@@ -26381,25 +26439,44 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                     }
                     logger.info("Report: added %d recent form games for %s", n_recent, player_name)
             except Exception as e:
-                logger.warning("Failed to load recent form for report: %s", e)
+                logger.warning("REPORT_DEBUG checkpoint=6 FAILED — recent form: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Gather recommended drills if requested ──
-            drill_list = _gather_drills_for_report(conn, org_id, request.report_type, request.data_scope, team_name=player.get("current_team"))
+            logger.info("REPORT_DEBUG checkpoint=7 report_id=%s — gathering drills", report_id)
+            drill_list = []
             drill_prompt_addon = ""
-            if drill_list:
-                input_data["recommended_drills"] = drill_list
-                drill_prompt_addon = DRILL_REPORT_PROMPT_SECTION
+            try:
+                drill_list = _gather_drills_for_report(conn, org_id, request.report_type, request.data_scope, team_name=player.get("current_team"))
+                if drill_list:
+                    input_data["recommended_drills"] = drill_list
+                    drill_prompt_addon = DRILL_REPORT_PROMPT_SECTION
+            except Exception as e:
+                logger.warning("REPORT_DEBUG checkpoint=7 FAILED — drills: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── PXR Reference Bridge: inject context into report input_data ──
+            logger.info("REPORT_DEBUG checkpoint=8 report_id=%s — building PXR context", report_id)
             try:
                 pxr_context = _build_pxr_context(request.player_id, org_id, player, conn)
                 if pxr_context:
                     input_data["pxr_context"] = pxr_context
             except Exception as e:
-                logger.warning("PXR context injection failed for report: %s", e)
+                logger.warning("REPORT_DEBUG checkpoint=8 FAILED — PXR context: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Player Outcomes: surface PXR pillars as top-level for prominent access ──
             if request.report_type == "player_outcomes":
+                logger.info("REPORT_DEBUG checkpoint=9 report_id=%s — fetching PXR pillars", report_id)
                 try:
                     _pxr_row = conn.execute("""
                         SELECT pxr_score, p1_offense, p2_defense, p3_possession, p4_physical,
@@ -26421,19 +26498,32 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                             "gp": _pxr_row["gp"],
                         }
                 except Exception as e:
-                    logger.warning("PXR pillar injection for outcomes report failed: %s", e)
+                    logger.warning("REPORT_DEBUG checkpoint=9 FAILED — PXR pillars: %s", e)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
 
             report_type_name = template["template_name"]
 
             # Build the system context block for the prompt — resolve codes to full tactical descriptions
+            logger.info("REPORT_DEBUG checkpoint=10 report_id=%s — resolving system codes", report_id)
             system_context_block = ""
             if team_system:
-                fc_desc = resolve_system_code(team_system.get('forecheck', ''))
-                dz_desc = resolve_system_code(team_system.get('dz_structure', ''))
-                oz_desc = resolve_system_code(team_system.get('oz_setup', ''))
-                pp_desc = resolve_system_code(team_system.get('pp_formation', ''))
-                pk_desc = resolve_system_code(team_system.get('pk_formation', ''))
-                bo_desc = resolve_system_code(team_system.get('breakout', ''))
+                try:
+                    fc_desc = resolve_system_code(team_system.get('forecheck', ''))
+                    dz_desc = resolve_system_code(team_system.get('dz_structure', ''))
+                    oz_desc = resolve_system_code(team_system.get('oz_setup', ''))
+                    pp_desc = resolve_system_code(team_system.get('pp_formation', ''))
+                    pk_desc = resolve_system_code(team_system.get('pk_formation', ''))
+                    bo_desc = resolve_system_code(team_system.get('breakout', ''))
+                except Exception as e:
+                    logger.warning("REPORT_DEBUG checkpoint=10 FAILED — system codes: %s", e)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    fc_desc = dz_desc = oz_desc = pp_desc = pk_desc = bo_desc = "Not available"
 
                 system_context_block = f"""
 
@@ -26553,8 +26643,17 @@ When a player has transfers or team splits:
 
             # ── PXI Mode injection (guardrails + mode block + action plans) ──
             # Fetch user hockey_role for mode resolution fallback
-            _user_role_row = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
-            _user_hockey_role = _user_role_row["hockey_role"] if _user_role_row and _user_role_row["hockey_role"] else "scout"
+            logger.info("REPORT_DEBUG checkpoint=11 report_id=%s — fetching user hockey_role", report_id)
+            try:
+                _user_role_row = conn.execute("SELECT hockey_role FROM users WHERE id = ?", (user_id,)).fetchone()
+                _user_hockey_role = _user_role_row["hockey_role"] if _user_role_row and _user_role_row["hockey_role"] else "scout"
+            except Exception as e:
+                logger.warning("REPORT_DEBUG checkpoint=11 FAILED — hockey_role: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                _user_hockey_role = "scout"
             _resolved_mode = resolve_mode(
                 user_hockey_role=_user_hockey_role,
                 explicit_mode=request.mode,
@@ -26562,6 +26661,7 @@ When a player has transfers or team splits:
             )
             tpl_prompt = template["prompt_text"] if template else None
             # Load shot zone intelligence for team/opponent reports
+            logger.info("REPORT_DEBUG checkpoint=12 report_id=%s — loading shot/series context", report_id)
             _shot_ctx = None
             if request.report_type in ("team_identity", "opponent_gameplan"):
                 try:
@@ -26572,6 +26672,10 @@ When a player has transfers or team splits:
                     )
                 except Exception:
                     _shot_ctx = None
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
             # Load series context for chalk_talk report types
             if request.report_type.startswith("chalk_talk_") or request.report_type in ("pre_game_intel",):
                 try:
@@ -26581,7 +26685,10 @@ When a player has transfers or team splits:
                         if _series_ctx:
                             _shot_ctx = f"{_shot_ctx}\n\n{_series_ctx}" if _shot_ctx else _series_ctx
                 except Exception:
-                    pass  # Non-fatal — never block report generation
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
             system_prompt = build_report_system_prompt(
                 mode=_resolved_mode,
                 base_prompt=system_prompt,
@@ -26637,16 +26744,22 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             # ── Film observations context injection ──
+            logger.info("REPORT_DEBUG checkpoint=13 report_id=%s — injecting film context", report_id)
             try:
                 film_ctx = _get_recent_film_context(conn, org_id, player_id=request.player_id, team_name=player.get("current_team"), days=30, max_reports=3, max_chars=1000)
                 if film_ctx:
                     user_prompt += f"\n\n--- RECENT FILM OBSERVATIONS ---\nRecent film analysis from the Film Room (use to support or challenge statistical findings):\n{film_ctx}\n--- END FILM OBSERVATIONS ---\n"
                     logger.info("Film context injected for player report: player=%s (%d chars)", request.player_id, len(film_ctx))
             except Exception as fc_err:
-                logger.warning("Film context injection failed (non-fatal): %s", str(fc_err))
+                logger.warning("REPORT_DEBUG checkpoint=13 FAILED — film context: %s", str(fc_err))
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # ── Series context injection ──
             if getattr(request, 'series_id', None) and getattr(request, 'game_number', None) is not None:
+                logger.info("REPORT_DEBUG checkpoint=14 report_id=%s — injecting series context", report_id)
                 try:
                     series_ctx = await summarize_series_context(request.series_id, request.game_number)
                     if series_ctx:
@@ -26666,9 +26779,14 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                         user_prompt = context_block + user_prompt
                         logger.info("Series context injected: series=%s game=%d (%d chars)", request.series_id, request.game_number, len(series_ctx))
                 except Exception as sc_err:
-                    logger.warning("Series context injection failed (non-fatal): %s", str(sc_err))
+                    logger.warning("REPORT_DEBUG checkpoint=14 FAILED — series context: %s", str(sc_err))
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
 
             # ── PXR Score Context Injection (append to system prompt for player-facing types) ──
+            logger.info("REPORT_DEBUG checkpoint=15 report_id=%s — PXR prompt block", report_id)
             try:
                 _pxr_score_ctx = input_data.get("pxr_context", {}).get("pxr_score_data", {})
                 if _pxr_score_ctx.get("pxr_context_available"):
@@ -26682,7 +26800,7 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                     if _pxr_block:
                         system_prompt += _pxr_block
             except Exception as e:
-                logger.warning("PXR prompt block injection failed: %s", e)
+                logger.warning("REPORT_DEBUG checkpoint=15 FAILED — PXR prompt: %s", e)
 
             # Per-report-type token limits
             _type_tokens = {
@@ -26720,6 +26838,7 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
                 "recruit_fit_report": 2500,
             }
             max_tokens = _type_tokens.get(request.report_type, 10000 if drill_list else 8000)
+            logger.info("REPORT_DEBUG checkpoint=16 report_id=%s — ALL DATA GATHERED, calling Anthropic API (%s, %d tokens)", report_id, llm_model, max_tokens)
             message = client.messages.create(
                 model=llm_model,
                 max_tokens=max_tokens,
