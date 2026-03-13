@@ -126,15 +126,15 @@ function getRoleGroup(role?: string): RoleGroup {
 }
 
 interface TopProspect {
-  id: string;
+  player_id: string;
   first_name: string;
   last_name: string;
+  name: string;
   position: string | null;
   current_team: string | null;
   current_league: string | null;
-  top_grade: number;
-  note_count: number;
-  last_noted: string;
+  pxr_score: number;
+  pxr_tier: string | null;
 }
 
 // ── League code mapping ──────────────────────────
@@ -245,7 +245,11 @@ function Dashboard() {
 
       const results = await Promise.allSettled(teamFetches);
       if (results[0].status === "fulfilled") setRoster((results[0] as PromiseFulfilledResult<{ data: Player[] }>).value.data);
-      if (results[1].status === "fulfilled") setScoringLeaders((results[1] as PromiseFulfilledResult<{ data: ScoringLeader[] }>).value.data);
+      if (results[1].status === "fulfilled") {
+        const raw = (results[1] as PromiseFulfilledResult<{ data: ScoringLeader[] }>).value.data;
+        const seen = new Set<string>();
+        setScoringLeaders(raw.filter((l) => { if (seen.has(l.id)) return false; seen.add(l.id); return true; }));
+      }
       if (htCode && results[2]?.status === "fulfilled") setScorebar((results[2] as PromiseFulfilledResult<{ data: HTGame[] }>).value.data);
       if (htCode && results[3]?.status === "fulfilled") setStandings((results[3] as PromiseFulfilledResult<{ data: HTStandings[] }>).value.data);
     } catch (err) {
@@ -265,7 +269,7 @@ function Dashboard() {
         api.get<ScoutingListItem[]>("/scouting-list?limit=5"),
         api.get<GamePlan[]>("/game-plans?status=active"),
         api.get<SeriesPlan[]>("/series?status=active"),
-        api.get<TopProspect[]>("/analytics/top-prospects?limit=5"),
+        api.get<{ players: TopProspect[] }>("/pxr/draft-board?season=2025-26"),
       ];
       if (isAgent) fetches.push(api.get<AgentClient[]>("/agent/clients"));
       const isCoachRole = user?.hockey_role === "coach" || user?.hockey_role === "admin" || user?.hockey_role === "gm";
@@ -303,8 +307,11 @@ function Dashboard() {
       // Series
       if (results[4].status === "fulfilled") setActiveSeries((results[4] as PromiseFulfilledResult<{ data: SeriesPlan[] }>).value.data);
 
-      // Top Prospects
-      if (results[5].status === "fulfilled") setTopProspects((results[5] as PromiseFulfilledResult<{ data: TopProspect[] }>).value.data);
+      // Top Prospects (PXR leaderboard — returns { players: [...] })
+      if (results[5].status === "fulfilled") {
+        const pxrData = (results[5] as PromiseFulfilledResult<{ data: { players: TopProspect[] } }>).value.data;
+        setTopProspects((pxrData.players || []).slice(0, 5));
+      }
 
       // Agent clients
       if (isAgent && results[6]?.status === "fulfilled") setAgentClients((results[6] as PromiseFulfilledResult<{ data: AgentClient[] }>).value.data);
@@ -1469,29 +1476,29 @@ function TopProspectsSection({ prospects, loading }: { prospects: TopProspect[];
     <DashboardCard
       icon={<Crown size={15} className="text-orange" />}
       title="Top Prospects"
-      viewAllHref="/scout-notes"
+      viewAllHref="/top-prospects"
       loading={loading}
       empty={prospects.length === 0}
       emptyIcon={<Crown size={24} className="text-muted/30" />}
-      emptyText="Rate players with Scout Notes to see your Top Prospects here."
-      emptyLink="/scout-notes/new"
-      emptyLinkText="Create a Scout Note"
+      emptyText="PXR scores will populate your Top Prospects automatically."
+      emptyLink="/top-prospects"
+      emptyLinkText="View PXR Leaderboard"
     >
       <div className="space-y-1">
         {prospects.map((p, i) => (
-          <Link key={p.id} href={`/players/${p.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
-            <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
-            <div className="w-6 h-6 rounded-full bg-navy/5 flex items-center justify-center text-[9px] font-oswald font-bold text-navy uppercase shrink-0">
+          <Link key={p.player_id} href={`/players/${p.player_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+            <span className="w-4 text-right font-oswald font-bold" style={{ color: "#94A3B8" }}>{i + 1}</span>
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-oswald font-bold uppercase shrink-0" style={{ backgroundColor: "rgba(15,42,61,0.05)", color: "#0F2A3D" }}>
               {p.position || "?"}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="font-medium text-navy truncate group-hover:text-teal transition-colors">
+              <span className="font-medium truncate group-hover:text-teal transition-colors" style={{ color: "#0F2A3D" }}>
                 {p.first_name} {p.last_name}
               </span>
             </div>
-            <span className="text-[10px] text-muted/60 truncate max-w-[80px]">{p.current_team || ""}</span>
-            <span className="inline-flex items-center justify-center w-7 h-5 rounded bg-orange/10 text-orange text-[10px] font-oswald font-bold shrink-0">
-              {p.top_grade}
+            <span className="text-[10px] truncate max-w-[80px]" style={{ color: "#94A3B8" }}>{p.current_team || ""}</span>
+            <span className="inline-flex items-center justify-center w-8 h-5 rounded text-[10px] font-oswald font-bold shrink-0" style={{ backgroundColor: "rgba(243,111,33,0.1)", color: "#F36F21" }}>
+              {p.pxr_score != null ? p.pxr_score.toFixed(1) : "—"}
             </span>
           </Link>
         ))}
