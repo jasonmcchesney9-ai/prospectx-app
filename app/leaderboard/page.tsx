@@ -240,15 +240,15 @@ export default function LeaderboardPage() {
     return result.sort((a, b) => (b.cohort_percentile ?? 0) - (a.cohort_percentile ?? 0));
   }, [allPlayers, selectedBirthYear]);
 
-  // ── View 3: Undervalued — cohort% >= 60 AND league% <= 45 ──
+  // ── View 3: Undervalued — cohort% >= 65 AND league% <= 50 ──
   const undervaluedPlayers = useMemo(() => {
     return allPlayers
       .filter(
         (p) =>
           p.cohort_percentile != null &&
           p.league_percentile != null &&
-          p.cohort_percentile >= 60 &&
-          p.league_percentile <= 45
+          p.cohort_percentile >= 65 &&
+          p.league_percentile <= 50
       )
       .map((p) => ({
         ...p,

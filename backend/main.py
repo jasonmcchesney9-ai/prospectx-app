@@ -34496,6 +34496,7 @@ async def pxr_draft_board(
     birth_year: Optional[int] = Query(default=None),
     tier: Optional[str] = Query(default=None),
     score_type: Optional[str] = Query(default=None),
+    filter: Optional[str] = Query(default=None),
     token_data: dict = Depends(verify_token),
 ):
     """Draft Board — ranked player list from pxr_scores. Role-gated."""
@@ -34523,6 +34524,12 @@ async def pxr_draft_board(
         if score_type and score_type in ("full", "estimated"):
             where_clauses.append("px.score_type = %s")
             params.append(score_type)
+
+        # ── Undervalued filter: high cohort rank + low league rank ──
+        if filter == "undervalued":
+            where_clauses.append("px.cohort_percentile >= 65")
+            where_clauses.append("px.league_percentile <= 50")
+            where_clauses.append("px.confidence_tier IN ('high', 'moderate')")
 
         where_sql = " AND ".join(where_clauses)
 
@@ -34611,6 +34618,7 @@ async def pxr_draft_board(
             "birth_year": birth_year,
             "tier": tier,
             "score_type": score_type,
+            "filter": filter,
             "season": season,
         },
         "filter_options": {
