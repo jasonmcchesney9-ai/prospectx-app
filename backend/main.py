@@ -24813,11 +24813,14 @@ Today's date is {datetime.now().date().isoformat()}."""
             indices = _compute_prospectx_indices(
                 stats_list[0] if stats_list else {},
                 player.get("position", ""),
-                conn.execute("SELECT * FROM player_stats WHERE org_id = ?", (org_id,)).fetchall()
+                conn.execute("SELECT ps.* FROM player_stats ps JOIN players p ON ps.player_id = p.id WHERE p.org_id = ?", (org_id,)).fetchall()
             )
             input_data["prospectx_indices"] = indices
         except Exception:
-            pass
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         intel_row = conn.execute(
             "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
@@ -26243,11 +26246,14 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                 indices = _compute_prospectx_indices(
                     stats_list[0] if stats_list else {},
                     player.get("position", ""),
-                    conn.execute("SELECT * FROM player_stats WHERE org_id = ?", (org_id,)).fetchall()
+                    conn.execute("SELECT ps.* FROM player_stats ps JOIN players p ON ps.player_id = p.id WHERE p.org_id = ?", (org_id,)).fetchall()
                 )
                 input_data["prospectx_indices"] = indices
             except Exception:
-                pass  # Non-critical
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             intel_row = conn.execute(
                 "SELECT * FROM player_intelligence WHERE player_id = ? AND org_id = ? ORDER BY version DESC LIMIT 1",
