@@ -10877,7 +10877,12 @@ def calculate_pxr_scores(conn, season: str = '2025-26') -> dict:
             for pkey, w in weights.items():
                 pval = pillar_scores.get(pkey)
                 if pval is not None and w > 0:
-                    composite += pval * w
+                    contribution = pval * w
+                    if pkey == 'P4':
+                        # Capped per PXR spec v1.1 — prevents Physical pillar from
+                        # dominating composite in edge cases
+                        contribution = min(contribution, 20)
+                    composite += contribution
                     weight_sum += w
             composite = composite / weight_sum if weight_sum > 0 else None
 
