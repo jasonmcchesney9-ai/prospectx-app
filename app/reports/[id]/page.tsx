@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -126,6 +126,12 @@ export default function ReportViewerPage() {
   const [copied, setCopied] = useState(false);
   const [sharedWithOrg, setSharedWithOrg] = useState(false);
 
+  // Language translation state
+  const [selectedLanguage, setSelectedLanguage] = useState<"en" | "fr" | "es">("en");
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translationToast, setTranslationToast] = useState(false);
+
   useEffect(() => {
     if (report) {
       const u = getUser();
@@ -233,9 +239,10 @@ export default function ReportViewerPage() {
   };
 
   const sections = useMemo(() => {
-    if (!report?.output_text) return [];
-    return parseReportSections(report.output_text);
-  }, [report?.output_text]);
+    const text = translatedContent || report?.output_text;
+    if (!text) return [];
+    return parseReportSections(text);
+  }, [report?.output_text, translatedContent]);
 
   // Extract grade from report text
   const grade = useMemo(() => {
@@ -360,6 +367,29 @@ export default function ReportViewerPage() {
     }
   };
 
+  const handleLanguageChange = useCallback(async (lang: "en" | "fr" | "es") => {
+    setSelectedLanguage(lang);
+    if (lang === "en") {
+      setTranslatedContent(null);
+      return;
+    }
+    setTranslating(true);
+    try {
+      const { data } = await api.post("/translate/report", {
+        report_id: reportId,
+        target_language: lang,
+      });
+      setTranslatedContent(data.translated_content);
+    } catch {
+      // Revert to previous language on error
+      setSelectedLanguage(translatedContent ? (selectedLanguage === "fr" ? "fr" : "es") : "en");
+      setTranslationToast(true);
+      setTimeout(() => setTranslationToast(false), 3000);
+    } finally {
+      setTranslating(false);
+    }
+  }, [reportId, translatedContent, selectedLanguage]);
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -419,6 +449,26 @@ export default function ReportViewerPage() {
               </div>
               <h1 className="text-2xl font-bold">
                 {report.title || "Report"}
+                {selectedLanguage !== "en" && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      marginLeft: "8px",
+                      background: "#0D9488",
+                      color: "#FFFFFF",
+                      fontSize: "9px",
+                      fontFamily: "Oswald, sans-serif",
+                      borderRadius: "10px",
+                      padding: "2px 8px",
+                      verticalAlign: "middle",
+                      textTransform: "uppercase",
+                      fontWeight: 700,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {selectedLanguage.toUpperCase()}
+                  </span>
+                )}
               </h1>
               {player ? (
                 <Link
@@ -503,6 +553,31 @@ export default function ReportViewerPage() {
 
               {/* Action buttons — hidden in print */}
               <div className="flex items-center gap-2 print:hidden">
+                <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => handleLanguageChange(e.target.value as "en" | "fr" | "es")}
+                    disabled={translating}
+                    style={{
+                      fontSize: "12px",
+                      fontFamily: "Oswald, sans-serif",
+                      border: "1px solid #E2E8F0",
+                      borderRadius: "4px",
+                      padding: "4px 8px",
+                      background: "#FFFFFF",
+                      color: "#0F2A3D",
+                      cursor: "pointer",
+                      appearance: "auto",
+                    }}
+                  >
+                    <option value="en">🇨🇦 English</option>
+                    <option value="fr">🇫🇷 Français</option>
+                    <option value="es">🇪🇸 Español</option>
+                  </select>
+                  {translating && (
+                    <Loader2 size={14} className="animate-spin" style={{ marginLeft: "4px", color: "#18B3A6" }} />
+                  )}
+                </div>
                 <button
                   onClick={handleCopyLink}
                   className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-oswald uppercase tracking-wider transition-colors"
@@ -678,6 +753,30 @@ export default function ReportViewerPage() {
             <p className="text-muted text-sm">
               No report content available.
             </p>
+          </div>
+        )}
+        {/* Translation error toast */}
+        {translationToast && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "24px",
+              right: "24px",
+              background: "#0F2A3D",
+              color: "#FFFFFF",
+              fontSize: "13px",
+              fontFamily: "Oswald, sans-serif",
+              padding: "10px 16px",
+              borderRadius: "8px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <AlertCircle size={16} style={{ color: "#F36F21" }} />
+            Translation unavailable
           </div>
         )}
       </main>
