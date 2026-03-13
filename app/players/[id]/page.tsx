@@ -3975,13 +3975,35 @@ export default function PlayerDetailPage() {
                 {[
                   ["Height / Weight", `${player.height_cm ? `${player.height_cm} cm` : "—"} · ${player.weight_kg ? `${player.weight_kg} kg` : "—"}`],
                   ["Handedness", player.shoots ? `${player.shoots}-shot` : "—"],
-                  ["Status", player.roster_status === "inj" ? "Injured" : player.roster_status === "susp" ? "Suspended" : "Healthy"],
+                  ["Status", ""],
                   ["Commitment", player.commitment_status || "Uncommitted"],
                   ["Birth Year", player.birth_year ? `${player.birth_year}` : "—"],
                 ].map(([label, value]) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #EEF3F8" }}>
                     <span style={{ fontSize: 10, color: "#5A7291", fontFamily: "'DM Mono', monospace", letterSpacing: ".04em", textTransform: "uppercase" }}>{label}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: label === "Status" ? "#0D9488" : "#0F2942" }}>{value}</span>
+                    {label === "Status" ? (
+                      <select
+                        value={player.roster_status || "active"}
+                        onChange={async (e) => {
+                          const ns = e.target.value;
+                          try {
+                            await api.patch(`/players/${playerId}/roster-status`, { roster_status: ns });
+                            setPlayer((prev) => prev ? { ...prev, roster_status: ns } : prev);
+                            toast.success("Roster status updated");
+                          } catch {
+                            toast.error("Failed to update status");
+                          }
+                        }}
+                        style={{ fontSize: 11, fontWeight: 600, color: "#0D9488", background: "transparent", border: "1px solid rgba(13,148,136,.3)", borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontFamily: "'DM Mono', monospace" }}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="released">Released</option>
+                        <option value="traded">Traded</option>
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "#0F2942" }}>{value}</span>
+                    )}
                   </div>
                 ))}
               </div>
