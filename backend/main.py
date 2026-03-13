@@ -5934,6 +5934,18 @@ def seed_new_templates():
         ("Player Outcomes Report", "player_outcomes",
          "Player Analytics", "Projections & Development",
          "Assess readiness for next-level advancement with readiness verdict, league context, next-level translation, advancement triggers, timeline, and risk factors."),
+        ("Film Clip Breakdown", "film_clip_breakdown",
+         "Film", "Player Analysis",
+         "Clip-by-clip film breakdown for a single player — each tagged clip gets focused analysis, pattern recognition across clips, and development priorities."),
+        ("Team Phase Review", "team_phase_review",
+         "Film", "Team Analysis",
+         "Team film review organized by phase of play — offensive, defensive, transition, special teams — with letter grades and priority fixes."),
+        ("Film Mini Report", "film_mini_report",
+         "Film", "Quick Notes",
+         "Compact 300-400 word film note for a player — quick observations, bullet-point takeaways, and a bottom-line verdict from limited film."),
+        ("What Went Wrong", "what_went_wrong",
+         "Film", "Game Review",
+         "Post-loss triage report — breakdowns ranked by impact, root cause analysis, numbered fix list, and what still worked. Player or team scope."),
     ]
     added = 0
     for name, rtype, cat, subcat, desc in new_templates:
@@ -12607,6 +12619,7 @@ class ReportResponse(BaseModel):
     quality_details: Optional[str] = None
     source_type: Optional[str] = "standard"
     source_film_session_id: Optional[str] = None
+    image_snapshots: Optional[list] = None
 
 class ReportGenerateResponse(BaseModel):
     report_id: str
@@ -51575,6 +51588,138 @@ even if the offense takes time to develop."
 
 Use SCOUT + AGENT lens. Reference specific film moments. Never fabricate highlights not present in tagged data.
 If PXR data is available, weave it in as supporting evidence.""",
+
+    "film_clip_breakdown": """You are a player development coach doing a detailed clip-by-clip film breakdown for one player.
+Write as if you are building a teaching reel — each clip gets its own mini-analysis that a coach can pull up
+on screen with the player.
+Do not list raw timestamps. Reference clips naturally: "In the early second period, you jump the passing lane
+and create a 2-on-1."
+
+Generate a structured clip-by-clip breakdown with these sections:
+
+PLAYER_CONTEXT
+Who we are watching, position, and the game/session context. One paragraph setting the stage.
+
+CLIP_BREAKDOWN
+For each tagged clip, write a focused analysis (3-5 sentences) covering:
+- What the player did and the decision they made
+- What was good about the execution
+- What could be improved
+- The coaching teaching point for this specific moment
+Number each clip sequentially. If image snapshots are available, reference them using [image:N] tokens
+to anchor the visual.
+
+PATTERN_ANALYSIS
+After reviewing all clips, identify 2-4 recurring patterns — both positive habits and areas needing work.
+Connect patterns across clips: "Clips 2, 5, and 8 all show the same late rotation in the D-zone."
+
+DEVELOPMENT_PRIORITIES
+3-5 actionable items for the player's next development block, directly tied to patterns observed across the clips.
+Each priority should reference the specific clips that demonstrate the need.
+
+If image snapshots are provided, reference them using [image:N] tokens (e.g., "In [image:3], we see the late
+gap closure"). Only describe what is stated in the label and event data — never invent visual details.
+Use SKILL_COACH + SCOUT lens. Every observation must come from tagged clip data — never invent sequences
+or behaviors.""",
+
+    "team_phase_review": """You are a systems coach reviewing team film organized by phase of play.
+Write for the coaching staff — structured, grade-based, actionable. This is about the team, not individuals.
+Do not list raw timestamps. Reference sequences naturally by period and game situation.
+
+Generate a structured phase-of-play review with these sections:
+
+COVERAGE_SUMMARY
+How many sequences were observable per phase? State sample sizes so the staff knows how much film
+backs each conclusion.
+
+OFFENSIVE_PHASE
+Attack patterns, zone entries, shot generation, cycle play, net-front presence.
+What is working offensively and what is breaking down? Grade: A/B/C/D/F with justification.
+
+DEFENSIVE_PHASE
+D-zone coverage, gap control, box-outs, net-front battles, clearing attempts.
+Are we defending as a five-man unit? Grade: A/B/C/D/F.
+
+TRANSITION_PHASE
+Breakout execution, neutral zone play, regroup discipline, counterattack speed.
+Do we move the puck quickly enough? Are we turning it over in transition? Grade: A/B/C/D/F.
+
+SPECIAL_TEAMS_PHASE
+Power play structure, entries, shot generation from intended positions.
+Penalty kill discipline, lane integrity, pressure timing. Grade each: A/B/C/D/F.
+
+PHASE_GRADES_SUMMARY
+Table-style summary — each phase with a letter grade and one-line justification.
+
+PRIORITY_FIXES
+3-5 fixes linked to film evidence. Each names the phase, describes the problem, and recommends
+a practice focus or drill.
+
+If image snapshots are provided, reference them using [image:N] tokens to illustrate key moments.
+Only describe what is stated in the label and event data — never invent visual details.
+Use COACH + ANALYST lens. Every finding must be anchored to tagged events. Never fabricate sequences.""",
+
+    "film_mini_report": """You are a scout writing a quick film note after reviewing a handful of clips on a player.
+Keep it tight — this is a sticky note for the file, not a full report. Target 300-400 words maximum.
+Write with authority but brevity. Every sentence should carry signal.
+
+Generate a compact film note with exactly three sections:
+
+FILM_NOTE
+2-3 sentences: what you watched, how many clips, the game/session context.
+
+OBSERVATIONS
+4-6 bullet points capturing the most important things you saw. Each bullet is one sentence, max two.
+Lead with the strongest observation. Mix positives and development areas.
+If image snapshots are available, reference the most impactful one using [image:N].
+
+VERDICT
+2-3 sentences: your bottom-line read on this player from this film. Would you watch more? Flag anything?
+
+HARD CONSTRAINT: Total output must not exceed 400 words. If you are running long, cut bullets
+from OBSERVATIONS.
+
+If image snapshots are provided, reference them using [image:N] tokens.
+Only describe what is stated in the label and event data — never invent visual details.
+Use SCOUT lens. Evidence-based only. No ceiling/floor projections from limited film.""",
+
+    "what_went_wrong": """You are a coach who just lost a game and needs to diagnose what went wrong — quickly, honestly,
+constructively. This is not a full post-game review. This is triage: what broke, why, and what to fix first.
+Write with urgency. No sugar-coating, but no blame either — diagnose, do not accuse.
+Do not list raw timestamps. Reference sequences by period and situation.
+
+Generate a structured triage report with these sections:
+
+DAMAGE_ASSESSMENT
+What happened? Score, momentum shifts, the story of the loss in 3-4 sentences.
+Be direct: "We got outworked in the second period and gave up three goals in six minutes."
+
+BREAKDOWNS
+3-5 specific things that went wrong, ranked by impact. For each:
+- What broke (system, personnel, execution, compete level)
+- When it happened (period, situation)
+- Film evidence (reference tagged clips/events)
+Each breakdown is 2-3 sentences. Be specific — "D-zone coverage collapsed" not "we played bad defense."
+
+ROOT_CAUSES
+Look across the breakdowns. Are there 1-2 underlying causes that connect multiple failures?
+"Three of our five breakdowns trace back to the same issue: our D are panicking under forecheck pressure
+and throwing blind rim passes instead of using the support route."
+
+FIX_LIST
+Numbered list of 3-5 fixes, ordered by priority. Each fix:
+- Names the problem it addresses
+- States exactly what changes (drill, system tweak, deployment, personnel)
+- Sets a timeline (next practice, next game, this week)
+
+WHAT_WORKED
+1-2 sentences on what we should keep doing. Even in a bad game, acknowledge what held up.
+This prevents overcorrection.
+
+If image snapshots are provided, reference them using [image:N] tokens to show specific breakdowns.
+Only describe what is stated in the label and event data — never invent visual details.
+Use COACH lens throughout. Every diagnosis must come from tagged data — never speculate beyond the evidence.
+Works for both player-specific and team-wide analysis depending on the tagged data provided.""",
 }
 
 
@@ -51627,6 +51772,17 @@ async def generate_film_report(session_id: str, request: Request, token_data: di
             (session_id, org_id),
         ).fetchall()
         events = [dict(e) if hasattr(e, "keys") else e for e in event_rows]
+
+        # 3a. Input validation — certain report types require clips or events
+        _TYPES_REQUIRE_CLIPS = {"film_clip_breakdown", "film_mini_report"}
+        _TYPES_REQUIRE_EVENTS = {"team_phase_review"}
+        _TYPES_REQUIRE_EITHER = {"what_went_wrong"}
+        if report_type in _TYPES_REQUIRE_CLIPS and not clips:
+            raise HTTPException(status_code=400, detail=f"Report type '{report_type}' requires tagged clips. Tag at least one clip in this session before generating.")
+        if report_type in _TYPES_REQUIRE_EVENTS and not events:
+            raise HTTPException(status_code=400, detail=f"Report type '{report_type}' requires tagged events. Tag at least one event in this session before generating.")
+        if report_type in _TYPES_REQUIRE_EITHER and not clips and not events:
+            raise HTTPException(status_code=400, detail=f"Report type '{report_type}' requires tagged clips or events. Tag at least one before generating.")
 
         # 3b. Resolve player UUIDs to names for clip and event context
         player_uuid_set = set()
