@@ -53350,6 +53350,96 @@ async def list_coach_feedback(org_id: str = Query(...),
         conn.close()
 
 
+# ── Org Preferences Summarizer ──────────────────────────────
+
+def build_org_preferences(org_id: str):
+    """Summarize accumulated coach feedback into structured preferences.
+
+    Returns a dict of preferences or None if fewer than 5 feedback rows
+    exist in the last 90 days.
+    """
+    conn = get_db()
+    try:
+        cutoff = (datetime.utcnow() - timedelta(days=90)).isoformat()
+        rows = conn.execute(
+            "SELECT section_key, action FROM coach_feedback WHERE org_id = ? AND created_at >= ?",
+            (org_id, cutoff),
+        ).fetchall()
+
+        if len(rows) < 5:
+            return None, len(rows)
+
+        # Count actions
+        too_long_count = sum(1 for r in rows if r["action"] == "too_long")
+        too_short_count = sum(1 for r in rows if r["action"] == "too_short")
+
+        # preferred_length
+        if too_long_count > 0 and too_long_count > too_short_count * 1.2:
+            preferred_length = "shorter"
+        elif too_short_count > 0 and too_short_count > too_long_count * 1.2:
+            preferred_length = "longer"
+        else:
+            preferred_length = "balanced"
+
+        # Aggregate by section_key + action
+        from collections import Counter
+        section_action_counts: dict = {}
+        for r in rows:
+            key = r["section_key"]
+            act = r["action"]
+            if key not in section_action_counts:
+                section_action_counts[key] = Counter()
+            section_action_counts[key][act] += 1
+
+        # flagged_sections: not_helpful or inaccurate, count >= 2
+        flagged_sections = sorted({
+            sk for sk, counts in section_action_counts.items()
+            if counts.get("not_helpful", 0) + counts.get("inaccurate", 0) >= 2
+        })
+
+        # saved_sections: save action, count >= 1
+        saved_sections = sorted({
+            sk for sk, counts in section_action_counts.items()
+            if counts.get("save", 0) >= 1
+        })
+
+        # accuracy_concerns: inaccurate action, count >= 2
+        accuracy_concerns = sorted({
+            sk for sk, counts in section_action_counts.items()
+            if counts.get("inaccurate", 0) >= 2
+        })
+
+        return {
+            "preferred_length": preferred_length,
+            "flagged_sections": flagged_sections,
+            "saved_sections": saved_sections,
+            "accuracy_concerns": accuracy_concerns,
+            "feedback_count": len(rows),
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+        }, len(rows)
+    except Exception:
+        conn.rollback()
+        return None, 0
+    finally:
+        conn.close()
+
+
+@app.get("/api/orgs/{org_id}/preferences")
+async def get_org_preferences(org_id: str, token_data: dict = Depends(verify_token)):
+    """Return summarized org preferences from coaching feedback."""
+    if token_data.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result, count = build_org_preferences(org_id)
+    if result is None:
+        return {
+            "status": "insufficient_data",
+            "feedback_count": count,
+            "message": "At least 5 feedback submissions required to build preferences",
+        }
+    return {"status": "ok", "preferences": result}
+
+
 # ============================================================
 # MAIN
 # ============================================================
