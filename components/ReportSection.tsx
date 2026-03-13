@@ -3,9 +3,17 @@ import { assetUrl } from "@/lib/api";
 import { Shield, Star, TrendingUp, Target, Zap, ClipboardList } from "lucide-react";
 import ListenButton from "./ListenButton";
 
+interface ImageSnapshot {
+  event_id: string;
+  image_ref: string;
+  label: string;
+  timecode: string;
+}
+
 interface Props {
   sectionKey: string;
   content: string;
+  imageSnapshots?: ImageSnapshot[] | null;
 }
 
 // Sections that get special visual treatment
@@ -143,15 +151,164 @@ function BoldText({ text, className }: { text: string; className?: string }) {
   return <span className={className}>{parts}</span>;
 }
 
-/** Check if content contains markdown images */
-function hasImages(content: string): boolean {
-  return /!\[[^\]]*\]\([^)]+\)/.test(content);
+/** Check if content contains markdown images or [image:N] tokens */
+function hasImages(content: string, snapshots?: ImageSnapshot[] | null): boolean {
+  if (/!\[[^\]]*\]\([^)]+\)/.test(content)) return true;
+  if (snapshots && snapshots.length > 0 && /\[image:\d+\]/.test(content)) return true;
+  return false;
 }
 
-export default function ReportSection({ sectionKey, content }: Props) {
+type BodySegment =
+  | { type: "text"; content: string }
+  | { type: "image"; src: string; label: string; timecode: string; index: number };
+
+/** Parse report body text, replacing [image:N] tokens with image segments */
+function parseReportBody(
+  bodyText: string,
+  snapshots?: ImageSnapshot[] | null,
+): BodySegment[] {
+  if (!snapshots || snapshots.length === 0) {
+    return [{ type: "text", content: bodyText }];
+  }
+
+  const segments: BodySegment[] = [];
+  const tokenRegex = /\[image:(\d+)\]/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = tokenRegex.exec(bodyText)) !== null) {
+    // Text before the token
+    if (match.index > lastIndex) {
+      segments.push({ type: "text", content: bodyText.slice(lastIndex, match.index) });
+    }
+
+    const n = parseInt(match[1], 10);
+    if (snapshots[n] && snapshots[n].image_ref) {
+      segments.push({
+        type: "image",
+        src: snapshots[n].image_ref,
+        label: snapshots[n].label || "",
+        timecode: snapshots[n].timecode || "",
+        index: n,
+      });
+    }
+    // Else: skip token entirely — no broken image
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text
+  if (lastIndex < bodyText.length) {
+    segments.push({ type: "text", content: bodyText.slice(lastIndex) });
+  }
+
+  return segments;
+}
+
+/** Inline image still from a frozen video keyframe */
+function ReportImageStill({
+  src,
+  label,
+  timecode,
+}: {
+  src: string;
+  label: string;
+  timecode: string;
+  index: number;
+}) {
+  return (
+    <div
+      style={{
+        maxWidth: "100%",
+        margin: "16px 0",
+        borderRadius: "8px",
+        overflow: "hidden",
+        border: "1px solid #E2E8F0",
+      }}
+    >
+      <img
+        src={src}
+        alt={label}
+        style={{ width: "100%", display: "block" }}
+        onError={(e) => {
+          // Hide entire component on load error
+          const target = e.currentTarget;
+          if (target.parentElement) {
+            target.parentElement.style.display = "none";
+          }
+        }}
+      />
+      <div
+        style={{
+          background: "#0F2942",
+          padding: "8px 12px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span
+          style={{
+            color: "#FFFFFF",
+            fontSize: "13px",
+            fontFamily: "JetBrains Mono, monospace",
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ color: "#94A3B8", fontSize: "12px" }}>{timecode}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Render report body segments — text through existing renderer, images inline */
+function ReportBodyRenderer({
+  content,
+  snapshots,
+  textClassName,
+}: {
+  content: string;
+  snapshots?: ImageSnapshot[] | null;
+  textClassName?: string;
+}) {
+  const segments = parseReportBody(content, snapshots);
+  const contentNeedsRich = hasImages(content, snapshots);
+
+  // Single text segment with no images — use existing render path exactly
+  if (segments.length === 1 && segments[0].type === "text" && !contentNeedsRich) {
+    return <>{content}</>;
+  }
+
+  return (
+    <>
+      {segments.map((seg, i) => {
+        if (seg.type === "image") {
+          return (
+            <ReportImageStill
+              key={`img-${i}`}
+              src={seg.src}
+              label={seg.label}
+              timecode={seg.timecode}
+              index={seg.index}
+            />
+          );
+        }
+        // Text segment — use RichContent if it contains markdown images, else plain
+        const textHasMarkdownImages = /!\[[^\]]*\]\([^)]+\)/.test(seg.content);
+        if (textHasMarkdownImages) {
+          return <RichContent key={`txt-${i}`} text={seg.content} className={textClassName} />;
+        }
+        return <BoldText key={`txt-${i}`} text={seg.content} className={textClassName} />;
+      })}
+    </>
+  );
+}
+
+export default function ReportSection({ sectionKey, content, imageSnapshots }: Props) {
   const label = SECTION_LABELS[sectionKey] || sectionKey.replace(/_/g, " ");
   const highlight = HIGHLIGHT_SECTIONS[sectionKey];
-  const contentHasImages = hasImages(content);
+  const contentHasImages = hasImages(content, imageSnapshots);
 
   // Special RECOMMENDED_DRILLS rendering
   if (sectionKey === "RECOMMENDED_DRILLS") {
@@ -184,7 +341,7 @@ export default function ReportSection({ sectionKey, content }: Props) {
 
           {/* Content with images */}
           <div className="text-sm leading-relaxed text-navy/85 whitespace-pre-wrap">
-            <RichContent text={content} />
+            <ReportBodyRenderer content={content} snapshots={imageSnapshots} />
           </div>
         </div>
       </section>
@@ -230,7 +387,7 @@ export default function ReportSection({ sectionKey, content }: Props) {
 
           {/* Content */}
           <div className="text-sm leading-relaxed text-navy/85 whitespace-pre-wrap">
-            {contentHasImages ? <RichContent text={content} /> : content}
+            {contentHasImages ? <ReportBodyRenderer content={content} snapshots={imageSnapshots} /> : content}
           </div>
         </div>
       </section>
@@ -252,7 +409,7 @@ export default function ReportSection({ sectionKey, content }: Props) {
             <ListenButton text={content} />
           </div>
           <div className="text-sm leading-relaxed text-body whitespace-pre-wrap pl-3">
-            {contentHasImages ? <RichContent text={content} /> : content}
+            {contentHasImages ? <ReportBodyRenderer content={content} snapshots={imageSnapshots} /> : content}
           </div>
         </div>
       </section>
@@ -270,7 +427,7 @@ export default function ReportSection({ sectionKey, content }: Props) {
         <ListenButton text={content} />
       </div>
       <div className="text-sm leading-relaxed text-body whitespace-pre-wrap pl-3">
-        {contentHasImages ? <RichContent text={content} /> : content}
+        {contentHasImages ? <ReportBodyRenderer content={content} snapshots={imageSnapshots} /> : content}
       </div>
     </section>
   );

@@ -649,7 +649,7 @@ export default function ReportViewerPage() {
             {/* Report Sections */}
             {sections.map((s, i) => (
               <div key={i} id={`section-${i}`}>
-                <ReportSection sectionKey={s.key} content={s.content} />
+                <ReportSection sectionKey={s.key} content={s.content} imageSnapshots={report.image_snapshots} />
               </div>
             ))}
 

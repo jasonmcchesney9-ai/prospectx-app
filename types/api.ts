@@ -516,6 +516,12 @@ export interface Report {
   quality_details?: string | null;
   source_type?: string | null;
   source_film_session_id?: string | null;
+  image_snapshots?: Array<{
+    event_id: string;
+    image_ref: string;
+    label: string;
+    timecode: string;
+  }> | null;
 }
 
 export interface ReportTemplate {
