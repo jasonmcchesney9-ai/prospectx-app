@@ -25436,6 +25436,31 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
                 """, (org_id,)).fetchall()
                 input_data["player_intelligence_summary"] = [dict(r) for r in intel_rows[:50]]
 
+        # ── Wire video event tags (team-level) into input_data ───────────
+        try:
+            roster_ids = [p["id"] for p in roster]
+            if roster_ids:
+                placeholders = ",".join("?" for _ in roster_ids)
+                team_ve_rows = conn.execute(
+                    f"""SELECT event_type, COUNT(*) as cnt
+                        FROM video_events
+                        WHERE org_id = ? AND player_id IN ({placeholders})
+                        GROUP BY event_type
+                        ORDER BY cnt DESC
+                        LIMIT 10""",
+                    [org_id] + roster_ids,
+                ).fetchall()
+                if team_ve_rows:
+                    team_video_summary = {r["event_type"]: r["cnt"] for r in team_ve_rows}
+                    input_data["video_event_tags_team_summary"] = team_video_summary
+                    logger.info("Report: added %d video tag types for team %s", len(team_video_summary), team_name)
+        except Exception as e:
+            logger.warning("Team report: video event tag fetch failed: %s", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
         if client:
             llm_model = "claude-sonnet-4-20250514"
 
@@ -26287,6 +26312,40 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                             aggregated_ext[k] = v
             if aggregated_ext:
                 input_data["instat_extended_stats"] = aggregated_ext
+
+            # ── Wire video event tags into input_data ────────────────────────
+            try:
+                ve_rows = conn.execute(
+                    """SELECT event_type, event_label, time_seconds, period, created_at, ice_zone, outcome
+                       FROM video_events
+                       WHERE player_id = ? AND org_id = ?
+                       ORDER BY created_at DESC""",
+                    (request.player_id, org_id),
+                ).fetchall()
+                if ve_rows:
+                    video_tags: dict = {}
+                    for vr in ve_rows:
+                        etype = vr["event_type"] or "unknown"
+                        if etype not in video_tags:
+                            video_tags[etype] = {"count": 0, "examples": []}
+                        video_tags[etype]["count"] += 1
+                        if len(video_tags[etype]["examples"]) < 3:
+                            video_tags[etype]["examples"].append({
+                                "label": vr["event_label"],
+                                "period": vr["period"],
+                                "time": vr["time_seconds"],
+                                "ice_zone": vr["ice_zone"],
+                                "outcome": vr["outcome"],
+                                "date": vr["created_at"],
+                            })
+                    input_data["video_event_tags"] = video_tags
+                    logger.info("Report: added %d video tag types for %s", len(video_tags), player_name)
+            except Exception as e:
+                logger.warning("Report: video event tag fetch failed: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
             # Add ProspectX Indices and Intelligence data for enriched reports
             logger.info("REPORT_DEBUG checkpoint=1 report_id=%s — computing PXI indices", report_id)
