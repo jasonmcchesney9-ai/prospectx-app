@@ -5385,7 +5385,23 @@ def init_db():
         """)
         conn.commit()
         if backfilled.rowcount and backfilled.rowcount > 0:
-            logger.info("Startup backfill: linked %d league_player_stats_cache rows to px_player_id", backfilled.rowcount)
+            logger.info("Startup backfill: linked %d league_player_stats_cache rows to px_player_id (by hockeytech_id)", backfilled.rowcount)
+        # Name-based fallback for rows still unlinked
+        name_backfilled = conn.execute("""
+            UPDATE league_player_stats_cache
+            SET px_player_id = (
+                SELECT p.id FROM players p
+                WHERE LOWER(TRIM(p.first_name)) || ' ' || LOWER(TRIM(p.last_name)) = LOWER(TRIM(league_player_stats_cache.player_name))
+                AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                LIMIT 1
+            )
+            WHERE px_player_id IS NULL
+            AND player_name IS NOT NULL
+            AND player_name != ''
+        """)
+        conn.commit()
+        if name_backfilled.rowcount and name_backfilled.rowcount > 0:
+            logger.info("Startup backfill: linked %d league_player_stats_cache rows to px_player_id (by name)", name_backfilled.rowcount)
     except Exception as e:
         conn.rollback()
         logger.warning("league_player_stats_cache px_player_id backfill skipped: %s", e)
@@ -11483,6 +11499,20 @@ def sync_hockeytech_data_cron():
                         AND px_player_id IS NULL
                         AND player_id IS NOT NULL
                         AND player_id != ''
+                    """, (code,))
+                    # Name-based fallback for rows still unlinked
+                    conn.execute("""
+                        UPDATE league_player_stats_cache
+                        SET px_player_id = (
+                            SELECT p.id FROM players p
+                            WHERE LOWER(TRIM(p.first_name)) || ' ' || LOWER(TRIM(p.last_name)) = LOWER(TRIM(league_player_stats_cache.player_name))
+                            AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                            LIMIT 1
+                        )
+                        WHERE league = ?
+                        AND px_player_id IS NULL
+                        AND player_name IS NOT NULL
+                        AND player_name != ''
                     """, (code,))
                     logger.info("[HT SYNC CRON] %s: cached %d scoring leaders", code, total_cached_leaders)
                 except Exception as ldr_err:
@@ -33231,6 +33261,20 @@ async def admin_populate_league_cache(league: str, token_data: dict = Depends(ve
                 AND player_id IS NOT NULL
                 AND player_id != ''
             """, (code,))
+            # Name-based fallback for rows still unlinked
+            conn.execute("""
+                UPDATE league_player_stats_cache
+                SET px_player_id = (
+                    SELECT p.id FROM players p
+                    WHERE LOWER(TRIM(p.first_name)) || ' ' || LOWER(TRIM(p.last_name)) = LOWER(TRIM(league_player_stats_cache.player_name))
+                    AND (p.is_deleted IS NULL OR p.is_deleted = 0)
+                    LIMIT 1
+                )
+                WHERE league = ?
+                AND px_player_id IS NULL
+                AND player_name IS NOT NULL
+                AND player_name != ''
+            """, (code,))
             logger.info("[CACHE WARMUP] %s: cached %d scoring leaders", code, total_leaders)
         except Exception as ldr_err:
             errors.append(f"leaders: {str(ldr_err)[:200]}")
@@ -33643,17 +33687,23 @@ async def league_hub_player_stats_stored(league: str, request: Request, limit: i
         if rows:
             # Live fallback lookup for rows where px_player_id was not backfilled
             ht_lookup: dict[str, str] = {}
+            name_lookup: dict[str, str] = {}
             if any(not r["px_player_id"] for r in rows):
                 px_rows = conn.execute(
-                    "SELECT id, hockeytech_id FROM players WHERE hockeytech_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)"
+                    "SELECT id, hockeytech_id, first_name, last_name FROM players WHERE (is_deleted IS NULL OR is_deleted = 0)"
                 ).fetchall()
                 for pr in px_rows:
-                    ht_lookup[str(pr["hockeytech_id"])] = pr["id"]
+                    if pr["hockeytech_id"]:
+                        ht_lookup[str(pr["hockeytech_id"])] = pr["id"]
+                    fn = (pr["first_name"] or "").strip().lower()
+                    ln = (pr["last_name"] or "").strip().lower()
+                    if fn and ln:
+                        name_lookup[f"{fn} {ln}"] = pr["id"]
 
             return [
                 {
                     "player_id": r["player_id"],
-                    "px_player_id": r["px_player_id"] or ht_lookup.get(r["player_id"]),
+                    "px_player_id": r["px_player_id"] or ht_lookup.get(r["player_id"]) or name_lookup.get((r["player_name"] or "").strip().lower()),
                     "name": r["player_name"],
                     "team_name": r["team_name"],
                     "team_code": r["team_code"],
