@@ -430,10 +430,6 @@ export default function ReportViewerPage() {
                     })}
                   </span>
                 )}
-                {report.llm_model && <span>Model: {report.llm_model}</span>}
-                {report.llm_tokens && (
-                  <span>{report.llm_tokens.toLocaleString()} tokens</span>
-                )}
               </div>
             </div>
 
