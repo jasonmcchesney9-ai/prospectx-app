@@ -40,12 +40,11 @@ import type { SuperadminOrg, SuperadminStats, SuperadminUser, OrgInvite } from "
 
 const TIER_OPTIONS = [
   { value: "rookie", label: "Rookie", color: "text-gray-600" },
-  { value: "parent", label: "Parent", color: "text-pink-600" },
-  { value: "scout", label: "Scout", color: "text-blue-600" },
+  { value: "coach", label: "Coach", color: "text-blue-600" },
   { value: "pro", label: "Pro", color: "text-teal" },
   { value: "elite", label: "Elite", color: "text-violet-600" },
   { value: "team_org", label: "Team", color: "text-orange" },
-  { value: "program_org", label: "Program", color: "text-navy" },
+  { value: "org", label: "Organization", color: "text-navy" },
   { value: "enterprise", label: "Enterprise", color: "text-purple-600" },
 ];
 
@@ -53,22 +52,20 @@ function tierBadge(tier: string | null) {
   const t = tier || "rookie";
   const colors: Record<string, string> = {
     rookie: "bg-gray-100 text-gray-700",
-    parent: "bg-pink-100 text-pink-700",
-    scout: "bg-blue-100 text-blue-700",
+    coach: "bg-blue-100 text-blue-700",
     pro: "bg-teal/10 text-teal",
     elite: "bg-violet-100 text-violet-700",
     team_org: "bg-orange/10 text-orange",
-    program_org: "bg-navy/10 text-navy",
+    org: "bg-navy/10 text-navy",
     enterprise: "bg-purple-100 text-purple-700",
   };
   const labels: Record<string, string> = {
     rookie: "Rookie",
-    parent: "Parent",
-    scout: "Scout",
+    coach: "Coach",
     pro: "Pro",
     elite: "Elite",
     team_org: "Team",
-    program_org: "Program",
+    org: "Organization",
     enterprise: "Enterprise",
   };
   return (

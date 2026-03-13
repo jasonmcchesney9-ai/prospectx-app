@@ -27723,8 +27723,8 @@ def get_player_pxr_context(player_id: str, conn) -> dict:
         score = row["pxr_score"]
         tier_id = "3B"
         tier_label = "EARLY STAGE"
-        for lo, hi, tid, tlabel in _PXR_TIERS:
-            if lo <= score <= hi:
+        for lo, _hi, tid, tlabel in _PXR_TIERS:
+            if score >= lo:
                 tier_id = tid
                 tier_label = tlabel
                 break
@@ -44364,24 +44364,27 @@ async def get_unread_count(token_data: dict = Depends(verify_token)):
     """Get total unread message count for nav badge."""
     user_id = token_data["user_id"]
     conn = get_db()
+    try:
+        # Get all conversations user is in
+        convs = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
+        total_unread = 0
+        for c in convs:
+            try:
+                pids = json.loads(c["participant_ids"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if user_id in pids:
+                unread = conn.execute(
+                    "SELECT COUNT(*) FROM msg_messages WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
+                    (c["id"], user_id)
+                ).fetchone()[0]
+                total_unread += unread
 
-    # Get all conversations user is in
-    convs = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
-    total_unread = 0
-    for c in convs:
-        try:
-            pids = json.loads(c["participant_ids"])
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if user_id in pids:
-            unread = conn.execute(
-                "SELECT COUNT(*) FROM msg_messages WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
-                (c["id"], user_id)
-            ).fetchone()[0]
-            total_unread += unread
-
-    conn.close()
-    return {"unread_count": total_unread}
+        return {"count": total_unread}
+    except Exception:
+        return {"count": 0}
+    finally:
+        conn.close()
 
 
 # ============================================================

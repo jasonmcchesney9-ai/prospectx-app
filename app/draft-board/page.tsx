@@ -233,13 +233,25 @@ export default function DraftBoardPage() {
   type BoardRow = TierRow | PlayerRow;
 
   const rowsWithTiers = useMemo((): BoardRow[] => {
+    // Group players by tier to skip headers for empty tiers
+    const tierPlayerMap = new Map<string, typeof sorted>();
+    for (const p of sorted) {
+      const tier = getTier(p.pxr_score);
+      if (tier) {
+        if (!tierPlayerMap.has(tier.id)) tierPlayerMap.set(tier.id, []);
+        tierPlayerMap.get(tier.id)!.push(p);
+      }
+    }
     const result: BoardRow[] = [];
     let lastTierId = "";
     let rank = 0;
     for (const p of sorted) {
       const tier = getTier(p.pxr_score);
       if (tier && tier.id !== lastTierId) {
-        result.push({ type: "tier", tier });
+        // Only show tier header if this tier has players
+        if (tierPlayerMap.has(tier.id) && tierPlayerMap.get(tier.id)!.length > 0) {
+          result.push({ type: "tier", tier });
+        }
         lastTierId = tier.id;
       }
       rank++;

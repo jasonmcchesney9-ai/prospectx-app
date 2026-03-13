@@ -14,12 +14,11 @@ interface UpgradeModalProps {
 
 const TIER_LABELS: Record<string, string> = {
   rookie: "Rookie",
-  parent: "Parent",
-  scout: "Scout",
+  coach: "Coach",
   pro: "Pro",
   elite: "Elite",
   team_org: "Team",
-  program_org: "Program",
+  org: "Organization",
   enterprise: "Enterprise",
 };
 
