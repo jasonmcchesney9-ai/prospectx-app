@@ -25045,7 +25045,36 @@ If data is limited for any focus area, note what additional data would strengthe
             except Exception:
                 pass
 
-        user_prompt = f"Generate a custom scouting report for {player_name}. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+        # ── PXR Natural Language Context (custom player report) ──
+        try:
+            _pxr_now = datetime.now(timezone.utc)
+            _pxr_sy = _pxr_now.year if _pxr_now.month >= 9 else _pxr_now.year - 1
+            _pxr_season = f"{_pxr_sy}-{(_pxr_sy + 1) % 100:02d}"
+            _pxr_ctx = format_pxr_context(player_id=request.player_id, season=_pxr_season, conn=conn)
+            if _pxr_ctx:
+                input_data["pxr_nl_context"] = _pxr_ctx
+        except Exception as _pxr_err:
+            logger.warning("format_pxr_context failed (non-fatal): %s", str(_pxr_err)[:500])
+
+        if input_data.get("pxr_nl_context"):
+            _pxr_section = (
+                "\n\nPXR INTELLIGENCE CONTEXT:\n"
+                + input_data["pxr_nl_context"] + "\n"
+                "Use this PXR context to ground your assessment "
+                "in ranked, cross-league performance data. "
+                "Reference specific percentiles and pillar "
+                "scores when they are relevant to the report."
+            )
+        else:
+            _pxr_section = (
+                "\n\nPXR INTELLIGENCE CONTEXT:\n"
+                "No PXR score available for this player. "
+                "Note in the report that a ranking score is "
+                "not yet available and would improve this "
+                "assessment when sufficient game data exists."
+            )
+
+        user_prompt = f"Generate a custom scouting report for {player_name}.{_pxr_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         # ── Film observations context injection (custom player report) ──
         try:
@@ -26866,7 +26895,36 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
             if drill_prompt_addon:
                 system_prompt += drill_prompt_addon
 
-            user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+            # ── PXR Natural Language Context (generate_report player) ──
+            try:
+                _pxr_now = datetime.now(timezone.utc)
+                _pxr_sy = _pxr_now.year if _pxr_now.month >= 9 else _pxr_now.year - 1
+                _pxr_season = f"{_pxr_sy}-{(_pxr_sy + 1) % 100:02d}"
+                _pxr_ctx = format_pxr_context(player_id=request.player_id, season=_pxr_season, conn=conn)
+                if _pxr_ctx:
+                    input_data["pxr_nl_context"] = _pxr_ctx
+            except Exception as _pxr_err:
+                logger.warning("format_pxr_context failed (non-fatal): %s", str(_pxr_err)[:500])
+
+            if input_data.get("pxr_nl_context"):
+                _pxr_section = (
+                    "\n\nPXR INTELLIGENCE CONTEXT:\n"
+                    + input_data["pxr_nl_context"] + "\n"
+                    "Use this PXR context to ground your assessment "
+                    "in ranked, cross-league performance data. "
+                    "Reference specific percentiles and pillar "
+                    "scores when they are relevant to the report."
+                )
+            else:
+                _pxr_section = (
+                    "\n\nPXR INTELLIGENCE CONTEXT:\n"
+                    "No PXR score available for this player. "
+                    "Note in the report that a ranking score is "
+                    "not yet available and would improve this "
+                    "assessment when sufficient game data exists."
+                )
+
+            user_prompt = f"Generate a {report_type_name} for the following player.{_pxr_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
             # ── Film observations context injection ──
             logger.info("REPORT_DEBUG checkpoint=13 report_id=%s — injecting film context", report_id)
@@ -40090,7 +40148,36 @@ When a player has transfers or team splits:
         except Exception as e:
             logger.warning("BG PXR context injection failed for %s: %s", player_id, e)
 
-        user_prompt = f"Generate a {report_type_name} for the following player. Here is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
+        # ── PXR Natural Language Context (background generate) ──
+        try:
+            _pxr_now = datetime.now(timezone.utc)
+            _pxr_sy = _pxr_now.year if _pxr_now.month >= 9 else _pxr_now.year - 1
+            _pxr_season = f"{_pxr_sy}-{(_pxr_sy + 1) % 100:02d}"
+            _pxr_ctx = format_pxr_context(player_id=player_id, season=_pxr_season, conn=conn)
+            if _pxr_ctx:
+                input_data["pxr_nl_context"] = _pxr_ctx
+        except Exception as _pxr_err:
+            logger.warning("format_pxr_context failed (non-fatal): %s", str(_pxr_err)[:500])
+
+        if input_data.get("pxr_nl_context"):
+            _pxr_section = (
+                "\n\nPXR INTELLIGENCE CONTEXT:\n"
+                + input_data["pxr_nl_context"] + "\n"
+                "Use this PXR context to ground your assessment "
+                "in ranked, cross-league performance data. "
+                "Reference specific percentiles and pillar "
+                "scores when they are relevant to the report."
+            )
+        else:
+            _pxr_section = (
+                "\n\nPXR INTELLIGENCE CONTEXT:\n"
+                "No PXR score available for this player. "
+                "Note in the report that a ranking score is "
+                "not yet available and would improve this "
+                "assessment when sufficient game data exists."
+            )
+
+        user_prompt = f"Generate a {report_type_name} for the following player.{_pxr_section}\n\nHere is ALL available data:\n\n" + json.dumps(input_data, indent=2, default=str)
 
         # ── PXR Score Context Injection (background path) ──
         try:
