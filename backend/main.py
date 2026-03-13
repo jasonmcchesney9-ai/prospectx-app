@@ -192,6 +192,7 @@ if ENVIRONMENT != "development":
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
 # ── Stripe Billing ────────────────────────────────────────
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
@@ -50281,6 +50282,123 @@ async def create_mux_upload_from_url(request: Request, token_data: dict = Depend
             }
         finally:
             conn.close()
+
+
+@app.post("/film/import/youtube", status_code=201)
+async def import_youtube_video(request: Request, token_data: dict = Depends(verify_token)):
+    """Import a YouTube video by URL using the YouTube Data API v3.
+
+    Fetches video metadata (title, description, thumbnail, duration) and stores
+    it in video_uploads as a ready reference.
+    """
+    import re as _re
+    from urllib.parse import urlparse, parse_qs
+
+    org_id = token_data["org_id"]
+    user_id = token_data["user_id"]
+
+    body = await request.json()
+    youtube_url = (body.get("youtube_url") or "").strip()
+    title_override = (body.get("title") or "").strip()
+
+    if not youtube_url:
+        raise HTTPException(status_code=400, detail="youtube_url is required")
+
+    # ── Extract video ID ──
+    video_id = None
+    try:
+        parsed = urlparse(youtube_url)
+        if parsed.hostname in ("www.youtube.com", "youtube.com", "m.youtube.com"):
+            qs = parse_qs(parsed.query)
+            video_id = qs.get("v", [None])[0]
+        elif parsed.hostname in ("youtu.be",):
+            video_id = parsed.path.lstrip("/").split("/")[0] or None
+    except Exception:
+        pass
+
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
+    # ── Call YouTube Data API v3 ──
+    if not YOUTUBE_API_KEY:
+        raise HTTPException(status_code=500, detail="YouTube API key not configured")
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={
+                    "id": video_id,
+                    "part": "snippet,contentDetails,status",
+                    "key": YOUTUBE_API_KEY,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        logger.exception("[youtube-import] YouTube API call failed for video_id=%s", video_id)
+        raise HTTPException(status_code=502, detail="Failed to reach YouTube API")
+
+    items = data.get("items") or []
+    if not items:
+        raise HTTPException(status_code=400, detail="Video unavailable or private")
+
+    item = items[0]
+    privacy = item.get("status", {}).get("privacyStatus", "")
+    if privacy == "private":
+        raise HTTPException(status_code=400, detail="Video unavailable or private")
+
+    snippet = item.get("snippet", {})
+    content_details = item.get("contentDetails", {})
+
+    title = title_override or snippet.get("title", "YouTube Video")
+    description = snippet.get("description", "")
+    thumbnails = snippet.get("thumbnails", {})
+    thumbnail_url = (thumbnails.get("high") or thumbnails.get("default") or {}).get("url", "")
+
+    # ── Parse ISO 8601 duration to seconds ──
+    duration_iso = content_details.get("duration", "")
+    duration_seconds = 0
+    dur_match = _re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
+    if dur_match:
+        hours = int(dur_match.group(1) or 0)
+        minutes = int(dur_match.group(2) or 0)
+        seconds = int(dur_match.group(3) or 0)
+        duration_seconds = hours * 3600 + minutes * 60 + seconds
+
+    # ── Insert into video_uploads ──
+    upload_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO video_uploads
+                (id, org_id, uploaded_by, title, description,
+                 upload_source, source_url, external_provider,
+                 thumbnail_url, duration_seconds, status,
+                 created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            upload_id, org_id, user_id, title, description,
+            "youtube", youtube_url, "youtube",
+            thumbnail_url, duration_seconds, "ready",
+            user_id, now, now,
+        ))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("[youtube-import] DB insert failed for video_id=%s", video_id)
+        raise HTTPException(status_code=500, detail="Failed to save video")
+    finally:
+        conn.close()
+
+    return {
+        "upload_id": upload_id,
+        "title": title,
+        "thumbnail_url": thumbnail_url,
+        "duration_seconds": duration_seconds,
+        "source_url": youtube_url,
+    }
 
 
 @app.get("/film/uploads/{upload_id}/status")
