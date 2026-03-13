@@ -25,9 +25,10 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import ListenButton from "@/components/ListenButton";
-import type { Report, Player } from "@/types/api";
+import type { Report, Player, QualityCheck } from "@/types/api";
 import { REPORT_TYPE_LABELS, SECTION_LABELS, PROSPECT_GRADES } from "@/types/api";
 import HockeyRink from "@/components/HockeyRink";
+import ReportQualityPanel from "@/components/ReportQualityPanel";
 
 /** Parse report output_text by ALL_CAPS section headers */
 function parseReportSections(
@@ -240,6 +241,28 @@ export default function ReportViewerPage() {
     if (!report?.output_text) return null;
     return extractGrade(report.output_text);
   }, [report?.output_text]);
+
+  // Derive quality check from quality_details JSON (if present)
+  const qualityCheck = useMemo((): QualityCheck | null => {
+    if (!report?.quality_details) return null;
+    try {
+      const details = JSON.parse(report.quality_details);
+      // Background reports store heuristic_check from evaluate_report_quality
+      if (details?.heuristic_check) return details.heuristic_check as QualityCheck;
+      // Fallback: derive from _score_report_quality output
+      if (details?.score != null) {
+        const s = Math.round(details.score);
+        const g: QualityCheck["grade"] = s >= 80 ? "Good" : s >= 60 ? "Needs Attention" : "High Risk";
+        const f = (details.flags || []).map((msg: string) => ({
+          code: "QUALITY",
+          severity: "MEDIUM" as const,
+          message: msg,
+        }));
+        return { overall_score: s, grade: g, flag_count: f.length, flags: f };
+      }
+    } catch { /* ignore parse errors */ }
+    return null;
+  }, [report?.quality_details]);
 
   // Build the filename for download/print — works for player or team reports
   const subjectName = player
@@ -597,6 +620,9 @@ export default function ReportViewerPage() {
           </div>
         ) : sections.length > 0 ? (
           <div className="bg-white rounded-xl border border-teal/20 p-6 sm:p-8">
+            {/* Quality Check Panel */}
+            <ReportQualityPanel qualityCheck={qualityCheck} />
+
             {/* Table of Contents */}
             {sections.length > 3 && (
               <div className="mb-8 p-4 bg-navy/[0.02] rounded-lg border border-teal/10">

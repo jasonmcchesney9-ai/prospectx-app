@@ -562,11 +562,25 @@ export interface TeamCreateRequest {
   abbreviation?: string;
 }
 
+export interface QualityFlag {
+  code: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  message: string;
+}
+
+export interface QualityCheck {
+  overall_score: number;
+  grade: "Good" | "Needs Attention" | "High Risk";
+  flag_count: number;
+  flags: QualityFlag[];
+}
+
 export interface ReportGenerateResponse {
   report_id: string;
   status: string;
   title?: string;
   generation_time_ms?: number;
+  quality_check?: QualityCheck;
 }
 
 export interface ReportStatusResponse {
