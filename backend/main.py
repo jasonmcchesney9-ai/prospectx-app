@@ -11389,6 +11389,110 @@ def format_pxr_context(player_id: str, season: str, conn) -> str:
         return ""
 
 
+# ══════════════════════════════════════════════════════════════════
+# evaluate_report_quality — heuristic advisory validator (NO LLM)
+# ══════════════════════════════════════════════════════════════════
+_KNOWN_SECTIONS: dict[str, list[str]] = {
+    "scouting": ["Strengths", "Development", "Summary", "Comparable", "Recommendation"],
+    "player_scouting": ["Strengths", "Development", "Summary", "Comparable", "Recommendation"],
+    "team_identity": ["Strengths", "Vulnerabilities", "System", "Personnel"],
+    "team": ["Strengths", "Vulnerabilities", "System", "Personnel"],
+    "dev_plan": ["Goals", "Development", "Focus", "Timeline"],
+    "player_season_roadmap": ["Goals", "Development", "Focus", "Timeline"],
+}
+
+_BANNED_STAFF_TERMS = [
+    "mom", "dad", "parent", "parents",
+    "guarantee", "guaranteed", "will definitely",
+    "certain to", "100%",
+]
+
+_STRONG_CLAIM_RE = re.compile(
+    r'\b(elite|exceptional|guaranteed|will definitely|certain to)\b',
+    re.IGNORECASE,
+)
+_DATA_TAG_RE = re.compile(
+    r'\[(DB|INSTAT|FILM|COACH|PXR|MICROSTAT)\]',
+    re.IGNORECASE,
+)
+_GRADE_INFLATION_RE = re.compile(r'\b([89]\.\d/10|10/10|A\+)\b')
+
+
+def evaluate_report_quality(report_text: str, report_type: str = "") -> dict:
+    """Heuristic report quality validator — string/regex checks only, NO LLM call.
+    Returns {overall_score, grade, flag_count, flags}."""
+    flags: list[dict] = []
+    text_lower = report_text.lower()
+
+    # ── CHECK 1: MISSING_SECTION ──
+    required = _KNOWN_SECTIONS.get(report_type, [])
+    for label in required:
+        if label.lower() not in text_lower:
+            flags.append({
+                "code": "MISSING_SECTION",
+                "severity": "MEDIUM",
+                "message": f"Expected section '{label}' not found in report",
+            })
+
+    # ── CHECK 2: BANNED_LANGUAGE (full-word match) ──
+    for term in _BANNED_STAFF_TERMS:
+        pattern = re.compile(r'\b' + re.escape(term) + r'\b', re.IGNORECASE)
+        if pattern.search(report_text):
+            flags.append({
+                "code": "BANNED_LANGUAGE",
+                "severity": "HIGH",
+                "message": f"Prohibited term '{term}' found",
+            })
+
+    # ── CHECK 3: UNSUPPORTED_CLAIM ──
+    for m in _STRONG_CLAIM_RE.finditer(report_text):
+        start = max(0, m.start() - 300)
+        end = min(len(report_text), m.end() + 300)
+        window = report_text[start:end]
+        if not _DATA_TAG_RE.search(window):
+            flags.append({
+                "code": "UNSUPPORTED_CLAIM",
+                "severity": "MEDIUM",
+                "message": f"Strong claim '{m.group()}' without nearby data tag",
+            })
+
+    # ── CHECK 4: GRADE_INFLATION ──
+    if _GRADE_INFLATION_RE.search(report_text):
+        has_microstat = "[MICROSTAT]" in report_text
+        has_film = "[FILM]" in report_text
+        if not (has_microstat or has_film):
+            flags.append({
+                "code": "GRADE_INFLATION",
+                "severity": "MEDIUM",
+                "message": "High grade assigned without microstat or film data support",
+            })
+
+    # ── SCORING ──
+    score = 100
+    for flag in flags:
+        if flag["severity"] == "HIGH":
+            score -= 15
+        elif flag["severity"] == "MEDIUM":
+            score -= 8
+        elif flag["severity"] == "LOW":
+            score -= 3
+    score = max(score, 0)
+
+    if score >= 80:
+        grade = "Good"
+    elif score >= 60:
+        grade = "Needs Attention"
+    else:
+        grade = "High Risk"
+
+    return {
+        "overall_score": score,
+        "grade": grade,
+        "flag_count": len(flags),
+        "flags": flags,
+    }
+
+
 def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, error_message: str | None = None):
     """Write a row to pxr_run_log for audit trail."""
     try:
@@ -12509,6 +12613,7 @@ class ReportGenerateResponse(BaseModel):
     status: str
     title: Optional[str] = None
     generation_time_ms: Optional[int] = None
+    quality_check: Optional[dict] = None
 
 class ReportStatusResponse(BaseModel):
     report_id: str
@@ -24780,7 +24885,14 @@ Today's date is {datetime.now().date().isoformat()}."""
             _increment_usage(user_id, "report", report_id, org_id, conn)
             conn.close()
 
-            return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+            # ── Heuristic quality check (non-blocking) ──
+            try:
+                _qc = evaluate_report_quality(report_text=output_text, report_type="custom_team")
+            except Exception as _qce:
+                logger.warning("Quality check failed (non-fatal): %s", str(_qce)[:200])
+                _qc = None
+
+            return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms, quality_check=_qc)
 
         except Exception as e:
             try:
@@ -25133,7 +25245,14 @@ If data is limited for any focus area, note what additional data would strengthe
         if request.player_id:
             asyncio.create_task(_extract_report_intelligence(report_id, request.player_id, org_id))
 
-        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+        # ── Heuristic quality check (non-blocking) ──
+        try:
+            _qc = evaluate_report_quality(report_text=output_text, report_type="custom_player")
+        except Exception as _qce:
+            logger.warning("Quality check failed (non-fatal): %s", str(_qce)[:200])
+            _qc = None
+
+        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms, quality_check=_qc)
 
     except Exception as e:
         try:
@@ -25809,7 +25928,15 @@ This report was generated in demo mode. Add your API key to backend/.env and re-
                 logger.warning("Series memory write failed (non-fatal): %s", str(sm_err))
 
         conn.close()
-        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+
+        # ── Heuristic quality check (non-blocking) ──
+        try:
+            _qc = evaluate_report_quality(report_text=output_text, report_type=request.report_type)
+        except Exception as _qce:
+            logger.warning("Quality check failed (non-fatal): %s", str(_qce)[:200])
+            _qc = None
+
+        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms, quality_check=_qc)
 
     except Exception as e:
         try:
@@ -27081,7 +27208,14 @@ Use the player's birth_year and age_group from the data. Today's date is {dateti
         if request.player_id:
             asyncio.create_task(_extract_report_intelligence(report_id, request.player_id, org_id))
 
-        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms)
+        # ── Heuristic quality check (non-blocking) ──
+        try:
+            _qc = evaluate_report_quality(report_text=output_text, report_type=request.report_type)
+        except Exception as _qce:
+            logger.warning("Quality check failed (non-fatal): %s", str(_qce)[:200])
+            _qc = None
+
+        return ReportGenerateResponse(report_id=report_id, status="complete", title=title, generation_time_ms=generation_ms, quality_check=_qc)
 
     except Exception as e:
         try:
@@ -40261,6 +40395,14 @@ When a player has transfers or team splits:
 
         # Score quality
         quality = _score_report_quality(output_text, report_type, mode=_bg_mode)
+
+        # ── Heuristic quality check (non-blocking) ──
+        try:
+            _qc = evaluate_report_quality(report_text=output_text, report_type=report_type)
+            quality["heuristic_check"] = _qc
+        except Exception as _qce:
+            logger.warning("Quality check failed (non-fatal): %s", str(_qce)[:200])
+
         conn.execute("""
             UPDATE reports SET
                 status = 'complete', title = ?, output_text = ?,
