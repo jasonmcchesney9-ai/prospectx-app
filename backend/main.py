@@ -11052,7 +11052,10 @@ def recalculate_pxr_for_players(player_ids: list[str], season: str = '2025-26') 
         conn.close()
 
 
-def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
+# Tier 2 PXR — HockeyTech counting stats only
+# See ProspectX PXR Tier 2 Addendum spec
+# Estimated scores — never overwrite Tier 1 (full) scores
+def calculate_tier2_pxr_scores(conn=None, season: str = '2025-26') -> dict:
     """Tier 2 PXR — estimated scores from basic player_stats for players without InStat data.
 
     Steps:
@@ -11077,7 +11080,7 @@ def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
 
     # ── Step 1: Find eligible players (have basic stats, no Tier 1 PXR) ──
     rows = conn.execute("""
-        SELECT ps.player_id, p.position, p.current_league, p.date_of_birth,
+        SELECT ps.player_id, p.position, p.current_league, p.dob,
                SUM(ps.gp) as gp, SUM(ps.g) as g, SUM(ps.a) as a, SUM(ps.p) as pts,
                SUM(ps.plus_minus) as pm, SUM(ps.pim) as pim
         FROM player_stats ps
@@ -11087,14 +11090,14 @@ def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
         WHERE ps.season = ?
           AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
           AND px.player_id IS NULL
-        GROUP BY ps.player_id, p.position, p.current_league, p.date_of_birth
+        GROUP BY ps.player_id, p.position, p.current_league, p.dob
         HAVING SUM(ps.gp) >= ?
     """, (season, season, MIN_GP)).fetchall()
 
     if not rows:
         if _own_conn:
             conn.close()
-        return {'scored': 0, 'skipped': 0, 'duration_ms': 0}
+        return {'players_considered': 0, 'scores_written': 0, 'skipped_has_tier1': 0, 'skipped_low_gp': 0, 'by_league': {}, 'duration_ms': 0}
 
     # ── Step 2: Position group mapping + per-60 rates ──
     def _pos_grp(pos):
@@ -11128,7 +11131,7 @@ def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
             'player_id': r['player_id'],
             'position_group': pg,
             'league': r['current_league'] or 'Unknown',
-            'birth_year': _birth_year(r['date_of_birth']),
+            'birth_year': _birth_year(r['dob']),
             'gp': gp,
             'gpg': g / gp,
             'apg': a / gp,
@@ -11139,7 +11142,7 @@ def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
     if not players:
         if _own_conn:
             conn.close()
-        return {'scored': 0, 'skipped': 0, 'duration_ms': 0}
+        return {'players_considered': len(rows), 'scores_written': 0, 'skipped_has_tier1': 0, 'skipped_low_gp': len(rows), 'by_league': {}, 'duration_ms': 0}
 
     # ── Step 3: Z-scores within league+position_group ──
     from collections import defaultdict
@@ -11254,8 +11257,8 @@ def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
             round(p['age_modifier'], 1),
             round(p.get('league_percentile', 50.0), 1),
             round(p.get('cohort_percentile', 50.0), 1),
-            0.3,  # data_completeness — Tier 2 has limited data
-            'moderate' if p['gp'] >= 20 else 'small_sample',
+            0.35,  # data_completeness — counting stats only
+            'moderate' if p['gp'] >= 20 else 'limited_metrics',
             p['gp'],
             'estimated', now_ts,
         ))
@@ -11266,8 +11269,19 @@ def calculate_tier2_pxr(conn=None, season: str = '2025-26') -> dict:
         conn.close()
 
     duration_ms = int((_time.time() - start) * 1000)
+    by_league = {}
+    for p in players:
+        lg = p.get('league', 'Unknown')
+        by_league[lg] = by_league.get(lg, 0) + 1
     logger.info("Tier 2 PXR: scored %d players (estimated) in %d ms", scored, duration_ms)
-    return {'scored': scored, 'skipped': skipped, 'duration_ms': duration_ms}
+    return {
+        'players_considered': len(rows),
+        'scores_written': scored,
+        'skipped_has_tier1': 0,  # excluded by SQL — Tier 1 players never reach this function
+        'skipped_low_gp': len(rows) - len(players),
+        'by_league': by_league,
+        'duration_ms': duration_ms,
+    }
 
 
 def _log_pxr_run(players_scored: int, duration_seconds: float, status: str, error_message: str | None = None):
@@ -11355,7 +11369,7 @@ def recalculate_pxr_scores_cron():
         conn.close()
         scored_t1 = result.get('scored', 0)
         # Tier 2: estimated scores for players without InStat data
-        t2_result = calculate_tier2_pxr(season='2025-26')
+        t2_result = calculate_tier2_pxr_scores(season='2025-26')
         scored_t2 = t2_result.get('scored', 0)
         duration = _time.time() - start
         logger.info("[PXR CRON] Complete: %d Tier 1 + %d Tier 2 scored in %.2fs", scored_t1, scored_t2, duration)
