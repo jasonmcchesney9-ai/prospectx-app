@@ -3244,6 +3244,13 @@ def init_db():
             conn.commit()
             logger.info("Migration: added %s column to organizations", col_name)
 
+    # ── Migration: Org branding — report_header_text ──
+    org_cols = _get_table_columns(conn, "organizations")
+    if "report_header_text" not in org_cols:
+        conn.execute("ALTER TABLE organizations ADD COLUMN report_header_text TEXT")
+        conn.commit()
+        logger.info("Migration: added report_header_text column to organizations")
+
     # ── Migration: Country/age_division columns on teams ──
     teams_cols2 = _get_table_columns(conn, "teams")
     for col_name, col_type in [
@@ -24161,6 +24168,104 @@ async def update_organization(org_id: str, body: OrgUpdateRequest, token_data: d
     return dict(row)
 
 
+# ── Org Branding API ──────────────────────────────────────────
+
+@app.get("/orgs/{org_id}/branding")
+async def get_org_branding(org_id: str, token_data: dict = Depends(verify_token)):
+    """Return org branding fields for white-label PDF reports."""
+    if token_data["org_id"] != org_id:
+        raise HTTPException(status_code=403, detail="Cannot access another organization's branding")
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, name, logo_url, primary_color, secondary_color, report_header_text "
+            "FROM organizations WHERE id = ?", (org_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        return {
+            "org_id": row["id"],
+            "name": row["name"],
+            "logo_url": row["logo_url"],
+            "brand_primary_color": row["primary_color"],
+            "brand_secondary_color": row["secondary_color"],
+            "report_header_text": row["report_header_text"],
+        }
+    finally:
+        conn.close()
+
+
+class OrgBrandingUpdateRequest(BaseModel):
+    logo_url: Optional[str] = None
+    brand_primary_color: Optional[str] = None
+    brand_secondary_color: Optional[str] = None
+    report_header_text: Optional[str] = None
+
+
+@app.put("/orgs/{org_id}/branding")
+async def update_org_branding(org_id: str, body: OrgBrandingUpdateRequest, token_data: dict = Depends(verify_token)):
+    """Update org branding fields. Org admin or platform admin only."""
+    if token_data["org_id"] != org_id:
+        raise HTTPException(status_code=403, detail="Cannot update another organization's branding")
+
+    # Validate color format if provided
+    import re as _re
+    _color_re = _re.compile(r'^#[0-9A-Fa-f]{6}$')
+    if body.brand_primary_color is not None and not _color_re.match(body.brand_primary_color):
+        raise HTTPException(status_code=400, detail="brand_primary_color must be a valid hex color (e.g. #0F2942)")
+    if body.brand_secondary_color is not None and not _color_re.match(body.brand_secondary_color):
+        raise HTTPException(status_code=400, detail="brand_secondary_color must be a valid hex color (e.g. #0D9488)")
+
+    conn = get_db()
+    try:
+        # Map API field names to DB column names
+        field_map = {
+            "brand_primary_color": "primary_color",
+            "brand_secondary_color": "secondary_color",
+            "logo_url": "logo_url",
+            "report_header_text": "report_header_text",
+        }
+        updates = []
+        params = []
+        for api_field, db_col in field_map.items():
+            val = getattr(body, api_field)
+            if val is not None:
+                updates.append(f"{db_col} = ?")
+                params.append(val)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No branding fields provided to update")
+
+        params.append(org_id)
+        conn.execute(f"UPDATE organizations SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+
+        # Return updated branding
+        row = conn.execute(
+            "SELECT id, name, logo_url, primary_color, secondary_color, report_header_text "
+            "FROM organizations WHERE id = ?", (org_id,)
+        ).fetchone()
+        return {
+            "org_id": row["id"],
+            "name": row["name"],
+            "logo_url": row["logo_url"],
+            "brand_primary_color": row["primary_color"],
+            "brand_secondary_color": row["secondary_color"],
+            "report_header_text": row["report_header_text"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.error("Failed to update org branding: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update branding")
+    finally:
+        conn.close()
+
+
 class TeamUpdateRequest(BaseModel):
     age_division: Optional[str] = None
     country: Optional[str] = None
@@ -24797,6 +24902,31 @@ async def _generate_custom_report(request, org_id: str, user_id: str, conn):
             if team_system:
                 input_data["team_system"] = team_system
 
+            # ── Org branding — for white-label PDF output ──
+            try:
+                _brand_row = conn.execute(
+                    "SELECT primary_color, secondary_color, logo_url, report_header_text "
+                    "FROM organizations WHERE id = ?", (org_id,)
+                ).fetchone()
+                input_data["org_branding"] = {
+                    "primary_color": (_brand_row["primary_color"] if _brand_row else None) or "#0F2942",
+                    "secondary_color": (_brand_row["secondary_color"] if _brand_row else None) or "#0D9488",
+                    "logo_url": _brand_row["logo_url"] if _brand_row else None,
+                    "header_text": _brand_row["report_header_text"] if _brand_row else None,
+                }
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logger.warning("org_branding fetch failed (using defaults): %s", e)
+                input_data["org_branding"] = {
+                    "primary_color": "#0F2942",
+                    "secondary_color": "#0D9488",
+                    "logo_url": None,
+                    "header_text": None,
+                }
+
             # Build custom prompt
             focus_prompt_parts = []
             required_sections = ["EXECUTIVE_SUMMARY", "BOTTOM_LINE"]
@@ -25120,6 +25250,31 @@ Today's date is {datetime.now().date().isoformat()}."""
             input_data["line_combinations"] = line_combos
         if team_system:
             input_data["team_system"] = team_system
+
+        # ── Org branding — for white-label PDF output ──
+        try:
+            _brand_row = conn.execute(
+                "SELECT primary_color, secondary_color, logo_url, report_header_text "
+                "FROM organizations WHERE id = ?", (org_id,)
+            ).fetchone()
+            input_data["org_branding"] = {
+                "primary_color": (_brand_row["primary_color"] if _brand_row else None) or "#0F2942",
+                "secondary_color": (_brand_row["secondary_color"] if _brand_row else None) or "#0D9488",
+                "logo_url": _brand_row["logo_url"] if _brand_row else None,
+                "header_text": _brand_row["report_header_text"] if _brand_row else None,
+            }
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.warning("org_branding fetch failed (using defaults): %s", e)
+            input_data["org_branding"] = {
+                "primary_color": "#0F2942",
+                "secondary_color": "#0D9488",
+                "logo_url": None,
+                "header_text": None,
+            }
 
         # Intelligence data
         try:
@@ -25793,6 +25948,31 @@ async def _generate_team_report(request, org_id: str, user_id: str, conn):
             "team_system": team_system,
             "report_type": request.report_type,
         }
+
+        # ── Org branding — for white-label PDF output ──
+        try:
+            _brand_row = conn.execute(
+                "SELECT primary_color, secondary_color, logo_url, report_header_text "
+                "FROM organizations WHERE id = ?", (org_id,)
+            ).fetchone()
+            input_data["org_branding"] = {
+                "primary_color": (_brand_row["primary_color"] if _brand_row else None) or "#0F2942",
+                "secondary_color": (_brand_row["secondary_color"] if _brand_row else None) or "#0D9488",
+                "logo_url": _brand_row["logo_url"] if _brand_row else None,
+                "header_text": _brand_row["report_header_text"] if _brand_row else None,
+            }
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.warning("org_branding fetch failed (using defaults): %s", e)
+            input_data["org_branding"] = {
+                "primary_color": "#0F2942",
+                "secondary_color": "#0D9488",
+                "logo_url": None,
+                "header_text": None,
+            }
 
         # ── Enrich team-report input_data for special report types ──
         if request.report_type in ("league_benchmarks", "season_projection", "free_agent_market"):
@@ -26749,6 +26929,31 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
                 input_data["line_combinations"] = line_combos
             if team_system:
                 input_data["team_system"] = team_system
+
+            # ── Org branding — for white-label PDF output ──
+            try:
+                _brand_row = conn.execute(
+                    "SELECT primary_color, secondary_color, logo_url, report_header_text "
+                    "FROM organizations WHERE id = ?", (org_id,)
+                ).fetchone()
+                input_data["org_branding"] = {
+                    "primary_color": (_brand_row["primary_color"] if _brand_row else None) or "#0F2942",
+                    "secondary_color": (_brand_row["secondary_color"] if _brand_row else None) or "#0D9488",
+                    "logo_url": _brand_row["logo_url"] if _brand_row else None,
+                    "header_text": _brand_row["report_header_text"] if _brand_row else None,
+                }
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logger.warning("org_branding fetch failed (using defaults): %s", e)
+                input_data["org_branding"] = {
+                    "primary_color": "#0F2942",
+                    "secondary_color": "#0D9488",
+                    "logo_url": None,
+                    "header_text": None,
+                }
 
             # Add ProspectX Indices and Intelligence data for enriched reports
             logger.info("REPORT_DEBUG checkpoint=1 report_id=%s — computing PXI indices", report_id)
@@ -40548,6 +40753,31 @@ When a player has transfers or team splits:
             input_data["transfers"] = transfer_context
         if team_splits:
             input_data["team_splits"] = team_splits
+
+        # ── Org branding — for white-label PDF output ──
+        try:
+            _brand_row = conn.execute(
+                "SELECT primary_color, secondary_color, logo_url, report_header_text "
+                "FROM organizations WHERE id = ?", (org_id,)
+            ).fetchone()
+            input_data["org_branding"] = {
+                "primary_color": (_brand_row["primary_color"] if _brand_row else None) or "#0F2942",
+                "secondary_color": (_brand_row["secondary_color"] if _brand_row else None) or "#0D9488",
+                "logo_url": _brand_row["logo_url"] if _brand_row else None,
+                "header_text": _brand_row["report_header_text"] if _brand_row else None,
+            }
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.warning("org_branding fetch failed (using defaults): %s", e)
+            input_data["org_branding"] = {
+                "primary_color": "#0F2942",
+                "secondary_color": "#0D9488",
+                "logo_url": None,
+                "header_text": None,
+            }
 
         # ── PXR Context for background reports ──
         try:
