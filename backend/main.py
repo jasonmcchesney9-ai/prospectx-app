@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import secrets
+import tempfile
 import hashlib
 import sqlite3
 import psycopg2
@@ -53866,7 +53867,7 @@ async def gemini_video_analyze(req: dict = Body(...),
         ).fetchone()
         if not upload_row or not upload_row["mux_playback_id"]:
             raise HTTPException(status_code=400, detail="Upload has no playback URL")
-        playback_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}.m3u8"
+        mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/high.mp4"
 
         # Step 3: Build roster dict { jersey_number: player_id }
         roster_rows = conn.execute(
@@ -53875,21 +53876,35 @@ async def gemini_video_analyze(req: dict = Body(...),
         ).fetchall()
         roster = {str(r["jersey_number"]): r["id"] for r in roster_rows}
 
-        # Step 4: Upload video to Gemini File API
-        genai.configure(api_key=GEMINI_API_KEY)
+        # Step 4: Download video to temp file, then upload to Gemini File API
+        tmp_path = None
         try:
-            video_file = genai.upload_file(playback_url)
-            # Wait for file processing
-            import time as _time
+            tmp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            tmp_path = tmp_file.name
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
+                async with client.stream("GET", mp4_url) as resp:
+                    resp.raise_for_status()
+                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 64):
+                        tmp_file.write(chunk)
+            tmp_file.close()
+
+            genai.configure(api_key=GEMINI_API_KEY)
+            video_file = genai.upload_file(tmp_path, mime_type="video/mp4")
+            # Wait for Gemini file processing
             while video_file.state.name == "PROCESSING":
-                _time.sleep(2)
+                await asyncio.sleep(2)
                 video_file = genai.get_file(video_file.name)
             if video_file.state.name == "FAILED":
                 raise HTTPException(status_code=500, detail="Video upload to Gemini failed")
         except HTTPException:
             raise
-        except Exception:
+        except Exception as exc:
+            logger.error("Video download/upload failed: %s", exc)
+            conn.rollback()
             raise HTTPException(status_code=500, detail="Video upload to Gemini failed")
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
         # Step 5: Send multimodal prompt to gemini-2.5-flash
         try:
@@ -53902,7 +53917,9 @@ async def gemini_video_analyze(req: dict = Body(...),
             )
             result = json.loads(response.text)
             events = result.get("events", [])
-        except Exception:
+        except Exception as exc:
+            logger.error("Gemini video analysis failed: %s", exc)
+            conn.rollback()
             raise HTTPException(status_code=500, detail="Video analysis failed")
 
         # Step 6 & 7: Map jerseys to player_ids and insert events
