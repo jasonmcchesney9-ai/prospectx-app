@@ -53910,7 +53910,7 @@ async def gemini_video_analyze(req: dict = Body(...),
                 contents=[
                     genai_types.Content(
                         parts=[
-                            genai_types.Part.from_uploaded_file(uploaded_file),
+                            uploaded_file,
                             genai_types.Part.from_text(_GEMINI_EVENT_SYSTEM_PROMPT),
                         ]
                     )
