@@ -26840,7 +26840,7 @@ async def generate_report(request: ReportGenerateRequest, token_data: dict = Dep
 
             # Gather player stats (including extended InStat analytics)
             stats_rows = conn.execute(
-                "SELECT * FROM player_stats WHERE player_id = ? ORDER BY season DESC, created_at DESC",
+                "SELECT * FROM player_stats WHERE player_id = ? AND stat_type = 'season' ORDER BY season DESC, created_at DESC",
                 (request.player_id,),
             ).fetchall()
             stats_list = []
