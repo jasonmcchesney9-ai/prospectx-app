@@ -53879,13 +53879,12 @@ async def gemini_video_analyze(req: dict = Body(...),
         # Step 4: Download video to temp file, then upload to Gemini File API
         tmp_path = None
         try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(mp4_url, timeout=120)
+                response.raise_for_status()
             tmp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
             tmp_path = tmp_file.name
-            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
-                async with client.stream("GET", mp4_url) as resp:
-                    resp.raise_for_status()
-                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 64):
-                        tmp_file.write(chunk)
+            tmp_file.write(response.content)
             tmp_file.close()
 
             genai.configure(api_key=GEMINI_API_KEY)
@@ -53899,7 +53898,7 @@ async def gemini_video_analyze(req: dict = Body(...),
         except HTTPException:
             raise
         except Exception as exc:
-            logger.error("Video download/upload failed: %s", exc)
+            logging.exception("Video download/upload failed: %s", exc)
             conn.rollback()
             raise HTTPException(status_code=500, detail="Video upload to Gemini failed")
         finally:
@@ -53918,7 +53917,7 @@ async def gemini_video_analyze(req: dict = Body(...),
             result = json.loads(response.text)
             events = result.get("events", [])
         except Exception as exc:
-            logger.error("Gemini video analysis failed: %s", exc)
+            logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
             raise HTTPException(status_code=500, detail="Video analysis failed")
 
@@ -53947,7 +53946,8 @@ async def gemini_video_analyze(req: dict = Body(...),
                     ),
                 )
                 inserted += 1
-            except Exception:
+            except Exception as exc:
+                logging.exception("Video event insert failed: %s", exc)
                 conn.rollback()
                 continue
         conn.commit()
@@ -53957,7 +53957,8 @@ async def gemini_video_analyze(req: dict = Body(...),
 
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        logging.exception("Video analyze error: %s", exc)
         conn.rollback()
         raise HTTPException(status_code=500, detail="Video analysis failed")
     finally:
