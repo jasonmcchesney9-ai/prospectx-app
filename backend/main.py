@@ -53870,9 +53870,6 @@ async def gemini_video_analyze(req: dict = Body(...),
         ).fetchone()
         if not upload_row or not upload_row["mux_playback_id"]:
             raise HTTPException(status_code=400, detail="Upload has no playback URL")
-        # Use HLS URL directly — Mux serves HLS by default, no MP4 download needed
-        hls_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}.m3u8"
-
         # Step 3: Build roster dict { jersey_number: player_id }
         roster_rows = conn.execute(
             "SELECT id, jersey_number FROM players WHERE org_id = ? AND jersey_number IS NOT NULL AND jersey_number != ''",
@@ -53880,25 +53877,43 @@ async def gemini_video_analyze(req: dict = Body(...),
         ).fetchall()
         roster = {str(r["jersey_number"]): r["id"] for r in roster_rows}
 
-        # Step 4: Send HLS URL directly to Gemini for analysis
+        # Step 4: Download video from Mux and upload to Gemini Files API
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/low.mp4"
+        tmp_path = None
         try:
+            # Download MP4 from Mux to a temp file
+            async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as http:
+                dl = await http.get(mp4_url)
+                dl.raise_for_status()
+            tmp_fd = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            tmp_path = tmp_fd.name
+            tmp_fd.write(dl.content)
+            tmp_fd.close()
+
+            # Upload to Gemini Files API
+            uploaded_file = gemini_client.files.upload(file=tmp_path)
+
+            # Poll until file is ACTIVE
+            import time as _poll_time
+            for _ in range(60):
+                status = gemini_client.files.get(name=uploaded_file.name)
+                if status.state.name == "ACTIVE":
+                    break
+                _poll_time.sleep(2)
+            else:
+                raise RuntimeError("Gemini file processing timed out")
+
+            # Call generate_content with uploaded file reference
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[
-                    {
-                        "parts": [
-                            {
-                                "file_data": {
-                                    "mime_type": "video/mp4",
-                                    "file_uri": hls_url
-                                }
-                            },
-                            {
-                                "text": _GEMINI_EVENT_SYSTEM_PROMPT
-                            }
+                    genai_types.Content(
+                        parts=[
+                            genai_types.Part.from_uploaded_file(uploaded_file),
+                            genai_types.Part.from_text(_GEMINI_EVENT_SYSTEM_PROMPT),
                         ]
-                    }
+                    )
                 ],
                 config=genai_types.GenerateContentConfig(
                     temperature=0.2,
@@ -53911,6 +53926,13 @@ async def gemini_video_analyze(req: dict = Body(...),
             logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
             raise HTTPException(status_code=500, detail=f"Video analysis failed: {str(exc)}")
+        finally:
+            if tmp_path:
+                import os as _os
+                try:
+                    _os.unlink(tmp_path)
+                except OSError:
+                    pass
 
         # Step 6 & 7: Map jerseys to player_ids and insert events
         now = datetime.now(timezone.utc).isoformat()
