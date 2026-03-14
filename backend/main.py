@@ -38480,6 +38480,25 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
     team_name_synced = ""
     logo_synced = False
 
+    # ── Resolve canonical team name ONCE for this sync batch ──
+    # Prevents cross-team contamination from per-player team_name in HT response
+    canonical_team_name = ""
+    try:
+        _tn_conn = get_db()
+        _tn_row = _tn_conn.execute(
+            "SELECT name FROM teams WHERE hockeytech_team_id = ? AND org_id IN (?, '__global__') LIMIT 1",
+            (team_id, org_id)
+        ).fetchone()
+        if _tn_row:
+            canonical_team_name = _tn_row["name"]
+        _tn_conn.close()
+    except Exception as _tn_err:
+        logger.warning("[SYNC ROSTER] Failed to resolve canonical team name from DB: %s", _tn_err)
+    # Fallback: use first player's team_name from HT response if DB lookup failed
+    if not canonical_team_name and roster:
+        canonical_team_name = (roster[0].get("team_name") or "").strip()
+    logger.info("[SYNC ROSTER] Canonical team name resolved: %r (team_id=%s)", canonical_team_name, team_id)
+
     # ── PXR 3A: Record sync start ──
     sync_id = str(uuid.uuid4())
     sync_conn = get_db()
@@ -38508,7 +38527,7 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
             weight_kg = _parse_ht_weight_to_kg(rp.get("weight", ""))
             shoots = (rp.get("shoots") or "")[:1].upper()
             shoots = shoots if shoots in ("L", "R") else None
-            team_name = rp.get("team_name", "")
+            team_name = canonical_team_name or rp.get("team_name", "")
             raw_photo = rp.get("photo", "")
             # Filter out HockeyTech "no photo" placeholders — treat as empty
             if raw_photo and "nophoto" in raw_photo.lower():
