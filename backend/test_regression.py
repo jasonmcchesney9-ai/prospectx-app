@@ -372,7 +372,7 @@ def test_duplicate_stats():
         cur.execute("""
             SELECT player_id, season, stat_type, COUNT(*) as cnt
             FROM player_stats
-            GROUP BY player_id, season, stat_type
+            GROUP BY player_id, season, stat_type, stat_row_type, team_name, data_source
             HAVING COUNT(*) > 1
             LIMIT 10
         """)
