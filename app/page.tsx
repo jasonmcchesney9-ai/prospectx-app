@@ -34,7 +34,6 @@ import NavBar from "@/components/NavBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import LandingPage from "@/components/LandingPage";
 import ReportCard from "@/components/ReportCard";
-import TeamContextBar from "@/components/TeamContextBar";
 import BenchTalkUsage from "@/components/BenchTalkUsage";
 import { useBenchTalk } from "@/components/BenchTalkProvider";
 import api, { assetUrl } from "@/lib/api";
@@ -497,18 +496,6 @@ function Dashboard() {
           );
         })()}
 
-        {/* ── Team Context Bar ─────────────────────────────── */}
-        <TeamContextBar
-          teams={teams}
-          activeTeam={activeTeam}
-          onTeamChange={handleTeamChange}
-          onSync={activeTeam ? async () => { await loadTeamData(activeTeam); } : undefined}
-          roster={roster}
-          scorebar={scorebar}
-          standings={standings}
-          gamePlans={activeGamePlans}
-          loading={loading}
-        />
 
         {/* ── PRO View (Scout / GM / Coach) ─────────────────── */}
         {roleGroup === "PRO" && (
@@ -882,7 +869,7 @@ function Dashboard() {
                   empty={activeGamePlans.length === 0}
                   emptyIcon={<Swords size={24} style={{ color: "rgba(148,163,184,0.3)" }} />}
                   emptyText="No active sessions"
-                  emptyLink="/game-hub"
+                  emptyLink="/chalk-talk/sessions"
                   emptyLinkText="Create a session"
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
