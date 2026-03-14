@@ -1249,7 +1249,7 @@ export default function PlayerDetailPage() {
       <ProtectedRoute>
         <NavBar />
         <div className="flex items-center justify-center min-h-[50vh]">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-navy border-t-teal" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2" style={{ borderColor: "#0F2942", borderTopColor: "#0D9488" }} />
         </div>
       </ProtectedRoute>
     );
@@ -1261,15 +1261,15 @@ export default function PlayerDetailPage() {
         <NavBar />
         <main className="max-w-4xl mx-auto px-4 py-8">
           {error ? (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-              <p className="text-red-700 font-medium mb-2">Error Loading Player</p>
-              <p className="text-red-600 text-sm">{error}</p>
-              <Link href="/players" className="inline-block mt-4 text-sm text-teal hover:underline">
+            <div className="rounded-xl p-6 text-center" style={{ background: "#FEF2F2", border: "1px solid rgba(192,57,43,0.2)" }}>
+              <p className="font-medium mb-2" style={{ color: "#C0392B" }}>Error Loading Player</p>
+              <p className="text-sm" style={{ color: "#C0392B" }}>{error}</p>
+              <Link href="/players" className="inline-block mt-4 text-sm hover:underline" style={{ color: "#0D9488" }}>
                 ← Back to Players
               </Link>
             </div>
           ) : (
-            <p className="text-muted">Player not found.</p>
+            <p style={{ color: "#94A3B8" }}>Player not found.</p>
           )}
         </main>
       </ProtectedRoute>
@@ -1596,33 +1596,33 @@ export default function PlayerDetailPage() {
                     <MoreVertical size={14} />
                   </button>
                   {overflowOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-teal/20 rounded-lg shadow-xl z-50 py-1">
+                    <div className="absolute right-0 top-full mt-1 w-48 rounded-lg shadow-xl z-50 py-1" style={{ background: "#FFFFFF", border: "1px solid rgba(13,148,136,0.2)" }}>
                       <button
                         onClick={() => { openBenchTalk(`Scout ${player.first_name} ${player.last_name}`, "scout"); setOverflowOpen(false); }}
-                        className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                        className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors" style={{ color: "#0F2942" }}
                       >
-                        <Search size={12} className="text-teal" /> Scout in Bench Talk
+                        <Search size={12} style={{ color: "#0D9488" }} /> Scout in Bench Talk
                       </button>
                       <Link
                         href="/watchlist"
                         onClick={() => setOverflowOpen(false)}
-                        className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                        className="block px-3 py-2 text-xs flex items-center gap-2 transition-colors" style={{ color: "#0F2942" }}
                       >
-                        <ListPlus size={12} className="text-muted" /> Add to Watchlist
+                        <ListPlus size={12} style={{ color: "#94A3B8" }} /> Add to Watchlist
                       </Link>
                       <Link
                         href={`/reports/generate?player_id=${playerId}&report_type=elite_profile`}
                         onClick={() => setOverflowOpen(false)}
-                        className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                        className="block px-3 py-2 text-xs flex items-center gap-2 transition-colors" style={{ color: "#0F2942" }}
                       >
-                        <Wand2 size={12} className="text-muted" /> Generate PXI Assessment
+                        <Wand2 size={12} style={{ color: "#94A3B8" }} /> Generate PXI Assessment
                       </Link>
                       <Link
                         href={`/reports/custom?player=${playerId}`}
                         onClick={() => setOverflowOpen(false)}
-                        className="block px-3 py-2 text-xs text-navy hover:bg-navy/[0.03] flex items-center gap-2 transition-colors"
+                        className="block px-3 py-2 text-xs flex items-center gap-2 transition-colors" style={{ color: "#0F2942" }}
                       >
-                        <FileText size={12} className="text-muted" /> Custom Report
+                        <FileText size={12} style={{ color: "#94A3B8" }} /> Custom Report
                       </Link>
                     </div>
                   )}
@@ -1822,13 +1822,13 @@ export default function PlayerDetailPage() {
 
             {/* Generate Intelligence CTA (when no intelligence exists) */}
             {(!intelligence || intelligence.version === 0) && (stats.length > 0 || goalieStats.length > 0 || notes.length > 0) && (
-              <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-4 text-center">
-                <Brain size={20} className="mx-auto text-teal/40 mb-1.5" />
-                <p className="text-xs text-muted mb-2">No intelligence data yet — generate a profile to unlock AI scouting insights.</p>
+              <div className="rounded-xl border border-dashed p-4 text-center" style={{ background: "linear-gradient(to right, rgba(15,41,66,0.02), rgba(13,148,136,0.02))", borderColor: "rgba(13,148,136,0.3)" }}>
+                <Brain size={20} className="mx-auto mb-1.5" style={{ color: "rgba(13,148,136,0.4)" }} />
+                <p className="text-xs mb-2" style={{ color: "#94A3B8" }}>No intelligence data yet — generate a profile to unlock AI scouting insights.</p>
                 <button
                   onClick={handleRefreshIntelligence}
                   disabled={refreshingIntel}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase tracking-wider rounded-lg transition-colors disabled:opacity-50" style={{ background: "#0D9488", color: "#FFFFFF", fontFamily: "'Oswald', sans-serif" }}
                 >
                   <Brain size={14} />
                   {refreshingIntel ? "Analyzing Player..." : "Generate Intelligence Profile"}
@@ -3942,12 +3942,9 @@ export default function PlayerDetailPage() {
                   <Link href={`/reports/generate?player=${playerId}&type=pro_skater`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "#0D9488", color: "white", border: "1.5px solid #0D9488", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
                     <Sparkles size={12} /> Generate PXI Report
                   </Link>
-                  <Link href="/watchlist" style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: "white", color: "#0F2942", border: "1.5px solid #DDE6EF", textDecoration: "none", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
-                    <ListPlus size={12} /> Add to Tracking
-                  </Link>
                   {canManageTP && (
                     <button onClick={toggleTopProspect} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, background: isTopProspect ? "#0D9488" : "white", color: isTopProspect ? "white" : "#0F2942", border: isTopProspect ? "1.5px solid #0D9488" : "1.5px solid #DDE6EF", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", width: "100%", justifyContent: "center" }}>
-                      <Star size={12} fill={isTopProspect ? "white" : "none"} /> {isTopProspect ? "On Top Prospects" : "Add to Top Prospects"}
+                      <Star size={12} fill={isTopProspect ? "white" : "none"} /> {isTopProspect ? "On Watchlist" : "Add to Watchlist"}
                     </button>
                   )}
                   {canManageTP && (
