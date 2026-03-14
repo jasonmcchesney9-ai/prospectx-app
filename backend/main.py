@@ -38636,22 +38636,43 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
                     results.append({"name": f"{first} {last}", "action": "updated", "player_id": existing[0]})
                 continue
 
-            # 2. Fuzzy match by name + DOB
-            candidates = conn.execute(
-                "SELECT id, first_name, last_name, dob FROM players WHERE org_id = ? AND LOWER(last_name) = LOWER(?)",
-                (org_id, last)
-            ).fetchall()
-
+            # 2. Match by name + DOB to prevent duplicates from name variations
             matched_id = None
-            for c in candidates:
-                # Exact first name match (case insensitive)
-                if c[1].lower() == first.lower():
-                    matched_id = c[0]
-                    break
-                # First name starts with same letters (handle nicknames like "Mike" vs "Michael")
-                if dob and c[3] == dob and (c[1].lower().startswith(first[:3].lower()) or first.lower().startswith(c[1][:3].lower())):
-                    matched_id = c[0]
-                    break
+
+            # 2a. Primary: exact first_name + last_name + DOB
+            if dob:
+                exact_dob_match = conn.execute(
+                    """SELECT id FROM players
+                       WHERE org_id = ? AND LOWER(first_name) = LOWER(?)
+                       AND LOWER(last_name) = LOWER(?) AND dob = ?
+                       AND (is_deleted = 0 OR is_deleted IS NULL)""",
+                    (org_id, first, last, dob)
+                ).fetchone()
+                if exact_dob_match:
+                    matched_id = exact_dob_match[0]
+
+            # 2b. Fallback: last_name + DOB only (catches Maxim/Max, Joey/Joseph)
+            if not matched_id and dob:
+                dob_fallback = conn.execute(
+                    """SELECT id, first_name FROM players
+                       WHERE org_id = ? AND LOWER(last_name) = LOWER(?) AND dob = ?
+                       AND (is_deleted = 0 OR is_deleted IS NULL)""",
+                    (org_id, last, dob)
+                ).fetchone()
+                if dob_fallback:
+                    matched_id = dob_fallback[0]
+                    logger.info("Merged HT player %s %s into existing %s via DOB match", first, last, dob_fallback[0])
+
+            # 2c. Legacy fallback: exact name match without DOB (for players missing DOB)
+            if not matched_id:
+                candidates = conn.execute(
+                    "SELECT id, first_name, last_name, dob FROM players WHERE org_id = ? AND LOWER(last_name) = LOWER(?)",
+                    (org_id, last)
+                ).fetchall()
+                for c in candidates:
+                    if c[1].lower() == first.lower():
+                        matched_id = c[0]
+                        break
 
             if matched_id:
                 # ── Roster status protection: skip non-active players (fuzzy match) ──
@@ -38830,6 +38851,64 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
 
         # safe_db() auto-commits here on success, auto-rollbacks on error
 
+    # ── Post-sync cleanup: deduplicate players with same last_name + DOB on same team ──
+    cleanup_merged = []
+    try:
+        cleanup_conn = get_db()
+        dupes_to_merge = cleanup_conn.execute("""
+            SELECT p1.id AS keep_id, p1.first_name AS keep_fn, p1.last_name AS keep_ln,
+                   p1.current_team AS team, p1.dob,
+                   p2.id AS delete_id, p2.first_name AS del_fn,
+                   COALESCE(
+                       (SELECT SUM(games_played) FROM player_stats WHERE player_id = p1.id), 0
+                   ) AS keep_gp,
+                   COALESCE(
+                       (SELECT SUM(games_played) FROM player_stats WHERE player_id = p2.id), 0
+                   ) AS del_gp
+            FROM players p1
+            JOIN players p2 ON LOWER(p1.last_name) = LOWER(p2.last_name)
+                AND p1.dob = p2.dob AND p1.dob IS NOT NULL AND p1.dob != ''
+                AND LOWER(p1.current_team) = LOWER(p2.current_team)
+                AND p1.id < p2.id
+            WHERE p1.org_id = ? AND p2.org_id = ?
+                AND (p1.is_deleted = 0 OR p1.is_deleted IS NULL)
+                AND (p2.is_deleted = 0 OR p2.is_deleted IS NULL)
+            ORDER BY p1.last_name
+        """, (org_id, org_id)).fetchall()
+
+        for d in dupes_to_merge:
+            # Keep the player with more GP; if tied, keep the one with lower id (p1)
+            if d["del_gp"] > d["keep_gp"]:
+                soft_del_id = d["keep_id"]
+                survivor_id = d["delete_id"]
+                survivor_fn = d["del_fn"]
+            else:
+                soft_del_id = d["delete_id"]
+                survivor_id = d["keep_id"]
+                survivor_fn = d["keep_fn"]
+            cleanup_conn.execute(
+                "UPDATE players SET is_deleted = 1, updated_at = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), soft_del_id)
+            )
+            logger.info("Cleanup merged duplicate: soft-deleted %s, kept %s %s (team=%s, dob=%s)",
+                        soft_del_id, survivor_fn, d["keep_ln"], d["team"], d["dob"])
+            cleanup_merged.append({
+                "kept": survivor_id,
+                "deleted": soft_del_id,
+                "name": f"{survivor_fn} {d['keep_ln']}",
+                "team": d["team"]
+            })
+        if cleanup_merged:
+            cleanup_conn.commit()
+        cleanup_conn.close()
+    except Exception as cleanup_err:
+        logger.warning("Post-sync duplicate cleanup failed: %s", cleanup_err)
+        try:
+            cleanup_conn.rollback()
+            cleanup_conn.close()
+        except Exception:
+            pass
+
     roster_result = {
         "synced": len(results),
         "created": created,
@@ -38839,6 +38918,7 @@ async def ht_sync_roster(league: str, team_id: int, season_id: Optional[int] = N
         "league": league_name,
         "logo_synced": logo_synced,
         "results": results,
+        "duplicates_cleaned": cleanup_merged,
     }
 
     # ── PXR 1C: Post-sync duplicate suggestions ──
