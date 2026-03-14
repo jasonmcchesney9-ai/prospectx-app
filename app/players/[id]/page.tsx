@@ -2200,12 +2200,12 @@ export default function PlayerDetailPage() {
             {gameLog && gameLog.games.length > 0 && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                    <Activity size={14} className="text-teal" /> Recent Games
+                  <h3 className="text-sm uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
+                    <Activity size={14} style={{ color: "#0D9488" }} /> Recent Games
                   </h3>
                   <button
                     onClick={() => setActiveTab("stats")}
-                    className="text-[10px] text-teal hover:underline font-oswald uppercase tracking-wider"
+                    className="text-[10px] hover:underline uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#0D9488" }}
                   >
                     View All →
                   </button>
@@ -2213,21 +2213,21 @@ export default function PlayerDetailPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-navy/10">
-                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Date</th>
-                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Opponent</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">G</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">A</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">P</th>
+                      <tr style={{ borderBottom: "1px solid rgba(15,41,66,0.1)" }}>
+                        <th className="text-left py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Date</th>
+                        <th className="text-left py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Opponent</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>G</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>A</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>P</th>
                       </tr>
                     </thead>
                     <tbody>
                       {gameLog.games.slice(0, 5).map((g, i) => (
-                        <tr key={i} className="border-b border-navy/5 hover:bg-navy/[0.02]">
-                          <td className="py-1.5 px-2 text-navy/70">
+                        <tr key={i} style={{ borderBottom: "1px solid rgba(15,41,66,0.05)" }}>
+                          <td className="py-1.5 px-2" style={{ color: "rgba(15,41,66,0.7)" }}>
                             {g.game_date ? new Date(g.game_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
                           </td>
-                          <td className="py-1.5 px-2 text-navy">{g.opponent || "—"}</td>
+                          <td className="py-1.5 px-2" style={{ color: "#0F2942" }}>{g.opponent || "—"}</td>
                           <td className="text-center py-1.5 px-2">{g.goals ?? "—"}</td>
                           <td className="text-center py-1.5 px-2">{g.assists ?? "—"}</td>
                           <td className="text-center py-1.5 px-2 font-bold">{g.points ?? "—"}</td>
@@ -2243,32 +2243,32 @@ export default function PlayerDetailPage() {
             {notes.length > 0 && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                    <PenLine size={14} className="text-teal" /> Scout Notes
-                    <span className="text-xs font-normal text-muted/60">({notes.length})</span>
+                  <h3 className="text-sm uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
+                    <PenLine size={14} style={{ color: "#0D9488" }} /> Scout Notes
+                    <span className="text-xs font-normal" style={{ color: "rgba(148,163,184,0.6)" }}>({notes.length})</span>
                   </h3>
                   <button
                     onClick={() => setActiveTab("notes")}
-                    className="text-[10px] text-teal hover:underline font-oswald uppercase tracking-wider"
+                    className="text-[10px] hover:underline uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#0D9488" }}
                   >
                     View All →
                   </button>
                 </div>
                 <div className="space-y-2">
                   {notes.slice(0, 3).map((note) => (
-                    <div key={note.id} className="flex items-start gap-2 p-2 rounded-lg bg-navy/[0.02]">
-                      <span className={`px-1.5 py-0.5 text-[9px] rounded-full font-medium shrink-0 ${
-                        note.note_type === "game" ? "bg-blue-50 text-blue-700" :
-                        note.note_type === "practice" ? "bg-green-50 text-green-700" :
-                        note.note_type === "interview" ? "bg-purple-50 text-purple-700" :
-                        "bg-gray-50 text-gray-600"
-                      }`}>
+                    <div key={note.id} className="flex items-start gap-2 p-2 rounded-lg" style={{ background: "rgba(15,41,66,0.02)" }}>
+                      <span className="px-1.5 py-0.5 text-[9px] rounded-full font-medium shrink-0" style={
+                        note.note_type === "game" ? { background: "rgba(59,130,246,0.08)", color: "#3B82F6" } :
+                        note.note_type === "practice" ? { background: "rgba(30,107,60,0.08)", color: "#1E6B3C" } :
+                        note.note_type === "interview" ? { background: "rgba(139,92,246,0.08)", color: "#7C3AED" } :
+                        { background: "#F8FAFC", color: "#94A3B8" }
+                      }>
                         {NOTE_TYPE_LABELS[note.note_type] || note.note_type}
                       </span>
-                      <p className="text-xs text-navy/80 line-clamp-2 flex-1">
+                      <p className="text-xs line-clamp-2 flex-1" style={{ color: "rgba(15,41,66,0.8)" }}>
                         {note.one_line_summary || note.note_text || "—"}
                       </p>
-                      <span className="text-[10px] text-muted/50 shrink-0">{relativeTime(note.created_at)}</span>
+                      <span className="text-[10px] shrink-0" style={{ color: "rgba(148,163,184,0.5)" }}>{relativeTime(note.created_at)}</span>
                     </div>
                   ))}
                 </div>
