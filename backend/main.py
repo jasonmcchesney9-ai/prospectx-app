@@ -53838,18 +53838,8 @@ Return this exact structure:
 Return {"events": []} if no clear events detected. Never hallucinate events."""
 
 
-@app.post("/video/analyze")
-async def gemini_video_analyze(req: dict = Body(...),
-                                token_data: dict = Depends(verify_token)):
-    """Analyze game video via Gemini and auto-tag events into video_events."""
-    if not _gemini_available or not GEMINI_API_KEY:
-        raise HTTPException(status_code=503, detail="Video analysis service not configured")
-
-    session_id = req.get("session_id")
-    org_id = req.get("org_id")
-    if not session_id or not org_id:
-        raise HTTPException(status_code=400, detail="session_id and org_id are required")
-
+async def _run_gemini_video_analyze(session_id: str, org_id: str):
+    """Background task: download video, upload to Gemini, auto-tag events."""
     conn = get_db()
     try:
         # Step 1: Look up video_sessions — get upload_id
@@ -53858,10 +53848,12 @@ async def gemini_video_analyze(req: dict = Body(...),
             (session_id, org_id),
         ).fetchone()
         if not session_row:
-            raise HTTPException(status_code=404, detail="Session not found")
+            logging.error("Auto-tag background: session %s not found", session_id)
+            return
         upload_id = session_row["upload_id"]
         if not upload_id:
-            raise HTTPException(status_code=400, detail="Session has no associated upload")
+            logging.error("Auto-tag background: session %s has no upload", session_id)
+            return
 
         # Step 2: Look up video_uploads — get mux_playback_id
         upload_row = conn.execute(
@@ -53869,7 +53861,9 @@ async def gemini_video_analyze(req: dict = Body(...),
             (upload_id, org_id),
         ).fetchone()
         if not upload_row or not upload_row["mux_playback_id"]:
-            raise HTTPException(status_code=400, detail="Upload has no playback URL")
+            logging.error("Auto-tag background: upload %s has no playback URL", upload_id)
+            return
+
         # Step 3: Build roster dict { jersey_number: player_id }
         roster_rows = conn.execute(
             "SELECT id, jersey_number FROM players WHERE org_id = ? AND jersey_number IS NOT NULL AND jersey_number != ''",
@@ -53925,7 +53919,7 @@ async def gemini_video_analyze(req: dict = Body(...),
         except Exception as exc:
             logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
-            raise HTTPException(status_code=500, detail=f"Video analysis failed: {str(exc)}")
+            return
         finally:
             if tmp_path:
                 import os as _os
@@ -53964,18 +53958,29 @@ async def gemini_video_analyze(req: dict = Body(...),
                 conn.rollback()
                 continue
         conn.commit()
+        logging.info("Auto-tag complete: session=%s events_detected=%d", session_id, inserted)
 
-        # Step 8: Return summary
-        return {"events_detected": inserted, "session_id": session_id}
-
-    except HTTPException:
-        raise
     except Exception as exc:
-        logging.exception("Video analyze error: %s", exc)
+        logging.exception("Auto-tag background error: %s", exc)
         conn.rollback()
-        raise HTTPException(status_code=500, detail="Video analysis failed")
     finally:
         conn.close()
+
+
+@app.post("/video/analyze")
+async def gemini_video_analyze(req: dict = Body(...),
+                                token_data: dict = Depends(verify_token)):
+    """Analyze game video via Gemini and auto-tag events into video_events."""
+    if not _gemini_available or not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Video analysis service not configured")
+
+    session_id = req.get("session_id")
+    org_id = req.get("org_id")
+    if not session_id or not org_id:
+        raise HTTPException(status_code=400, detail="session_id and org_id are required")
+
+    asyncio.create_task(_run_gemini_video_analyze(session_id, org_id))
+    return {"status": "processing", "message": "Auto-tagging started"}
 
 
 # ============================================================
