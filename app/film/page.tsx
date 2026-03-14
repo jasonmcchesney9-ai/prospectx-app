@@ -75,14 +75,17 @@ const PXI_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 function formatDate(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
   try {
-    return new Date(iso).toLocaleDateString("en-US", {
+    return d.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
   } catch {
-    return iso;
+    return "—";
   }
 }
 
@@ -94,8 +97,10 @@ function formatFileSize(bytes?: number): string {
 }
 
 function formatLastOpened(iso: string): string | null {
+  if (!iso) return null;
   try {
     const opened = new Date(iso);
+    if (isNaN(opened.getTime())) return null;
     const now = new Date();
     const diffMs = now.getTime() - opened.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
