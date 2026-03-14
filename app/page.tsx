@@ -878,7 +878,7 @@ function Dashboard() {
                   empty={activeGamePlans.length === 0}
                   emptyIcon={<Swords size={24} className="text-muted/30" />}
                   emptyText="No active sessions"
-                  emptyLink="/game-plans"
+                  emptyLink="/game-hub"
                   emptyLinkText="Create a session"
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -950,17 +950,6 @@ function Dashboard() {
                   </DashboardCard>
                 )}
 
-                {/* Quick Actions */}
-                {showWidget("quick_actions") && (
-                <div className="flex flex-wrap gap-2">
-                  <Link href="/reports/generate" className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-navy to-navy-light text-white text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:shadow-md transition-all">
-                    <Zap size={14} /> New Report
-                  </Link>
-                  <Link href="/game-plans" className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-navy border border-teal/20 text-xs font-oswald font-bold uppercase tracking-wider rounded-lg hover:bg-navy/[0.02] transition-colors">
-                    <Swords size={14} /> Game Plan
-                  </Link>
-                </div>
-                )}
               </div>
 
               {/* RIGHT: Intelligence */}
