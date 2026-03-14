@@ -485,7 +485,7 @@ function Dashboard() {
                       if (t) handleTeamChange(t);
                     }}
                     style={{ appearance: "none", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#FFFFFF", fontSize: 11, fontFamily: "'Oswald', sans-serif", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", borderRadius: 7, padding: "8px 28px 8px 12px", cursor: "pointer" }}
-                    className="focus:outline-none focus:ring-1 focus:ring-teal"
+                    className="focus:outline-none"
                   >
                     {teams.map((t) => (
                       <option key={t.id} value={t.name} style={{ background: "#0F2942", color: "#FFFFFF" }}>{t.name}</option>
@@ -1169,11 +1169,11 @@ function Dashboard() {
             <FamilyPlayerSpotlight scoringLeaders={scoringLeaders} loading={teamDataLoading} />
 
             {/* 2. Upcoming Games */}
-            <div className="bg-white rounded-xl border border-border mt-4">
-              <div className="px-5 py-3 border-b border-border bg-gradient-to-r from-navy to-navy/90 rounded-t-xl">
+            <div className="rounded-xl mt-4" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }}>
+              <div className="px-5 py-3 rounded-t-xl" style={{ borderBottom: "1px solid #E2EAF3", background: "linear-gradient(to right, #0F2942, rgba(15,41,66,0.9))" }}>
                 <div className="flex items-center gap-2">
-                  <Calendar size={14} className="text-teal" />
-                  <h3 className="font-oswald text-xs font-bold text-white uppercase tracking-wider">Upcoming Games</h3>
+                  <Calendar size={14} style={{ color: "#0D9488" }} />
+                  <h3 className="font-oswald text-xs font-bold uppercase tracking-wider" style={{ color: "#FFFFFF" }}>Upcoming Games</h3>
                 </div>
               </div>
               <div className="p-4">
@@ -1182,23 +1182,23 @@ function Dashboard() {
                   if (upcoming.length === 0) {
                     return (
                       <div className="text-center py-6">
-                        <Calendar size={28} className="mx-auto text-muted/30 mb-2" />
-                        <p className="text-sm text-muted">No upcoming games scheduled</p>
+                        <Calendar size={28} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.3)" }} />
+                        <p className="text-sm" style={{ color: "#94A3B8" }}>No upcoming games scheduled</p>
                       </div>
                     );
                   }
                   return (
                     <div className="space-y-2">
                       {upcoming.slice(0, 5).map((g) => (
-                        <div key={g.game_id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-navy/[0.02] transition-colors">
+                        <div key={g.game_id} className="flex items-center justify-between p-3 rounded-lg transition-colors" style={{ border: "1px solid #E2EAF3" }} onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(15,41,66,0.02)")} onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <div className="text-center shrink-0">
-                              <p className="text-[10px] text-muted font-oswald uppercase">{g.game_date}</p>
-                              <p className="text-[10px] text-muted">{g.time}</p>
+                              <p className="text-[10px] font-oswald uppercase" style={{ color: "#94A3B8" }}>{g.game_date}</p>
+                              <p className="text-[10px]" style={{ color: "#94A3B8" }}>{g.time}</p>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-navy truncate">{g.away_team} @ {g.home_team}</p>
-                              <p className="text-[10px] text-muted truncate">{g.venue}</p>
+                              <p className="text-xs font-semibold truncate" style={{ color: "#0F2942" }}>{g.away_team} @ {g.home_team}</p>
+                              <p className="text-[10px] truncate" style={{ color: "#94A3B8" }}>{g.venue}</p>
                             </div>
                           </div>
                         </div>
@@ -1212,25 +1212,25 @@ function Dashboard() {
             {/* 3. Family Guide Tiles */}
             <div className="mt-4">
               <div className="flex items-center gap-2 mb-3">
-                <BookOpen size={14} className="text-teal" />
-                <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Family Guide</h3>
+                <BookOpen size={14} style={{ color: "#0D9488" }} />
+                <h3 className="font-oswald text-xs font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>Family Guide</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  { title: "Nutrition & Recovery", desc: "Meal planning, hydration, sleep, and recovery protocols", icon: Heart, color: "bg-red-50", iconColor: "text-red-500", href: "/player-guide#nutrition" },
-                  { title: "Mental Performance", desc: "Focus, confidence, pre-game routines, and resilience", icon: Sparkles, color: "bg-purple-50", iconColor: "text-purple-500", href: "/player-guide#mental" },
-                  { title: "Education & Development", desc: "Balancing school, skill development, and long-term growth", icon: BookOpen, color: "bg-blue-50", iconColor: "text-blue-500", href: "/player-guide#education" },
-                  { title: "Pathway Planning", desc: "Junior, college, and professional hockey pathways", icon: TrendingUp, color: "bg-green-50", iconColor: "text-green-500", href: "/player-guide#pathway" },
+                  { title: "Nutrition & Recovery", desc: "Meal planning, hydration, sleep, and recovery protocols", icon: Heart, iconBg: "#FEF2F2", iconColor: "#C0392B", href: "/player-guide#nutrition" },
+                  { title: "Mental Performance", desc: "Focus, confidence, pre-game routines, and resilience", icon: Sparkles, iconBg: "#F5F3FF", iconColor: "#7C3AED", href: "/player-guide#mental" },
+                  { title: "Education & Development", desc: "Balancing school, skill development, and long-term growth", icon: BookOpen, iconBg: "#EFF6FF", iconColor: "#2563EB", href: "/player-guide#education" },
+                  { title: "Pathway Planning", desc: "Junior, college, and professional hockey pathways", icon: TrendingUp, iconBg: "#F0FDF4", iconColor: "#16A34A", href: "/player-guide#pathway" },
                 ].map((tile) => (
-                  <Link key={tile.title} href={tile.href} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-                    <div className={`w-10 h-10 rounded-lg ${tile.color} flex items-center justify-center group-hover:scale-110 transition-transform shrink-0`}>
-                      <tile.icon size={20} className={tile.iconColor} />
+                  <Link key={tile.title} href={tile.href} className="flex items-start gap-3 p-4 rounded-xl hover:shadow-md transition-all group" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }}>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shrink-0" style={{ background: tile.iconBg }}>
+                      <tile.icon size={20} style={{ color: tile.iconColor }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">{tile.title}</p>
-                      <p className="text-xs text-muted mt-0.5">{tile.desc}</p>
+                      <p className="font-oswald text-sm font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>{tile.title}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "#94A3B8" }}>{tile.desc}</p>
                     </div>
-                    <ChevronRight size={16} className="text-muted/40 mt-1 group-hover:text-teal transition-colors shrink-0" />
+                    <ChevronRight size={16} className="group-hover:text-teal transition-colors shrink-0 mt-1" style={{ color: "rgba(148,163,184,0.4)" }} />
                   </Link>
                 ))}
               </div>
@@ -1251,7 +1251,7 @@ function Dashboard() {
             {/* Team Leaders */}
             {!teamDataLoading && scoringLeaders.length > 0 && (
               <DashboardCard
-                icon={<BarChart3 size={15} className="text-teal" />}
+                icon={<BarChart3 size={15} style={{ color: "#0D9488" }} />}
                 title={`${activeTeam?.name || "Team"} Leaders`}
                 viewAllHref={activeTeam ? `/teams/${encodeURIComponent(activeTeam.name)}` : "/teams"}
                 loading={teamDataLoading}
@@ -1259,19 +1259,19 @@ function Dashboard() {
               >
                 <div className="space-y-1">
                   {scoringLeaders.map((l, i) => (
-                    <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
-                      <span className="w-4 text-right font-oswald font-bold text-muted/50">{i + 1}</span>
-                      <span className="flex-1 font-medium text-navy truncate group-hover:text-teal transition-colors">
+                    <Link key={`${l.id}-${i}`} href={`/players/${l.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded transition-colors text-xs group" onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(15,41,66,0.02)")} onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
+                      <span className="w-4 text-right font-oswald font-bold" style={{ color: "rgba(148,163,184,0.5)" }}>{i + 1}</span>
+                      <span className="flex-1 font-medium truncate group-hover:text-teal transition-colors" style={{ color: "#0F2942" }}>
                         {l.first_name} {l.last_name}
                       </span>
-                      <span className="font-oswald text-muted/60 w-6 text-center">{l.gp}</span>
-                      <span className="font-oswald text-navy/80 w-14 text-right">
+                      <span className="font-oswald w-6 text-center" style={{ color: "rgba(148,163,184,0.6)" }}>{l.gp}</span>
+                      <span className="font-oswald w-14 text-right" style={{ color: "rgba(15,41,66,0.8)" }}>
                         {l.g}G-{l.a}A—<strong>{l.p}</strong>
                       </span>
-                      <span className="font-oswald text-teal font-bold w-8 text-right">{(l.ppg ?? 0).toFixed(2)}</span>
+                      <span className="font-oswald font-bold w-8 text-right" style={{ color: "#0D9488" }}>{(l.ppg ?? 0).toFixed(2)}</span>
                     </Link>
                   ))}
-                  <div className="flex items-center justify-between text-[9px] text-muted/40 px-2 pt-1 border-t border-teal/10">
+                  <div className="flex items-center justify-between text-[9px] px-2 pt-1" style={{ color: "rgba(148,163,184,0.4)", borderTop: "1px solid rgba(13,148,136,0.1)" }}>
                     <span>Player</span>
                     <span className="flex gap-3"><span>GP</span><span>G-A—P</span><span>P/G</span></span>
                   </div>
@@ -1280,17 +1280,17 @@ function Dashboard() {
             )}
 
             {/* Agent Hub Banner */}
-            <div className="bg-gradient-to-br from-[#475569] to-[#334155] rounded-xl p-5 mb-4 text-white">
+            <div className="rounded-xl p-5 mb-4" style={{ background: "linear-gradient(to bottom right, #475569, #334155)", color: "#FFFFFF" }}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <Briefcase size={20} />
                 </div>
                 <div>
                   <h3 className="font-oswald text-sm font-bold uppercase tracking-wider">Agent Hub</h3>
-                  <p className="text-xs text-white/60 mt-0.5">Client management and reports</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>Client management and reports</p>
                 </div>
               </div>
-              <Link href="/my-clients" className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5 transition-colors">
+              <Link href="/my-clients" className="inline-flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 transition-colors" style={{ background: "rgba(255,255,255,0.1)" }} onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")} onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}>
                 Manage Clients <ChevronRight size={12} />
               </Link>
             </div>
@@ -1303,12 +1303,12 @@ function Dashboard() {
 
                 {/* Recent Reports */}
                 <DashboardCard
-                  icon={<FileText size={15} className="text-navy" />}
+                  icon={<FileText size={15} style={{ color: "#0F2942" }} />}
                   title="Recent Reports"
                   viewAllHref="/reports"
                   loading={loading}
                   empty={recentReports.length === 0}
-                  emptyIcon={<FileText size={24} className="text-muted/30" />}
+                  emptyIcon={<FileText size={24} style={{ color: "rgba(148,163,184,0.3)" }} />}
                   emptyText="No reports yet"
                   emptyLink="/reports/generate"
                   emptyLinkText="Generate a report"
@@ -1324,22 +1324,22 @@ function Dashboard() {
               {/* Right (2/5) */}
               <div className="lg:col-span-2 space-y-4">
                 {/* Players Link Card */}
-                <Link href="/players" className="flex items-center gap-3 p-4 bg-white rounded-xl border border-border hover:shadow-md transition-all group">
-                  <div className="w-10 h-10 rounded-lg bg-teal/10 flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
-                    <Users size={20} className="text-teal" />
+                <Link href="/players" className="flex items-center gap-3 p-4 rounded-xl hover:shadow-md transition-all group" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }}>
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shrink-0" style={{ background: "rgba(13,148,136,0.1)" }}>
+                    <Users size={20} style={{ color: "#0D9488" }} />
                   </div>
                   <div>
-                    <p className="font-oswald text-sm font-bold text-navy uppercase tracking-wider">Player Database</p>
-                    <p className="text-xs text-muted mt-0.5">Search, filter, and browse all players</p>
+                    <p className="font-oswald text-sm font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>Player Database</p>
+                    <p className="text-xs mt-0.5" style={{ color: "#94A3B8" }}>Search, filter, and browse all players</p>
                   </div>
-                  <ChevronRight size={16} className="text-muted/40 ml-auto group-hover:text-teal transition-colors" />
+                  <ChevronRight size={16} className="ml-auto group-hover:text-teal transition-colors" style={{ color: "rgba(148,163,184,0.4)" }} />
                 </Link>
 
                 {/* Monthly Usage */}
-                <div className="bg-white rounded-xl border border-border p-5">
+                <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }}>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-oswald text-xs font-bold text-navy uppercase tracking-wider">Monthly Usage</h3>
-                    <Link href="/billing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal/10 text-teal hover:bg-teal/20 transition-colors">
+                    <h3 className="font-oswald text-xs font-bold uppercase tracking-wider" style={{ color: "#0F2942" }}>Monthly Usage</h3>
+                    <Link href="/billing" className="flex items-center gap-1 text-[10px] font-oswald font-bold uppercase tracking-wider px-2 py-0.5 rounded-full transition-colors" style={{ background: "rgba(13,148,136,0.1)", color: "#0D9488" }} onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(13,148,136,0.2)")} onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(13,148,136,0.1)")}>
                       <Crown size={10} />
                       {user?.subscription_tier || "Rookie"}
                     </Link>
@@ -1416,12 +1416,12 @@ function DashboardCard({
 function ScoutingListSection({ scoutingList, loading }: { scoutingList: ScoutingListItem[]; loading: boolean }) {
   return (
     <DashboardCard
-      icon={<Target size={15} className="text-orange" />}
+      icon={<Target size={15} style={{ color: "#E67E22" }} />}
       title="Watchlist"
       viewAllHref="/watchlist"
       loading={loading}
       empty={scoutingList.length === 0}
-      emptyIcon={<Target size={24} className="text-muted/30" />}
+      emptyIcon={<Target size={24} style={{ color: "rgba(148,163,184,0.3)" }} />}
       emptyText="No players on watchlist"
       emptyLink="/watchlist"
       emptyLinkText="Add a player"
@@ -1470,19 +1470,19 @@ function ScoutingListSection({ scoutingList, loading }: { scoutingList: Scouting
 function TopProspectsSection({ prospects, loading }: { prospects: TopProspect[]; loading: boolean }) {
   return (
     <DashboardCard
-      icon={<Crown size={15} className="text-orange" />}
+      icon={<Crown size={15} style={{ color: "#E67E22" }} />}
       title="Top Prospects"
       viewAllHref="/top-prospects"
       loading={loading}
       empty={prospects.length === 0}
-      emptyIcon={<Crown size={24} className="text-muted/30" />}
+      emptyIcon={<Crown size={24} style={{ color: "rgba(148,163,184,0.3)" }} />}
       emptyText="PXR scores will populate your Top Prospects automatically."
       emptyLink="/top-prospects"
       emptyLinkText="View PXR Leaderboard"
     >
       <div className="space-y-1">
         {prospects.map((p, i) => (
-          <Link key={p.player_id} href={`/players/${p.player_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-navy/[0.02] transition-colors text-xs group">
+          <Link key={p.player_id} href={`/players/${p.player_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded transition-colors text-xs group" onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(15,41,66,0.02)")} onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
             <span className="w-4 text-right font-oswald font-bold" style={{ color: "#94A3B8" }}>{i + 1}</span>
             <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-oswald font-bold uppercase shrink-0" style={{ backgroundColor: "rgba(15,42,61,0.05)", color: "#0F2A3D" }}>
               {p.position || "?"}
@@ -1516,14 +1516,15 @@ function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { 
   }
 
   return (
-    <div className="bg-white rounded-xl border border-orange/25 p-4">
+    <div className="rounded-xl p-4" style={{ background: "#FFFFFF", border: "1px solid rgba(230,126,34,0.25)" }}>
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-[10px] font-oswald font-bold text-muted uppercase tracking-wider">League Scores</h3>
+        <h3 className="text-[10px] font-oswald font-bold uppercase tracking-wider" style={{ color: "#94A3B8" }}>League Scores</h3>
         {onLeagueChange && (
           <select
             value={scorebarLeague || ""}
             onChange={(e) => onLeagueChange(e.target.value)}
-            className="ml-auto text-[10px] font-oswald uppercase tracking-wider bg-white border border-border rounded px-2 py-0.5 text-navy cursor-pointer"
+            className="ml-auto text-[10px] font-oswald uppercase tracking-wider rounded px-2 py-0.5 cursor-pointer"
+            style={{ background: "#FFFFFF", border: "1px solid #E2EAF3", color: "#0F2942" }}
           >
             <option value="">My Team&apos;s League</option>
             <option value="gojhl">GOJHL</option>
@@ -1538,7 +1539,10 @@ function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { 
       <div className="relative">
         <button
           onClick={() => scrollBy(-1)}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 w-7 h-7 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-navy/60 hover:text-navy hover:border-teal/30 transition-colors"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 z-10 w-7 h-7 rounded-full shadow-md flex items-center justify-center transition-colors"
+          style={{ background: "#FFFFFF", border: "1px solid #E2EAF3", color: "rgba(15,41,66,0.6)" }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#0F2942"; e.currentTarget.style.borderColor = "rgba(13,148,136,0.3)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(15,41,66,0.6)"; e.currentTarget.style.borderColor = "#E2EAF3"; }}
           aria-label="Scroll left"
         >
           <ChevronLeft size={16} />
@@ -1550,25 +1554,22 @@ function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { 
             return (
               <div
                 key={g.game_id}
-                className={`shrink-0 w-40 rounded-lg border p-2.5 text-center text-xs ${
-                  isOurGame ? "border-teal bg-teal/[0.03]" : "border-border"
-                }`}
+                className="shrink-0 w-40 rounded-lg p-2.5 text-center text-xs"
+                style={{ border: isOurGame ? "1px solid #0D9488" : "1px solid #E2EAF3", background: isOurGame ? "rgba(13,148,136,0.03)" : undefined }}
               >
-                <p className="text-[9px] text-muted/60 mb-1">
+                <p className="text-[9px] mb-1" style={{ color: "rgba(148,163,184,0.6)" }}>
                   {new Date(g.game_date || g.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   {g.time && ` · ${g.time}`}
                 </p>
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.home_team}</span>
-                  <span className="font-oswald font-bold text-sm text-navy">{g.home_score ?? "-"}</span>
+                  <span className="font-oswald text-[11px] truncate flex-1 text-left" style={{ color: "#0F2942" }}>{g.home_team}</span>
+                  <span className="font-oswald font-bold text-sm" style={{ color: "#0F2942" }}>{g.home_score ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-oswald text-[11px] text-navy truncate flex-1 text-left">{g.away_team}</span>
-                  <span className="font-oswald font-bold text-sm text-navy">{g.away_score ?? "-"}</span>
+                  <span className="font-oswald text-[11px] truncate flex-1 text-left" style={{ color: "#0F2942" }}>{g.away_team}</span>
+                  <span className="font-oswald font-bold text-sm" style={{ color: "#0F2942" }}>{g.away_score ?? "-"}</span>
                 </div>
-                <p className={`text-[9px] font-oswald uppercase tracking-wider mt-1 ${
-                  g.status === "Final" || g.status === "final" ? "text-muted/50" : "text-green-600 font-bold"
-                }`}>
+                <p className="text-[9px] font-oswald uppercase tracking-wider mt-1" style={{ color: g.status === "Final" || g.status === "final" ? "rgba(148,163,184,0.5)" : "#1E6B3C", fontWeight: g.status !== "Final" && g.status !== "final" ? 700 : undefined }}>
                   {g.status || "Scheduled"}
                 </p>
               </div>
@@ -1577,7 +1578,10 @@ function LiveScorebar({ scorebar, teamName, scorebarLeague, onLeagueChange }: { 
         </div>
         <button
           onClick={() => scrollBy(1)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 w-7 h-7 rounded-full bg-white border border-border shadow-md flex items-center justify-center text-navy/60 hover:text-navy hover:border-teal/30 transition-colors"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 z-10 w-7 h-7 rounded-full shadow-md flex items-center justify-center transition-colors"
+          style={{ background: "#FFFFFF", border: "1px solid #E2EAF3", color: "rgba(15,41,66,0.6)" }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#0F2942"; e.currentTarget.style.borderColor = "rgba(13,148,136,0.3)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(15,41,66,0.6)"; e.currentTarget.style.borderColor = "#E2EAF3"; }}
           aria-label="Scroll right"
         >
           <ChevronRight size={16} />
@@ -1600,16 +1604,16 @@ function FamilyPlayerSpotlight({ scoringLeaders, loading }: { scoringLeaders: Sc
   const myPlayer = myPlayerId ? scoringLeaders.find((l) => l.id === myPlayerId) : null;
 
   if (loading) {
-    return <div className="bg-white rounded-xl border border-border p-5 animate-pulse"><div className="h-16 bg-navy/5 rounded-lg" /></div>;
+    return <div className="rounded-xl p-5 animate-pulse" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }}><div className="h-16 rounded-lg" style={{ background: "rgba(15,41,66,0.05)" }} /></div>;
   }
 
   if (!myPlayer) {
     return (
-      <div className="bg-gradient-to-r from-navy/[0.02] to-teal/[0.02] rounded-xl border border-dashed border-teal/30 p-6 text-center">
-        <Heart size={28} className="mx-auto text-teal/40 mb-2" />
-        <p className="text-sm font-semibold text-navy mb-1">Select Your Player</p>
-        <p className="text-xs text-muted mb-3">Set up your player profile to see their stats and development here.</p>
-        <Link href="/my-player" className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors">
+      <div className="rounded-xl p-6 text-center" style={{ background: "linear-gradient(to right, rgba(15,41,66,0.02), rgba(13,148,136,0.02))", border: "1px dashed rgba(13,148,136,0.3)" }}>
+        <Heart size={28} className="mx-auto mb-2" style={{ color: "rgba(13,148,136,0.4)" }} />
+        <p className="text-sm font-semibold mb-1" style={{ color: "#0F2942" }}>Select Your Player</p>
+        <p className="text-xs mb-3" style={{ color: "#94A3B8" }}>Set up your player profile to see their stats and development here.</p>
+        <Link href="/my-player" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-oswald uppercase tracking-wider rounded-lg transition-colors" style={{ background: "#0D9488", color: "#FFFFFF" }} onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(13,148,136,0.9)")} onMouseLeave={(e) => (e.currentTarget.style.background = "#0D9488")}>
           <Users size={14} /> Choose Player
         </Link>
       </div>
@@ -1617,37 +1621,37 @@ function FamilyPlayerSpotlight({ scoringLeaders, loading }: { scoringLeaders: Sc
   }
 
   return (
-    <div className="bg-white rounded-xl border border-border p-5">
+    <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-teal/10 flex items-center justify-center">
-            <span className="font-oswald font-bold text-teal text-lg">{myPlayer.position}</span>
+          <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "rgba(13,148,136,0.1)" }}>
+            <span className="font-oswald font-bold text-lg" style={{ color: "#0D9488" }}>{myPlayer.position}</span>
           </div>
           <div>
-            <h3 className="text-lg font-oswald font-bold text-navy">{myPlayer.first_name} {myPlayer.last_name}</h3>
-            <p className="text-xs text-muted">{myPlayer.current_team} · {myPlayer.position}</p>
+            <h3 className="text-lg font-oswald font-bold" style={{ color: "#0F2942" }}>{myPlayer.first_name} {myPlayer.last_name}</h3>
+            <p className="text-xs" style={{ color: "#94A3B8" }}>{myPlayer.current_team} · {myPlayer.position}</p>
           </div>
         </div>
         <div className="flex items-center gap-4 text-center">
           <div>
-            <p className="text-lg font-oswald font-bold text-navy">{myPlayer.gp}</p>
-            <p className="text-[9px] text-muted uppercase">GP</p>
+            <p className="text-lg font-oswald font-bold" style={{ color: "#0F2942" }}>{myPlayer.gp}</p>
+            <p className="text-[9px] uppercase" style={{ color: "#94A3B8" }}>GP</p>
           </div>
           <div>
-            <p className="text-lg font-oswald font-bold text-navy">{myPlayer.g}</p>
-            <p className="text-[9px] text-muted uppercase">G</p>
+            <p className="text-lg font-oswald font-bold" style={{ color: "#0F2942" }}>{myPlayer.g}</p>
+            <p className="text-[9px] uppercase" style={{ color: "#94A3B8" }}>G</p>
           </div>
           <div>
-            <p className="text-lg font-oswald font-bold text-navy">{myPlayer.a}</p>
-            <p className="text-[9px] text-muted uppercase">A</p>
+            <p className="text-lg font-oswald font-bold" style={{ color: "#0F2942" }}>{myPlayer.a}</p>
+            <p className="text-[9px] uppercase" style={{ color: "#94A3B8" }}>A</p>
           </div>
           <div>
-            <p className="text-lg font-oswald font-bold text-teal">{myPlayer.p}</p>
-            <p className="text-[9px] text-muted uppercase">PTS</p>
+            <p className="text-lg font-oswald font-bold" style={{ color: "#0D9488" }}>{myPlayer.p}</p>
+            <p className="text-[9px] uppercase" style={{ color: "#94A3B8" }}>PTS</p>
           </div>
           <div>
-            <p className="text-lg font-oswald font-bold text-orange">{(myPlayer.ppg ?? 0).toFixed(2)}</p>
-            <p className="text-[9px] text-muted uppercase">P/G</p>
+            <p className="text-lg font-oswald font-bold" style={{ color: "#E67E22" }}>{(myPlayer.ppg ?? 0).toFixed(2)}</p>
+            <p className="text-[9px] uppercase" style={{ color: "#94A3B8" }}>P/G</p>
           </div>
         </div>
       </div>

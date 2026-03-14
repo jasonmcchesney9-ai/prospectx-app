@@ -1934,33 +1934,33 @@ export default function PlayerDetailPage() {
             {teamSystem ? (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                    <Shield size={14} className="text-navy" /> Team System — {teamSystem.team_name}
-                    {teamSystem.season && <span className="text-xs font-normal text-muted/60 ml-1">{teamSystem.season}</span>}
+                  <h3 className="text-sm uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
+                    <Shield size={14} style={{ color: "#0F2942" }} /> Team System — {teamSystem.team_name}
+                    {teamSystem.season && <span className="text-xs font-normal ml-1" style={{ color: "rgba(148,163,184,0.6)" }}>{teamSystem.season}</span>}
                   </h3>
                   <Link
                     href="/team-systems"
-                    className="text-xs text-teal hover:underline"
+                    className="text-xs hover:underline" style={{ color: "#0D9488" }}
                   >
                     Edit Systems →
                   </Link>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {([
-                    { label: "Forecheck", value: teamSystem.forecheck, icon: Swords, color: "text-orange" },
-                    { label: "DZ Coverage", value: teamSystem.dz_structure, icon: Shield, color: "text-navy" },
-                    { label: "OZ Setup", value: teamSystem.oz_setup, icon: Target, color: "text-teal" },
-                    { label: "Breakout", value: teamSystem.breakout, icon: Zap, color: "text-orange" },
-                    { label: "PK", value: teamSystem.pk_formation, icon: Shield, color: "text-navy" },
-                  ] as const).filter((f) => f.value).map(({ label, value, icon: Icon, color }) => {
+                    { label: "Forecheck", value: teamSystem.forecheck, icon: Swords, iconColor: "#E67E22" },
+                    { label: "DZ Coverage", value: teamSystem.dz_structure, icon: Shield, iconColor: "#0F2942" },
+                    { label: "OZ Setup", value: teamSystem.oz_setup, icon: Target, iconColor: "#0D9488" },
+                    { label: "Breakout", value: teamSystem.breakout, icon: Zap, iconColor: "#E67E22" },
+                    { label: "PK", value: teamSystem.pk_formation, icon: Shield, iconColor: "#0F2942" },
+                  ] as const).filter((f) => f.value).map(({ label, value, icon: Icon, iconColor }) => {
                     const entry = systemsLibrary.find((e) => e.code === value);
                     return (
-                      <div key={label} className="p-3 rounded-lg bg-navy/[0.03] border border-teal/10">
+                      <div key={label} className="p-3 rounded-lg" style={{ background: "rgba(15,41,66,0.03)", border: "1px solid rgba(13,148,136,0.1)" }}>
                         <div className="flex items-center gap-1.5 mb-1">
-                          <Icon size={12} className={color} />
-                          <span className="text-[10px] font-oswald uppercase tracking-wider text-muted">{label}</span>
+                          <Icon size={12} style={{ color: iconColor }} />
+                          <span className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>{label}</span>
                         </div>
-                        <p className="text-xs font-semibold text-navy">{entry?.name || value}</p>
+                        <p className="text-xs font-semibold" style={{ color: "#0F2942" }}>{entry?.name || value}</p>
                       </div>
                     );
                   })}
@@ -1969,17 +1969,17 @@ export default function PlayerDetailPage() {
                 {(teamSystem.pace || teamSystem.physicality || teamSystem.offensive_style) && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {teamSystem.pace && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-orange/[0.06] text-navy/70">
+                      <span className="text-xs px-2 py-0.5 rounded" style={{ background: "rgba(230,126,34,0.06)", color: "rgba(15,41,66,0.7)" }}>
                         <strong>Pace:</strong> {teamSystem.pace}
                       </span>
                     )}
                     {teamSystem.physicality && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-orange/[0.06] text-navy/70">
+                      <span className="text-xs px-2 py-0.5 rounded" style={{ background: "rgba(230,126,34,0.06)", color: "rgba(15,41,66,0.7)" }}>
                         <strong>Physical:</strong> {teamSystem.physicality}
                       </span>
                     )}
                     {teamSystem.offensive_style && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-orange/[0.06] text-navy/70">
+                      <span className="text-xs px-2 py-0.5 rounded" style={{ background: "rgba(230,126,34,0.06)", color: "rgba(15,41,66,0.7)" }}>
                         <strong>Offense:</strong> {teamSystem.offensive_style}
                       </span>
                     )}
@@ -1988,23 +1988,23 @@ export default function PlayerDetailPage() {
                 {teamSystem.identity_tags && teamSystem.identity_tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {teamSystem.identity_tags.map((tag) => (
-                      <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-teal/10 text-teal font-medium">
+                      <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(13,148,136,0.1)", color: "#0D9488" }}>
                         {tag}
                       </span>
                     ))}
                   </div>
                 )}
                 {teamSystem.notes && (
-                  <p className="text-xs text-muted/70 mt-2 italic">{teamSystem.notes}</p>
+                  <p className="text-xs mt-2 italic" style={{ color: "rgba(148,163,184,0.7)" }}>{teamSystem.notes}</p>
                 )}
               </div>
             ) : player.current_team ? (
-              <div className="bg-navy/[0.02] rounded-xl border border-dashed border-teal/20 p-5 text-center">
-                <Shield size={24} className="mx-auto text-muted/30 mb-2" />
-                <p className="text-sm text-muted mb-1">No system profile for <strong>{player.current_team}</strong></p>
+              <div className="rounded-xl border border-dashed p-5 text-center" style={{ background: "rgba(15,41,66,0.02)", borderColor: "rgba(13,148,136,0.2)" }}>
+                <Shield size={24} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.3)" }} />
+                <p className="text-sm mb-1" style={{ color: "#94A3B8" }}>No system profile for <strong>{player.current_team}</strong></p>
                 <Link
                   href="/team-systems"
-                  className="text-xs text-teal hover:underline"
+                  className="text-xs hover:underline" style={{ color: "#0D9488" }}
                 >
                   Create team system profile →
                 </Link>
@@ -2014,26 +2014,26 @@ export default function PlayerDetailPage() {
             {/* Player Notes Preview */}
             {player.notes && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Player Notes</h3>
-                <p className="text-sm text-navy/80 whitespace-pre-wrap">{player.notes}</p>
+                <h3 className="text-sm uppercase tracking-wider mb-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Player Notes</h3>
+                <p className="text-sm whitespace-pre-wrap" style={{ color: "rgba(15,41,66,0.8)" }}>{player.notes}</p>
               </div>
             )}
 
             {/* Suggest Correction */}
             <div className="no-print" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted flex items-center gap-2">
-                  <AlertTriangle size={14} className="text-orange" />
+                <h3 className="text-sm uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
+                  <AlertTriangle size={14} style={{ color: "#E67E22" }} />
                   Data Corrections
                   {pendingCorrections > 0 && (
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange text-white text-[10px] font-bold">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style={{ background: "#E67E22", color: "#FFFFFF" }}>
                       {pendingCorrections}
                     </span>
                   )}
                 </h3>
                 <button
                   onClick={() => setShowCorrectionForm(!showCorrectionForm)}
-                  className="text-xs text-teal hover:text-teal/70 flex items-center gap-1 transition-colors"
+                  className="text-xs flex items-center gap-1 transition-colors" style={{ color: "#0D9488" }}
                 >
                   {showCorrectionForm ? <X size={12} /> : <Edit3 size={12} />}
                   {showCorrectionForm ? "Cancel" : "Suggest Correction"}
@@ -2041,7 +2041,7 @@ export default function PlayerDetailPage() {
               </div>
 
               {correctionMsg && (
-                <div className="mb-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-green-700 text-xs flex items-center gap-2">
+                <div className="mb-3 rounded-lg px-3 py-2 text-xs flex items-center gap-2" style={{ background: "rgba(30,107,60,0.08)", border: "1px solid rgba(30,107,60,0.2)", color: "#1E6B3C" }}>
                   <CheckCircle size={12} />
                   {correctionMsg}
                   <button onClick={() => setCorrectionMsg("")} className="ml-auto"><X size={10} /></button>
@@ -2049,13 +2049,13 @@ export default function PlayerDetailPage() {
               )}
 
               {showCorrectionForm && (
-                <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-teal/20">
+                <div className="space-y-3 p-3 rounded-lg" style={{ background: "#F8FAFC", border: "1px solid rgba(13,148,136,0.2)" }}>
                   <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Field to Correct</label>
+                    <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Field to Correct</label>
                     <select
                       value={correctionField}
                       onChange={(e) => setCorrectionField(e.target.value)}
-                      className="w-full border border-teal/20 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      className="w-full rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30" style={{ border: "1px solid rgba(13,148,136,0.2)" }}
                     >
                       <option value="">Select field...</option>
                       {CORRECTABLE_FIELDS.map((f) => (
@@ -2065,49 +2065,48 @@ export default function PlayerDetailPage() {
                   </div>
 
                   {correctionField && (
-                    <div className="text-[10px] text-muted">
-                      Current value: <span className="font-medium text-navy">
+                    <div className="text-[10px]" style={{ color: "#94A3B8" }}>
+                      Current value: <span className="font-medium" style={{ color: "#0F2942" }}>
                         {String((player as unknown as Record<string, unknown>)[correctionField] ?? "—")}
                       </span>
                     </div>
                   )}
 
                   <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Correct Value</label>
+                    <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Correct Value</label>
                     <input
                       type="text"
                       value={correctionValue}
                       onChange={(e) => setCorrectionValue(e.target.value)}
                       placeholder="Enter the correct value..."
-                      className="w-full border border-teal/20 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      className="w-full rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30" style={{ border: "1px solid rgba(13,148,136,0.2)" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Reason (optional)</label>
+                    <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Reason (optional)</label>
                     <textarea
                       value={correctionReason}
                       onChange={(e) => setCorrectionReason(e.target.value)}
                       placeholder="Why is this incorrect?"
                       rows={2}
-                      className="w-full border border-teal/20 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none"
+                      className="w-full rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30 resize-none" style={{ border: "1px solid rgba(13,148,136,0.2)" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Confidence</label>
+                    <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Confidence</label>
                     <div className="flex gap-2 mt-1">
                       {(["low", "medium", "high"] as const).map((c) => (
                         <button
                           key={c}
                           onClick={() => setCorrectionConfidence(c)}
-                          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                            correctionConfidence === c
-                              ? c === "high" ? "bg-green-100 text-green-700 border border-green-300"
-                                : c === "medium" ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                : "bg-red-100 text-red-700 border border-red-300"
-                              : "bg-gray-100 text-muted border border-teal/20 hover:bg-gray-200"
-                          }`}
+                          className="px-3 py-1 rounded text-xs font-medium transition-colors"
+                          style={correctionConfidence === c
+                            ? c === "high" ? { background: "rgba(30,107,60,0.1)", color: "#1E6B3C", border: "1px solid rgba(30,107,60,0.3)" }
+                              : c === "medium" ? { background: "rgba(245,158,11,0.1)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)" }
+                              : { background: "rgba(192,57,43,0.1)", color: "#C0392B", border: "1px solid rgba(192,57,43,0.3)" }
+                            : { background: "#F8FAFC", color: "#94A3B8", border: "1px solid rgba(13,148,136,0.2)" }}
                         >
                           {c.charAt(0).toUpperCase() + c.slice(1)}
                         </button>
@@ -2140,7 +2139,7 @@ export default function PlayerDetailPage() {
                       }
                     }}
                     disabled={submittingCorrection || !correctionField || !correctionValue}
-                    className="w-full bg-gradient-to-r from-orange to-orange/80 text-white py-2 rounded-lg font-oswald font-semibold uppercase tracking-wider text-sm hover:shadow-md transition-shadow disabled:opacity-50"
+                    className="w-full py-2 rounded-lg font-semibold uppercase tracking-wider text-sm hover:shadow-md transition-shadow disabled:opacity-50" style={{ background: "#E67E22", color: "#FFFFFF", fontFamily: "'Oswald', sans-serif" }}
                   >
                     {submittingCorrection ? "Submitting..." : "Submit Correction"}
                   </button>
@@ -2148,7 +2147,7 @@ export default function PlayerDetailPage() {
               )}
 
               {!showCorrectionForm && pendingCorrections === 0 && (
-                <p className="text-xs text-muted">
+                <p className="text-xs" style={{ color: "#94A3B8" }}>
                   See incorrect data? Click &quot;Suggest Correction&quot; to submit a fix for review.
                 </p>
               )}
@@ -2157,20 +2156,20 @@ export default function PlayerDetailPage() {
             {/* ── BelowFold: Career Stats ── */}
             {stats.filter(s => s.stat_type === "season").length > 1 && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
-                  <TrendingUp size={14} className="text-teal" /> Career Stats
+                <h3 className="text-sm uppercase tracking-wider mb-3 flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
+                  <TrendingUp size={14} style={{ color: "#0D9488" }} /> Career Stats
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="border-b border-navy/10">
-                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Season</th>
-                        <th className="text-left py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">Team</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">GP</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">G</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">A</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-muted text-[10px]">P</th>
-                        <th className="text-center py-1.5 px-2 font-oswald uppercase tracking-wider text-teal text-[10px]">PPG</th>
+                      <tr style={{ borderBottom: "1px solid rgba(15,41,66,0.1)" }}>
+                        <th className="text-left py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Season</th>
+                        <th className="text-left py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Team</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>GP</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>G</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>A</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>P</th>
+                        <th className="text-center py-1.5 px-2 uppercase tracking-wider text-[10px]" style={{ fontFamily: "'Oswald', sans-serif", color: "#0D9488" }}>PPG</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2178,15 +2177,15 @@ export default function PlayerDetailPage() {
                         .filter(s => s.stat_type === "season")
                         .sort((a, b) => (b.season || "").localeCompare(a.season || ""))
                         .map((s) => (
-                          <tr key={s.id} className="border-b border-navy/5 hover:bg-navy/[0.02]">
-                            <td className="py-1.5 px-2 font-medium text-navy">{s.season || "—"}</td>
+                          <tr key={s.id} style={{ borderBottom: "1px solid rgba(15,41,66,0.05)" }}>
+                            <td className="py-1.5 px-2 font-medium" style={{ color: "#0F2942" }}>{s.season || "—"}</td>
                             {/* team_name stripped by backend StatsResponse model — fallback to player.current_team */}
-                            <td className="py-1.5 px-2 text-navy/70">{s.team_name || player?.current_team || "—"}</td>
+                            <td className="py-1.5 px-2" style={{ color: "rgba(15,41,66,0.7)" }}>{s.team_name || player?.current_team || "—"}</td>
                             <td className="text-center py-1.5 px-2">{s.gp}</td>
                             <td className="text-center py-1.5 px-2">{s.g}</td>
                             <td className="text-center py-1.5 px-2">{s.a}</td>
                             <td className="text-center py-1.5 px-2 font-bold">{s.p}</td>
-                            <td className="text-center py-1.5 px-2 font-bold text-teal">
+                            <td className="text-center py-1.5 px-2 font-bold" style={{ color: "#0D9488" }}>
                               {s.gp > 0 ? (s.p / s.gp).toFixed(2) : "—"}
                             </td>
                           </tr>
