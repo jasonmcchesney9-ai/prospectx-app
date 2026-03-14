@@ -53812,30 +53812,22 @@ async def get_org_preferences(org_id: str, token_data: dict = Depends(verify_tok
 # GEMINI VIDEO ANALYSIS ENDPOINT
 # ============================================================
 
-_GEMINI_EVENT_SYSTEM_PROMPT = """You are an ice hockey event detection system analyzing game footage. Output ONLY valid JSON. No prose, no markdown, no explanation.
-Detect these event types only:
+_GEMINI_EVENT_SYSTEM_PROMPT = """CRITICAL: You are a video analysis API. Output ONLY a JSON object. No prose, no explanation, no markdown, no conversation.
+Watch this hockey game video and detect these events:
 zone_entry, zone_exit, dump_in, shot_attempt, faceoff, hit, breakout, penalty
-For ice_zone use: offensive | neutral | defensive from home team perspective.
-For outcome use: possession_maintained | turnover | on_net | blocked | wide | won | lost | null.
-Capture player jersey number as string if visible, null if not.
-Assign confidence score 0.0-1.0 per event.
-Return this exact structure:
-{
-  "events": [
-    {
-      "event_type": "zone_entry",
-      "event_label": "controlled",
-      "ice_zone": "offensive",
-      "outcome": "possession_maintained",
-      "period": 2,
-      "time_seconds": 1253.4,
-      "team": "home",
-      "player_jersey": "17",
-      "confidence": 0.82
-    }
-  ]
-}
-Return {"events": []} if no clear events detected. Never hallucinate events."""
+For each event output:
+- event_type: one of the 8 types above
+- event_label: brief descriptor (e.g. "controlled", "icing", "wrist shot")
+- ice_zone: offensive | neutral | defensive (from home team perspective)
+- outcome: possession_maintained | turnover | on_net | blocked | wide | won | lost | null
+- period: 1, 2, or 3
+- time_seconds: float, seconds from video start
+- team: home | away
+- player_jersey: jersey number string if visible, null if not
+- confidence: 0.0-1.0
+Return ONLY this JSON structure, nothing else:
+{"events": [...]}
+If uncertain about an event, include it with confidence below 0.5. Do NOT explain yourself."""
 
 
 async def _run_gemini_video_analyze(session_id: str, org_id: str):
@@ -53901,11 +53893,9 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             # Call generate_content with uploaded file reference
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=[
-                    _GEMINI_EVENT_SYSTEM_PROMPT,
-                    uploaded_file,
-                ],
+                contents=[uploaded_file],
                 config=genai_types.GenerateContentConfig(
+                    system_instruction=_GEMINI_EVENT_SYSTEM_PROMPT,
                     temperature=0.2,
                     max_output_tokens=8192,
                 ),
