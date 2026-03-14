@@ -3510,11 +3510,11 @@ export default function PlayerDetailPage() {
                   {/* Legacy backward compat: show old sections model if no v2 sections */}
                   {!devPlanV2.section_1_snapshot && devPlan?.sections && devPlan.sections.length > 0 && (
                     <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
-                      <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Legacy Plan Sections</h3>
+                      <h3 className="text-xs uppercase tracking-wider mb-3" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Legacy Plan Sections</h3>
                       {devPlan.sections.map((section: DevelopmentPlanSection, idx: number) => (
                         <div key={idx} className="mb-3 last:mb-0">
-                          <h4 className="text-sm font-semibold text-navy mb-1">{section.title}</h4>
-                          <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{section.content}</div>
+                          <h4 className="text-sm font-semibold mb-1" style={{ color: "#0F2942" }}>{section.title}</h4>
+                          <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "rgba(15,41,66,0.8)" }}>{section.content}</div>
                         </div>
                       ))}
                     </div>
@@ -3525,8 +3525,8 @@ export default function PlayerDetailPage() {
               {/* Loading state */}
               {loadingDevPlan && (
                 <div className="text-center py-12">
-                  <Loader2 size={24} className="mx-auto text-teal animate-spin mb-2" />
-                  <p className="text-sm text-muted">Loading development plan...</p>
+                  <Loader2 size={24} className="mx-auto animate-spin mb-2" style={{ color: "#0D9488" }} />
+                  <p className="text-sm" style={{ color: "#94A3B8" }}>Loading development plan...</p>
                 </div>
               )}
               </div>
@@ -3537,7 +3537,7 @@ export default function PlayerDetailPage() {
               <div style={{ background: "white", borderRadius: 14, overflow: "hidden", position: "relative", borderLeft: "4px solid #0D9488" }}>
                 <div style={{ background: "linear-gradient(135deg, #0F2942 0%, #1A3F54 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>Parent Access</h4>
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-teal/20 text-teal">{linkedParents.length} linked</span>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: "rgba(13,148,136,0.2)", color: "#0D9488" }}>{linkedParents.length} linked</span>
                 </div>
                 <div className="px-4 py-3">
                   {/* Linked parents list */}
@@ -3546,9 +3546,9 @@ export default function PlayerDetailPage() {
                       {linkedParents.map((p) => (
                         <div key={p.link_id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
                           <div className="flex items-center gap-2">
-                            <User size={13} className="text-muted/50" />
+                            <User size={13} style={{ color: "rgba(148,163,184,0.5)" }} />
                             <div>
-                              <p className="text-sm text-navy font-medium">{p.first_name || ""} {p.last_name || ""}</p>
+                              <p className="text-sm font-medium" style={{ color: "#0F2942" }}>{p.first_name || ""} {p.last_name || ""}</p>
                               <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#6B7B8D" }}>{p.email}</p>
                             </div>
                           </div>
@@ -3563,7 +3563,7 @@ export default function PlayerDetailPage() {
                                 toast.error("Failed to unlink parent");
                               }
                             }}
-                            className="text-xs text-red-500 hover:text-red-700"
+                            className="text-xs" style={{ color: "#C0392B" }}
                           >
                             Remove
                           </button>
@@ -3571,7 +3571,7 @@ export default function PlayerDetailPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted/50 italic mb-3">No parent accounts linked. Add a parent email to give family access.</p>
+                    <p className="text-sm italic mb-3" style={{ color: "rgba(148,163,184,0.5)" }}>No parent accounts linked. Add a parent email to give family access.</p>
                   )}
                   {/* Add parent form */}
                   <div className="flex gap-2">
@@ -3580,7 +3580,7 @@ export default function PlayerDetailPage() {
                       value={parentEmail}
                       onChange={(e) => setParentEmail(e.target.value)}
                       placeholder="Parent email address"
-                      className="flex-1 text-sm px-3 py-2 border border-border rounded-lg outline-none focus:border-teal/40 bg-gray-50"
+                      className="flex-1 text-sm px-3 py-2 rounded-lg outline-none focus:border-teal/40" style={{ border: "1px solid #E2EAF3", background: "#F8FAFC" }}
                     />
                     <button
                       onClick={async () => {
@@ -3606,13 +3606,13 @@ export default function PlayerDetailPage() {
                         }
                       }}
                       disabled={linkingParent || !parentEmail.trim()}
-                      className="flex items-center gap-1 px-4 py-2 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                      className="flex items-center gap-1 px-4 py-2 text-xs font-medium rounded-lg disabled:opacity-50" style={{ background: "#0D9488", color: "#FFFFFF" }}
                     >
                       {linkingParent ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                       Send Invite
                     </button>
                   </div>
-                  <p className="text-[11px] text-muted/40 mt-2">Enter the parent&apos;s account email. They will gain Family access to this player&apos;s profile, development plan, and schedule.</p>
+                  <p className="text-[11px] mt-2" style={{ color: "rgba(148,163,184,0.4)" }}>Enter the parent&apos;s account email. They will gain Family access to this player&apos;s profile, development plan, and schedule.</p>
                 </div>
               </div>
             )}
@@ -3623,7 +3623,7 @@ export default function PlayerDetailPage() {
         {/* Video Tab */}
         {activeTab === "video" && (
           <section className="space-y-4">
-            <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Video sessions, game film clips, and tagged highlights.</p>
+            <p className="text-[11px] tracking-wider -mb-1" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.7)" }}>Video sessions, game film clips, and tagged highlights.</p>
 
             {/* ── Recruitment Reel Section ──────────────────────── */}
             <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
