@@ -61,6 +61,7 @@ def create_direct_upload(cors_origin: str = "*") -> dict:
 
     asset_settings = mux_python.CreateAssetRequest(
         playback_policy=[mux_python.PlaybackPolicy.PUBLIC],
+        mp4_support="standard",
     )
     upload_request = mux_python.CreateUploadRequest(
         timeout=3600,
@@ -105,6 +106,7 @@ def create_asset_from_url(url: str, passthrough: str = "") -> dict:
             mux_python.InputSettings(url=url),
         ],
         playback_policy=[mux_python.PlaybackPolicy.PUBLIC],
+        mp4_support="standard",
         passthrough=passthrough or None,
     )
 
