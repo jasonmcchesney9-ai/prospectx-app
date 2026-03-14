@@ -53905,7 +53905,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
                     genai_types.Content(
                         parts=[
                             uploaded_file,
-                            genai_types.Part.from_text(_GEMINI_EVENT_SYSTEM_PROMPT),
+                            genai_types.Part(text=_GEMINI_EVENT_SYSTEM_PROMPT),
                         ]
                     )
                 ],
