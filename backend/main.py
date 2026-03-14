@@ -53902,12 +53902,8 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[
-                    genai_types.Content(
-                        parts=[
-                            uploaded_file,
-                            genai_types.Part(text=_GEMINI_EVENT_SYSTEM_PROMPT),
-                        ]
-                    )
+                    _GEMINI_EVENT_SYSTEM_PROMPT,
+                    uploaded_file,
                 ],
                 config=genai_types.GenerateContentConfig(
                     temperature=0.2,
