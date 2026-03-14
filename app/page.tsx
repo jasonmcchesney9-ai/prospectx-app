@@ -906,6 +906,11 @@ function Dashboard() {
                 </DashboardCard>
                 )}
 
+                {/* Top Prospects */}
+                {showWidget("top_prospects") && (
+                  <TopProspectsSection prospects={topProspects} loading={loading} />
+                )}
+
                 {/* Players Without Development Plans */}
                 {(user?.hockey_role === "coach" || user?.hockey_role === "admin" || user?.hockey_role === "gm") && (
                   <DashboardCard
@@ -979,11 +984,6 @@ function Dashboard() {
                 {/* Scouting List */}
                 {showWidget("scouting_list") && (
                   <ScoutingListSection scoutingList={scoutingList} loading={loading} />
-                )}
-
-                {/* Top Prospects */}
-                {showWidget("top_prospects") && (
-                  <TopProspectsSection prospects={topProspects} loading={loading} />
                 )}
 
                 {/* Team Leaders */}
