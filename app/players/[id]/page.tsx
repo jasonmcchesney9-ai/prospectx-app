@@ -3414,7 +3414,7 @@ export default function PlayerDetailPage() {
                         <div className="flex items-center gap-2">
                           <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,.4)" }}>8.</span>
                           <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>Staff Notes</h4>
-                          <span className="flex items-center gap-1 text-xs text-teal bg-teal/10 px-2 py-0.5 rounded-full">
+                          <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ color: "#0D9488", background: "rgba(13,148,136,0.1)" }}>
                             <Lock size={10} /> Internal
                           </span>
                         </div>
@@ -3439,7 +3439,7 @@ export default function PlayerDetailPage() {
                               value={editV2Content}
                               onChange={(e) => setEditV2Content(e.target.value)}
                               rows={6}
-                              className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
+                              className="w-full text-sm rounded-lg p-3 outline-none leading-relaxed resize-y focus:border-teal/40" style={{ color: "rgba(15,41,66,0.8)", background: "#F8FAFC", border: "1px solid #E2EAF3" }}
                             />
                             <div className="flex gap-2 mt-2">
                               <button
@@ -3470,20 +3470,20 @@ export default function PlayerDetailPage() {
                                   }
                                 }}
                                 disabled={savingDevPlan}
-                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50" style={{ background: "#0D9488", color: "#FFFFFF" }}
                               >
                                 {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                                 Save
                               </button>
-                              <button onClick={() => setEditingV2Section(null)} className="px-3 py-1.5 text-xs text-muted hover:text-navy">
+                              <button onClick={() => setEditingV2Section(null)} className="px-3 py-1.5 text-xs" style={{ color: "#94A3B8" }}>
                                 Cancel
                               </button>
                             </div>
                           </>
                         ) : devPlanV2.section_8_staff_notes ? (
-                          <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{devPlanV2.section_8_staff_notes}</div>
+                          <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "rgba(15,41,66,0.8)" }}>{devPlanV2.section_8_staff_notes}</div>
                         ) : (
-                          <p className="text-sm text-muted/40 italic">No staff notes yet</p>
+                          <p className="text-sm italic" style={{ color: "rgba(148,163,184,0.4)" }}>No staff notes yet</p>
                         )}
                       </div>
                     </div>
@@ -3492,15 +3492,15 @@ export default function PlayerDetailPage() {
                   {/* Recent Reports (coach/admin/scout only) */}
                   {COACH_ROLES.has(userRole) && reports.length > 0 && (
                     <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
-                      <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Recent Reports</h3>
+                      <h3 className="text-xs uppercase tracking-wider mb-3" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Recent Reports</h3>
                       <div className="space-y-2">
                         {reports.slice(0, 3).map((r) => (
-                          <Link key={r.id} href={`/reports/${r.id}`} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 border border-border">
+                          <Link key={r.id} href={`/reports/${r.id}`} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ border: "1px solid #E2EAF3" }}>
                             <div className="flex items-center gap-2">
-                              <FileText size={14} className="text-muted" />
-                              <span className="text-sm text-navy">{r.title || r.report_type.replace(/_/g, " ")}</span>
+                              <FileText size={14} style={{ color: "#94A3B8" }} />
+                              <span className="text-sm" style={{ color: "#0F2942" }}>{r.title || r.report_type.replace(/_/g, " ")}</span>
                             </div>
-                            <span className="text-xs text-muted">{new Date(r.created_at).toLocaleDateString()}</span>
+                            <span className="text-xs" style={{ color: "#94A3B8" }}>{new Date(r.created_at).toLocaleDateString()}</span>
                           </Link>
                         ))}
                       </div>
