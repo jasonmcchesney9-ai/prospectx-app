@@ -3143,7 +3143,7 @@ export default function PlayerDetailPage() {
               {planStatus === "draft" && draftSections && (
                 <div className="space-y-3">
                   {/* Draft banner */}
-                  <div className="flex items-center gap-2 text-sm text-orange bg-orange/5 px-3 py-2 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg" style={{ color: "#E67E22", background: "rgba(230,126,34,0.05)" }}>
                     <AlertTriangle size={16} />
                     <span className="font-medium">Draft — review sections below, then save or finalize.</span>
                   </div>
@@ -3166,7 +3166,7 @@ export default function PlayerDetailPage() {
                             <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,.4)" }}>{num}.</span>
                             <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>{title}</h4>
                             {isStaffOnly && (
-                              <span className="flex items-center gap-1 text-xs text-teal bg-teal/10 px-2 py-0.5 rounded-full">
+                              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ color: "#0D9488", background: "rgba(13,148,136,0.1)" }}>
                                 <Lock size={10} /> Internal
                               </span>
                             )}
@@ -3175,7 +3175,8 @@ export default function PlayerDetailPage() {
                           {!isStaffOnly && COACH_ROLES.has(userRole) && (
                             <button
                               onClick={() => setVisibilityFlags((prev) => ({ ...prev, [visKey]: !prev[visKey] }))}
-                              className={`p-1 rounded ${visibilityFlags[visKey] ? "text-teal" : "text-white/30"}`}
+                              className="p-1 rounded"
+                              style={{ color: visibilityFlags[visKey] ? "#0D9488" : "rgba(255,255,255,0.3)" }}
                               title={visibilityFlags[visKey] ? "Visible to player/parent" : "Hidden from player/parent"}
                             >
                               {visibilityFlags[visKey] ? <Eye size={14} /> : <EyeOff size={14} />}
@@ -3187,9 +3188,9 @@ export default function PlayerDetailPage() {
                             value={content}
                             onChange={(e) => setDraftSections((prev) => prev ? { ...prev, [sectionKey]: e.target.value } : prev)}
                             rows={6}
-                            className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
+                            className="w-full text-sm rounded-lg p-3 outline-none leading-relaxed resize-y focus:border-teal/40" style={{ color: "rgba(15,41,66,0.8)", background: "#F8FAFC", border: "1px solid #E2EAF3" }}
                           />
-                          <p className="text-xs text-muted/40 mt-1 text-right">{content.length} characters</p>
+                          <p className="text-xs mt-1 text-right" style={{ color: "rgba(148,163,184,0.4)" }}>{content.length} characters</p>
                         </div>
                       </div>
                     );
@@ -3200,7 +3201,7 @@ export default function PlayerDetailPage() {
                     <button
                       onClick={() => handleSaveV2("draft")}
                       disabled={savingDevPlan}
-                      className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider bg-navy text-white rounded-lg hover:bg-navy/90 disabled:opacity-50"
+                      className="flex items-center gap-1 px-4 py-2 text-sm uppercase tracking-wider rounded-lg disabled:opacity-50" style={{ fontFamily: "'Oswald', sans-serif", background: "#0F2942", color: "#FFFFFF" }}
                     >
                       {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                       Save Plan
@@ -3208,14 +3209,14 @@ export default function PlayerDetailPage() {
                     <button
                       onClick={() => handleSaveV2("final")}
                       disabled={savingDevPlan}
-                      className="flex items-center gap-1 px-4 py-2 text-sm font-oswald uppercase tracking-wider bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                      className="flex items-center gap-1 px-4 py-2 text-sm uppercase tracking-wider rounded-lg disabled:opacity-50" style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                     >
                       <CheckCircle size={14} />
                       Mark Final
                     </button>
                     <button
                       onClick={() => { setDraftSections(null); setPlanStatus(devPlanV2 ? "saved" : "empty"); }}
-                      className="px-4 py-2 text-sm text-muted hover:text-navy"
+                      className="px-4 py-2 text-sm" style={{ color: "#94A3B8" }}
                     >
                       Discard
                     </button>
@@ -3229,14 +3230,16 @@ export default function PlayerDetailPage() {
                   {/* Plan header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium uppercase ${
-                        devPlanV2.status === "final" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                      }`}>
+                      <span className="px-2 py-0.5 text-xs rounded-full font-medium uppercase" style={
+                        devPlanV2.status === "final"
+                          ? { background: "rgba(30,107,60,0.1)", color: "#1E6B3C" }
+                          : { background: "rgba(245,158,11,0.1)", color: "#F59E0B" }
+                      }>
                         {devPlanV2.status}
                       </span>
-                      <span className="text-xs text-muted">v{devPlanV2.version} • {devPlanV2.season}</span>
+                      <span className="text-xs" style={{ color: "#94A3B8" }}>v{devPlanV2.version} • {devPlanV2.season}</span>
                     </div>
-                    <span className="text-xs text-muted">
+                    <span className="text-xs" style={{ color: "#94A3B8" }}>
                       {devPlanV2.created_by_name} • {new Date(devPlanV2.created_at).toLocaleDateString()}
                     </span>
                   </div>
@@ -3264,12 +3267,12 @@ export default function PlayerDetailPage() {
                             <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "rgba(255,255,255,.4)" }}>{num}.</span>
                             <h4 style={{ fontSize: 12, fontWeight: 700, color: "white", fontFamily: "'DM Sans', sans-serif", letterSpacing: ".04em", textTransform: "uppercase" }}>{title}</h4>
                             {isUpdated && (
-                              <span className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Updated
+                              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full" style={{ color: "#1E6B3C", background: "rgba(30,107,60,0.08)" }}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#1E6B3C" }} /> Updated
                               </span>
                             )}
                             {!isUpdated && devPlanV2.version > 1 && prevVersion && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" title="Unchanged" />
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#D1D5DB" }} title="Unchanged" />
                             )}
                             {!isVisible && COACH_ROLES.has(userRole) && (
                               <span className="flex items-center gap-1 text-xs text-white/40 bg-white/10 px-2 py-0.5 rounded-full">
@@ -3319,7 +3322,7 @@ export default function PlayerDetailPage() {
                                       }
                                     }}
                                     disabled={savingDevPlan}
-                                    className="p-1 text-teal hover:bg-white/10 rounded"
+                                    className="p-1 rounded" style={{ color: "#0D9488" }}
                                   >
                                     {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                                   </button>
@@ -3344,12 +3347,12 @@ export default function PlayerDetailPage() {
                               value={editV2Content}
                               onChange={(e) => setEditV2Content(e.target.value)}
                               rows={8}
-                              className="w-full text-sm text-navy/80 bg-gray-50 border border-border rounded-lg p-3 outline-none focus:border-teal/40 leading-relaxed resize-y"
+                              className="w-full text-sm rounded-lg p-3 outline-none leading-relaxed resize-y focus:border-teal/40" style={{ color: "rgba(15,41,66,0.8)", background: "#F8FAFC", border: "1px solid #E2EAF3" }}
                             />
                           ) : content ? (
-                            <div className="text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">{content}</div>
+                            <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "rgba(15,41,66,0.8)" }}>{content}</div>
                           ) : (
-                            <p className="text-sm text-muted/40 italic">Not yet completed</p>
+                            <p className="text-sm italic" style={{ color: "rgba(148,163,184,0.4)" }}>Not yet completed</p>
                           )}
                         </div>
                       </div>
