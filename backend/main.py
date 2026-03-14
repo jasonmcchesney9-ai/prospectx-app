@@ -53878,15 +53878,18 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             tmp_fd.close()
 
             # Upload to Gemini Files API
-            uploaded_file = gemini_client.files.upload(file=tmp_path)
+            import asyncio as _asyncio
+            uploaded_file = await _asyncio.to_thread(
+                gemini_client.files.upload,
+                file=tmp_path,
+            )
 
             # Poll until file is ACTIVE
-            import time as _poll_time
             for _ in range(60):
                 status = gemini_client.files.get(name=uploaded_file.name)
                 if status.state.name == "ACTIVE":
                     break
-                _poll_time.sleep(2)
+                await _asyncio.sleep(2)
             else:
                 raise RuntimeError("Gemini file processing timed out")
 
