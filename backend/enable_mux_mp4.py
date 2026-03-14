@@ -1,11 +1,11 @@
 """
-One-time script to enable mp4_support="standard" on all existing Mux assets.
+One-time script to add static renditions to all existing Mux assets.
 
 Usage:
     MUX_TOKEN_ID=xxx MUX_TOKEN_SECRET=yyy python enable_mux_mp4.py
 
-This enables static MP4 renditions so Gemini auto-tag can download
-videos via /low.mp4 for Files API upload.
+This creates a "highest" resolution static MP4 rendition so Gemini
+auto-tag can download videos via /highest.mp4 for Files API upload.
 """
 
 import os
@@ -39,11 +39,11 @@ def list_assets():
 
 
 def enable_mp4(asset_id):
-    """Enable mp4_support=standard on a single asset."""
-    resp = requests.put(
-        f"{BASE}/assets/{asset_id}/mp4-support",
+    """Add a 'highest' static rendition to a single asset."""
+    resp = requests.post(
+        f"{BASE}/assets/{asset_id}/static-renditions",
         auth=AUTH,
-        json={"mp4_support": "standard"},
+        json={"resolution": "highest"},
     )
     resp.raise_for_status()
     return resp.json()
@@ -61,10 +61,12 @@ def main():
     for asset in assets:
         asset_id = asset["id"]
         status = asset.get("status", "unknown")
-        mp4 = asset.get("mp4_support", "none")
+        static = asset.get("static_renditions", {})
+        static_files = static.get("files", []) if isinstance(static, dict) else []
+        has_highest = any(f.get("name") == "highest.mp4" for f in static_files)
 
-        if mp4 == "standard":
-            print(f"  SKIP  {asset_id} — mp4_support already standard")
+        if has_highest:
+            print(f"  SKIP  {asset_id} — already has highest.mp4 rendition")
             skipped += 1
             continue
 
@@ -75,7 +77,7 @@ def main():
 
         try:
             enable_mp4(asset_id)
-            print(f"  OK    {asset_id} — mp4_support enabled")
+            print(f"  OK    {asset_id} — static rendition created")
             updated += 1
         except requests.HTTPError as e:
             print(f"  FAIL  {asset_id} — {e}")
