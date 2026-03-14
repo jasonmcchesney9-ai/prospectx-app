@@ -2287,9 +2287,9 @@ export default function PlayerDetailPage() {
           {/* Stats Tab — Left Column */}
         {activeTab === "stats" && (
           <section>
-            <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">Season stats, game log, and performance progression over time.</p>
+            <p className="text-[11px] tracking-wider mb-2" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.7)" }}>Season stats, game log, and performance progression over time.</p>
             {/* Sub-view switcher */}
-            <div className="flex items-center gap-1 mb-4 p-0.5 bg-navy/[0.04] rounded-lg w-fit">
+            <div className="flex items-center gap-1 mb-4 p-0.5 rounded-lg w-fit" style={{ background: "rgba(15,41,66,0.04)" }}>
               {([
                 { key: "current" as StatsSubView, label: "Current" },
                 { key: "progression" as StatsSubView, label: "Progression" },
@@ -2298,11 +2298,14 @@ export default function PlayerDetailPage() {
                 <button
                   key={sv.key}
                   onClick={() => setStatsSubView(sv.key)}
-                  className={`px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-md transition-all ${
-                    statsSubView === sv.key
-                      ? "bg-white text-navy shadow-sm font-bold"
-                      : "text-muted hover:text-navy"
+                  className={`px-3 py-1.5 text-xs uppercase tracking-wider rounded-md transition-all ${
+                    statsSubView === sv.key ? "shadow-sm font-bold" : ""
                   }`}
+                  style={{
+                    fontFamily: "'Oswald', sans-serif",
+                    background: statsSubView === sv.key ? "#FFFFFF" : "transparent",
+                    color: statsSubView === sv.key ? "#0F2942" : "#94A3B8",
+                  }}
                 >
                   {sv.label}
                 </button>
@@ -2314,18 +2317,18 @@ export default function PlayerDetailPage() {
               <>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <h2 className="text-lg font-semibold text-navy">Season Stats</h2>
+                    <h2 className="text-lg font-semibold" style={{ color: "#0F2942" }}>Season Stats</h2>
                     {stats.length > 0 && stats[0]?.created_at && (
-                      <p className="text-[10px] text-muted/50 flex items-center gap-1.5 mt-0.5">
+                      <p className="text-[10px] flex items-center gap-1.5 mt-0.5" style={{ color: "rgba(148,163,184,0.5)" }}>
                         {(() => {
                           const ts = new Date(stats[0].created_at);
                           const diffDays = (Date.now() - ts.getTime()) / (1000 * 60 * 60 * 24);
-                          const dot = diffDays <= 2 ? "bg-green-500" : diffDays <= 7 ? "bg-teal" : "bg-amber-500";
+                          const dotColor = diffDays <= 2 ? "#1E6B3C" : diffDays <= 7 ? "#0D9488" : "#F59E0B";
                           return (
                             <>
-                              <span className={`inline-block w-1.5 h-1.5 rounded-full ${dot}`} />
+                              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
                               Last updated {ts.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                              {diffDays > 7 && <span className="text-amber-600 font-medium ml-1">&middot; Sync may be needed</span>}
+                              {diffDays > 7 && <span className="font-medium ml-1" style={{ color: "#F59E0B" }}>&middot; Sync may be needed</span>}
                             </>
                           );
                         })()}
@@ -2338,16 +2341,18 @@ export default function PlayerDetailPage() {
                       accept=".csv,.xlsx,.xls,.xlsm"
                       onChange={handleCsvUpload}
                       disabled={uploading}
-                      className="block text-sm text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-orange/30 file:text-xs file:font-oswald file:uppercase file:tracking-wider file:font-semibold file:bg-orange/10 file:text-orange hover:file:bg-orange/20 file:transition-colors file:cursor-pointer"
+                      className="block text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:text-xs file:uppercase file:tracking-wider file:font-semibold file:transition-colors file:cursor-pointer" style={{ color: "#94A3B8" }}
                     />
-                    <p className="text-[10px] text-muted/60 mt-1">Supports XLSX analytics exports, CSV, Excel</p>
+                    <p className="text-[10px] mt-1" style={{ color: "rgba(148,163,184,0.6)" }}>Supports XLSX analytics exports, CSV, Excel</p>
                   </div>
                 </div>
 
                 {uploadMsg && (
-                  <div className={`mb-3 px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${
-                    uploadMsg.startsWith("✓") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
-                  }`}>
+                  <div className="mb-3 px-3 py-2 rounded-lg text-sm flex items-center gap-2" style={
+                    uploadMsg.startsWith("✓")
+                      ? { background: "rgba(30,107,60,0.08)", color: "#1E6B3C", border: "1px solid rgba(30,107,60,0.2)" }
+                      : { background: "#FEF2F2", color: "#C0392B", border: "1px solid rgba(192,57,43,0.2)" }
+                  }>
                     {uploadMsg.startsWith("✓") ? <CheckCircle size={14} /> : null}
                     {uploadMsg}
                   </div>
@@ -2355,13 +2360,13 @@ export default function PlayerDetailPage() {
 
                 {/* Recent Form Badge */}
                 {recentForm && recentForm.games_found > 0 && (
-                  <div className="mb-4 p-3 rounded-lg bg-gradient-to-r from-teal/[0.04] to-transparent border border-teal/15">
+                  <div className="mb-4 p-3 rounded-lg" style={{ background: "linear-gradient(to right, rgba(13,148,136,0.04), transparent)", border: "1px solid rgba(13,148,136,0.15)" }}>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-[10px] font-oswald uppercase tracking-wider text-teal font-bold">Last {recentForm.games_found} Games</span>
-                      <span className="text-xs text-navy font-medium">{recentForm.totals.g}G {recentForm.totals.a}A {recentForm.totals.p}P</span>
-                      <span className="text-xs text-muted">({recentForm.averages.ppg} PPG)</span>
+                      <span className="text-[10px] uppercase tracking-wider font-bold" style={{ fontFamily: "'Oswald', sans-serif", color: "#0D9488" }}>Last {recentForm.games_found} Games</span>
+                      <span className="text-xs font-medium" style={{ color: "#0F2942" }}>{recentForm.totals.g}G {recentForm.totals.a}A {recentForm.totals.p}P</span>
+                      <span className="text-xs" style={{ color: "#94A3B8" }}>({recentForm.averages.ppg} PPG)</span>
                       {recentForm.streak && recentForm.streak !== "No active streak" && recentForm.streak !== "No game data available" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal/10 text-teal text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(13,148,136,0.1)", color: "#0D9488" }}>
                           <Flame size={9} />
                           {recentForm.streak}
                         </span>
@@ -2373,7 +2378,7 @@ export default function PlayerDetailPage() {
                 {/* Goalie Stats (if goalie position) */}
                 {goalieStats.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-2">Goaltending</h3>
+                    <h3 className="text-sm uppercase tracking-wider mb-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Goaltending</h3>
                     <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                       <GoalieStatTable stats={goalieStats} />
                     </div>
@@ -2403,13 +2408,13 @@ export default function PlayerDetailPage() {
                 })()}
 
                 {stats.length === 0 && goalieStats.length === 0 && (
-                  <p className="text-xs text-muted/60 mt-2">No stats yet — import via CSV/XLSX or sync from League Data.</p>
+                  <p className="text-xs mt-2" style={{ color: "rgba(148,163,184,0.6)" }}>No stats yet — import via CSV/XLSX or sync from League Data.</p>
                 )}
 
                 {/* Extended Stats (Advanced Analytics) */}
                 {stats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
                   <div className="mt-6">
-                    <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
+                    <h3 className="text-sm uppercase tracking-wider mb-3" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
                       Advanced Analytics
                     </h3>
                     {stats
@@ -2429,7 +2434,7 @@ export default function PlayerDetailPage() {
                 {/* Goalie Extended Stats */}
                 {goalieStats.some((s) => s.extended_stats && Object.keys(s.extended_stats).length > 0) && (
                   <div className="mt-6">
-                    <h3 className="text-sm font-oswald uppercase tracking-wider text-muted mb-3">
+                    <h3 className="text-sm uppercase tracking-wider mb-3" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
                       Goaltending Advanced Analytics
                     </h3>
                     {goalieStats
@@ -2449,33 +2454,33 @@ export default function PlayerDetailPage() {
                 {/* Team Splits (multi-team season) */}
                 {teamSplits.length > 1 && (
                   <div className="mt-6">
-                    <h3 className="text-sm font-oswald uppercase tracking-wider text-navy mb-3 flex items-center gap-2">
-                      <ArrowRightLeft size={14} className="text-teal" />
+                    <h3 className="text-sm uppercase tracking-wider mb-3 flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>
+                      <ArrowRightLeft size={14} style={{ color: "#0D9488" }} />
                       Team Splits (Current Season)
                     </h3>
                     <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", overflow: "hidden", position: "relative" }}>
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="bg-navy/[0.04] border-b border-border">
-                            <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-navy/60">Team</th>
-                            <th className="px-3 py-2 text-left font-oswald uppercase tracking-wider text-navy/60">League</th>
-                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">GP</th>
-                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">G</th>
-                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">A</th>
-                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">P</th>
-                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">+/-</th>
-                            <th className="px-3 py-2 text-center font-oswald uppercase tracking-wider text-navy/60">PIM</th>
+                          <tr style={{ background: "rgba(15,41,66,0.04)", borderBottom: "1px solid #E2EAF3" }}>
+                            <th className="px-3 py-2 text-left uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>Team</th>
+                            <th className="px-3 py-2 text-left uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>League</th>
+                            <th className="px-3 py-2 text-center uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>GP</th>
+                            <th className="px-3 py-2 text-center uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>G</th>
+                            <th className="px-3 py-2 text-center uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>A</th>
+                            <th className="px-3 py-2 text-center uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>P</th>
+                            <th className="px-3 py-2 text-center uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>+/-</th>
+                            <th className="px-3 py-2 text-center uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.6)" }}>PIM</th>
                           </tr>
                         </thead>
                         <tbody>
                           {teamSplits.map((ts) => (
-                            <tr key={ts.id} className="border-b border-border/50 hover:bg-navy/[0.02]">
-                              <td className="px-3 py-2 font-medium text-navy">{ts.team_name || "—"}</td>
-                              <td className="px-3 py-2 text-navy/60">{ts.league || "—"}</td>
+                            <tr key={ts.id} style={{ borderBottom: "1px solid rgba(226,234,243,0.5)" }}>
+                              <td className="px-3 py-2 font-medium" style={{ color: "#0F2942" }}>{ts.team_name || "—"}</td>
+                              <td className="px-3 py-2" style={{ color: "rgba(15,41,66,0.6)" }}>{ts.league || "—"}</td>
                               <td className="px-3 py-2 text-center">{ts.gp}</td>
                               <td className="px-3 py-2 text-center">{ts.g}</td>
                               <td className="px-3 py-2 text-center">{ts.a}</td>
-                              <td className="px-3 py-2 text-center font-bold text-navy">{ts.p}</td>
+                              <td className="px-3 py-2 text-center font-bold" style={{ color: "#0F2942" }}>{ts.p}</td>
                               <td className="px-3 py-2 text-center">{ts.plus_minus ?? "—"}</td>
                               <td className="px-3 py-2 text-center">{ts.pim ?? "—"}</td>
                             </tr>
@@ -2491,11 +2496,11 @@ export default function PlayerDetailPage() {
             {/* Progression Sub-View */}
             {statsSubView === "progression" && (
               <>
-                <h2 className="text-lg font-semibold text-navy mb-3">Season Progression</h2>
+                <h2 className="text-lg font-semibold mb-3" style={{ color: "#0F2942" }}>Season Progression</h2>
                 {loadingProgression ? (
                   <div className="text-center py-12">
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-navy border-t-teal mx-auto" />
-                    <p className="text-xs text-muted mt-2">Loading progression data...</p>
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 mx-auto" style={{ borderColor: "#0F2942", borderTopColor: "#0D9488" }} />
+                    <p className="text-xs mt-2" style={{ color: "#94A3B8" }}>Loading progression data...</p>
                   </div>
                 ) : progression ? (
                   <ProgressionChart data={progression} />
@@ -2506,11 +2511,11 @@ export default function PlayerDetailPage() {
             {/* Game Log Sub-View */}
             {statsSubView === "gamelog" && (
               <>
-                <h2 className="text-lg font-semibold text-navy mb-3">Game Log</h2>
+                <h2 className="text-lg font-semibold mb-3" style={{ color: "#0F2942" }}>Game Log</h2>
                 {loadingGameLog ? (
                   <div className="text-center py-12">
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-navy border-t-teal mx-auto" />
-                    <p className="text-xs text-muted mt-2">Loading game log...</p>
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 mx-auto" style={{ borderColor: "#0F2942", borderTopColor: "#0D9488" }} />
+                    <p className="text-xs mt-2" style={{ color: "#94A3B8" }}>Loading game log...</p>
                   </div>
                 ) : gameLog ? (
                   <GameLogTable
@@ -2618,13 +2623,13 @@ export default function PlayerDetailPage() {
         {/* Notes Tab */}
         {activeTab === "notes" && (
           <section>
-            <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">Game observations, scouting notes, and tagged assessments from your team.</p>
+            <p className="text-[11px] tracking-wider mb-2" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.7)" }}>Game observations, scouting notes, and tagged assessments from your team.</p>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-navy">Scout Notes</h2>
+              <h2 className="text-lg font-semibold" style={{ color: "#0F2942" }}>Scout Notes</h2>
               <div className="flex items-center gap-2">
                 <Link
                   href={`/scout-notes/new?player_id=${playerId}`}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal text-white hover:bg-teal/90 transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-wider rounded-lg transition-colors" style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                 >
                   <ClipboardCheck size={14} />
                   Scout Evaluation
@@ -2640,7 +2645,7 @@ export default function PlayerDetailPage() {
                       setNotePrivate(false);
                     }
                   }}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-oswald uppercase tracking-wider rounded-lg bg-teal/10 text-teal hover:bg-teal/20 border border-teal/30 transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-wider rounded-lg transition-colors" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(13,148,136,0.1)", color: "#0D9488", border: "1px solid rgba(13,148,136,0.3)" }}
                 >
                   {showNoteForm ? <X size={14} /> : <PenLine size={14} />}
                   {showNoteForm ? "Cancel" : "Quick Note"}
@@ -2651,7 +2656,7 @@ export default function PlayerDetailPage() {
             {/* Note Form — Mobile Optimized */}
             {showNoteForm && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", marginBottom: 16, position: "relative" }}>
-                <h3 className="text-sm font-semibold text-navy mb-3">
+                <h3 className="text-sm font-semibold mb-3" style={{ color: "#0F2942" }}>
                   {editingNoteId ? "Edit Note" : "New Note"}
                 </h3>
 
@@ -2661,11 +2666,10 @@ export default function PlayerDetailPage() {
                     <button
                       key={key}
                       onClick={() => setNoteType(key)}
-                      className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                        noteType === key
-                          ? "bg-teal text-white border-teal"
-                          : "bg-white text-muted border-teal/20 hover:border-teal/50"
-                      }`}
+                      className="px-3 py-1 text-xs rounded-full border transition-colors"
+                      style={noteType === key
+                        ? { background: "#0D9488", color: "#FFFFFF", borderColor: "#0D9488" }
+                        : { background: "#FFFFFF", color: "#94A3B8", borderColor: "rgba(13,148,136,0.2)" }}
                     >
                       {label}
                     </button>
@@ -2678,23 +2682,22 @@ export default function PlayerDetailPage() {
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="Enter your scouting observation..."
                   rows={4}
-                  className="w-full px-3 py-2.5 border border-teal/20 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal" style={{ border: "1px solid rgba(13,148,136,0.2)" }}
                   autoFocus
                 />
 
                 {/* Tags */}
                 <div className="mt-3">
-                  <p className="text-xs text-muted mb-1.5">Tags</p>
+                  <p className="text-xs mb-1.5" style={{ color: "#94A3B8" }}>Tags</p>
                   <div className="flex flex-wrap gap-1.5">
                     {NOTE_TAG_OPTIONS.map((tag) => (
                       <button
                         key={tag}
                         onClick={() => toggleTag(tag)}
-                        className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                          noteTags.includes(tag)
-                            ? "bg-navy text-white border-navy"
-                            : "bg-white text-muted border-teal/20 hover:border-navy/30"
-                        }`}
+                        className="px-2.5 py-1 text-xs rounded-full border transition-colors"
+                        style={noteTags.includes(tag)
+                          ? { background: "#0F2942", color: "#FFFFFF", borderColor: "#0F2942" }
+                          : { background: "#FFFFFF", color: "#94A3B8", borderColor: "rgba(13,148,136,0.2)" }}
                       >
                         {NOTE_TAG_LABELS[tag] || tag}
                       </button>
@@ -2706,9 +2709,8 @@ export default function PlayerDetailPage() {
                 <div className="flex items-center justify-between mt-4">
                   <button
                     onClick={() => setNotePrivate(!notePrivate)}
-                    className={`flex items-center gap-1.5 text-xs transition-colors ${
-                      notePrivate ? "text-orange" : "text-muted"
-                    }`}
+                    className="flex items-center gap-1.5 text-xs transition-colors"
+                    style={{ color: notePrivate ? "#E67E22" : "#94A3B8" }}
                   >
                     {notePrivate ? <Lock size={14} /> : <Unlock size={14} />}
                     {notePrivate ? "Private (only you)" : "Shared with team"}
@@ -2716,7 +2718,7 @@ export default function PlayerDetailPage() {
                   <button
                     onClick={handleSaveNote}
                     disabled={!noteText.trim() || savingNote}
-                    className="flex items-center gap-2 px-4 py-2 bg-teal text-white text-xs font-oswald uppercase tracking-wider rounded-lg hover:bg-teal/90 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-xs uppercase tracking-wider rounded-lg disabled:opacity-50 transition-colors" style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                   >
                     <Send size={14} />
                     {savingNote ? "Saving..." : editingNoteId ? "Update" : "Save Note"}
@@ -2728,9 +2730,9 @@ export default function PlayerDetailPage() {
             {/* Notes List */}
             {notes.length === 0 ? (
               <div style={{ textAlign: "center", paddingTop: 32, paddingBottom: 32, background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
-                <PenLine size={24} className="mx-auto text-muted/40 mb-2" />
-                <p className="text-muted text-sm">No notes yet for this player.</p>
-                <p className="text-xs text-muted/60 mt-1">Add your first scouting observation above.</p>
+                <PenLine size={24} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.4)" }} />
+                <p className="text-sm" style={{ color: "#94A3B8" }}>No notes yet for this player.</p>
+                <p className="text-xs mt-1" style={{ color: "rgba(148,163,184,0.6)" }}>Add your first scouting observation above.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -2740,20 +2742,20 @@ export default function PlayerDetailPage() {
                       <div className="flex-1 min-w-0">
                         {/* Header */}
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                            note.note_type === "game" ? "bg-blue-50 text-blue-700" :
-                            note.note_type === "practice" ? "bg-green-50 text-green-700" :
-                            note.note_type === "interview" ? "bg-purple-50 text-purple-700" :
-                            "bg-gray-50 text-gray-600"
-                          }`}>
+                          <span className="px-2 py-0.5 text-xs rounded-full font-medium" style={
+                            note.note_type === "game" ? { background: "rgba(59,130,246,0.08)", color: "#3B82F6" } :
+                            note.note_type === "practice" ? { background: "rgba(30,107,60,0.08)", color: "#1E6B3C" } :
+                            note.note_type === "interview" ? { background: "rgba(139,92,246,0.08)", color: "#7C3AED" } :
+                            { background: "#F8FAFC", color: "#94A3B8" }
+                          }>
                             {NOTE_TYPE_LABELS[note.note_type] || note.note_type}
                           </span>
                           {note.is_private && (
-                            <span className="flex items-center gap-0.5 text-xs text-orange">
+                            <span className="flex items-center gap-0.5 text-xs" style={{ color: "#E67E22" }}>
                               <Lock size={10} /> Private
                             </span>
                           )}
-                          <span className="text-xs text-muted" title={new Date(note.created_at).toLocaleString()}>
+                          <span className="text-xs" style={{ color: "#94A3B8" }} title={new Date(note.created_at).toLocaleString()}>
                             {relativeTime(note.created_at)}
                           </span>
                         </div>
@@ -2762,11 +2764,12 @@ export default function PlayerDetailPage() {
                         {(note.overall_grade || note.prospect_status) && (
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {note.overall_grade && (
-                              <span className={`w-7 h-7 rounded flex items-center justify-center text-xs font-oswald font-bold ${
-                                note.overall_grade >= 4 ? "bg-green-100 text-green-700" :
-                                note.overall_grade === 3 ? "bg-amber-50 text-amber-700" :
-                                "bg-red-100 text-red-700"
-                              }`}>
+                              <span className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold" style={{
+                                fontFamily: "'Oswald', sans-serif",
+                                ...(note.overall_grade >= 4 ? { background: "rgba(30,107,60,0.1)", color: "#1E6B3C" } :
+                                note.overall_grade === 3 ? { background: "rgba(245,158,11,0.08)", color: "#F59E0B" } :
+                                { background: "rgba(192,57,43,0.1)", color: "#C0392B" })
+                              }}>
                                 {note.overall_grade}
                               </span>
                             )}
@@ -2788,7 +2791,7 @@ export default function PlayerDetailPage() {
                               { label: "CMP", value: note.compete_rating },
                               { label: "DEF", value: note.defense_rating },
                             ].filter(r => r.value).map((r) => (
-                              <span key={r.label} className="text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded bg-navy/5 text-navy/60">
+                              <span key={r.label} className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(15,41,66,0.05)", color: "rgba(15,41,66,0.6)" }}>
                                 {r.label} {r.value}
                               </span>
                             ))}
@@ -2797,31 +2800,31 @@ export default function PlayerDetailPage() {
 
                         {/* v2: One-line summary */}
                         {note.one_line_summary && (
-                          <p className="text-xs text-navy/80 mb-2 italic">{note.one_line_summary}</p>
+                          <p className="text-xs mb-2 italic" style={{ color: "rgba(15,41,66,0.8)" }}>{note.one_line_summary}</p>
                         )}
 
                         {/* v2: Strengths / Improvements */}
                         {note.strengths_notes && (
-                          <p className="text-sm text-navy whitespace-pre-wrap mb-1"><span className="text-[10px] font-oswald uppercase tracking-wider text-navy/50">Strengths: </span>{note.strengths_notes}</p>
+                          <p className="text-sm whitespace-pre-wrap mb-1" style={{ color: "#0F2942" }}><span className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.5)" }}>Strengths: </span>{note.strengths_notes}</p>
                         )}
                         {note.improvements_notes && (
-                          <p className="text-sm text-navy whitespace-pre-wrap mb-1"><span className="text-[10px] font-oswald uppercase tracking-wider text-navy/50">Improve: </span>{note.improvements_notes}</p>
+                          <p className="text-sm whitespace-pre-wrap mb-1" style={{ color: "#0F2942" }}><span className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.5)" }}>Improve: </span>{note.improvements_notes}</p>
                         )}
 
                         {/* Note Text */}
                         {note.note_text && (
-                          <p className="text-sm text-navy whitespace-pre-wrap">{note.note_text}</p>
+                          <p className="text-sm whitespace-pre-wrap" style={{ color: "#0F2942" }}>{note.note_text}</p>
                         )}
 
                         {/* Tags + Scout */}
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           {note.tags.map((tag) => (
-                            <span key={tag} className="px-2 py-0.5 text-xs bg-navy/5 text-navy/70 rounded-full">
+                            <span key={tag} className="px-2 py-0.5 text-xs rounded-full" style={{ background: "rgba(15,41,66,0.05)", color: "rgba(15,41,66,0.7)" }}>
                               {NOTE_TAG_LABELS[tag] || tag}
                             </span>
                           ))}
                           {note.scout_name && (
-                            <span className="text-xs text-muted ml-auto">
+                            <span className="text-xs ml-auto" style={{ color: "#94A3B8" }}>
                               — {note.scout_name}
                             </span>
                           )}
@@ -2832,14 +2835,16 @@ export default function PlayerDetailPage() {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => handleEditNote(note)}
-                          className="p-1.5 text-muted hover:text-navy rounded transition-colors"
+                          className="p-1.5 rounded transition-colors"
+                          style={{ color: "#94A3B8" }}
                           title="Edit"
                         >
                           <Edit3 size={14} />
                         </button>
                         <button
                           onClick={() => handleDeleteNote(note.id)}
-                          className="p-1.5 text-muted hover:text-red-600 rounded transition-colors"
+                          className="p-1.5 rounded transition-colors"
+                          style={{ color: "#94A3B8" }}
                           title="Delete"
                         >
                           <Trash2 size={14} />
@@ -2857,15 +2862,15 @@ export default function PlayerDetailPage() {
         {/* Reports Tab */}
         {activeTab === "reports" && (
           <section>
-            <p className="text-[11px] text-muted/70 font-oswald tracking-wider mb-2">AI-generated scouting reports and custom analysis for this player.</p>
+            <p className="text-[11px] tracking-wider mb-2" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.7)" }}>AI-generated scouting reports and custom analysis for this player.</p>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-navy">Reports</h2>
-              <span className="text-xs text-muted">{reports.length} total</span>
+              <h2 className="text-lg font-semibold" style={{ color: "#0F2942" }}>Reports</h2>
+              <span className="text-xs" style={{ color: "#94A3B8" }}>{reports.length} total</span>
             </div>
             {reports.length === 0 ? (
               <div style={{ textAlign: "center", paddingTop: 32, paddingBottom: 32, background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
-                <FileText size={24} className="mx-auto text-muted/40 mb-2" />
-                <p className="text-muted text-sm">No reports yet for this player.</p>
+                <FileText size={24} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.4)" }} />
+                <p className="text-sm" style={{ color: "#94A3B8" }}>No reports yet for this player.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2881,15 +2886,15 @@ export default function PlayerDetailPage() {
         {/* Player Tab */}
         {activeTab === "player" && (
           <section className="space-y-4">
-            <p className="text-[11px] text-muted/70 font-oswald tracking-wider -mb-1">Player card, development plan, and long-term projection tools.</p>
+            <p className="text-[11px] tracking-wider -mb-1" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.7)" }}>Player card, development plan, and long-term projection tools.</p>
 
             {/* ── Film Review Recommended Card (P1 Film → Dev Plan Bridge) ── */}
             {statTrends.length > 0 && !statTrendsLoading && (
               <div style={{ background: "white", borderRadius: 14, overflow: "hidden", borderLeft: "4px solid #0D9488", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)" }}>
                 <div style={{ background: "linear-gradient(135deg, #0D9488 0%, #14B8A8 100%)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div className="flex items-center gap-2">
-                    <Film size={14} style={{ color: "white" }} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "white", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em", textTransform: "uppercase" }}>Film Review Recommended</span>
+                    <Film size={14} style={{ color: "#FFFFFF" }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#FFFFFF", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em", textTransform: "uppercase" }}>Film Review Recommended</span>
                   </div>
                   <span style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", background: "rgba(255,255,255,0.2)", borderRadius: 4, padding: "2px 6px" }}>
                     {statTrends.length} {statTrends.length === 1 ? "trigger" : "triggers"}
@@ -2900,10 +2905,10 @@ export default function PlayerDetailPage() {
                   <div className="space-y-2 mb-3">
                     {statTrends.slice(0, 3).map((t, idx) => (
                       <div key={idx} className="flex items-start gap-2">
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, flexShrink: 0, background: t.severity === "high" ? "#EF4444" : "#F59E0B" }} />
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", marginTop: 5, flexShrink: 0, background: t.severity === "high" ? "#C0392B" : "#F59E0B" }} />
                         <div>
-                          <span className="text-xs font-oswald uppercase tracking-wider text-navy font-bold">{t.label}</span>
-                          <p className="text-[11px] text-muted/70 leading-snug">{t.trigger_reason}</p>
+                          <span className="text-xs uppercase tracking-wider font-bold" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>{t.label}</span>
+                          <p className="text-[11px] leading-snug" style={{ color: "rgba(148,163,184,0.7)" }}>{t.trigger_reason}</p>
                         </div>
                       </div>
                     ))}
@@ -2911,11 +2916,11 @@ export default function PlayerDetailPage() {
 
                   {/* Clip count */}
                   {(statTrendsClipCounts.total || 0) > 0 ? (
-                    <p className="text-[11px] text-teal font-medium mb-3">
+                    <p className="text-[11px] font-medium mb-3" style={{ color: "#0D9488" }}>
                       {statTrendsClipCounts.total} clip{statTrendsClipCounts.total !== 1 ? "s" : ""} available for review
                     </p>
                   ) : (
-                    <p className="text-[11px] text-muted/50 mb-3">No film tagged yet — import game footage to enable clip review</p>
+                    <p className="text-[11px] mb-3" style={{ color: "rgba(148,163,184,0.5)" }}>No film tagged yet — import game footage to enable clip review</p>
                   )}
 
                   {/* PXI coaching suggestions */}
@@ -2923,8 +2928,8 @@ export default function PlayerDetailPage() {
                     <div className="mb-3 space-y-1.5">
                       {filmSuggestions.slice(0, 3).map((s, idx) => (
                         <div key={idx} style={{ background: "rgba(13,148,136,0.05)", borderRadius: 6, padding: "6px 10px" }}>
-                          <p className="text-[11px] text-navy/80 leading-snug">
-                            <span className="font-bold text-teal">{s.label}:</span> {s.coaching_note}
+                          <p className="text-[11px] leading-snug" style={{ color: "rgba(15,41,66,0.8)" }}>
+                            <span className="font-bold" style={{ color: "#0D9488" }}>{s.label}:</span> {s.coaching_note}
                           </p>
                         </div>
                       ))}
@@ -2957,14 +2962,14 @@ export default function PlayerDetailPage() {
                   {filmSummaries.slice(0, 3).map((fs) => (
                     <div key={fs.id} style={{ marginBottom: filmSummaries.indexOf(fs) < Math.min(filmSummaries.length, 3) - 1 ? 10 : 0, paddingBottom: filmSummaries.indexOf(fs) < Math.min(filmSummaries.length, 3) - 1 ? 10 : 0, borderBottom: filmSummaries.indexOf(fs) < Math.min(filmSummaries.length, 3) - 1 ? "1px solid rgba(0,0,0,0.06)" : "none" }}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-oswald uppercase tracking-wider text-muted/50">
+                        <span className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.5)" }}>
                           {new Date(fs.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </span>
                       </div>
-                      <p className="text-[12px] text-navy/80 leading-relaxed">{fs.summary}</p>
+                      <p className="text-[12px] leading-relaxed" style={{ color: "rgba(15,41,66,0.8)" }}>{fs.summary}</p>
                       <Link
                         href={`/film/sessions/${fs.session_id}`}
-                        className="inline-flex items-center gap-1 text-[10px] font-oswald uppercase tracking-wider text-teal hover:text-teal/80 mt-1"
+                        className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider mt-1" style={{ fontFamily: "'Oswald', sans-serif", color: "#0D9488" }}
                       >
                         View Full Analysis <ExternalLink size={9} />
                       </Link>
@@ -2978,21 +2983,21 @@ export default function PlayerDetailPage() {
             {player && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative", display: "flex", alignItems: "center", gap: 16 }}>
                 {player.image_url && hasRealImage(player.image_url) ? (
-                  <img src={assetUrl(player.image_url)} alt={`${player.first_name} ${player.last_name}`} className="w-16 h-16 rounded-full object-cover border border-border" />
+                  <img src={assetUrl(player.image_url)} alt={`${player.first_name} ${player.last_name}`} className="w-16 h-16 rounded-full object-cover" style={{ border: "1px solid #E2EAF3" }} />
                 ) : (
-                  <div className="w-16 h-16 rounded-full bg-navy/5 flex items-center justify-center text-lg font-oswald text-navy/40">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center text-lg" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(15,41,66,0.05)", color: "rgba(15,41,66,0.4)" }}>
                     {player.first_name?.charAt(0)}{player.last_name?.charAt(0)}
                   </div>
                 )}
                 <div>
-                  <h2 className="text-lg font-oswald font-bold text-navy uppercase tracking-wider">
+                  <h2 className="text-lg font-bold uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>
                     {player.first_name} {player.last_name}
                   </h2>
-                  <p className="text-sm text-muted">
+                  <p className="text-sm" style={{ color: "#94A3B8" }}>
                     {fullPosition(player.position)} {player.jersey_number ? `#${player.jersey_number}` : ""} {player.current_team ? `• ${player.current_team}` : ""} {player.current_league ? `• ${formatLeague(player.current_league)}` : ""}
                   </p>
                   {player.dob && (
-                    <p className="text-xs text-muted/60 mt-0.5">
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(148,163,184,0.6)" }}>
                       DOB: {new Date(player.dob).toLocaleDateString()} {player.shoots ? `• Shoots: ${player.shoots}` : ""}
                     </p>
                   )}
@@ -3003,7 +3008,7 @@ export default function PlayerDetailPage() {
             {/* ── Section 2: Season Snapshot ───────────────────────── */}
             {stats.length > 0 && (
               <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px", position: "relative" }}>
-                <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Season Snapshot</h3>
+                <h3 className="text-xs uppercase tracking-wider mb-3" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Season Snapshot</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {(() => {
                     const s = stats.filter(st => st.stat_type === "season").sort((a, b) => {
@@ -3020,9 +3025,9 @@ export default function PlayerDetailPage() {
                         { label: isFamily ? "Save percentage" : "SV%", value: (s as unknown as Record<string, unknown>).sv_pct || "—" },
                         { label: isFamily ? "Shutouts" : "SO", value: (s as unknown as Record<string, unknown>).so || "—" },
                       ].map(({ label, value }) => (
-                        <div key={label} className="text-center p-2 bg-gray-50 rounded-lg">
-                          <p className="text-lg font-oswald font-bold text-navy">{String(value)}</p>
-                          <p className="text-xs text-muted">{label}</p>
+                        <div key={label} className="text-center p-2 rounded-lg" style={{ background: "#F8FAFC" }}>
+                          <p className="text-lg font-bold" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>{String(value)}</p>
+                          <p className="text-xs" style={{ color: "#94A3B8" }}>{label}</p>
                         </div>
                       ));
                     }
@@ -3036,9 +3041,9 @@ export default function PlayerDetailPage() {
                       { label: isFamily ? "Penalty minutes" : "PIM", value: s.pim ?? "—" },
                       { label: isFamily ? "Shots on goal" : "SOG", value: s.shots ?? "—" },
                     ].map(({ label, value }) => (
-                      <div key={label} className="text-center p-2 bg-gray-50 rounded-lg">
-                        <p className="text-lg font-oswald font-bold text-navy">{String(value)}</p>
-                        <p className="text-xs text-muted">{label}</p>
+                      <div key={label} className="text-center p-2 rounded-lg" style={{ background: "#F8FAFC" }}>
+                        <p className="text-lg font-bold" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>{String(value)}</p>
+                        <p className="text-xs" style={{ color: "#94A3B8" }}>{label}</p>
                       </div>
                     ));
                   })()}
@@ -3055,7 +3060,7 @@ export default function PlayerDetailPage() {
                   {COACH_ROLES.has(userRole) && devPlanV2History.length > 1 && planStatus === "saved" && (
                     <button
                       onClick={() => setShowDevVersions(!showDevVersions)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-white/20 rounded-lg hover:bg-white/10 text-white/70"
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.7)" }}
                     >
                       <History size={14} />
                       v{devPlanV2?.version || 1} of {devPlanV2History.length}
@@ -3066,7 +3071,7 @@ export default function PlayerDetailPage() {
                     <button
                       onClick={handleGenerateV2}
                       disabled={generatingDevPlan}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50" style={{ background: "#0D9488", color: "#FFFFFF" }}
                     >
                       {generatingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                       {devPlanV2 ? "Generate New Version" : "Generate Dev Plan"}
@@ -3078,8 +3083,8 @@ export default function PlayerDetailPage() {
               <div style={{ padding: "12px 16px 14px" }}>
               {/* Version History Dropdown */}
               {showDevVersions && devPlanV2History.length > 1 && (
-                <div className="bg-gray-50 rounded-lg border border-border p-3 space-y-1 mb-3">
-                  <p className="text-xs font-oswald uppercase tracking-wider text-muted mb-2">Version History</p>
+                <div className="rounded-lg p-3 space-y-1 mb-3" style={{ background: "#F8FAFC", border: "1px solid #E2EAF3" }}>
+                  <p className="text-xs uppercase tracking-wider mb-2" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Version History</p>
                   {devPlanV2History.map((v) => (
                     <button
                       key={v.id}
@@ -3092,12 +3097,11 @@ export default function PlayerDetailPage() {
                           toast.error("Failed to load version");
                         }
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between ${
-                        v.id === devPlanV2?.id ? "bg-teal/10 text-teal" : "hover:bg-white text-navy"
-                      }`}
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between"
+                      style={v.id === devPlanV2?.id ? { background: "rgba(13,148,136,0.1)", color: "#0D9488" } : { color: "#0F2942" }}
                     >
                       <span>v{v.version} — {v.created_by_name}</span>
-                      <span className="text-xs text-muted">{new Date(v.created_at).toLocaleDateString()}</span>
+                      <span className="text-xs" style={{ color: "#94A3B8" }}>{new Date(v.created_at).toLocaleDateString()}</span>
                     </button>
                   ))}
                 </div>
@@ -3106,17 +3110,17 @@ export default function PlayerDetailPage() {
               {/* ── EMPTY STATE ──────────────────────────────────── */}
               {planStatus === "empty" && !loadingDevPlan && (
                 <div className="text-center py-12">
-                  <TrendingUp size={32} className="mx-auto text-muted/40 mb-3" />
+                  <TrendingUp size={32} className="mx-auto mb-3" style={{ color: "rgba(148,163,184,0.4)" }} />
                   {FAMILY_ROLES.has(userRole) ? (
-                    <p className="text-muted text-sm">Your development plan hasn&apos;t been created yet. Ask your coach.</p>
+                    <p className="text-sm" style={{ color: "#94A3B8" }}>Your development plan hasn&apos;t been created yet. Ask your coach.</p>
                   ) : (
                     <>
-                      <p className="text-muted text-sm mb-1">No development plan on file for {new Date().getFullYear()}-{String(new Date().getFullYear() + 1).slice(2)}</p>
-                      <p className="text-muted/60 text-xs mb-4">Click below to create an AI-powered development roadmap.</p>
+                      <p className="text-sm mb-1" style={{ color: "#94A3B8" }}>No development plan on file for {new Date().getFullYear()}-{String(new Date().getFullYear() + 1).slice(2)}</p>
+                      <p className="text-xs mb-4" style={{ color: "rgba(148,163,184,0.6)" }}>Click below to create an AI-powered development roadmap.</p>
                       <button
                         onClick={handleGenerateV2}
                         disabled={generatingDevPlan}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-teal text-white rounded-lg hover:bg-teal/90 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-lg disabled:opacity-50" style={{ background: "#0D9488", color: "#FFFFFF" }}
                       >
                         <Sparkles size={16} />
                         Generate Dev Plan
@@ -3129,9 +3133,9 @@ export default function PlayerDetailPage() {
               {/* ── GENERATING STATE ─────────────────────────────── */}
               {planStatus === "generating" && (
                 <div className="text-center py-12">
-                  <Loader2 size={28} className="mx-auto text-teal animate-spin mb-3" />
-                  <p className="text-sm text-navy font-medium">&#9889; PXI is generating...</p>
-                  <p className="text-xs text-muted mt-1">This may take 15-30 seconds</p>
+                  <Loader2 size={28} className="mx-auto animate-spin mb-3" style={{ color: "#0D9488" }} />
+                  <p className="text-sm font-medium" style={{ color: "#0F2942" }}>&#9889; PXI is generating...</p>
+                  <p className="text-xs mt-1" style={{ color: "#94A3B8" }}>This may take 15-30 seconds</p>
                 </div>
               )}
 
