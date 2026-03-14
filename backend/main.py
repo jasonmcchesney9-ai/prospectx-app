@@ -90,13 +90,15 @@ except ImportError:
     )
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
     _gemini_available = True
 except ImportError:
     genai = None
+    genai_types = None
     _gemini_available = False
     logging.getLogger("prospectx").warning(
-        "google-generativeai not available — Gemini video analysis disabled"
+        "google-genai not available — Gemini video analysis disabled"
     )
 
 from pxi_prompt_core import (
@@ -53888,13 +53890,16 @@ async def gemini_video_analyze(req: dict = Body(...),
             tmp_file.write(response.content)
             tmp_file.close()
 
-            genai.configure(api_key=GEMINI_API_KEY)
-            video_file = genai.upload_file(tmp_path, mime_type="video/mp4")
+            gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+            video_file = gemini_client.files.upload(
+                file=tmp_path,
+                config=genai_types.UploadFileConfig(mime_type="video/mp4"),
+            )
             # Wait for Gemini file processing
-            while video_file.state.name == "PROCESSING":
+            while video_file.state == "PROCESSING":
                 await asyncio.sleep(2)
-                video_file = genai.get_file(video_file.name)
-            if video_file.state.name == "FAILED":
+                video_file = gemini_client.files.get(name=video_file.name)
+            if video_file.state == "FAILED":
                 raise HTTPException(status_code=500, detail="Video upload to Gemini failed")
         except HTTPException:
             raise
@@ -53908,10 +53913,10 @@ async def gemini_video_analyze(req: dict = Body(...),
 
         # Step 5: Send multimodal prompt to gemini-2.5-flash
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(
-                [video_file, _GEMINI_EVENT_SYSTEM_PROMPT],
-                generation_config=genai.GenerationConfig(
+            response = gemini_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[video_file, _GEMINI_EVENT_SYSTEM_PROMPT],
+                config=genai_types.GenerateContentConfig(
                     response_mime_type="application/json",
                 ),
             )
