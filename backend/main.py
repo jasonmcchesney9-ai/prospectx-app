@@ -53914,8 +53914,10 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
                     max_output_tokens=8192,
                 ),
             )
+            logging.info("Gemini raw response: %s", response.text[:500])
             result = json.loads(response.text)
             events = result.get("events", [])
+            logging.info("Gemini detected %d events", len(events))
         except Exception as exc:
             logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
