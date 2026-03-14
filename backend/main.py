@@ -53893,7 +53893,14 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             # Call generate_content with uploaded file reference
             response = gemini_client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=[uploaded_file],
+                contents=[
+                    genai_types.Part(
+                        file_data=genai_types.FileData(
+                            file_uri=uploaded_file.uri,
+                            mime_type=uploaded_file.mime_type,
+                        )
+                    )
+                ],
                 config=genai_types.GenerateContentConfig(
                     system_instruction=_GEMINI_EVENT_SYSTEM_PROMPT,
                     temperature=0.2,
