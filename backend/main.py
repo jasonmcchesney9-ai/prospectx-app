@@ -39300,25 +39300,34 @@ async def ht_sync_stats(league: str, team_id: int, season_id: Optional[int] = No
             except (ValueError, TypeError):
                 sv_pct = 0.0
 
-            # Upsert goalie_stats
-            existing_gs = conn.execute(
-                "SELECT id FROM goalie_stats WHERE player_id = ? AND season = ? AND data_source = 'hockeytech'",
-                (player_id, season_name)
-            ).fetchone()
+            # Upsert goalie_stats — delete duplicates first, then update-or-insert
+            try:
+                all_gs = conn.execute(
+                    "SELECT id FROM goalie_stats WHERE player_id = ? AND season = ? AND data_source = 'hockeytech' ORDER BY created_at ASC",
+                    (player_id, season_name)
+                ).fetchall()
 
-            if existing_gs:
-                conn.execute("""
-                    UPDATE goalie_stats SET gp = ?, ga = ?, sa = ?, sv = ?, sv_pct = ?, gaa = ?,
-                        data_source = 'hockeytech'
-                    WHERE id = ?
-                """, (gp, gp * gaa if gaa else 0, sa, sv, str(sv_pct), gaa, existing_gs["id"]))
-            else:
-                conn.execute("""
-                    INSERT INTO goalie_stats (id, player_id, org_id, season, stat_type, gp,
-                        ga, sa, sv, sv_pct, gaa, data_source)
-                    VALUES (?, ?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, 'hockeytech')
-                """, (gen_id(), player_id, org_id, season_name, gp,
-                      gp * gaa if gaa else 0, sa, sv, str(sv_pct), gaa))
+                if len(all_gs) > 1:
+                    for stale in all_gs[1:]:
+                        conn.execute("DELETE FROM goalie_stats WHERE id = ?", (stale["id"],))
+
+                if all_gs:
+                    conn.execute("""
+                        UPDATE goalie_stats SET gp = ?, ga = ?, sa = ?, sv = ?, sv_pct = ?, gaa = ?,
+                            data_source = 'hockeytech'
+                        WHERE id = ?
+                    """, (gp, gp * gaa if gaa else 0, sa, sv, str(sv_pct), gaa, all_gs[0]["id"]))
+                else:
+                    conn.execute("""
+                        INSERT INTO goalie_stats (id, player_id, org_id, season, stat_type, gp,
+                            ga, sa, sv, sv_pct, gaa, data_source)
+                        VALUES (?, ?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, 'hockeytech')
+                    """, (gen_id(), player_id, org_id, season_name, gp,
+                          gp * gaa if gaa else 0, sa, sv, str(sv_pct), gaa))
+            except Exception as e:
+                conn.rollback()
+                logger.error("goalie_stats upsert error player=%s season=%s: %s", player_id, season_name, str(e))
+                continue
 
             synced_goalies += 1
 
