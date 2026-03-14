@@ -2774,7 +2774,14 @@ export default function PlayerDetailPage() {
                               </span>
                             )}
                             {note.prospect_status && PROSPECT_STATUS_LABELS[note.prospect_status] && (
-                              <span className={`text-[9px] font-oswald uppercase tracking-wider px-1.5 py-0.5 rounded ${PROSPECT_STATUS_LABELS[note.prospect_status].color}`}>
+                              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ fontFamily: "'Oswald', sans-serif", ...({
+                                TOP_TARGET: { background: "rgba(192,57,43,0.1)", color: "#C0392B" },
+                                A_PROSPECT: { background: "rgba(230,126,34,0.1)", color: "#E67E22" },
+                                B_PROSPECT: { background: "rgba(13,148,136,0.1)", color: "#0D9488" },
+                                C_PROSPECT: { background: "rgba(59,130,246,0.08)", color: "#3B82F6" },
+                                FOLLOW_UP: { background: "rgba(245,158,11,0.08)", color: "#F59E0B" },
+                                PASS: { background: "rgba(148,163,184,0.1)", color: "#94A3B8" },
+                              } as Record<string, React.CSSProperties>)[note.prospect_status] || {} }}>
                                 {PROSPECT_STATUS_LABELS[note.prospect_status].label}
                               </span>
                             )}
@@ -2940,8 +2947,8 @@ export default function PlayerDetailPage() {
                   {(statTrendsClipCounts.total || 0) > 0 && (
                     <Link
                       href={`/film?player_id=${playerId}${statTrends[0]?.event_type_filter ? `&event_type=${statTrends[0].event_type_filter}` : ""}`}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-oswald uppercase tracking-wider text-white transition-colors"
-                      style={{ background: "#0D9488" }}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs uppercase tracking-wider transition-colors"
+                      style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                     >
                       <Play size={12} />
                       Review Clips
@@ -3275,7 +3282,7 @@ export default function PlayerDetailPage() {
                               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#D1D5DB" }} title="Unchanged" />
                             )}
                             {!isVisible && COACH_ROLES.has(userRole) && (
-                              <span className="flex items-center gap-1 text-xs text-white/40 bg-white/10 px-2 py-0.5 rounded-full">
+                              <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.1)" }}>
                                 <EyeOff size={10} /> Hidden
                               </span>
                             )}
@@ -3326,14 +3333,14 @@ export default function PlayerDetailPage() {
                                   >
                                     {savingDevPlan ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                                   </button>
-                                  <button onClick={() => setEditingV2Section(null)} className="p-1 text-white/50 hover:bg-white/10 rounded">
+                                  <button onClick={() => setEditingV2Section(null)} className="p-1 rounded" style={{ color: "rgba(255,255,255,0.5)" }}>
                                     <X size={14} />
                                   </button>
                                 </>
                               ) : (
                                 <button
                                   onClick={() => { setEditingV2Section(num); setEditV2Content(content || ""); }}
-                                  className="p-1 text-white/50 hover:bg-white/10 rounded"
+                                  className="p-1 rounded" style={{ color: "rgba(255,255,255,0.5)" }}
                                 >
                                   <Edit3 size={14} />
                                 </button>
@@ -3427,7 +3434,8 @@ export default function PlayerDetailPage() {
                               setEditV2Content(devPlanV2.section_8_staff_notes || "");
                             }
                           }}
-                          className="p-1 text-white/50 hover:bg-white/10 rounded"
+                          className="p-1 rounded"
+                          style={{ color: "rgba(255,255,255,0.5)" }}
                         >
                           {editingV2Section === 8 ? <X size={14} /> : <Edit3 size={14} />}
                         </button>
@@ -3544,7 +3552,7 @@ export default function PlayerDetailPage() {
                   {linkedParents.length > 0 ? (
                     <div className="space-y-2 mb-3">
                       {linkedParents.map((p) => (
-                        <div key={p.link_id} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+                        <div key={p.link_id} className="flex items-center justify-between py-1.5 border-b last:border-0" style={{ borderColor: "rgba(226,234,243,0.3)" }}>
                           <div className="flex items-center gap-2">
                             <User size={13} style={{ color: "rgba(148,163,184,0.5)" }} />
                             <div>
@@ -3628,29 +3636,29 @@ export default function PlayerDetailPage() {
             {/* ── Recruitment Reel Section ──────────────────────── */}
             <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-0">
-                  <Film size={14} className="text-teal" /> Recruitment Reels
+                <h3 className="text-sm uppercase tracking-wider flex items-center gap-2 mb-0" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>
+                  <Film size={14} style={{ color: "#0D9488" }} /> Recruitment Reels
                 </h3>
                 <Link
                   href={`/players/${playerId}/reels/build`}
-                  className="flex items-center gap-1.5 bg-teal text-white px-3 py-1.5 rounded-lg font-oswald uppercase tracking-wider text-[11px] hover:bg-teal/90 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg uppercase tracking-wider text-[11px] transition-colors" style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                 >
                   <Film size={12} /> Build Recruitment Reel
                 </Link>
               </div>
-              <p className="text-xs text-muted mb-3">
+              <p className="text-xs mb-3" style={{ color: "#94A3B8" }}>
                 Pull clips across all sessions to build a cross-season recruitment reel.
               </p>
 
               {reelsLoading ? (
                 <div className="flex items-center justify-center py-4">
-                  <Loader2 size={16} className="animate-spin text-teal" />
-                  <span className="ml-2 text-xs text-muted">Loading reels...</span>
+                  <Loader2 size={16} className="animate-spin" style={{ color: "#0D9488" }} />
+                  <span className="ml-2 text-xs" style={{ color: "#94A3B8" }}>Loading reels...</span>
                 </div>
               ) : playerReels.length === 0 ? (
                 <div className="text-center py-4">
-                  <Film size={28} className="mx-auto text-muted/20 mb-2" />
-                  <p className="text-sm text-muted">No reels yet — build one above.</p>
+                  <Film size={28} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.2)" }} />
+                  <p className="text-sm" style={{ color: "#94A3B8" }}>No reels yet — build one above.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -3659,25 +3667,25 @@ export default function PlayerDetailPage() {
                     return (
                       <div
                         key={reel.id}
-                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
+                        className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg transition-all" style={{ border: "1px solid #F3F4F6" }}
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-navy truncate">{reel.title}</p>
+                          <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{reel.title}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-muted font-mono">{clipCount} clip{clipCount !== 1 ? "s" : ""}</span>
-                            <span className="text-[10px] text-muted/60">{new Date(reel.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                            <span className="text-[10px] font-mono" style={{ color: "#94A3B8" }}>{clipCount} clip{clipCount !== 1 ? "s" : ""}</span>
+                            <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.6)" }}>{new Date(reel.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
                             {reel.share_enabled ? (
-                              <span className="flex items-center gap-1 text-[9px] font-oswald uppercase tracking-wider bg-teal/10 text-teal px-1.5 py-0.5 rounded">
+                              <span className="flex items-center gap-1 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(13,148,136,0.1)", color: "#0D9488" }}>
                                 <Share2 size={8} /> Shared
                               </span>
                             ) : (
-                              <span className="text-[9px] font-oswald uppercase tracking-wider text-muted/40 px-1.5 py-0.5">Draft</span>
+                              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.4)" }}>Draft</span>
                             )}
                           </div>
                         </div>
                         <Link
                           href={`/reels/${reel.id}`}
-                          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider rounded-lg hover:bg-teal hover:text-white transition-colors"
+                          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase tracking-wider rounded-lg transition-colors" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(13,148,136,0.1)", color: "#0D9488" }}
                         >
                           <Eye size={10} /> View
                         </Link>
@@ -3689,10 +3697,10 @@ export default function PlayerDetailPage() {
             </div>
 
             <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-              <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
-                <Video size={14} className="text-teal" /> Game Film
+              <h3 className="text-sm uppercase tracking-wider flex items-center gap-2 mb-1" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>
+                <Video size={14} style={{ color: "#0D9488" }} /> Game Film
               </h3>
-              <p className="text-xs text-muted mb-5">
+              <p className="text-xs mb-5" style={{ color: "#94A3B8" }}>
                 Quick-access clips for this player&apos;s recent events.
               </p>
 
@@ -3701,7 +3709,7 @@ export default function PlayerDetailPage() {
                   {/* Last Game – All Events */}
                   <Link
                     href={`/video-sessions?player_id=${playerId}`}
-                    className="px-4 py-2.5 bg-teal text-white text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-teal/90 transition-colors flex items-center gap-2"
+                    className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                   >
                     <Play size={14} /> Last Game – All Events
                   </Link>
@@ -3709,7 +3717,7 @@ export default function PlayerDetailPage() {
                   {/* Last 3 Games – Shots */}
                   <Link
                     href={`/video-sessions?player_id=${playerId}&action=Shots`}
-                    className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                    className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(15,41,66,0.06)", color: "#0F2942" }}
                   >
                     <Target size={14} /> Last 3 Games – Shots
                   </Link>
@@ -3718,7 +3726,7 @@ export default function PlayerDetailPage() {
                   {player.position && ["C", "F", "LW", "RW"].includes(player.position) && (
                     <Link
                       href={`/video-sessions?player_id=${playerId}&action=Faceoffs`}
-                      className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                      className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(15,41,66,0.06)", color: "#0F2942" }}
                     >
                       <Swords size={14} /> Last 3 Games – Faceoffs
                     </Link>
@@ -3728,7 +3736,7 @@ export default function PlayerDetailPage() {
                   {player.position === "D" && (
                     <Link
                       href={`/video-sessions?player_id=${playerId}&zone=DZ`}
-                      className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                      className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(15,41,66,0.06)", color: "#0F2942" }}
                     >
                       <Shield size={14} /> Defensive Zone Clips
                     </Link>
@@ -3738,7 +3746,7 @@ export default function PlayerDetailPage() {
                   {player.position === "G" && (
                     <Link
                       href={`/video-sessions?player_id=${playerId}&action=Goals against`}
-                      className="px-4 py-2.5 bg-navy/[0.06] text-navy text-sm font-oswald font-semibold uppercase tracking-wider rounded-lg hover:bg-navy/[0.1] transition-colors flex items-center gap-2"
+                      className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2" style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(15,41,66,0.06)", color: "#0F2942" }}
                     >
                       <AlertTriangle size={14} /> Goals Against
                     </Link>
@@ -3746,11 +3754,11 @@ export default function PlayerDetailPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Video size={32} className="mx-auto text-muted/30 mb-2" />
-                  <p className="text-sm text-muted">
+                  <Video size={32} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.3)" }} />
+                  <p className="text-sm" style={{ color: "#94A3B8" }}>
                     No game film imported yet for this player.
                   </p>
-                  <p className="text-xs text-muted/60 mt-1">
+                  <p className="text-xs mt-1" style={{ color: "rgba(148,163,184,0.6)" }}>
                     Upload a tagged game file in Game Sheets to get started.
                   </p>
                 </div>
@@ -3759,23 +3767,23 @@ export default function PlayerDetailPage() {
 
             {/* Film Room Clips */}
             <div style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "14px 16px 16px", position: "relative" }}>
-              <h3 className="text-sm font-oswald uppercase tracking-wider text-navy flex items-center gap-2 mb-1">
-                <Scissors size={14} className="text-teal" /> Film Room Clips
+              <h3 className="text-sm uppercase tracking-wider flex items-center gap-2 mb-1" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>
+                <Scissors size={14} style={{ color: "#0D9488" }} /> Film Room Clips
               </h3>
-              <p className="text-xs text-muted mb-4">
+              <p className="text-xs mb-4" style={{ color: "#94A3B8" }}>
                 Clips tagged to this player in Film Room sessions.
               </p>
 
               {filmClipsLoading ? (
                 <div className="flex items-center justify-center py-6">
-                  <Loader2 size={18} className="animate-spin text-teal" />
-                  <span className="ml-2 text-xs text-muted">Loading clips...</span>
+                  <Loader2 size={18} className="animate-spin" style={{ color: "#0D9488" }} />
+                  <span className="ml-2 text-xs" style={{ color: "#94A3B8" }}>Loading clips...</span>
                 </div>
               ) : filmClips.length === 0 ? (
                 <div className="text-center py-6">
-                  <Scissors size={28} className="mx-auto text-muted/20 mb-2" />
-                  <p className="text-sm text-muted">No Film Room clips for this player yet.</p>
-                  <p className="text-xs text-muted/60 mt-1">
+                  <Scissors size={28} className="mx-auto mb-2" style={{ color: "rgba(148,163,184,0.2)" }} />
+                  <p className="text-sm" style={{ color: "#94A3B8" }}>No Film Room clips for this player yet.</p>
+                  <p className="text-xs mt-1" style={{ color: "rgba(148,163,184,0.6)" }}>
                     Tag clips to this player in the Film Room to see them here.
                   </p>
                 </div>
@@ -3807,11 +3815,11 @@ export default function PlayerDetailPage() {
                         <div key={sid}>
                           {/* Session header */}
                           <div className="flex items-center gap-2 mb-1.5 px-1">
-                            <span className="text-[11px] font-oswald uppercase tracking-wider text-navy/70 font-semibold truncate">{sessionTitle}</span>
+                            <span className="text-[11px] uppercase tracking-wider font-semibold truncate" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(15,41,66,0.7)" }}>{sessionTitle}</span>
                             {uploadCount > 1 && (
                               <>
-                                <span className="text-[9px] font-oswald uppercase tracking-wider text-teal bg-teal/10 px-1.5 py-0.5 rounded">Full Game ({uploadCount} periods)</span>
-                                <span className="text-[9px] font-mono text-muted/50">{uploadCount} videos</span>
+                                <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ fontFamily: "'Oswald', sans-serif", color: "#0D9488", background: "rgba(13,148,136,0.1)" }}>Full Game ({uploadCount} periods)</span>
+                                <span className="text-[9px] font-mono" style={{ color: "rgba(148,163,184,0.5)" }}>{uploadCount} videos</span>
                               </>
                             )}
                           </div>
@@ -3819,23 +3827,25 @@ export default function PlayerDetailPage() {
                             {grouped[sid].map((clip) => (
                               <div
                                 key={clip.id}
-                                className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
+                                className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border transition-all"
+                                style={{ borderColor: "#E2EAF3" }}
                               >
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-navy truncate">{clip.title}</p>
+                                  <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{clip.title}</p>
                                   <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
+                                    <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: "#0D9488" }}>
                                       <Clock size={10} />
                                       {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
                                     </span>
                                     {clip.description && (
-                                      <span className="text-[10px] text-muted truncate">{clip.description}</span>
+                                      <span className="text-[10px] truncate" style={{ color: "#94A3B8" }}>{clip.description}</span>
                                     )}
                                   </div>
                                 </div>
                                 <Link
                                   href={`/film-room/sessions/${sid}?seek=${clip.start_time_seconds}`}
-                                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-teal/10 text-teal text-[10px] font-oswald uppercase tracking-wider rounded-lg hover:bg-teal hover:text-white transition-colors"
+                                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase tracking-wider rounded-lg transition-colors"
+                                  style={{ fontFamily: "'Oswald', sans-serif", background: "rgba(13,148,136,0.1)", color: "#0D9488" }}
                                 >
                                   <Play size={10} />
                                   Watch
@@ -3852,17 +3862,18 @@ export default function PlayerDetailPage() {
                         {noSession.map((clip) => (
                           <div
                             key={clip.id}
-                            className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-gray-100 hover:border-teal/20 transition-all"
+                            className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border transition-all"
+                            style={{ borderColor: "#E2EAF3" }}
                           >
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-navy truncate">{clip.title}</p>
+                              <p className="text-sm font-semibold truncate" style={{ color: "#0F2942" }}>{clip.title}</p>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <span className="flex items-center gap-1 text-[10px] text-teal font-mono">
+                                <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: "#0D9488" }}>
                                   <Clock size={10} />
                                   {fmtTime(clip.start_time_seconds)} — {fmtTime(clip.end_time_seconds)}
                                 </span>
                                 {clip.description && (
-                                  <span className="text-[10px] text-muted truncate">{clip.description}</span>
+                                  <span className="text-[10px] truncate" style={{ color: "#94A3B8" }}>{clip.description}</span>
                                 )}
                               </div>
                             </div>
@@ -4038,28 +4049,28 @@ export default function PlayerDetailPage() {
             {/* Training Volume Widget — shown on Dev Plan tab */}
             {activeTab === "player" && drillLogData && drillLogData.summary.total_season > 0 && (
               <section className="print:hidden" style={{ background: "white", borderRadius: 14, border: "1.5px solid rgba(13,148,136,.45)", boxShadow: "0 1px 3px rgba(9,28,48,.05), 0 4px 16px rgba(9,28,48,.07)", padding: "12px 16px 14px" }}>
-                <h3 className="text-xs font-oswald uppercase tracking-wider text-muted mb-3">Training Volume</h3>
+                <h3 className="text-xs uppercase tracking-wider mb-3" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Training Volume</h3>
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="text-center p-3 bg-teal/5 rounded-lg">
-                    <p className="text-lg font-bold text-navy">{drillLogData.summary.this_week}</p>
-                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Week</p>
+                  <div className="text-center p-3 rounded-lg" style={{ background: "rgba(13,148,136,0.05)" }}>
+                    <p className="text-lg font-bold" style={{ color: "#0F2942" }}>{drillLogData.summary.this_week}</p>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>This Week</p>
                   </div>
-                  <div className="text-center p-3 bg-teal/5 rounded-lg">
-                    <p className="text-lg font-bold text-navy">{drillLogData.summary.this_month}</p>
-                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">This Month</p>
+                  <div className="text-center p-3 rounded-lg" style={{ background: "rgba(13,148,136,0.05)" }}>
+                    <p className="text-lg font-bold" style={{ color: "#0F2942" }}>{drillLogData.summary.this_month}</p>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>This Month</p>
                   </div>
-                  <div className="text-center p-3 bg-teal/5 rounded-lg">
-                    <p className="text-lg font-bold text-navy">{drillLogData.summary.total_season}</p>
-                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Season Total</p>
+                  <div className="text-center p-3 rounded-lg" style={{ background: "rgba(13,148,136,0.05)" }}>
+                    <p className="text-lg font-bold" style={{ color: "#0F2942" }}>{drillLogData.summary.total_season}</p>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Season Total</p>
                   </div>
                 </div>
                 {drillLogData.logs.length > 0 && (
                   <div className="mt-3 space-y-1">
-                    <p className="text-[10px] font-oswald uppercase tracking-wider text-muted">Recent Drills</p>
+                    <p className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Recent Drills</p>
                     {drillLogData.logs.slice(0, 5).map((log) => (
                       <div key={log.id} className="flex items-center justify-between text-xs py-1">
-                        <span className="text-navy truncate">{log.drill_name}</span>
-                        <span className="text-muted shrink-0 ml-2">{new Date(log.logged_at).toLocaleDateString()}</span>
+                        <span className="truncate" style={{ color: "#0F2942" }}>{log.drill_name}</span>
+                        <span className="shrink-0 ml-2" style={{ color: "#94A3B8" }}>{new Date(log.logged_at).toLocaleDateString()}</span>
                       </div>
                     ))}
                   </div>
@@ -4072,26 +4083,26 @@ export default function PlayerDetailPage() {
         </div>
 
         {/* Print Footer */}
-        <div className="print-footer mt-8 pt-4 border-t border-navy/10 justify-center items-center gap-2 text-xs text-muted">
+        <div className="print-footer mt-8 pt-4 border-t justify-center items-center gap-2 text-xs" style={{ borderColor: "rgba(15,41,66,0.1)", color: "#94A3B8" }}>
           <div className="text-center">
-            <p className="font-oswald text-navy text-sm">ProspectX Intelligence</p>
+            <p className="text-sm" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>ProspectX Intelligence</p>
             <p>Exported {new Date().toLocaleDateString()}</p>
           </div>
         </div>
 
         {/* Transfer Modal */}
         {showTransferModal && player && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center no-print" onClick={() => setShowTransferModal(false)}>
-            <div className="bg-white rounded-xl border border-border shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-oswald uppercase tracking-wider text-navy mb-1">Change Team</h3>
-              <p className="text-xs text-muted mb-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center no-print" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowTransferModal(false)}>
+            <div className="rounded-xl shadow-xl w-full max-w-md mx-4 p-6" style={{ background: "#FFFFFF", border: "1px solid #E2EAF3" }} onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg uppercase tracking-wider mb-1" style={{ fontFamily: "'Oswald', sans-serif", color: "#0F2942" }}>Change Team</h3>
+              <p className="text-xs mb-4" style={{ color: "#94A3B8" }}>
                 Transfer <span className="font-semibold">{player.first_name} {player.last_name}</span> from{" "}
                 <span className="font-semibold">{player.current_team || "no team"}</span>
               </p>
 
               {/* League */}
               <div className="mb-3">
-                <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">New League</label>
+                <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>New League</label>
                 {transferCustomLeague ? (
                   <div className="flex gap-1">
                     <input
@@ -4099,9 +4110,10 @@ export default function PlayerDetailPage() {
                       value={transferLeague}
                       onChange={(e) => setTransferLeague(e.target.value)}
                       placeholder="Enter league name"
-                      className="flex-1 border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      className="flex-1 border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      style={{ borderColor: "#E2EAF3" }}
                     />
-                    <button type="button" onClick={() => { setTransferCustomLeague(false); setTransferLeague(player.current_league || ""); }} className="text-[10px] text-teal hover:underline px-1 shrink-0">List</button>
+                    <button type="button" onClick={() => { setTransferCustomLeague(false); setTransferLeague(player.current_league || ""); }} className="text-[10px] hover:underline px-1 shrink-0" style={{ color: "#0D9488" }}>List</button>
                   </div>
                 ) : (
                   <select
@@ -4118,7 +4130,8 @@ export default function PlayerDetailPage() {
                         setTransferCustomTeam(false);
                       }
                     }}
-                    className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    style={{ borderColor: "#E2EAF3" }}
                   >
                     <option value="">Select league...</option>
                     {editLeagues.map((lg) => (
@@ -4131,7 +4144,7 @@ export default function PlayerDetailPage() {
 
               {/* Team */}
               <div className="mb-3">
-                <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">New Team</label>
+                <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>New Team</label>
                 {transferCustomTeam ? (
                   <div className="flex gap-1">
                     <input
@@ -4139,10 +4152,11 @@ export default function PlayerDetailPage() {
                       value={transferTeam}
                       onChange={(e) => setTransferTeam(e.target.value)}
                       placeholder="Enter team name"
-                      className="flex-1 border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      className="flex-1 border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                      style={{ borderColor: "#E2EAF3" }}
                     />
                     {!transferCustomLeague && (
-                      <button type="button" onClick={() => { setTransferCustomTeam(false); setTransferTeam(""); }} className="text-[10px] text-teal hover:underline px-1 shrink-0">List</button>
+                      <button type="button" onClick={() => { setTransferCustomTeam(false); setTransferTeam(""); }} className="text-[10px] hover:underline px-1 shrink-0" style={{ color: "#0D9488" }}>List</button>
                     )}
                   </div>
                 ) : (
@@ -4156,7 +4170,8 @@ export default function PlayerDetailPage() {
                         setTransferTeam(e.target.value);
                       }
                     }}
-                    className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                    style={{ borderColor: "#E2EAF3" }}
                   >
                     <option value="">Select team...</option>
                     {filteredTransferTeams.map((t) => (
@@ -4169,13 +4184,14 @@ export default function PlayerDetailPage() {
 
               {/* Note */}
               <div className="mb-4">
-                <label className="text-[10px] font-oswald uppercase tracking-wider text-muted">Note (optional)</label>
+                <label className="text-[10px] uppercase tracking-wider" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>Note (optional)</label>
                 <input
                   type="text"
                   value={transferNote}
                   onChange={(e) => setTransferNote(e.target.value)}
                   placeholder="e.g. Mid-season trade, called up from Jr. B"
-                  className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                  className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal/30"
+                  style={{ borderColor: "#E2EAF3" }}
                 />
               </div>
 
@@ -4183,14 +4199,16 @@ export default function PlayerDetailPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowTransferModal(false)}
-                  className="flex-1 py-2 border border-border rounded text-sm font-oswald uppercase tracking-wider text-muted hover:bg-gray-50 transition-colors"
+                  className="flex-1 py-2 border rounded text-sm uppercase tracking-wider transition-colors"
+                  style={{ fontFamily: "'Oswald', sans-serif", borderColor: "#E2EAF3", color: "#94A3B8" }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleTransfer}
                   disabled={submittingTransfer || !transferTeam.trim()}
-                  className="flex-1 py-2 bg-teal text-white rounded text-sm font-oswald uppercase tracking-wider hover:bg-teal/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  className="flex-1 py-2 rounded text-sm uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  style={{ fontFamily: "'Oswald', sans-serif", background: "#0D9488", color: "#FFFFFF" }}
                 >
                   {submittingTransfer ? <><Loader2 size={14} className="animate-spin" /> Transferring...</> : <><ArrowRightLeft size={14} /> Transfer</>}
                 </button>
@@ -4246,7 +4264,8 @@ function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: str
           return (
             <div
               key={key}
-              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg bg-navy/[0.02] border border-navy/[0.06]"
+              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg"
+              style={{ background: "rgba(15,41,66,0.02)", border: "1px solid rgba(15,41,66,0.06)" }}
             >
               <div className="relative w-[76px] h-[76px]">
                 <svg width="76" height="76" viewBox="0 0 80 80" className="transform -rotate-90">
@@ -4261,29 +4280,29 @@ function QuickMetrics({ stats, position }: { stats: PlayerStats[]; position: str
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <IconComp size={12} style={{ color }} className="mb-0.5" />
-                  <span className="text-lg font-oswald font-bold leading-none tabular-nums" style={{ color }}>
+                  <span className="text-lg font-bold leading-none tabular-nums" style={{ color, fontFamily: "'Oswald', sans-serif" }}>
                     {display}
                   </span>
                 </div>
               </div>
-              <span className="text-[9px] font-oswald uppercase tracking-widest text-muted mt-1">{label}</span>
+              <span className="text-[9px] uppercase tracking-widest mt-1" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>{label}</span>
             </div>
           );
         })}
         {/* 6th tile: PXI placeholder */}
-        <div className="relative flex flex-col items-center justify-center py-2.5 px-1 rounded-lg border border-dashed border-teal/20 bg-teal/[0.02]">
+        <div className="relative flex flex-col items-center justify-center py-2.5 px-1 rounded-lg border border-dashed" style={{ borderColor: "rgba(13,148,136,0.2)", background: "rgba(13,148,136,0.02)" }}>
           <div className="relative w-[76px] h-[76px] flex items-center justify-center">
-            <Sparkles size={18} className="text-teal/30" />
+            <Sparkles size={18} style={{ color: "rgba(13,148,136,0.3)" }} />
           </div>
-          <span className="text-[9px] font-oswald uppercase tracking-widest text-teal/40 mt-1">PXI</span>
-          <span className="text-[7px] text-muted/40 mt-0.5">Run AI Analysis</span>
+          <span className="text-[9px] uppercase tracking-widest mt-1" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(13,148,136,0.4)" }}>PXI</span>
+          <span className="text-[7px] mt-0.5" style={{ color: "rgba(148,163,184,0.4)" }}>Run AI Analysis</span>
         </div>
       </div>
-      <div className="flex items-center justify-between pt-2 mt-2 border-t border-teal/8">
-        <p className="text-[9px] text-muted/50">
+      <div className="flex items-center justify-between pt-2 mt-2 border-t" style={{ borderColor: "rgba(13,148,136,0.08)" }}>
+        <p className="text-[9px]" style={{ color: "rgba(148,163,184,0.5)" }}>
           Based on {season.gp} GP {season.season ? `(${season.season})` : ""} · Stat-derived estimates
         </p>
-        <span className="text-[8px] text-muted/30 font-oswald uppercase tracking-widest">ProspectX</span>
+        <span className="text-[8px] uppercase tracking-widest" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.3)" }}>ProspectX</span>
       </div>
     </div>
   );
@@ -4360,8 +4379,8 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
           return (
             <div
               key={key}
-              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg border border-navy/[0.06] hover:border-teal/20 transition-all duration-300"
-              style={{ backgroundColor: color + Math.round(bgOpacity * 255).toString(16).padStart(2, "0") }}
+              className="relative flex flex-col items-center py-2.5 px-1 rounded-lg transition-all duration-300"
+              style={{ border: "1px solid rgba(15,41,66,0.06)", backgroundColor: color + Math.round(bgOpacity * 255).toString(16).padStart(2, "0") }}
               title={idx.description}
             >
               <div className="relative w-[76px] h-[76px]">
@@ -4378,14 +4397,14 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-xs leading-none mb-0.5">{icon}</span>
                   <span
-                    className="text-xl font-oswald font-bold leading-none tabular-nums"
-                    style={{ color }}
+                    className="text-xl font-bold leading-none tabular-nums"
+                    style={{ color, fontFamily: "'Oswald', sans-serif" }}
                   >
                     {idx.value}
                   </span>
                 </div>
               </div>
-              <span className="text-[9px] font-oswald uppercase tracking-widest text-muted mt-1">
+              <span className="text-[9px] uppercase tracking-widest mt-1" style={{ fontFamily: "'Oswald', sans-serif", color: "#94A3B8" }}>
                 {ABBREV[key] || idx.label}
               </span>
               <span
@@ -4398,14 +4417,14 @@ function ProspectXMetricsPanel({ indices }: { indices: PlayerMetrics }) {
           );
         })}
       </div>
-      <div className="flex items-center justify-between pt-2 mt-2 border-t border-teal/8">
-        <p className="text-[9px] text-muted/50">
+      <div className="flex items-center justify-between pt-2 mt-2 border-t" style={{ borderColor: "rgba(13,148,136,0.08)" }}>
+        <p className="text-[9px]" style={{ color: "rgba(148,163,184,0.5)" }}>
           Based on {indices.gp} GP {indices.season ? `(${indices.season})` : ""}
           {indices.has_extended_stats && (
-            <span className="ml-1 text-teal/60">+ Extended Analytics</span>
+            <span className="ml-1" style={{ color: "rgba(13,148,136,0.6)" }}>+ Extended Analytics</span>
           )}
         </p>
-        <span className="text-[8px] text-muted/30 font-oswald uppercase tracking-widest">
+        <span className="text-[8px] uppercase tracking-widest" style={{ fontFamily: "'Oswald', sans-serif", color: "rgba(148,163,184,0.3)" }}>
           ProspectX
         </span>
       </div>
