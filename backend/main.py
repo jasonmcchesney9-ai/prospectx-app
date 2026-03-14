@@ -53884,7 +53884,7 @@ async def gemini_video_analyze(req: dict = Body(...),
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         try:
             response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-2.0-flash-lite",
                 contents=[
                     {
                         "parts": [
