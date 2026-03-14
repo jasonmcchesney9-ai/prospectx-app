@@ -11173,6 +11173,7 @@ def calculate_tier2_pxr_scores(conn=None, season: str = '2025-26') -> dict:
         LEFT JOIN pxr_scores px ON px.player_id = ps.player_id AND px.season = ?
                                    AND px.score_type = 'full' AND px.pxr_score IS NOT NULL
         WHERE ps.season = ?
+          AND ps.stat_type = 'season'
           AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
           AND px.player_id IS NULL
         GROUP BY ps.player_id, p.position, p.current_league, p.dob
