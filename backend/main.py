@@ -45529,6 +45529,34 @@ async def send_message(body: SendMessageRequest, token_data: dict = Depends(veri
     }
 
 
+@app.get("/api/messages/unread-count")
+async def get_unread_count(token_data: dict = Depends(verify_token)):
+    """Get total unread message count for nav badge."""
+    user_id = token_data["user_id"]
+    conn = get_db()
+    try:
+        # Get all conversations user is in
+        convs = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
+        total_unread = 0
+        for c in convs:
+            try:
+                pids = json.loads(c["participant_ids"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if user_id in pids:
+                unread = conn.execute(
+                    "SELECT COUNT(*) FROM msg_messages WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
+                    (c["id"], user_id)
+                ).fetchone()[0]
+                total_unread += unread
+
+        return {"count": total_unread}
+    except Exception:
+        return {"count": 0}
+    finally:
+        conn.close()
+
+
 @app.get("/api/messages/{conversation_id}")
 async def get_messages(conversation_id: str, token_data: dict = Depends(verify_token)):
     """Get messages for a conversation. Marks unread as read."""
@@ -45799,34 +45827,6 @@ async def block_user(body: BlockUserRequest, token_data: dict = Depends(verify_t
     conn.commit()
     conn.close()
     return {"detail": "User blocked"}
-
-
-@app.get("/api/messages/unread-count")
-async def get_unread_count(token_data: dict = Depends(verify_token)):
-    """Get total unread message count for nav badge."""
-    user_id = token_data["user_id"]
-    conn = get_db()
-    try:
-        # Get all conversations user is in
-        convs = conn.execute("SELECT * FROM msg_conversations WHERE status = 'active'").fetchall()
-        total_unread = 0
-        for c in convs:
-            try:
-                pids = json.loads(c["participant_ids"])
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if user_id in pids:
-                unread = conn.execute(
-                    "SELECT COUNT(*) FROM msg_messages WHERE conversation_id = ? AND sender_id != ? AND read_at IS NULL",
-                    (c["id"], user_id)
-                ).fetchone()[0]
-                total_unread += unread
-
-        return {"count": total_unread}
-    except Exception:
-        return {"count": 0}
-    finally:
-        conn.close()
 
 
 # ============================================================
