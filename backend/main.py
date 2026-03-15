@@ -53980,7 +53980,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
 
         # Step 4: Download video from Mux and upload to Gemini Files API
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/highest.mp4"
+        mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/medium.mp4"
         logging.info(f"Gemini auto-tag — downloading from Mux: {mp4_url[:60]}")
         tmp_path = None
         uploaded_file = None
