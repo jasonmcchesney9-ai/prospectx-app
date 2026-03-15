@@ -39982,6 +39982,17 @@ You have access to the ProspectX database with:
 - Team line combinations, roster breakdowns, and tactical systems
 - Active game plans, chalk talk sessions, and series strategies
 - Scouting observations (notes, tags) across the organization
+
+## FILM HUB & VIDEO INTELLIGENCE
+You have full access to the Film Hub. When coaches ask about game film,
+video analysis, or auto-tagged events — use the query_film_events tool.
+Do NOT say you lack visibility into video analysis. You can query:
+- Film sessions (games uploaded for review)
+- Auto-tagged events (faceoffs, shots, zone entries, hits, etc. detected by AI)
+- Clips (manually or auto-created segments)
+When a coach asks "how did we look against Elmira?" — pull the film events
+and give them a real breakdown: shot attempts, zone entries, turnovers, hits.
+A typical period has 30-80 tagged events. Surface the most meaningful ones.
 - Personal scouting watchlist with priority tracking
 
 # TOOLS
@@ -40383,6 +40394,32 @@ BENCH_TALK_TOOLS = [
                 }
             },
             "required": ["player_name"]
+        }
+    },
+    {
+        "name": "query_film_events",
+        "description": "Query tagged film events from video sessions. Use when coach asks about game film, video analysis, auto-tagged plays, or specific game breakdowns. Returns event counts, types, timestamps, and outcomes from AI-analyzed game footage.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "Film session ID. If unknown, omit to get recent sessions."
+                },
+                "team_name": {
+                    "type": "string",
+                    "description": "Team name to filter sessions by."
+                },
+                "event_type": {
+                    "type": "string",
+                    "description": "Filter by event type: faceoff, shot_attempt, zone_entry, zone_exit, dump_in, hit, breakout, penalty, goal, blocked_shot, turnover"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max events to return. Default 50."
+                }
+            },
+            "required": []
         }
     },
     # ── Web Search (Anthropic server-side tool) ──────────────────
@@ -42138,6 +42175,57 @@ async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str
         return _pt_get_scouting_list(tool_input, org_id, user_id)
     elif tool_name == "diagnose_player_struggles":
         return _pt_diagnose_player_struggles(tool_input, org_id)
+    elif tool_name == "query_film_events":
+        session_id = tool_input.get("session_id")
+        team_name = tool_input.get("team_name")
+        event_type = tool_input.get("event_type")
+        limit = tool_input.get("limit", 50)
+
+        conn = get_db()
+        try:
+            where_clauses = ["ve.org_id = %s"]
+            params: list = [org_id]
+
+            if session_id:
+                where_clauses.append("ve.session_id = %s")
+                params.append(session_id)
+
+            if team_name:
+                where_clauses.append("vs.name ILIKE %s")
+                params.append(f"%{team_name}%")
+
+            if event_type:
+                where_clauses.append("ve.event_type = %s")
+                params.append(event_type)
+
+            where_sql = " AND ".join(where_clauses)
+
+            events = conn.execute(f"""
+                SELECT ve.event_type, ve.event_label, ve.ice_zone,
+                       ve.outcome, ve.period, ve.time_seconds,
+                       ve.confidence, ve.raw_payload,
+                       vs.name as session_title, vs.match_date
+                FROM video_events ve
+                LEFT JOIN video_sessions vs ON vs.id = ve.session_id
+                WHERE {where_sql}
+                ORDER BY ve.period, ve.time_seconds
+                LIMIT %s
+            """, params + [limit]).fetchall()
+
+            if not events:
+                return {"events": [], "summary": "No film events found for this query."}, {}
+
+            from collections import Counter
+            type_counts = Counter(e["event_type"] for e in events)
+            summary = f"Found {len(events)} events. Breakdown: " + ", ".join(f"{v} {k}" for k, v in type_counts.most_common())
+
+            return {
+                "summary": summary,
+                "events": [dict(e) for e in events[:limit]],
+                "session_title": events[0]["session_title"] if events else None
+            }, {}
+        finally:
+            conn.close()
     else:
         return {"error": f"Unknown tool: {tool_name}"}, {}
 
