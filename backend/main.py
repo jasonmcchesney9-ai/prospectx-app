@@ -54022,13 +54022,27 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
                     max_output_tokens=8192,
                 ),
             )
-            logging.info("Gemini raw response: %s", response.text[:500])
-            clean = response.text.strip()
+            raw = response.text or ""
+            logging.info("Gemini raw response: %s", raw[:500])
+            clean = raw.strip()
+            # Remove opening fence (handles ```json, ```JSON, ```, etc.)
             if clean.startswith("```"):
-                clean = clean.split("```")[1]
-                if clean.startswith("json"):
-                    clean = clean[4:]
-            result = json.loads(clean.strip())
+                clean = clean.split("```", 1)[1]  # strip opening fence
+                if "```" in clean:
+                    clean = clean.rsplit("```", 1)[0]  # strip closing fence
+                clean = clean.strip()
+            # Remove leading language hint if present (e.g. "json\n{...")
+            if clean.lower().startswith("json"):
+                clean = clean[4:].strip()
+            # Parse with debug logging on failure
+            try:
+                result = json.loads(clean)
+            except json.JSONDecodeError as e:
+                logging.error(
+                    f"Gemini JSON parse failed: {e} | "
+                    f"first 300 chars: {clean[:300]!r}"
+                )
+                raise
             events = result.get("events", [])
             logging.info("Gemini detected %d events", len(events))
         except Exception as exc:
