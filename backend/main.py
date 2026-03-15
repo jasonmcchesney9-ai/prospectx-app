@@ -11339,7 +11339,7 @@ def calculate_tier2_pxr_scores(conn=None, season: str = '2025-26') -> dict:
                 gp = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.gp ELSE EXCLUDED.gp END,
                 score_type = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.score_type ELSE EXCLUDED.score_type END,
                 pxr_null_reason = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.pxr_null_reason ELSE NULL END,
-                calc_timestamp = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.calc_timestamp ELSE CURRENT_TIMESTAMP END
+                calc_timestamp = CASE WHEN pxr_scores.score_type = 'full' THEN pxr_scores.calc_timestamp ELSE CURRENT_TIMESTAMP::text END
         """, (
             p['player_id'], season, p['position_group'],
             p['pxr_final'],
