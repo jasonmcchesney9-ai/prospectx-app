@@ -48,6 +48,7 @@ import glob
 import httpx
 import jwt
 import shutil
+import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends, File, UploadFile, Body, Form, status
@@ -53996,77 +53997,139 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
         if video_content is None:
             raise Exception("No Mux rendition available for this asset")
         tmp_path = None
-        uploaded_file = None
+        chunk_dir = None
+        CHUNK_SECONDS = 180  # 3-minute chunks
         try:
             tmp_fd = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
             tmp_path = tmp_fd.name
             tmp_fd.write(video_content)
             tmp_fd.close()
 
-            # Upload to Gemini Files API (non-blocking)
-            logging.info("Gemini auto-tag — uploading to Gemini Files API")
+            # Try to split into chunks via ffmpeg
+            chunk_paths = []
             try:
-                uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=tmp_path)
-            except Exception as upload_exc:
-                if "RESOURCE_EXHAUSTED" in str(upload_exc):
-                    logging.error(f"Gemini auto-tag — 429 RESOURCE_EXHAUSTED: Gemini storage quota full. Delete old files.")
-                    conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
-                    conn.commit()
-                    return
-                raise
-
-            # Poll until file is ACTIVE (non-blocking)
-            logging.info("Gemini auto-tag — file uploaded, polling for ACTIVE")
-            for _ in range(60):
-                status = await asyncio.to_thread(gemini_client.files.get, name=uploaded_file.name)
-                if status.state.name == "ACTIVE":
-                    break
-                await asyncio.sleep(2)
-            else:
-                raise RuntimeError("Gemini file processing timed out")
-
-            # Call generate_content with uploaded file reference (non-blocking)
-            logging.info("Gemini auto-tag — file ACTIVE, calling generate_content")
-            response = await asyncio.to_thread(
-                gemini_client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=[
-                    genai_types.Part(
-                        file_data=genai_types.FileData(
-                            file_uri=uploaded_file.uri,
-                            mime_type=uploaded_file.mime_type,
-                        )
-                    )
-                ],
-                config=genai_types.GenerateContentConfig(
-                    system_instruction=_GEMINI_EVENT_SYSTEM_PROMPT,
-                    temperature=0.2,
-                    max_output_tokens=8192,
-                ),
-            )
-            raw = response.text or ""
-            logging.info(f"Gemini auto-tag — raw response length: {len(raw)} chars")
-            clean = raw.strip()
-            # Remove opening fence (handles ```json, ```JSON, ```, etc.)
-            if clean.startswith("```"):
-                clean = clean.split("```", 1)[1]  # strip opening fence
-                if "```" in clean:
-                    clean = clean.rsplit("```", 1)[0]  # strip closing fence
-                clean = clean.strip()
-            # Remove leading language hint if present (e.g. "json\n{...")
-            if clean.lower().startswith("json"):
-                clean = clean[4:].strip()
-            # Parse with debug logging on failure
-            try:
-                result = json.loads(clean)
-            except json.JSONDecodeError as e:
-                logging.error(
-                    f"Gemini JSON parse failed: {e} | "
-                    f"first 300 chars: {clean[:300]!r}"
+                chunk_dir = tempfile.mkdtemp(prefix="gemini_chunks_")
+                chunk_pattern = os.path.join(chunk_dir, "chunk_%03d.mp4")
+                ffmpeg_cmd = [
+                    "ffmpeg", "-i", tmp_path,
+                    "-c", "copy", "-map", "0",
+                    "-segment_time", str(CHUNK_SECONDS),
+                    "-f", "segment", "-reset_timestamps", "1",
+                    chunk_pattern,
+                ]
+                proc = await asyncio.to_thread(
+                    subprocess.run, ffmpeg_cmd,
+                    capture_output=True, timeout=300,
                 )
-                raise
-            events = result.get("events", [])
-            logging.info(f"Gemini auto-tag — parsed {len(events)} events")
+                if proc.returncode == 0:
+                    chunk_paths = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.mp4")))
+                    logging.info(f"Gemini auto-tag — ffmpeg split into {len(chunk_paths)} chunks of {CHUNK_SECONDS}s")
+                else:
+                    logging.warning(f"Gemini auto-tag — ffmpeg failed (rc={proc.returncode}): {proc.stderr[:500]}")
+                    chunk_paths = []
+            except FileNotFoundError:
+                logging.warning("Gemini auto-tag — ffmpeg not found, falling back to single-file upload")
+                chunk_paths = []
+            except Exception as ff_exc:
+                logging.warning(f"Gemini auto-tag — ffmpeg error ({ff_exc}), falling back to single-file upload")
+                chunk_paths = []
+
+            # Fall back to single file if chunking failed
+            if not chunk_paths:
+                chunk_paths = [tmp_path]
+                logging.info("Gemini auto-tag — processing as single file (no chunking)")
+
+            # Process each chunk: upload → poll → generate → parse → delete
+            events = []
+            for chunk_idx, chunk_path in enumerate(chunk_paths):
+                chunk_offset = chunk_idx * CHUNK_SECONDS if len(chunk_paths) > 1 else 0
+                chunk_label = f"chunk {chunk_idx + 1}/{len(chunk_paths)}"
+                uploaded_file = None
+                try:
+                    # Upload chunk to Gemini Files API
+                    logging.info(f"Gemini auto-tag — uploading {chunk_label} to Gemini Files API")
+                    try:
+                        uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=chunk_path)
+                    except Exception as upload_exc:
+                        if "RESOURCE_EXHAUSTED" in str(upload_exc):
+                            logging.error(f"Gemini auto-tag — 429 RESOURCE_EXHAUSTED on {chunk_label}: Gemini storage quota full.")
+                            conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
+                            conn.commit()
+                            return
+                        raise
+
+                    # Poll until file is ACTIVE
+                    logging.info(f"Gemini auto-tag — {chunk_label} uploaded, polling for ACTIVE")
+                    for _ in range(60):
+                        status = await asyncio.to_thread(gemini_client.files.get, name=uploaded_file.name)
+                        if status.state.name == "ACTIVE":
+                            break
+                        await asyncio.sleep(2)
+                    else:
+                        raise RuntimeError(f"Gemini file processing timed out for {chunk_label}")
+
+                    # Call generate_content
+                    logging.info(f"Gemini auto-tag — {chunk_label} ACTIVE, calling generate_content")
+                    response = await asyncio.to_thread(
+                        gemini_client.models.generate_content,
+                        model="gemini-2.5-flash",
+                        contents=[
+                            genai_types.Part(
+                                file_data=genai_types.FileData(
+                                    file_uri=uploaded_file.uri,
+                                    mime_type=uploaded_file.mime_type,
+                                )
+                            )
+                        ],
+                        config=genai_types.GenerateContentConfig(
+                            system_instruction=_GEMINI_EVENT_SYSTEM_PROMPT,
+                            temperature=0.2,
+                            max_output_tokens=8192,
+                        ),
+                    )
+                    raw = response.text or ""
+                    logging.info(f"Gemini auto-tag — {chunk_label} raw response length: {len(raw)} chars")
+                    clean = raw.strip()
+                    # Remove opening fence (handles ```json, ```JSON, ```, etc.)
+                    if clean.startswith("```"):
+                        clean = clean.split("```", 1)[1]
+                        if "```" in clean:
+                            clean = clean.rsplit("```", 1)[0]
+                        clean = clean.strip()
+                    # Remove leading language hint if present (e.g. "json\n{...")
+                    if clean.lower().startswith("json"):
+                        clean = clean[4:].strip()
+                    # Parse with debug logging on failure
+                    try:
+                        result = json.loads(clean)
+                    except json.JSONDecodeError as e:
+                        logging.error(
+                            f"Gemini JSON parse failed for {chunk_label}: {e} | "
+                            f"first 300 chars: {clean[:300]!r}"
+                        )
+                        raise
+                    chunk_events = result.get("events", [])
+
+                    # Apply time offset for chunked videos
+                    if chunk_offset > 0:
+                        for ev in chunk_events:
+                            ts = ev.get("time_seconds")
+                            if ts is not None:
+                                ev["time_seconds"] = ts + chunk_offset
+
+                    events.extend(chunk_events)
+                    logging.info(f"Gemini auto-tag — {chunk_label} parsed {len(chunk_events)} events (offset +{chunk_offset}s)")
+
+                finally:
+                    # Delete from Gemini immediately after processing this chunk
+                    if uploaded_file:
+                        try:
+                            await asyncio.to_thread(gemini_client.files.delete, name=uploaded_file.name)
+                            logging.info(f"Gemini auto-tag — deleted Gemini file for {chunk_label}")
+                        except Exception as cleanup_err:
+                            logging.warning(f"Gemini auto-tag — file cleanup failed for {chunk_label}: {cleanup_err}")
+
+            logging.info(f"Gemini auto-tag — all chunks processed, total {len(events)} events")
         except Exception as exc:
             logging.error(f"Gemini auto-tag FAILED at generate_content: {type(exc).__name__}: {exc}", exc_info=True)
             conn.rollback()
@@ -54077,17 +54140,14 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
                 conn.rollback()
             return
         finally:
-            # Clean up Gemini file to free storage quota
-            if uploaded_file:
-                try:
-                    await asyncio.to_thread(gemini_client.files.delete, name=uploaded_file.name)
-                    logging.info(f"Gemini auto-tag — deleted Gemini file {uploaded_file.name}")
-                except Exception as cleanup_err:
-                    logging.warning(f"Gemini auto-tag — file cleanup failed: {cleanup_err}")
             if tmp_path:
-                import os as _os
                 try:
-                    _os.unlink(tmp_path)
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+            if chunk_dir:
+                try:
+                    shutil.rmtree(chunk_dir, ignore_errors=True)
                 except OSError:
                     pass
 
