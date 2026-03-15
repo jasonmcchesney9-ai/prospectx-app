@@ -4421,6 +4421,7 @@ def init_db():
         ("session_id", "TEXT REFERENCES video_sessions(id) ON DELETE SET NULL"),
         ("period_number", "INTEGER"),
         ("period_label", "TEXT"),
+        ("auto_tag_status", "TEXT DEFAULT 'none'"),
     ]:
         if col_name not in vu_cols:
             conn.execute(f"ALTER TABLE video_uploads ADD COLUMN {col_name} {col_def}")
@@ -53847,6 +53848,10 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             logging.error("Auto-tag background: session %s has no upload", session_id)
             return
 
+        # Mark auto_tag_status = processing
+        conn.execute("UPDATE video_uploads SET auto_tag_status = 'processing' WHERE id = ? AND org_id = ?", (upload_id, org_id))
+        conn.commit()
+
         # Step 2: Look up video_uploads — get mux_playback_id
         upload_row = conn.execute(
             "SELECT id, mux_playback_id FROM video_uploads WHERE id = ? AND org_id = ?",
@@ -53878,20 +53883,20 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             tmp_fd.close()
 
             # Upload to Gemini Files API
-            uploaded_file = gemini_client.files.upload(file=tmp_path)
+            uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=tmp_path)
 
             # Poll until file is ACTIVE
-            import time as _poll_time
             for _ in range(60):
-                status = gemini_client.files.get(name=uploaded_file.name)
+                status = await asyncio.to_thread(gemini_client.files.get, name=uploaded_file.name)
                 if status.state.name == "ACTIVE":
                     break
-                _poll_time.sleep(2)
+                await asyncio.sleep(2)
             else:
                 raise RuntimeError("Gemini file processing timed out")
 
             # Call generate_content with uploaded file reference
-            response = gemini_client.models.generate_content(
+            response = await asyncio.to_thread(
+                gemini_client.models.generate_content,
                 model="gemini-2.5-flash",
                 contents=[
                     genai_types.Part(
@@ -53914,6 +53919,11 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
         except Exception as exc:
             logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
+            try:
+                conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
+                conn.commit()
+            except Exception:
+                conn.rollback()
             return
         finally:
             if tmp_path:
@@ -53953,11 +53963,19 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
                 conn.rollback()
                 continue
         conn.commit()
+        # Mark auto_tag_status = complete
+        conn.execute("UPDATE video_uploads SET auto_tag_status = 'complete' WHERE id = ? AND org_id = ?", (upload_id, org_id))
+        conn.commit()
         logging.info("Auto-tag complete: session=%s events_detected=%d", session_id, inserted)
 
     except Exception as exc:
         logging.exception("Auto-tag background error: %s", exc)
         conn.rollback()
+        try:
+            conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
+            conn.commit()
+        except Exception:
+            conn.rollback()
     finally:
         conn.close()
 
