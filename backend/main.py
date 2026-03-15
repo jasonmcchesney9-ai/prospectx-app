@@ -53971,11 +53971,6 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
             logging.error("Auto-tag background: upload %s has no playback URL", upload_id)
             return
 
-        # Mark upload as processing
-        conn.execute("UPDATE video_uploads SET auto_tag_status = 'processing' WHERE id = ?", (upload_id,))
-        conn.commit()
-        logging.info("Gemini auto-tag START — upload_id=%s", upload_id)
-
         # Step 3: Build roster dict { jersey_number: player_id }
         roster_rows = conn.execute(
             "SELECT id, jersey_number FROM players WHERE org_id = ? AND jersey_number IS NOT NULL AND jersey_number != ''",
@@ -53986,18 +53981,21 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
         # Step 4: Download video from Mux and upload to Gemini Files API
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/highest.mp4"
+        logging.info(f"Gemini auto-tag — downloading from Mux: {mp4_url[:60]}")
         tmp_path = None
         try:
             # Download MP4 from Mux to a temp file
             async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as http:
                 dl = await http.get(mp4_url)
                 dl.raise_for_status()
+            logging.info(f"Gemini auto-tag — downloaded {len(dl.content)} bytes")
             tmp_fd = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
             tmp_path = tmp_fd.name
             tmp_fd.write(dl.content)
             tmp_fd.close()
 
             # Upload to Gemini Files API (non-blocking)
+            logging.info("Gemini auto-tag — uploading to Gemini Files API")
             uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=tmp_path)
 
             # Poll until file is ACTIVE (non-blocking)
@@ -54030,7 +54028,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
                 ),
             )
             raw = response.text or ""
-            logging.info("Gemini raw response: %s", raw[:500])
+            logging.info(f"Gemini auto-tag — raw response length: {len(raw)} chars")
             clean = raw.strip()
             # Remove opening fence (handles ```json, ```JSON, ```, etc.)
             if clean.startswith("```"):
@@ -54051,7 +54049,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
                 )
                 raise
             events = result.get("events", [])
-            logging.info("Gemini detected %d events", len(events))
+            logging.info(f"Gemini auto-tag — parsed {len(events)} events")
         except Exception as exc:
             logging.error(f"Gemini auto-tag FAILED at generate_content: {type(exc).__name__}: {exc}", exc_info=True)
             conn.rollback()
@@ -54102,7 +54100,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
         # Mark auto_tag_status = complete
         conn.execute("UPDATE video_uploads SET auto_tag_status = 'complete' WHERE id = ? AND org_id = ?", (upload_id, org_id))
         conn.commit()
-        logging.info("Auto-tag complete: session=%s events_detected=%d", session_id, inserted)
+        logging.info(f"Gemini auto-tag COMPLETE — {inserted} events written to DB")
 
     except Exception as exc:
         logging.error(f"Gemini auto-tag FAILED at outer: {type(exc).__name__}: {exc}", exc_info=True)
