@@ -53955,6 +53955,8 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             logging.error("Auto-tag background: session %s has no upload", session_id)
             return
 
+        logging.info(f"Gemini auto-tag START — upload_id={upload_id}")
+
         # Mark auto_tag_status = processing
         conn.execute("UPDATE video_uploads SET auto_tag_status = 'processing' WHERE id = ? AND org_id = ?", (upload_id, org_id))
         conn.commit()
@@ -54002,6 +54004,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
                 raise RuntimeError("Gemini file processing timed out")
 
             # Call generate_content with uploaded file reference
+            logging.info("Gemini auto-tag — file ACTIVE, calling generate_content")
             response = await asyncio.to_thread(
                 gemini_client.models.generate_content,
                 model="gemini-2.5-flash",
@@ -54029,6 +54032,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             events = result.get("events", [])
             logging.info("Gemini detected %d events", len(events))
         except Exception as exc:
+            logging.error(f"Gemini auto-tag FAILED at generate_content: {type(exc).__name__}: {exc}", exc_info=True)
             logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
             try:
@@ -54081,6 +54085,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
         logging.info("Auto-tag complete: session=%s events_detected=%d", session_id, inserted)
 
     except Exception as exc:
+        logging.error(f"Gemini auto-tag FAILED at outer: {type(exc).__name__}: {exc}", exc_info=True)
         logging.exception("Auto-tag background error: %s", exc)
         conn.rollback()
         try:
