@@ -53923,7 +53923,12 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
                 ),
             )
             logging.info("Gemini raw response: %s", response.text[:500])
-            result = json.loads(response.text)
+            clean = response.text.strip()
+            if clean.startswith("```"):
+                clean = clean.split("```")[1]
+                if clean.startswith("json"):
+                    clean = clean[4:]
+            result = json.loads(clean.strip())
             events = result.get("events", [])
             logging.info("Gemini detected %d events", len(events))
         except Exception as exc:
