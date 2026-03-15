@@ -53983,6 +53983,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
         mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/highest.mp4"
         logging.info(f"Gemini auto-tag — downloading from Mux: {mp4_url[:60]}")
         tmp_path = None
+        uploaded_file = None
         try:
             # Download MP4 from Mux to a temp file
             async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as http:
@@ -53996,7 +53997,15 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
 
             # Upload to Gemini Files API (non-blocking)
             logging.info("Gemini auto-tag — uploading to Gemini Files API")
-            uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=tmp_path)
+            try:
+                uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=tmp_path)
+            except Exception as upload_exc:
+                if "RESOURCE_EXHAUSTED" in str(upload_exc):
+                    logging.error(f"Gemini auto-tag — 429 RESOURCE_EXHAUSTED: Gemini storage quota full. Delete old files.")
+                    conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
+                    conn.commit()
+                    return
+                raise
 
             # Poll until file is ACTIVE (non-blocking)
             logging.info("Gemini auto-tag — file uploaded, polling for ACTIVE")
@@ -54060,6 +54069,13 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
                 conn.rollback()
             return
         finally:
+            # Clean up Gemini file to free storage quota
+            if uploaded_file:
+                try:
+                    await asyncio.to_thread(gemini_client.files.delete, name=uploaded_file.name)
+                    logging.info(f"Gemini auto-tag — deleted Gemini file {uploaded_file.name}")
+                except Exception as cleanup_err:
+                    logging.warning(f"Gemini auto-tag — file cleanup failed: {cleanup_err}")
             if tmp_path:
                 import os as _os
                 try:
