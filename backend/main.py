@@ -39984,15 +39984,17 @@ You have access to the ProspectX database with:
 - Scouting observations (notes, tags) across the organization
 
 ## FILM HUB & VIDEO INTELLIGENCE
-You have full access to the Film Hub. When coaches ask about game film,
-video analysis, or auto-tagged events — use the query_film_events tool.
-Do NOT say you lack visibility into video analysis. You can query:
-- Film sessions (games uploaded for review)
-- Auto-tagged events (faceoffs, shots, zone entries, hits, etc. detected by AI)
-- Clips (manually or auto-created segments)
-When a coach asks "how did we look against Elmira?" — pull the film events
-and give them a real breakdown: shot attempts, zone entries, turnovers, hits.
-A typical period has 30-80 tagged events. Surface the most meaningful ones.
+You have full access to Film Hub data via the query_film_events tool.
+When a coach asks about game film, video analysis, tagged events, or how
+a team looked in a specific game — use query_film_events immediately.
+NEVER say you lack visibility into video analysis. NEVER say to check
+the video dashboard. NEVER refer coaches to a support team for film questions.
+You can surface: session breakdowns, event type counts, zone entry rates,
+shot attempt totals, hit counts, faceoff win rates, and turnover patterns.
+A typical period has 30-80 tagged events. Lead with the most meaningful ones.
+Example response: "In the Elmira game, auto-tag detected 47 events in Period 2 —
+12 shot attempts, 9 zone entries, 6 hits, and 4 turnovers. Want me to break
+down the defensive zone coverage patterns?"
 - Personal scouting watchlist with priority tracking
 
 # TOOLS
@@ -40398,25 +40400,29 @@ BENCH_TALK_TOOLS = [
     },
     {
         "name": "query_film_events",
-        "description": "Query tagged film events from video sessions. Use when coach asks about game film, video analysis, auto-tagged plays, or specific game breakdowns. Returns event counts, types, timestamps, and outcomes from AI-analyzed game footage.",
+        "description": "Query auto-tagged film events from video sessions. Use whenever a coach asks about game film, video analysis, how a team or player looked in a game, or auto-tagged plays. Returns event counts by type, period breakdowns, and play details from AI-analyzed game footage.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "session_id": {
                     "type": "string",
-                    "description": "Film session ID. If unknown, omit to get recent sessions."
+                    "description": "Film session ID. Omit to get most recent sessions for the org."
                 },
                 "team_name": {
                     "type": "string",
-                    "description": "Team name to filter sessions by."
+                    "description": "Filter sessions by team name (searches session title)."
                 },
                 "event_type": {
                     "type": "string",
-                    "description": "Filter by event type: faceoff, shot_attempt, zone_entry, zone_exit, dump_in, hit, breakout, penalty, goal, blocked_shot, turnover"
+                    "description": "Filter by type: faceoff, shot_attempt, zone_entry, zone_exit, dump_in, hit, breakout, penalty, goal, blocked_shot, turnover. Omit for all types."
+                },
+                "period": {
+                    "type": "integer",
+                    "description": "Filter by period (1, 2, or 3). Omit for all periods."
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Max events to return. Default 50."
+                    "description": "Max events to return. Default 100."
                 }
             },
             "required": []
@@ -42179,27 +42185,25 @@ async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str
         session_id = tool_input.get("session_id")
         team_name = tool_input.get("team_name")
         event_type = tool_input.get("event_type")
-        limit = tool_input.get("limit", 50)
-
+        period = tool_input.get("period")
+        limit = tool_input.get("limit", 100)
         conn = get_db()
         try:
             where_clauses = ["ve.org_id = %s"]
             params: list = [org_id]
-
             if session_id:
                 where_clauses.append("ve.session_id = %s")
                 params.append(session_id)
-
             if team_name:
                 where_clauses.append("vs.name ILIKE %s")
                 params.append(f"%{team_name}%")
-
             if event_type:
                 where_clauses.append("ve.event_type = %s")
                 params.append(event_type)
-
-            where_sql = " AND ".join(where_clauses)
-
+            if period:
+                where_clauses.append("ve.period = %s")
+                params.append(period)
+            where_sql = "WHERE " + " AND ".join(where_clauses)
             events = conn.execute(f"""
                 SELECT ve.event_type, ve.event_label, ve.ice_zone,
                        ve.outcome, ve.period, ve.time_seconds,
@@ -42207,22 +42211,27 @@ async def _execute_bench_talk_tool(tool_name: str, tool_input: dict, org_id: str
                        vs.name as session_title, vs.match_date
                 FROM video_events ve
                 LEFT JOIN video_sessions vs ON vs.id = ve.session_id
-                WHERE {where_sql}
+                {where_sql}
                 ORDER BY ve.period, ve.time_seconds
                 LIMIT %s
             """, params + [limit]).fetchall()
-
             if not events:
-                return {"events": [], "summary": "No film events found for this query."}, {}
-
+                return {"result": "No film events found. The session may not have been auto-tagged yet. Coach can use Auto-Tag in Film Hub to analyze the video."}, {}
             from collections import Counter
             type_counts = Counter(e["event_type"] for e in events)
-            summary = f"Found {len(events)} events. Breakdown: " + ", ".join(f"{v} {k}" for k, v in type_counts.most_common())
-
+            period_counts = Counter(e["period"] for e in events)
+            summary = (
+                f"Found {len(events)} tagged events"
+                + (f" in '{events[0]['session_title']}'" if events[0]["session_title"] else "")
+                + f". By type: " + ", ".join(f"{v} {k}" for k, v in type_counts.most_common())
+                + f". By period: " + ", ".join(f"P{k}: {v}" for k, v in sorted(period_counts.items()))
+            )
             return {
                 "summary": summary,
-                "events": [dict(e) for e in events[:limit]],
-                "session_title": events[0]["session_title"] if events else None
+                "total_events": len(events),
+                "type_breakdown": dict(type_counts),
+                "period_breakdown": dict(period_counts),
+                "events": [dict(e) for e in events]
             }, {}
         finally:
             conn.close()
