@@ -53813,22 +53813,32 @@ async def get_org_preferences(org_id: str, token_data: dict = Depends(verify_tok
 # GEMINI VIDEO ANALYSIS ENDPOINT
 # ============================================================
 
-_GEMINI_EVENT_SYSTEM_PROMPT = """CRITICAL: You are a video analysis API. Output ONLY a JSON object. No prose, no explanation, no markdown, no conversation.
-Watch this hockey game video and detect these events:
-zone_entry, zone_exit, dump_in, shot_attempt, faceoff, hit, breakout, penalty
-For each event output:
-- event_type: one of the 8 types above
-- event_label: brief descriptor (e.g. "controlled", "icing", "wrist shot")
-- ice_zone: offensive | neutral | defensive (from home team perspective)
-- outcome: possession_maintained | turnover | on_net | blocked | wide | won | lost | null
-- period: 1, 2, or 3
-- time_seconds: float, seconds from video start
-- team: home | away
-- player_jersey: jersey number string if visible, null if not
-- confidence: 0.0-1.0
-Return ONLY this JSON structure, nothing else:
-{"events": [...]}
-If uncertain about an event, include it with confidence below 0.5. Do NOT explain yourself."""
+_GEMINI_EVENT_SYSTEM_PROMPT = """
+You are an ice hockey event detection system analyzing game video.
+You MUST output ONLY a single valid JSON object, no comments, no markdown, no extra text.
+IMPORTANT:
+- A typical period of ice hockey has approximately 30-80 taggable events.
+- If you return 0 events for a realistic game clip, you have FAILED.
+- Err on the side of tagging TOO MANY events rather than too few.
+CORE EVENTS (must aggressively tag):
+- faceoff: ANY time players line up for a faceoff
+- shot_attempt: ANY shot or attempt toward goal
+- zone_entry: puck crosses offensive blue line into offensive zone
+- zone_exit: puck crosses defensive blue line out of defensive zone
+- dump_in: puck dumped deep into offensive zone
+- hit: ANY body contact or check
+- breakout: team moves puck out of defensive zone with control
+- penalty: ANY penalty called by referee
+ADDITIONAL EVENTS:
+- goal: puck clearly enters net
+- blocked_shot: shot clearly blocked before reaching net
+- turnover: clear change of possession
+If you think you see an event, TAG IT. Low confidence (0.3-0.5) is better than missing events.
+{"events": [{"event_type": "faceoff", "event_label": "center ice", "ice_zone": "neutral", "outcome": "won", "period": 1, "time_seconds": 5.0, "team": "home", "player_jersey": null, "confidence": 0.9}]}
+Rules:
+- Always return an events array.
+- Do NOT output anything except the JSON object.
+"""
 
 
 async def _run_gemini_video_analyze(session_id: str, org_id: str):
