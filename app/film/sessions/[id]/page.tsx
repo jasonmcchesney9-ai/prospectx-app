@@ -1106,20 +1106,44 @@ export default function FilmSessionViewerPage() {
             </button>
             <button
               onClick={async () => {
-                if (autoTagging) return;
+                if (autoTagging || !upload?.id) return;
                 setAutoTagging(true);
                 try {
                   const orgId = getUser()?.org_id || "";
-                  const res = await api.post("/video/analyze", { session_id: sessionId, org_id: orgId });
-                  const count = res.data?.events_detected ?? 0;
-                  toast.success(`${count} events detected — review in timeline`, { duration: 8000 });
-                  // Refresh events
-                  try {
-                    const evRes = await api.get("/film/events", { params: { session_id: sessionId, limit: 500 } });
-                    setSessionEvents(Array.isArray(evRes.data) ? evRes.data : []);
-                  } catch { /* silent */ }
+                  await api.post("/video/analyze", {
+                    session_id: sessionId,
+                    org_id: orgId,
+                    upload_id: upload?.id,
+                  });
+
+                  // Poll auto_tag_status every 3s until complete or failed
+                  let attempts = 0;
+                  const maxAttempts = 100; // 5 minutes
+                  while (attempts < maxAttempts) {
+                    await new Promise((r) => setTimeout(r, 3000));
+                    attempts++;
+                    try {
+                      const statusRes = await api.get(`/film/uploads/${upload?.id}`);
+                      const status = statusRes.data?.auto_tag_status;
+                      if (status === "complete") {
+                        // Fetch events and update timeline
+                        const evRes = await api.get("/film/events", {
+                          params: { session_id: sessionId, limit: 500 },
+                        });
+                        setSessionEvents(Array.isArray(evRes.data) ? evRes.data : []);
+                        toast.success("Auto-tag complete — events added to timeline");
+                        break;
+                      } else if (status === "failed") {
+                        toast.error("Auto-tag failed — try again or tag manually");
+                        break;
+                      }
+                    } catch { /* keep polling */ }
+                  }
+                  if (attempts >= maxAttempts) {
+                    toast.error("Auto-tag timed out — try again");
+                  }
                 } catch {
-                  toast.error("Auto-tagging failed — try again", { style: { background: "#E67E22", color: "#FFFFFF" } });
+                  toast.error("Auto-tag error — try again");
                 } finally {
                   setAutoTagging(false);
                 }
