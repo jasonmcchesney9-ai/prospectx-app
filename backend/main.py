@@ -53938,11 +53938,11 @@ Rules:
 """
 
 
-async def _run_gemini_video_analyze(session_id: str, org_id: str):
+async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str | None = None):
     """Background task: download video, upload to Gemini, auto-tag events."""
     conn = get_db()
     try:
-        # Step 1: Look up video_sessions — get upload_id
+        # Step 1: Look up video_sessions — get upload_id (fall back to session default)
         session_row = conn.execute(
             "SELECT id, org_id, upload_id FROM video_sessions WHERE id = ? AND org_id = ?",
             (session_id, org_id),
@@ -53950,7 +53950,8 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
         if not session_row:
             logging.error("Auto-tag background: session %s not found", session_id)
             return
-        upload_id = session_row["upload_id"]
+        if not upload_id:
+            upload_id = session_row["upload_id"]
         if not upload_id:
             logging.error("Auto-tag background: session %s has no upload", session_id)
             return
@@ -53969,6 +53970,11 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
         if not upload_row or not upload_row["mux_playback_id"]:
             logging.error("Auto-tag background: upload %s has no playback URL", upload_id)
             return
+
+        # Mark upload as processing
+        conn.execute("UPDATE video_uploads SET auto_tag_status = 'processing' WHERE id = ?", (upload_id,))
+        conn.commit()
+        logging.info("Gemini auto-tag START — upload_id=%s", upload_id)
 
         # Step 3: Build roster dict { jersey_number: player_id }
         roster_rows = conn.execute(
@@ -53991,10 +53997,11 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             tmp_fd.write(dl.content)
             tmp_fd.close()
 
-            # Upload to Gemini Files API
+            # Upload to Gemini Files API (non-blocking)
             uploaded_file = await asyncio.to_thread(gemini_client.files.upload, file=tmp_path)
 
-            # Poll until file is ACTIVE
+            # Poll until file is ACTIVE (non-blocking)
+            logging.info("Gemini auto-tag — file uploaded, polling for ACTIVE")
             for _ in range(60):
                 status = await asyncio.to_thread(gemini_client.files.get, name=uploaded_file.name)
                 if status.state.name == "ACTIVE":
@@ -54003,7 +54010,7 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             else:
                 raise RuntimeError("Gemini file processing timed out")
 
-            # Call generate_content with uploaded file reference
+            # Call generate_content with uploaded file reference (non-blocking)
             logging.info("Gemini auto-tag — file ACTIVE, calling generate_content")
             response = await asyncio.to_thread(
                 gemini_client.models.generate_content,
@@ -54047,7 +54054,6 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
             logging.info("Gemini detected %d events", len(events))
         except Exception as exc:
             logging.error(f"Gemini auto-tag FAILED at generate_content: {type(exc).__name__}: {exc}", exc_info=True)
-            logging.exception("Gemini video analysis failed: %s", exc)
             conn.rollback()
             try:
                 conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
@@ -54100,7 +54106,6 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str):
 
     except Exception as exc:
         logging.error(f"Gemini auto-tag FAILED at outer: {type(exc).__name__}: {exc}", exc_info=True)
-        logging.exception("Auto-tag background error: %s", exc)
         conn.rollback()
         try:
             conn.execute("UPDATE video_uploads SET auto_tag_status = 'failed' WHERE id = ? AND org_id = ?", (upload_id, org_id))
@@ -54120,10 +54125,11 @@ async def gemini_video_analyze(req: dict = Body(...),
 
     session_id = req.get("session_id")
     org_id = req.get("org_id")
+    upload_id = req.get("upload_id")  # optional — uses active tab's upload
     if not session_id or not org_id:
         raise HTTPException(status_code=400, detail="session_id and org_id are required")
 
-    asyncio.create_task(_run_gemini_video_analyze(session_id, org_id))
+    asyncio.create_task(_run_gemini_video_analyze(session_id, org_id, upload_id=upload_id))
     return {"status": "processing", "message": "Auto-tagging started"}
 
 

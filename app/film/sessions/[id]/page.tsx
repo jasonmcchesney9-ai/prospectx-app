@@ -1111,34 +1111,44 @@ export default function FilmSessionViewerPage() {
                 const toastId = toast.loading("Analyzing video...");
                 try {
                   const orgId = getUser()?.org_id || "";
-                  await api.post("/video/analyze", { session_id: sessionId, org_id: orgId });
-                  // Poll auto_tag_status on the upload until complete or failed
-                  let status = "processing";
-                  for (let i = 0; i < 60; i++) {
+                  await api.post("/video/analyze", {
+                    session_id: sessionId,
+                    org_id: orgId,
+                    upload_id: upload?.id,
+                  });
+
+                  // Poll auto_tag_status every 3s until complete or failed
+                  let attempts = 0;
+                  const maxAttempts = 100; // 5 minutes
+                  while (attempts < maxAttempts) {
                     await new Promise((r) => setTimeout(r, 3000));
+                    attempts++;
                     try {
-                      const pollRes = await api.get(`/film/uploads/${upload.id}`);
-                      status = pollRes.data?.auto_tag_status || "processing";
-                      if (status === "complete" || status === "failed") break;
-                    } catch { /* continue polling */ }
+                      const statusRes = await api.get(`/film/uploads/${upload?.id}`);
+                      const status = statusRes.data?.auto_tag_status;
+                      if (status === "complete") {
+                        toast.dismiss(toastId);
+                        // Fetch events and update timeline
+                        const evRes = await api.get("/film/events", {
+                          params: { session_id: sessionId, limit: 500 },
+                        });
+                        setSessionEvents(Array.isArray(evRes.data) ? evRes.data : []);
+                        toast.success("Auto-tag complete — events added to timeline");
+                        break;
+                      } else if (status === "failed") {
+                        toast.dismiss(toastId);
+                        toast.error("Auto-tag failed — try again or tag manually");
+                        break;
+                      }
+                    } catch { /* keep polling */ }
                   }
-                  toast.dismiss(toastId);
-                  if (status === "complete") {
-                    // Refresh events
-                    try {
-                      const evRes = await api.get("/film/events", { params: { session_id: sessionId, limit: 500 } });
-                      const evts = Array.isArray(evRes.data) ? evRes.data : [];
-                      setSessionEvents(evts);
-                      toast.success(`${evts.length} events detected — review in timeline`, { duration: 8000 });
-                    } catch {
-                      toast.success("Auto-tagging complete — refresh to see events", { duration: 8000 });
-                    }
-                  } else {
-                    toast.error("Auto-tagging failed — try again", { style: { background: "#E67E22", color: "#FFFFFF" } });
+                  if (attempts >= maxAttempts) {
+                    toast.dismiss(toastId);
+                    toast.error("Auto-tag timed out — try again");
                   }
                 } catch {
                   toast.dismiss(toastId);
-                  toast.error("Auto-tagging failed — try again", { style: { background: "#E67E22", color: "#FFFFFF" } });
+                  toast.error("Auto-tag error — try again");
                 } finally {
                   setAutoTagging(false);
                 }
