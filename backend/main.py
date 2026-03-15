@@ -53980,19 +53980,27 @@ async def _run_gemini_video_analyze(session_id: str, org_id: str, upload_id: str
 
         # Step 4: Download video from Mux and upload to Gemini Files API
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/medium.mp4"
-        logging.info(f"Gemini auto-tag — downloading from Mux: {mp4_url[:60]}")
+        renditions = ["medium.mp4", "low.mp4", "highest.mp4"]
+        video_content = None
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as http:
+            for rendition in renditions:
+                mp4_url = f"https://stream.mux.com/{upload_row['mux_playback_id']}/{rendition}"
+                logging.info(f"Gemini auto-tag — trying Mux rendition: {rendition}")
+                dl = await http.get(mp4_url)
+                if dl.status_code == 200:
+                    video_content = dl.content
+                    logging.info(f"Gemini auto-tag — downloaded {len(video_content)} bytes via {rendition}")
+                    break
+                else:
+                    logging.warning(f"Gemini auto-tag — {rendition} not available ({dl.status_code}), trying next")
+        if video_content is None:
+            raise Exception("No Mux rendition available for this asset")
         tmp_path = None
         uploaded_file = None
         try:
-            # Download MP4 from Mux to a temp file
-            async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as http:
-                dl = await http.get(mp4_url)
-                dl.raise_for_status()
-            logging.info(f"Gemini auto-tag — downloaded {len(dl.content)} bytes")
             tmp_fd = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
             tmp_path = tmp_fd.name
-            tmp_fd.write(dl.content)
+            tmp_fd.write(video_content)
             tmp_fd.close()
 
             # Upload to Gemini Files API (non-blocking)
