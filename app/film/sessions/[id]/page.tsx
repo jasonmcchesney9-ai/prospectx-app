@@ -1106,19 +1106,38 @@ export default function FilmSessionViewerPage() {
             </button>
             <button
               onClick={async () => {
-                if (autoTagging) return;
+                if (autoTagging || !upload?.id) return;
                 setAutoTagging(true);
+                const toastId = toast.loading("Analyzing video...");
                 try {
                   const orgId = getUser()?.org_id || "";
-                  const res = await api.post("/video/analyze", { session_id: sessionId, org_id: orgId });
-                  const count = res.data?.events_detected ?? 0;
-                  toast.success(`${count} events detected — review in timeline`, { duration: 8000 });
-                  // Refresh events
-                  try {
-                    const evRes = await api.get("/film/events", { params: { session_id: sessionId, limit: 500 } });
-                    setSessionEvents(Array.isArray(evRes.data) ? evRes.data : []);
-                  } catch { /* silent */ }
+                  await api.post("/video/analyze", { session_id: sessionId, org_id: orgId });
+                  // Poll auto_tag_status on the upload until complete or failed
+                  let status = "processing";
+                  for (let i = 0; i < 60; i++) {
+                    await new Promise((r) => setTimeout(r, 3000));
+                    try {
+                      const pollRes = await api.get(`/film/uploads/${upload.id}`);
+                      status = pollRes.data?.auto_tag_status || "processing";
+                      if (status === "complete" || status === "failed") break;
+                    } catch { /* continue polling */ }
+                  }
+                  toast.dismiss(toastId);
+                  if (status === "complete") {
+                    // Refresh events
+                    try {
+                      const evRes = await api.get("/film/events", { params: { session_id: sessionId, limit: 500 } });
+                      const evts = Array.isArray(evRes.data) ? evRes.data : [];
+                      setSessionEvents(evts);
+                      toast.success(`${evts.length} events detected — review in timeline`, { duration: 8000 });
+                    } catch {
+                      toast.success("Auto-tagging complete — refresh to see events", { duration: 8000 });
+                    }
+                  } else {
+                    toast.error("Auto-tagging failed — try again", { style: { background: "#E67E22", color: "#FFFFFF" } });
+                  }
                 } catch {
+                  toast.dismiss(toastId);
                   toast.error("Auto-tagging failed — try again", { style: { background: "#E67E22", color: "#FFFFFF" } });
                 } finally {
                   setAutoTagging(false);
